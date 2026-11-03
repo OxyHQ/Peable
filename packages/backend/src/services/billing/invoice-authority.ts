@@ -1,106 +1,13 @@
+import { billingFinalInvoiceAuthoritySchema } from '@peable.to/contracts';
 import type { BillingTaxCheckoutSnapshot } from './tax-checkout';
 import { createPublicKey, verify } from 'node:crypto';
-import { z } from 'zod';
 import {
   canonicalBillingAuthority,
   type BillingFinalInvoiceAuthority,
   type BillingPaidInvoice,
 } from '@peable.to/shared-types';
-import { billingReference, BillingError, unixSeconds, type BillingOwner } from './contracts';
+import { BillingError, type BillingOwner } from './contracts';
 import { toUnix } from '../../lib/time';
-
-const amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const environment = z.enum(['development', 'staging', 'production']);
-const mode = z.enum(['test', 'live']);
-export const finalInvoiceAuthoritySchema = z
-  .object({
-    schema_version: z.literal(2),
-    source: z
-      .object({
-        invoice_id: billingReference,
-        payment_intent_id: billingReference,
-        customer_id: billingReference,
-        subscription_id: billingReference,
-        price_id: billingReference,
-        plan_id: billingReference,
-        merchant_id: billingReference,
-        app_id: billingReference,
-        mode,
-        environment,
-      })
-      .strict(),
-    invoice: z
-      .object({
-        platform: z.literal('peable'),
-        currency: z.string().regex(/^[A-Z]{3}$/),
-        gross_minor_units: amount,
-        net_minor_units: amount,
-        tax_minor_units: amount,
-        merchant_fee_minor_units: amount,
-        tax_treatment: z.enum(['inclusive', 'exclusive']),
-        seller_id: billingReference,
-        invoice_issuer_id: billingReference,
-        tax_quote_id: billingReference,
-        customer_location_evidence_id: billingReference,
-        tax_rate_evidence_id: billingReference,
-        context: z
-          .object({
-            payer_account_id: billingReference,
-            beneficiary_account_id: billingReference,
-            provider_subscription_id: billingReference,
-            offer_id: billingReference,
-            offer_version: z.number().int().positive(),
-            period_start: unixSeconds,
-            period_end: unixSeconds,
-            mode,
-            environment,
-          })
-          .strict(),
-        issued_at: unixSeconds,
-        expires_at: unixSeconds,
-        faircoin_quote: z
-          .object({
-            id: billingReference,
-            amount_base_units: z
-              .string()
-              .regex(/^[1-9][0-9]*$/)
-              .max(80),
-            quoted_at: unixSeconds,
-            expires_at: unixSeconds,
-            rounding_evidence_id: billingReference,
-          })
-          .strict()
-          .optional(),
-        tax_lines: z
-          .array(
-            z
-              .object({
-                calculation_id: billingReference,
-                country: z.string().regex(/^[A-Z]{2}$/),
-                state: z.string().nullable(),
-                tax_type: z.string().nullable(),
-                rate_percentage: z.string().nullable(),
-                taxable_minor_units: amount,
-                tax_minor_units: amount,
-                inclusive: z.boolean(),
-                taxability_reason: z.string().min(1),
-              })
-              .strict(),
-          )
-          .max(500)
-          .optional(),
-      })
-      .strict(),
-    method: z.enum(['card', 'faircoin']),
-    signature: z
-      .object({
-        algorithm: z.literal('Ed25519'),
-        key_id: billingReference,
-        value: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-      })
-      .strict(),
-  })
-  .strict();
 
 export interface FinalInvoiceAuthorityReader {
   /** Trusted deployment adapter; never constructed from merchant request data. */
@@ -125,7 +32,7 @@ export function verifyFinalInvoiceAuthority(
   keys: Readonly<Record<string, string>>,
   now: Date,
 ): BillingFinalInvoiceAuthority {
-  const authority = finalInvoiceAuthoritySchema.parse(raw);
+  const authority = billingFinalInvoiceAuthoritySchema.parse(raw);
   const { source, invoice, signature } = authority;
   const paid = expected.invoice;
   const context = invoice.context;

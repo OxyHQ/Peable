@@ -88,11 +88,7 @@ describe('WebhooksResource.constructEvent', () => {
     const resource = new WebhooksResource();
 
     // Freeze "now" close to the signed timestamp so it is within tolerance.
-    const event = resource.constructEvent(RAW_BODY, header, SECRET, {
-      // Explicit generous tolerance since the real clock has moved on since
-      // the fixed TIMESTAMP above.
-      toleranceSec: Number.MAX_SAFE_INTEGER,
-    });
+    const event = resource.constructEvent(RAW_BODY, header, SECRET, Number.MAX_SAFE_INTEGER);
 
     expect(event).toEqual(EVENT);
   });
@@ -103,7 +99,7 @@ describe('WebhooksResource.constructEvent', () => {
     const resource = new WebhooksResource();
 
     expect(() =>
-      resource.constructEvent(tampered, header, SECRET, { toleranceSec: Number.MAX_SAFE_INTEGER }),
+      resource.constructEvent(tampered, header, SECRET, Number.MAX_SAFE_INTEGER),
     ).toThrow(PeableSignatureVerificationError);
   });
 
@@ -112,7 +108,7 @@ describe('WebhooksResource.constructEvent', () => {
     const resource = new WebhooksResource();
 
     expect(() =>
-      resource.constructEvent(RAW_BODY, header, SECRET, { toleranceSec: Number.MAX_SAFE_INTEGER }),
+      resource.constructEvent(RAW_BODY, header, SECRET, Number.MAX_SAFE_INTEGER),
     ).toThrow(PeableSignatureVerificationError);
   });
 
@@ -126,17 +122,15 @@ describe('WebhooksResource.constructEvent', () => {
     );
   });
 
-  test('respects a custom toleranceSec', () => {
+  test('respects a custom tolerance', () => {
     const timestamp = Math.floor(Date.now() / 1000) - 120;
     const header = signWebhook(SECRET, RAW_BODY, timestamp);
     const resource = new WebhooksResource();
 
-    expect(() => resource.constructEvent(RAW_BODY, header, SECRET, { toleranceSec: 60 })).toThrow(
+    expect(() => resource.constructEvent(RAW_BODY, header, SECRET, 60)).toThrow(
       PeableSignatureVerificationError,
     );
-    expect(() =>
-      resource.constructEvent(RAW_BODY, header, SECRET, { toleranceSec: 300 }),
-    ).not.toThrow();
+    expect(() => resource.constructEvent(RAW_BODY, header, SECRET, 300)).not.toThrow();
   });
 
   test('rejects a signature-valid but non-JSON body', () => {
@@ -144,9 +138,9 @@ describe('WebhooksResource.constructEvent', () => {
     const header = signWebhook(SECRET, rawBody, TIMESTAMP);
     const resource = new WebhooksResource();
 
-    expect(() =>
-      resource.constructEvent(rawBody, header, SECRET, { toleranceSec: Number.MAX_SAFE_INTEGER }),
-    ).toThrow(PeableSignatureVerificationError);
+    expect(() => resource.constructEvent(rawBody, header, SECRET, Number.MAX_SAFE_INTEGER)).toThrow(
+      PeableSignatureVerificationError,
+    );
   });
 
   test('rejects a signature-valid JSON body that does not match the event shape', () => {
@@ -154,9 +148,9 @@ describe('WebhooksResource.constructEvent', () => {
     const header = signWebhook(SECRET, rawBody, TIMESTAMP);
     const resource = new WebhooksResource();
 
-    expect(() =>
-      resource.constructEvent(rawBody, header, SECRET, { toleranceSec: Number.MAX_SAFE_INTEGER }),
-    ).toThrow(PeableSignatureVerificationError);
+    expect(() => resource.constructEvent(rawBody, header, SECRET, Number.MAX_SAFE_INTEGER)).toThrow(
+      PeableSignatureVerificationError,
+    );
   });
 
   test('rejects a malformed signature header', () => {
@@ -192,6 +186,22 @@ describe('WebhooksResource.constructEvent', () => {
     expect(resource.constructEvent(RAW_BODY, header, ['whsec_old', 'whsec_new'])).toEqual(EVENT);
     expect(() => resource.constructEvent(RAW_BODY, header, ['whsec_old'])).toThrow(
       PeableSignatureVerificationError,
+    );
+  });
+  test('verifies the raw body as bytes (a Buffer or Uint8Array) exactly as as text', () => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const header = signWebhook('whsec_new', RAW_BODY, timestamp);
+    const resource = new WebhooksResource();
+    const bytes = new TextEncoder().encode(RAW_BODY);
+
+    expect(resource.constructEvent(bytes, header, 'whsec_new')).toEqual(EVENT);
+    expect(resource.constructEvent(Buffer.from(RAW_BODY), header, 'whsec_new')).toEqual(EVENT);
+  });
+
+  test('refuses a negative tolerance', () => {
+    const header = signWebhook('whsec_new', RAW_BODY, Math.floor(Date.now() / 1000));
+    expect(() => new WebhooksResource().constructEvent(RAW_BODY, header, 'whsec_new', -1)).toThrow(
+      /tolerance/,
     );
   });
 });

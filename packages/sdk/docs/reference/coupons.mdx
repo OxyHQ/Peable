@@ -1,0 +1,259 @@
+---
+title: "Coupons"
+description: "The Coupons endpoints of the Peable API."
+order: 912
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Coupons
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/coupons`](#create-a-coupon) | Create a coupon |
+| [`GET /v1/coupons`](#list-coupons) | List coupons |
+| [`GET /v1/coupons/{id}`](#retrieve-a-coupon) | Retrieve a coupon |
+| [`POST /v1/coupons/{id}`](#update-a-coupon) | Update a coupon |
+| [`DELETE /v1/coupons/{id}`](#delete-a-coupon) | Delete a coupon |
+
+## Create a coupon
+
+`POST /v1/coupons`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.coupons.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Your own id (`SUMMER25`); generated (`coupon_…`) when absent. Matches `^[A-Za-z0-9_-]{1,64}$`. |
+| `name` | string | 1–40 characters. |
+| `percent_off` | number | At most 100. |
+| `amount_off` | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `duration` | string | Default `once`. One of `once`, `repeating`, `forever`. |
+| `duration_in_months` | integer | Required for `repeating`. Between 1 and 1200. |
+| `max_redemptions` | integer | Between 1 and 2147483647. |
+| `redeem_by` | integer | Unix seconds, in the future. At most 253402300799. |
+| `applies_to` | object |  |
+| `applies_to[products]` **required** | array of string | At most 100 items. At least 1 item. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Coupon](/reference/objects/coupon).
+
+```json
+{
+  "id": "SUMMER25",
+  "object": "coupon",
+  "livemode": false,
+  "name": "Summer sale",
+  "percent_off": 25,
+  "amount_off": null,
+  "currency": null,
+  "duration": "repeating",
+  "duration_in_months": 3,
+  "max_redemptions": 100,
+  "redeem_by": null,
+  "times_redeemed": 0,
+  "valid": true,
+  "applies_to": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List coupons
+
+`GET /v1/coupons`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.coupons.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Coupon](/reference/objects/coupon) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Coupon](/reference/objects/coupon) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "SUMMER25",
+      "object": "coupon",
+      "livemode": false,
+      "name": "Summer sale",
+      "percent_off": 25,
+      "amount_off": null,
+      "currency": null,
+      "duration": "repeating",
+      "duration_in_months": 3,
+      "max_redemptions": 100,
+      "redeem_by": null,
+      "times_redeemed": 0,
+      "valid": true,
+      "applies_to": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/coupons"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a coupon
+
+`GET /v1/coupons/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.coupons.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The coupon (`SUMMER25`, `coupon_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Coupon](/reference/objects/coupon).
+
+```json
+{
+  "id": "SUMMER25",
+  "object": "coupon",
+  "livemode": false,
+  "name": "Summer sale",
+  "percent_off": 25,
+  "amount_off": null,
+  "currency": null,
+  "duration": "repeating",
+  "duration_in_months": 3,
+  "max_redemptions": 100,
+  "redeem_by": null,
+  "times_redeemed": 0,
+  "valid": true,
+  "applies_to": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a coupon
+
+`POST /v1/coupons/{id}`
+
+Only `name` and `metadata` change.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.coupons.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The coupon (`SUMMER25`, `coupon_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string \| `""` | `""` clears it. 1–40 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Coupon](/reference/objects/coupon).
+
+```json
+{
+  "id": "SUMMER25",
+  "object": "coupon",
+  "livemode": false,
+  "name": "Summer sale",
+  "percent_off": 25,
+  "amount_off": null,
+  "currency": null,
+  "duration": "repeating",
+  "duration_in_months": 3,
+  "max_redemptions": 100,
+  "redeem_by": null,
+  "times_redeemed": 0,
+  "valid": true,
+  "applies_to": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a coupon
+
+`DELETE /v1/coupons/{id}`
+
+Discounts customers already hold are not affected; the id is never reused.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.coupons.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The coupon (`SUMMER25`, `coupon_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedCoupon](/reference/objects/deleted-coupon).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

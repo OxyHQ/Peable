@@ -1,0 +1,22 @@
+---
+title: "PublicInvoicePayment"
+description: "The public_invoice_payment object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PublicInvoicePayment
+
+Object type: `public_invoice_payment`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"public_invoice_payment"` |  |
+| `payment_intent` | string | The PaymentIntent (`pi_…`) that pays the invoice. |
+| `client_secret` | string | The intent's payer credential (`pi_…_secret_…`), as a payment link hands out. |
+
+## Returned by
+
+- [`POST /v1/invoices/public/{token}/pay`](/reference/hosted-invoices#pay-a-hosted-invoice) — Pay a hosted invoice

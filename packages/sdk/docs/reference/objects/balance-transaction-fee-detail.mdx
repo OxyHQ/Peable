@@ -1,0 +1,20 @@
+---
+title: "BalanceTransactionFeeDetail"
+description: "The BalanceTransactionFeeDetail shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BalanceTransactionFeeDetail
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string | Upper-case ISO 4217 code, or `FAIR`. |
+| `type` | string | One of `application_fee`, `processing_fee`, `tax`, `other`. |
+
+## Used in
+
+[BalanceTransaction](/reference/objects/balance-transaction)

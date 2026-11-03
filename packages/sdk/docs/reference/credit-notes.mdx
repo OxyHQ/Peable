@@ -1,0 +1,195 @@
+---
+title: "Credit notes"
+description: "The Credit notes endpoints of the Peable API."
+order: 913
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Credit notes
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/credit_notes`](#issue-a-credit-note) | Issue a credit note |
+| [`GET /v1/credit_notes`](#list-credit-notes) | List credit notes |
+| [`GET /v1/credit_notes/{id}`](#retrieve-a-credit-note) | Retrieve a credit note |
+| [`POST /v1/credit_notes/{id}/void`](#void-a-credit-note) | Void a credit note |
+| [`GET /v1/credit_notes/preview`](#preview-a-credit-note) | Preview a credit note |
+
+## Issue a credit note
+
+`POST /v1/credit_notes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.creditNotes.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `invoice` **required** | string | 1–255 characters. |
+| `amount` | string | Credit this much of the invoice, tax included, spread over its lines. |
+| `reason` | string | One of `duplicate`, `fraudulent`, `order_change`, `product_unsatisfactory`. |
+| `memo` | string | 1–5000 characters. |
+| `refund_amount` | string |  |
+| `credit_amount` | string |  |
+| `out_of_band_amount` | string |  |
+| `lines` | array of object | At most 100 items. At least 1 item. |
+| `lines[][type]` **required** | string | One of `invoice_line_item`, `custom_line_item`. |
+| `lines[][invoice_line_item]` | string | 1–255 characters. |
+| `lines[][amount]` | string | For an invoice line: the amount of it to credit (default all of it). |
+| `lines[][description]` | string | 1–500 characters. |
+| `lines[][quantity]` | integer | Between 0 and 1000000000. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [CreditNote](/reference/objects/credit-note).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List credit notes
+
+`GET /v1/credit_notes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.creditNotes.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `invoice` | query | string | 1–255 characters. |
+| `customer` | query | string | 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [CreditNote](/reference/objects/credit-note) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [CreditNote](/reference/objects/credit-note) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `data.customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a credit note
+
+`GET /v1/credit_notes/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.creditNotes.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The credit note (`cn_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [CreditNote](/reference/objects/credit-note).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Void a credit note
+
+`POST /v1/credit_notes/{id}/void`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.creditNotes.voidCreditNote()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The credit note (`cn_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [CreditNote](/reference/objects/credit-note).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Preview a credit note
+
+`GET /v1/credit_notes/preview`
+
+The note `POST /v1/credit_notes` would issue with the same fields, computed and never stored (its `id` and `number` are empty).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.creditNotes.preview()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `invoice` **required** | query | string | 1–255 characters. |
+| `amount` | query | string | Credit this much of the invoice, tax included, spread over its lines. |
+| `reason` | query | string | One of `duplicate`, `fraudulent`, `order_change`, `product_unsatisfactory`. |
+| `memo` | query | string | 1–5000 characters. |
+| `refund_amount` | query | string |  |
+| `credit_amount` | query | string |  |
+| `out_of_band_amount` | query | string |  |
+| `lines[]` | query | array of object | At most 100 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [CreditNote](/reference/objects/credit-note).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

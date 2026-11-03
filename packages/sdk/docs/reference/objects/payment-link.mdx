@@ -1,0 +1,109 @@
+---
+title: "PaymentLink"
+description: "The payment_link object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentLink
+
+Object type: `payment_link`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_link"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `active` | boolean |  |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `rail` | string | One of `faircoin`, `card`. |
+| `network` | string \| null | One of `mainnet`, `testnet`. |
+| `line_items` | array of [CheckoutLineItem](/reference/objects/checkout-line-item) | The link's prices (`GET /v1/payment_links/{id}/line_items` lists them in full). |
+| `contribution` | [ContributionDetails](/reference/objects/contribution-details) | Present on an organization contribution link (FairCoin). |
+| `locale` | string \| null | One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
+| `allow_promotion_codes` | boolean |  |
+| `billing_address_collection` | string | One of `auto`, `required`. |
+| `shipping_address_collection` | object \| null |  |
+| `shipping_address_collection.allowed_countries` | array of string |  |
+| `phone_number_collection` | object |  |
+| `phone_number_collection.enabled` | boolean |  |
+| `tax_id_collection` | object |  |
+| `tax_id_collection.enabled` | boolean |  |
+| `custom_fields` | array of [CheckoutCustomField](/reference/objects/checkout-custom-field) |  |
+| `consent_collection` | object \| null |  |
+| `consent_collection.terms_of_service` | string | One of `none`, `required`. |
+| `automatic_tax` | object |  |
+| `automatic_tax.enabled` | boolean |  |
+| `customer_creation` | string | One of `always`, `if_required`. |
+| `after_completion` | [CheckoutAfterCompletion](/reference/objects/checkout-after-completion) |  |
+| `restrictions` | object \| null |  |
+| `restrictions.completed_sessions` | object |  |
+| `restrictions.completed_sessions.limit` | integer | At least -9007199254740991. |
+| `restrictions.completed_sessions.count` | integer | At least -9007199254740991. |
+| `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `url` | string | `checkout.peable.to/l/<id>` — share it, or render it as a QR code. |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "link_0193b8f2c1a87d3e9f4a",
+  "object": "payment_link",
+  "livemode": false,
+  "active": true,
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "line_items": [],
+  "allow_promotion_codes": false,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "customer_creation": "if_required",
+  "after_completion": {
+    "type": "hosted_confirmation",
+    "redirect": null,
+    "hosted_confirmation": {
+      "custom_message": null
+    }
+  },
+  "restrictions": null,
+  "submit_type": "auto",
+  "locale": null,
+  "metadata": {},
+  "url": "https://checkout.peable.to/l/link_0193b8f2c1a87d3e9f4a",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/payment_links`](/reference/payment-links#create-a-payment-link) — Create a payment link
+- [`GET /v1/payment_links`](/reference/payment-links#list-payment-links) — List payment links
+- [`GET /v1/payment_links/{id}`](/reference/payment-links#retrieve-a-payment-link) — Retrieve a payment link
+- [`POST /v1/payment_links/{id}`](/reference/payment-links#update-a-payment-link) — Update a payment link
+
+## Events
+
+- [`payment_link.created`](/reference/webhook-events#payment_linkcreated)
+- [`payment_link.updated`](/reference/webhook-events#payment_linkupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

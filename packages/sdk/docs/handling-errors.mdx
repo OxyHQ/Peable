@@ -1,0 +1,98 @@
+---
+title: "Handling errors"
+description: "The error envelope, HTTP statuses and the typed SDK errors."
+order: 18
+---
+
+# Errors
+
+Every non-2xx answer is one envelope:
+
+```json
+{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "parameter_invalid",
+    "param": "amount",
+    "message": "amount must be a positive integer string",
+    "doc_url": "https://oxy.so/developers/docs/peable/errors/#parameter_invalid",
+    "request_id": "req_…"
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `type` | The broad class to branch on first ([types](/errors#error-types)) |
+| `code` | The specific reason, when there is one ([codes](/errors#all-codes)) |
+| `decline_code` | On a `card_error`: the issuer's reason |
+| `param` | The offending request field, in bracket notation (`metadata[order_id]`, `line_items[0][price]`) |
+| `message` | For a developer, not for a payer |
+| `doc_url` | This site's entry for `code` |
+| `request_id` | The `Request-Id` of the answer; quote it to Peable support |
+
+A card decline also carries the `payment_intent` (or the `invoice`) as it now
+is, and an expired onboarding link its `refresh_url`. A `500` never carries an
+internal message: the `request_id` is how support finds the cause.
+
+## HTTP statuses
+
+| Status | Meaning |
+|---|---|
+| `400` | The request is invalid — including a well-formed one that breaks a rule. `422` is never used |
+| `401` | The credential is missing, expired or invalid |
+| `402` | The payment method was refused (`card_error`) |
+| `403` | The credential is valid but may not do this |
+| `404` | The object does not exist, or this credential cannot read it — the same answer either way |
+| `409` | A conflict with the object's state, or the same `Idempotency-Key` still in flight |
+| `429` | Too many requests: back off and retry |
+| `5xx` | Peable or its provider failed: safe to retry with the same `Idempotency-Key` |
+
+## In the SDK
+
+Every error is a `PeableError` with `type`, `statusCode`, `code`, `param`,
+`declineCode`, `docUrl`, `requestId` and `raw` (the answer's body). `code` is
+the gateway's code, or `undefined` when it sent none, so branch on `type`
+first. A subclass per type lets you catch what you handle:
+
+| Class | `type` |
+|---|---|
+| `PeableInvalidRequestError` | `invalid_request_error` |
+| `PeableAuthenticationError` | `authentication_error` |
+| `PeablePermissionError` | `permission_error` |
+| `PeableCardError` | `card_error` — adds `paymentIntent`, the payment as it now is |
+| `PeableIdempotencyError` | `idempotency_error` — the `409` (first attempt still running) is retried before it reaches you |
+| `PeableRateLimitError` | `rate_limit_error` — retried before it reaches you |
+| `PeableAPIError` | `api_error` |
+| `PeableConnectionError` | `api_connection_error` — no answer was read: the network failed, the attempt timed out (`code: 'timeout'`) or the body was cut off (`code: 'response_interrupted'`); retried first |
+| `PeableSignatureVerificationError` | `signature_verification_error` — a webhook signature that does not verify ([Webhooks](/webhooks#verify-the-signature)) |
+
+```ts
+import { PeableCardError, PeableError } from '@peable.to/sdk';
+
+try {
+  await peable.paymentIntents.create({
+    amount: '2500', rail: 'card', currency: 'EUR',
+    customer: 'cus_…', payment_method: 'pm_…', confirm: true, off_session: true,
+  });
+} catch (err) {
+  if (err instanceof PeableCardError) {
+    askForAnotherCard(err.paymentIntent, err.declineCode);
+  } else if (err instanceof PeableError && err.code === 'account_not_ready') {
+    showOnboarding();
+  } else {
+    log.error({ requestId: err.requestId }, err.message);
+    throw err;
+  }
+}
+```
+
+A refusal from the Oxy authentication layer, in front of Peable, has no
+`request_id` in its body; `err.requestId` then falls back to the
+`Request-Id` header.
+
+## Every code
+
+The [error catalogue](/errors) lists every `type` and every `code` the
+gateway can answer with, generated from the same table the gateway's error
+envelope is typed against.

@@ -1,0 +1,163 @@
+---
+title: "Checkout"
+description: "Hosted and embedded Checkout Sessions over your catalog, with branding and receipts."
+order: 4
+---
+
+# Checkout
+
+A **Checkout Session** (`cs_…`) is an order — line items over your
+[catalog](/catalog), a discount, Peable Tax, what to collect from the payer —
+completed on Peable's checkout, hosted at `checkout.peable.to` or embedded in
+your page. The payment is created when the payer **confirms**, for the amount
+the session computed, and the session completes when the **payment** does,
+never on a browser callback. It is Stripe Checkout's model.
+
+## Create a session
+
+```ts
+const session = await peable.checkout.sessions.create({
+  line_items: [
+    { price: 'price_…', quantity: 2, adjustable_quantity: { enabled: true, maximum: 10 } },
+    {
+      price_data: { currency: 'FAIR', unit_amount: '50000000', product_data: { name: 'Gift wrap' } },
+      quantity: 1,
+    },
+  ],
+  allow_promotion_codes: true,               // or discounts: [{ coupon: 'LAUNCH' }]
+  billing_address_collection: 'required',
+  shipping_address_collection: { allowed_countries: ['ES', 'PT'] },
+  phone_number_collection: { enabled: true },
+  custom_fields: [
+    { key: 'gift_note', label: { type: 'custom', custom: 'Gift note' }, type: 'text', optional: true },
+  ],
+  consent_collection: { terms_of_service: 'required' }, // needs branding.terms_of_service_url
+  automatic_tax: { enabled: true },          // Peable Tax; fails closed
+  customer_email: 'buyer@example.com',       // or customer: 'cus_…'
+  locale: 'es',                              // en es fr de it pt, or 'auto'
+  success_url: 'https://shop.example/done?cs={CHECKOUT_SESSION_ID}',
+  cancel_url: 'https://shop.example/cart',   // "Back to merchant", before payment
+  expires_at: Math.floor(Date.now() / 1000) + 3600, // 30 min – 24 h; default 24 h
+  client_reference_id: 'ORDER-123',
+  metadata: { order_id: 'ORDER-123' },
+});
+
+redirect(session.url);
+```
+
+A `FAIR` order is paid on the FairCoin rail, any other currency by card: the
+line items' currency decides, and every line has the same one.
+
+| Field | Meaning |
+|---|---|
+| `mode` | `payment` (default); `setup` — save a card for a customer (`currency` required, card only: FairCoin has no stored methods); `subscription` — sell a subscription ([Subscriptions](/billing#sell-a-subscription-with-checkout)) |
+| `ui_mode` | `hosted` (answers `url`) or `embedded` (answers `client_secret`) |
+| `status` | `open`, then `complete` or `expired` |
+| `payment_status` | `paid`; `unpaid` (a FairCoin payment broadcast and confirming, or a card authorized for manual capture); `no_payment_required` (setup, or a discount took the total to zero) |
+| `amount_subtotal`, `amount_total`, `total_details` | Priced by the catalog's one pricing module: tiers, `transform_quantity`, the discount (half-up per line; an amount off allocated in proportion), Peable Tax on the discounted lines |
+| `payment_intent` / `setup_intent` | `null` until the payer confirms; expandable |
+
+**Promotion codes are reserved at confirm and counted at completion.** The
+confirm that links a payment takes the code's row lock and counts the open
+sessions already holding it, so two payers racing for a code's last
+redemption cannot both get it.
+
+## Manage a session
+
+```ts
+await peable.checkout.sessions.retrieve('cs_…', { expand: ['payment_intent'] });
+await peable.checkout.sessions.update('cs_…', { metadata: { gift: 'yes' } });
+await peable.checkout.sessions.listLineItems('cs_…');  // GET …/line_items (expand[]=data.price)
+await peable.checkout.sessions.expire('cs_…');
+await peable.checkout.sessions.list({ payment_intent: 'pi_…' }); // or payment_link, customer, status
+```
+
+Expiring an open session cancels its payment first, if one was confirmed. A
+payment already in flight cannot be called off: the expiry is refused.
+
+## Fulfil the order
+
+| Event | When |
+|---|---|
+| `checkout.session.completed` | The payment succeeded, was authorized for capture, or — FairCoin — was broadcast |
+| `checkout.session.async_payment_succeeded` | A FairCoin payment the session completed with was confirmed on chain |
+| `checkout.session.async_payment_failed` | …or failed (an underpayment) |
+| `checkout.session.expired` | The session ran out without a payment |
+
+Fulfil on `checkout.session.completed` when `payment_status` is `paid`, or on
+`checkout.session.async_payment_succeeded`. Re-read the session on your
+server if you act on a redirect.
+
+## Hosted checkout
+
+`session.url` opens `checkout.peable.to/c/<id>`. The payer sees your
+[branding](#branding), the lines (with a quantity stepper where you allowed
+one), a promotion-code box, the fields you asked for, the totals with tax, and
+then the payment step: the provider's secure card fields (with Apple Pay and
+Google Pay above them where available) or the FairCoin deep link and QR code.
+It speaks `en`, `es`, `fr`, `de`, `it` and `pt` (`locale`, else the browser's
+language).
+
+The page redirects to `success_url` only after the gateway says the session is
+`complete`; until then it shows what is true ("confirming"), and an expired
+session says so. The payer needs no Oxy account: the hosted checkout is
+anonymous, and a FairCoin payer signs in their own wallet.
+
+## Embedded checkout
+
+Create the session with `ui_mode: 'embedded'` and hand its `client_secret` to
+the browser:
+
+```ts
+import { PeableCheckout } from '@peable.to/sdk/checkout';
+
+const checkout = PeableCheckout.mountCheckout('#checkout', {
+  clientSecret, // cs_…_secret_…
+  appearance: { theme: 'flat', variables: { colorPrimary: '#0a7d33' } },
+  onComplete: ({ sessionId, successUrl }) => router.push(`/thanks?cs=${sessionId}`),
+});
+```
+
+The same experience runs in an iframe from `checkout.peable.to`. The frame and
+your page talk over `postMessage`, each checking the other's origin and
+window; the client secret travels in the frame URL's fragment, never to a
+server log. `complete` is posted only after the gateway says so — re-read the
+session on your server before fulfilling anyway. `appearance` is described in
+[Elements](/elements#appearance).
+
+## Branding
+
+`GET` / `POST /v1/merchants/me/branding` (`peable.merchants.branding`, or
+Orbit → Branding with a live preview) styles hosted and embedded checkout and
+Peable's emails:
+
+| Field | |
+|---|---|
+| `use_avatar_as_icon` | The square icon is your avatar |
+| `logo` | A `file_…` of purpose `business_logo` ([Files](/refunds-and-disputes#files)); the same field as `business_logo` on `POST /v1/merchants/me` |
+| `primary_color`, `accent_color` | `#rrggbb` |
+| `font` | `system`, `inter`, `roboto`, `open_sans`, `lato`, `source_sans`, `noto_sans`, `serif`, `monospace` — system stacks; no remote font is ever loaded |
+| `border_style` | `rounded`, `rectangular`, `pill` |
+| `terms_of_service_url` | `https://…`; required before a session asks for terms acceptance |
+
+## Customer emails
+
+`GET` / `POST /v1/merchants/me/email_settings` (`peable.merchants.emailSettings`):
+
+| Setting | Default |
+|---|---|
+| `payment_receipts` | on |
+| `refund_notices` | on |
+| `checkout_confirmations` | off |
+| `support_email` | The reply-to address |
+
+A receipt goes to the payment's `receipt_email` — a Checkout Session sets it
+from the email the payer gave — with your branding, the lines, the amount, the
+date, the rail and a receipt number from your own sequence (`R-000042`).
+Nothing else: no address, no card or FairCoin details, no secrets. A receipt
+that cannot be sent within three days is dropped rather than sent late.
+
+## On behalf of a seller
+
+`connected_account: 'ca_…'` on the session pays one of your FairCoin sellers
+directly ([FairCoin sellers](/connect-faircoin#4-take-a-payment-for-a-seller)).

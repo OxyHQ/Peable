@@ -118,6 +118,7 @@ describe('loopback test checkout entry', () => {
         type: 'api_error',
         code: 'local_test_unavailable',
         message: 'the local test checkout could not be created',
+        doc_url: 'https://oxy.so/developers/docs/peable/errors/#local_test_unavailable',
         request_id: null,
       },
     });
@@ -141,6 +142,7 @@ describe('loopback test checkout entry', () => {
         type: 'permission_error',
         code: 'local_test_request_required',
         message: 'this route answers only the local test checkout on loopback',
+        doc_url: 'https://oxy.so/developers/docs/peable/errors/#local_test_request_required',
         request_id: null,
       },
     });

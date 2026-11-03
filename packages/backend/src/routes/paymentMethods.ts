@@ -3,12 +3,20 @@
  * metadata), list a customer's, detach. There is no create and no attach — a
  * `pm_…` is born attached when a SetupIntent (or a payment saving its card)
  * succeeds, and a detached one is dead (`services/customers/paymentMethodService.ts`).
+ *
+ * Request schemas: the contract's (`@peable.to/contracts` `paymentMethodRoutes`).
  */
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { z } from 'zod';
-import type { BillingDetails, UpdatePaymentMethodParams } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+import {
+  type BillingDetails,
+  METADATA_LIMIT_MESSAGE,
+  detachPaymentMethodParams,
+  expandOnlyQuery,
+  listPaymentMethodsQuery,
+  toAddress,
+  updatePaymentMethodParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import { findCustomerForMerchant } from '../db/customers/customerRepository';
 import {
@@ -24,51 +32,18 @@ import { ProviderError } from '../services/providers/provider';
 import { recordCustomerObjectEvent } from '../services/intentTransition';
 import { kickWebhookOutbox } from '../services/webhookOutbox';
 import { toPaymentMethodDTO } from '../lib/serialize';
-import { addressSchema, emailSchema, toAddress } from '../lib/addressSchema';
 import {
   requireAuthenticated,
   sendError,
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
-import {
-  answerList,
-  expandParam,
-  listQuerySchema,
-  parseQuery,
-  resolveListReference,
-  retrieveQuerySchema,
-} from '../lib/list';
-import { METADATA_LIMIT_MESSAGE, metadataUpdateSchema } from '../lib/metadata';
+import { answerList, parseQuery, resolveListReference } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
-
-const updateBodySchema = z
-  .object({
-    billing_details: z
-      .object({
-        address: addressSchema.optional(),
-        email: emailSchema.optional(),
-        name: z.string().max(500).optional(),
-        phone: z.string().max(40).optional(),
-      })
-      .strict()
-      .optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof UpdatePaymentMethodParams | 'expand', z.ZodType>)
-  .strict();
-
-const detachBodySchema = z.object({ expand: expandParam.optional() }).strict();
-
-/** `customer` is REQUIRED: Stripe lists a customer's methods, never a merchant's whole wallet. */
-const listPaymentMethodsQuery = listQuerySchema({
-  customer: z.string().min(1).max(255),
-  type: z.literal('card').optional(),
-});
-const retrieveQuery = retrieveQuerySchema({});
 
 export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
@@ -78,7 +53,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -111,7 +86,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -120,7 +95,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const query = parseQuery(req, res, retrieveQuery);
+      const query = parseQuery(req, res, expandOnlyQuery);
       if (!query) return;
       const expand = parseExpand(res, 'payment_method', query.expand, { list: false });
       if (!expand) return;
@@ -144,7 +119,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -154,7 +129,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = updateBodySchema.safeParse(req.body ?? {});
+      const parsed = updatePaymentMethodParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -223,7 +198,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods/:id/detach',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -233,7 +208,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = detachBodySchema.safeParse(req.body ?? {});
+      const parsed = detachPaymentMethodParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

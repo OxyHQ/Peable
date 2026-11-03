@@ -1,0 +1,21 @@
+---
+title: "TaxTransactionReversal"
+description: "The TaxTransactionReversal shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxTransactionReversal
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount_total` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `amount_net` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `tax_amount` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `line_items` | array of [TaxCalculationLineItem](/reference/objects/tax-calculation-line-item) |  |
+
+## Used in
+
+[TaxTransaction](/reference/objects/tax-transaction)

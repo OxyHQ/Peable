@@ -1,0 +1,20 @@
+---
+title: "PriceTier"
+description: "The PriceTier shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PriceTier
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `up_to` | integer \| null | The last quantity this tier covers; `null` on the last tier. At least -9007199254740991. |
+| `unit_amount` | string \| null | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `flat_amount` | string \| null | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+
+## Used in
+
+[Price](/reference/objects/price)

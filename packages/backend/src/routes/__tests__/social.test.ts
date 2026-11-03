@@ -123,7 +123,7 @@ let baseUrl: string;
 interface NextAddressResponse {
   address?: string;
   index?: number;
-  error?: { type: string; message: string };
+  error?: { type: string; code?: string; message: string };
 }
 
 interface CursorResponse {
@@ -213,10 +213,11 @@ describe('POST /v1/social/:username/next_address', () => {
     expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test('409s with type keyless_recipient for a keyless recipient', async () => {
+  test('409s with code keyless_recipient for a keyless recipient', async () => {
     const { status, body } = await postNextAddress('keylessbob', { network: 'testnet' });
     expect(status).toBe(409);
-    expect(body.error?.type).toBe('keyless_recipient');
+    expect(body.error?.type).toBe('invalid_request_error');
+    expect(body.error?.code).toBe('keyless_recipient');
   });
 
   // The wallet refuses mainnet for pay-by-@username, but the wallet is not the

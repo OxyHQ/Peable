@@ -1,0 +1,210 @@
+---
+title: "Hosted portal"
+description: "The Hosted portal endpoints of the Peable API."
+order: 922
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Hosted portal
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/billing_portal/public/{token}`](#retrieve-the-hosted-portal) | Retrieve the hosted portal |
+| [`POST /v1/billing_portal/public/{token}/cancel`](#cancel-a-subscription-from-the-portal) | Cancel a subscription from the portal |
+| [`POST /v1/billing_portal/public/{token}/change_plan`](#change-plan-from-the-portal) | Change plan from the portal |
+| [`POST /v1/billing_portal/public/{token}/customer`](#update-billing-details-from-the-portal) | Update billing details from the portal |
+| [`POST /v1/billing_portal/public/{token}/payment_method_update`](#begin-a-card-update-from-the-portal) | Begin a card update from the portal |
+| [`POST /v1/billing_portal/public/{token}/payment_method_update/complete`](#finish-a-card-update-from-the-portal) | Finish a card update from the portal |
+| [`POST /v1/billing_portal/public/{token}/renew`](#undo-a-cancellation-at-period-end) | Undo a cancellation at period end |
+
+## Retrieve the hosted portal
+
+`GET /v1/billing_portal/public/{token}`
+
+The customer, their subscriptions, invoices and the plans they may switch to.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PublicPortalSession](/reference/objects/public-portal-session).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a subscription from the portal
+
+`POST /v1/billing_portal/public/{token}/cancel`
+
+At period end or now, as the configuration says. Answers the portal as it now is.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `subscription` **required** | string | 1–255 characters. |
+
+**Response `200`**
+
+Returns [PublicPortalSession](/reference/objects/public-portal-session).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Change plan from the portal
+
+`POST /v1/billing_portal/public/{token}/change_plan`
+
+Answers the portal as it now is.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `subscription` **required** | string | 1–255 characters. |
+| `price` | string | 1–255 characters. |
+| `quantity` | integer | Between 0 and 1000000000. |
+
+**Response `200`**
+
+Returns [PublicPortalSession](/reference/objects/public-portal-session).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update billing details from the portal
+
+`POST /v1/billing_portal/public/{token}/customer`
+
+Answers the portal as it now is.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `email` | string (email) | At most 512 characters. |
+| `name` | string | 1–500 characters. |
+| `phone` | string | 1–40 characters. |
+| `address` | object |  |
+| `address[line1]` | string | At most 500 characters. |
+| `address[line2]` | string | At most 500 characters. |
+| `address[city]` | string | At most 500 characters. |
+| `address[state]` | string | At most 500 characters. |
+| `address[postal_code]` | string | At most 40 characters. |
+| `address[country]` | string | Matches `^[A-Z]{2}$`. |
+
+**Response `200`**
+
+Returns [PublicPortalSession](/reference/objects/public-portal-session).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Begin a card update from the portal
+
+`POST /v1/billing_portal/public/{token}/payment_method_update`
+
+A SetupIntent for the customer; card customers only.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [PortalPaymentMethodUpdate](/reference/objects/portal-payment-method-update).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Finish a card update from the portal
+
+`POST /v1/billing_portal/public/{token}/payment_method_update/complete`
+
+Once the SetupIntent succeeded, its method becomes the customer's default and every live subscription's.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `setup_intent` **required** | string | 1–255 characters. |
+
+**Response `200`**
+
+Returns [PortalPaymentMethodUpdateResult](/reference/objects/portal-payment-method-update-result).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Undo a cancellation at period end
+
+`POST /v1/billing_portal/public/{token}/renew`
+
+Answers the portal as it now is.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The portal session token (from the session `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `subscription` **required** | string | 1–255 characters. |
+
+**Response `200`**
+
+Returns [PublicPortalSession](/reference/objects/public-portal-session).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

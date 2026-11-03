@@ -1,0 +1,176 @@
+---
+title: "Events"
+description: "The Events endpoints of the Peable API."
+order: 919
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Events
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/events`](#list-events) | List events |
+| [`GET /v1/events/{id}`](#retrieve-an-event) | Retrieve an event |
+| [`GET /v1/events/stream`](#stream-events) | Stream events |
+
+## List events
+
+`GET /v1/events`
+
+Every event of the last 30 days, newest first, rendered exactly as its webhook deliveries carried it.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.events.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `type` | query | string | An exact event type, or a prefix ending in `.*` (`payment_intent.*`). At most 100 characters. Matches `^(\*\|[a-z_]+(\.[a-z_]+)*(\.\*)?)$`. |
+| `delivery_success` | query | boolean | `true`: only events every delivery of which succeeded. `false`: only events with a delivery still pending or failed. |
+| `payment_intent` | query | string | `pi_…`: only the events about that payment — the timeline of one payment. 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Event](/reference/objects/event) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Event](/reference/objects/event) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "evt_0193b8f2c1a87d3e9f4b",
+      "object": "event",
+      "type": "webhook_endpoint.test",
+      "created": 1793750400,
+      "livemode": false,
+      "api_version": "2026-11-03",
+      "data": {
+        "object": {
+          "id": "we_0193b8f2c1a87d3e9f4c",
+          "object": "webhook_endpoint",
+          "livemode": false,
+          "url": "https://example.com/peable/webhooks",
+          "description": null,
+          "enabled_events": [
+            "*"
+          ],
+          "status": "enabled",
+          "disabled_reason": null,
+          "api_version": "2026-11-03",
+          "metadata": {},
+          "created": 1793750000,
+          "updated_at": 1793750000
+        }
+      },
+      "request": {
+        "id": "req_0193b8f2c1a87d3e9f4d",
+        "idempotency_key": null
+      }
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/events"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve an event
+
+`GET /v1/events/{id}`
+
+A `404` once the event is older than 30 days.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.events.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The event (`evt_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Event](/reference/objects/event).
+
+```json
+{
+  "id": "evt_0193b8f2c1a87d3e9f4b",
+  "object": "event",
+  "type": "webhook_endpoint.test",
+  "created": 1793750400,
+  "livemode": false,
+  "api_version": "2026-11-03",
+  "data": {
+    "object": {
+      "id": "we_0193b8f2c1a87d3e9f4c",
+      "object": "webhook_endpoint",
+      "livemode": false,
+      "url": "https://example.com/peable/webhooks",
+      "description": null,
+      "enabled_events": [
+        "*"
+      ],
+      "status": "enabled",
+      "disabled_reason": null,
+      "api_version": "2026-11-03",
+      "metadata": {},
+      "created": 1793750000,
+      "updated_at": 1793750000
+    }
+  },
+  "request": {
+    "id": "req_0193b8f2c1a87d3e9f4d",
+    "idempotency_key": null
+  }
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Stream events
+
+`GET /v1/events/stream`
+
+Server-Sent Events: every event of this merchant as it commits, rendered exactly as a webhook delivery carries it (`event: event`, `id:` the `evt_…`). Resumes after `Last-Event-ID`. Test mode only — what `peable listen` forwards to a local server.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.events.stream()`
+- **Mode:** Test mode only: a live credential is refused with [`test_mode_only`](/errors#test_mode_only).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `types` | query | string | Comma-separated event types or `prefix.*` patterns (`payment_intent.succeeded,charge.*`). Absent: every event. At most 2000 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A Server-Sent Events stream (`text/event-stream`); each event's `data` is [Event](/reference/objects/event).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

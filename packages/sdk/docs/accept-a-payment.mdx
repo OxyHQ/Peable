@@ -1,0 +1,206 @@
+---
+title: "Accept a payment"
+description: "PaymentIntents on both rails: FairCoin paid to your watch-only key, and cards."
+order: 3
+---
+
+# Accept a payment
+
+A **PaymentIntent** (`pi_…`) is one payment, on one of two rails:
+
+- **FairCoin** — the payer sends FAIR from their own wallet to an address
+  derived from your watch-only key. Peable watches the chain and never holds
+  the coins, so it cannot spend, refund or move them.
+- **Card** — collected by Peable's payment provider in the payer's browser
+  (cards, Apple Pay, Google Pay, and the bank methods you turn on). Card data
+  never reaches Peable or your server.
+
+[Checkout](/checkout) and [Payment Links](/payment-links) create
+PaymentIntents for you. Create one yourself when you build your own payment
+UI.
+
+## Amounts, currencies and networks
+
+- **Amounts are base-unit integer strings**, never floats. `1 FAIR =
+  100000000` base units; card amounts use each currency's ISO 4217 minor unit,
+  so `"2500"` is €25.00 and, because JPY has none, `"1500"` is ¥1,500.
+- **Currencies**: `FAIR` on the FairCoin rail; on the card rail `EUR`, `USD`,
+  `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD` and `JPY`.
+- **Network** is `testnet` or `mainnet`. A FairCoin payment's network must be
+  your merchant's registered network — or, for a payment on behalf of a seller,
+  the seller's ([FairCoin sellers](/connect-faircoin)).
+
+## A FairCoin payment
+
+```ts
+const intent = await peable.paymentIntents.create(
+  { amount: '250000000', network: 'testnet', metadata: { order_id: '123' } },
+  { idempotencyKey: 'order:123' },
+);
+
+intent.status;                          // 'requires_action'
+intent.next_action.faircoin_payment;    // { address, amount, uri }
+intent.faircoin;                        // { network, address, txid, confirmations, required_confirmations }
+new Date(intent.expires_at * 1000);     // instants are Unix seconds
+```
+
+Show the payer `next_action.faircoin_payment` — the `faircoin:` URI as a deep
+link or a QR code — or let `@peable.to/sdk/checkout` do it
+([Elements](/elements#the-pay-button)). When the payer's wallet broadcasts,
+the intent is `processing`; it is `succeeded` once
+`faircoin.confirmations` reaches `required_confirmations`. A transaction that
+pays less than the amount cancels it with `cancellation_reason: 'underpaid'`.
+
+## A card payment
+
+Card details are collected by the provider's fields in the browser
+([Elements](/elements)). To charge a returning customer, save a card first
+with a SetupIntent, then charge it from your server:
+
+```ts
+const customer = await peable.customers.create({ email: 'ada@example.com' });
+const setup = await peable.setupIntents.create({ customer: customer.id, usage: 'off_session' });
+// The browser completes setup.client_secret; then setup_intent.succeeded and
+// payment_method.attached arrive, and the card is a pm_… on the customer.
+const [card] = (await peable.paymentMethods.list({ customer: customer.id })).data;
+
+const paid = await peable.paymentIntents.create({
+  amount: '2500',
+  rail: 'card',
+  currency: 'EUR',
+  customer: customer.id,
+  payment_method: card.id,
+  confirm: true,
+  off_session: true,
+});
+```
+
+A decline throws `PeableCardError` (HTTP 402): `err.declineCode` carries the
+issuer's reason and `err.paymentIntent` the payment, back in
+`requires_payment_method`. The payer can try another card on the **same**
+payment.
+
+**Authorize now, capture later.** With `capture_method: 'manual'` the
+confirmed payment waits in `requires_capture`; capture all or part of it:
+
+```ts
+const held = await peable.paymentIntents.create({
+  amount: '5000', rail: 'card', currency: 'EUR', capture_method: 'manual',
+  customer: customer.id, payment_method: card.id, confirm: true,
+});
+await peable.paymentIntents.capture(held.id, { amount_to_capture: '3000' });
+```
+
+`peable.charges.retrieve(paid.latest_charge)` is the read-only record of what
+was authorized and captured. A confirmation that needs 3-D Secure answers
+`status: 'requires_action'` with `next_action: { type: 'use_peable_sdk' }`:
+the payer's browser finishes it with `@peable.to/sdk/checkout`. Card-only
+parameters on a FairCoin payment are a 400 naming the field.
+
+## Statuses
+
+Peable uses Stripe's seven PaymentIntent statuses:
+
+| Rail | Path |
+|---|---|
+| FairCoin | `requires_action` → `processing` → `succeeded` |
+| Card | `requires_payment_method` → (`requires_confirmation` → `requires_action` → `processing` → `requires_capture` →) `succeeded` |
+
+`canceled` is the other end, with `cancellation_reason`:
+
+| `cancellation_reason` | Why |
+|---|---|
+| `abandoned` | It expired before the payer paid |
+| the reason you gave | You called `cancel` (`requested_by_customer`, `duplicate`, …) |
+| `automatic` | The provider cancelled it |
+| `underpaid` | A FairCoin transaction paid less than the amount |
+
+Refunds are not statuses: a refunded payment stays `succeeded` and its
+`amount_refunded` grows ([Refunds and disputes](/refunds-and-disputes)).
+
+> **A failed attempt is not the end of a card payment**
+>
+> One declined attempt returns the payment to `requires_payment_method` with
+> `last_payment_error`, and `payment_intent.succeeded` can still follow. Never
+> cancel an order on `payment_intent.payment_failed` alone; act on
+> `payment_intent.canceled`. A FairCoin underpayment sends `payment_failed` and
+> then `canceled` (`underpaid`).
+
+## Expiry
+
+`expires_at` applies only while the payer has not paid. A FairCoin payment
+that is `processing` never expires, nor does an authorization held for
+capture; `can_expire` on the intent says which (the SDK exports `canExpire`
+and `EXPIRABLE_STATUSES`). Release stock on `payment_intent.canceled` with
+`cancellation_reason: 'abandoned'`, never on your own clock.
+
+## Manage a payment
+
+```ts
+await peable.paymentIntents.retrieve(intent.id);
+await peable.paymentIntents.list({ status: 'succeeded', limit: 20 });
+await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes' }, description: 'Order 123' });
+await peable.paymentIntents.cancel(intent.id, { cancellation_reason: 'requested_by_customer' });
+```
+
+A payment can be cancelled until money moves: in `requires_payment_method`,
+`requires_confirmation`, `requires_action`, or `requires_capture` (which
+releases the held authorization). A `processing` payment — coins on the chain,
+a charge at the acquirer — cannot be called off: the answer is
+`400 payment_intent_unexpected_state`, and it means the payer got there first.
+
+### Send a payer back to an unpaid payment
+
+A PaymentIntent carries no confirmation credential — one on that shape would
+be handed out by every list and every read. To resume a payment the payer did
+not finish, ask for it explicitly:
+
+```ts
+const action = await peable.paymentIntents.clientAction(intent.id);
+```
+
+Do that rather than creating a second payment: a fresh intent for a payer who
+returns the next day leaves the first one alive until it expires — two prices
+they can be shown and two payments they can make.
+
+## Payment methods and wallets
+
+Card-rail payments offer what your **payment method configuration** offers in
+the payment's currency. Cards, Apple Pay and Google Pay are on by default;
+SEPA Debit, iDEAL, Bancontact and EPS (EUR only) are yours to turn on. Every
+method says whether it is `available` and, when not, why
+(`unavailable_reason`: `provider_unsupported`, or `requires_card` for a wallet
+while cards are off).
+
+```ts
+const [config] = (await peable.paymentMethodConfigurations.list()).data; // the default
+await peable.paymentMethodConfigurations.update(config.id, {
+  sepa_debit: { display_preference: { preference: 'on' } },
+});
+
+// Or name the methods of one payment exactly:
+await peable.paymentIntents.create({
+  amount: '1500', rail: 'card', currency: 'EUR', payment_method_types: ['card', 'ideal'],
+});
+```
+
+A PaymentIntent keeps the `payment_method_types` it was created with. SEPA
+Debit stays `processing` for days: wait for `payment_intent.succeeded`, never a
+browser callback.
+
+To show Apple Pay and Google Pay on **your own** pages, register each domain,
+serve the wallet's domain association file, then validate it:
+
+```ts
+const domain = await peable.paymentMethodDomains.create({ domain_name: 'shop.example.com' });
+await peable.paymentMethodDomains.validate(domain.id);
+```
+
+Peable's hosted checkout runs on Peable's domain and needs nothing.
+
+## Events
+
+`payment_intent.created`, `.processing`, `.requires_action`, `.succeeded`,
+`.payment_failed`, `.canceled` and `.amount_capturable_updated` carry the
+PaymentIntent; fulfil on `payment_intent.succeeded`. See
+[Webhooks and events](/webhooks).

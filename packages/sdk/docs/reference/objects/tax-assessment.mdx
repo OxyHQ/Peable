@@ -1,0 +1,109 @@
+---
+title: "TaxAssessment"
+description: "The tax.assessment object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxAssessment
+
+Object type: `tax.assessment`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.assessment"` |  |
+| `id` | string | `taxasm_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `rule_set_version` | string |  |
+| `as_of` | integer | The instant the facts were judged at. |
+| `inputs_digest` | string | SHA-256 of the canonical inputs — what a replay is checked against. |
+| `results` | array of [TaxAssessmentResult](/reference/objects/tax-assessment-result) |  |
+| `summary` | object | How many results have each outcome. |
+| `summary.registration_declared` | integer |  |
+| `summary.likely_required` | integer |  |
+| `summary.approaching_threshold` | integer |  |
+| `summary.not_indicated` | integer |  |
+| `summary.uncertain` | integer |  |
+| `summary.unsupported` | integer |  |
+| `created_by` | object |  |
+| `created_by.type` | string | One of `user`, `service`. |
+| `created_by.id` | string \| null |  |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.assessment",
+  "id": "taxasm_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "rule_set_version": "2026-11-03.1",
+  "as_of": 1793750400,
+  "inputs_digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "results": [
+    {
+      "rule": "us_tx_sales_tax",
+      "country": "US",
+      "state": "TX",
+      "tax_type": "sales_tax",
+      "outcome": "approaching_threshold",
+      "reasons": [
+        {
+          "code": "approaching_threshold",
+          "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+          "evidence": {
+            "measured_minor": "41000000",
+            "threshold_minor": "50000000"
+          }
+        }
+      ],
+      "measured": {
+        "amount": "41000000",
+        "currency": "USD",
+        "transactions": 812,
+        "from": 1762041600,
+        "to": 1793577600,
+        "excluded_currencies": []
+      },
+      "threshold": {
+        "amount": "50000000",
+        "currency": "USD"
+      },
+      "deadline": null,
+      "coverage_limits": [],
+      "review_items": [
+        "taxrev_0193b8f2c1a87d3e9f4a"
+      ]
+    }
+  ],
+  "summary": {
+    "registration_declared": 0,
+    "likely_required": 0,
+    "approaching_threshold": 1,
+    "not_indicated": 0,
+    "uncertain": 0,
+    "unsupported": 0
+  },
+  "created_by": {
+    "type": "service",
+    "id": "app_42"
+  },
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/assessments`](/reference/tax-compliance#list-assessments) — List assessments
+- [`POST /v1/tax/assessments`](/reference/tax-compliance#run-an-assessment) — Run an assessment
+- [`GET /v1/tax/assessments/{id}`](/reference/tax-compliance#retrieve-an-assessment) — Retrieve an assessment
+
+## Events
+
+- [`tax.assessment.created`](/reference/webhook-events#taxassessmentcreated)
+
+## Used in
+
+[Event](/reference/objects/event)

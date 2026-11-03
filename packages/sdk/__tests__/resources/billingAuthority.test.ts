@@ -5,8 +5,16 @@ import {
   type BillingFinalInvoiceAuthority,
   type BillingPaidInvoice,
 } from '@peable.to/shared-types';
-import { BillingResource } from '../../src/resources/billing';
-import type { RestClient } from '../../src/core/client';
+import type { GatewayClient, RestClient } from '../../src/core/client';
+import { withBillingAuthority } from '../../src/overlays/billingAuthority';
+import { resources } from '../support/testGateway';
+
+/** `peable.billing` over `client`, verifying with `invoiceAuthorityKeys`. */
+function BillingOver(client: RestClient, invoiceAuthorityKeys?: Readonly<Record<string, string>>) {
+  return withBillingAuthority(resources(client as GatewayClient).billing, {
+    ...(invoiceAuthorityKeys === undefined ? {} : { invoiceAuthorityKeys }),
+  });
+}
 const keys = generateKeyPairSync('ed25519');
 const unix = (ms: number) => Math.floor(ms / 1000);
 const pinned = { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
@@ -104,13 +112,13 @@ describe('pinned SDK invoice authority', () => {
     const { authority } = fixture();
     const requests: string[] = [];
     await expect(
-      new BillingResource(client(authority, requests)).retrieveFinalInvoiceAuthority(
+      BillingOver(client(authority, requests)).retrieveFinalInvoiceAuthority(
         'sub_fixture',
         'in_fixture',
       ),
     ).rejects.toThrow('unconfigured');
     expect(requests).toHaveLength(0);
-    const resource = new BillingResource(client(authority, requests), pinned);
+    const resource = BillingOver(client(authority, requests), pinned);
     expect(await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).toEqual(
       authority,
     );
@@ -126,12 +134,12 @@ describe('pinned SDK invoice authority', () => {
     const { authority, expected } = fixture();
     const requests: string[] = [];
     await expect(
-      new BillingResource(client(authority, requests), {}).retrieveFinalInvoiceAuthority(
+      BillingOver(client(authority, requests), {}).retrieveFinalInvoiceAuthority(
         'sub_fixture',
         'in_fixture',
       ),
     ).rejects.toThrow('unconfigured');
-    const resource = new BillingResource(client(authority, requests), { another: pinned.fixture });
+    const resource = BillingOver(client(authority, requests), { another: pinned.fixture });
     await expect(
       resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture'),
     ).rejects.toThrow('verification failed');
@@ -145,7 +153,7 @@ describe('pinned SDK invoice authority', () => {
     };
     resign(authority);
     await expect(
-      new BillingResource(client(authority, requests), pinned).retrieveFinalInvoiceAuthority(
+      BillingOver(client(authority, requests), pinned).retrieveFinalInvoiceAuthority(
         'sub_fixture',
         'in_fixture',
       ),
@@ -154,7 +162,7 @@ describe('pinned SDK invoice authority', () => {
     resign(authority);
     expect(
       (
-        await new BillingResource(
+        await BillingOver(
           client(authority, requests, expected.invoice),
           pinned,
         ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')
@@ -164,7 +172,7 @@ describe('pinned SDK invoice authority', () => {
     const unsupported = { ...authority, schema_version: 1 as unknown as 2 };
     resign(unsupported);
     await expect(
-      new BillingResource(client(unsupported, requests), pinned).retrieveFinalInvoiceAuthority(
+      BillingOver(client(unsupported, requests), pinned).retrieveFinalInvoiceAuthority(
         'sub_fixture',
         'in_fixture',
       ),
@@ -184,7 +192,7 @@ it('recovers a payment inside its original quote after quote expiry', async () =
   };
   expected.invoice.paid_at = unix(+now - 90_000);
   resign(authority);
-  const resource = new BillingResource(client(authority, [], expected.invoice), pinned);
+  const resource = BillingOver(client(authority, [], expected.invoice), pinned);
   expect((await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).method).toBe(
     'faircoin',
   );
@@ -211,17 +219,17 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
     },
   });
   // Without the option, an authority without lines verifies and no query is sent.
-  await new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+  await BillingOver(recording(authority), pinned).retrieveFinalInvoiceAuthority(
     'sub_fixture',
     'in_fixture',
   );
   expect(queries.at(-1)).toBeUndefined();
   // Asked for but missing: refused.
   await expect(
-    new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+    BillingOver(recording(authority), pinned).retrieveFinalInvoiceAuthority(
       'sub_fixture',
       'in_fixture',
-      { include: ['tax_lines'] },
+      { include: 'tax_lines' },
     ),
   ).rejects.toThrow('verification failed');
   authority.invoice.tax_lines = [
@@ -238,10 +246,11 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
     },
   ];
   resign(authority);
-  const withLines = await new BillingResource(
-    recording(authority),
-    pinned,
-  ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture', { include: ['tax_lines'] });
+  const withLines = await BillingOver(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+    'sub_fixture',
+    'in_fixture',
+    { include: 'tax_lines' },
+  );
   expect(queries.at(-1)).toEqual({ include: 'tax_lines' });
   expect(withLines.invoice.tax_lines?.[0]?.tax_minor_units).toBe(500);
   // Lines that do not add up to the tax are refused even when signed.
@@ -249,10 +258,10 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
   if (line) line.tax_minor_units = 400;
   resign(authority);
   await expect(
-    new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+    BillingOver(recording(authority), pinned).retrieveFinalInvoiceAuthority(
       'sub_fixture',
       'in_fixture',
-      { include: ['tax_lines'] },
+      { include: 'tax_lines' },
     ),
   ).rejects.toThrow('verification failed');
 });

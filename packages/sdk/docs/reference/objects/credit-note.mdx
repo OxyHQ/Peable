@@ -1,0 +1,67 @@
+---
+title: "CreditNote"
+description: "The credit_note object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CreditNote
+
+Object type: `credit_note`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"credit_note"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `number` | string | `<invoice number>-CN-<nn>`. |
+| `invoice` | string \| [Invoice](/reference/objects/invoice) | `in_…`, or the Invoice with `expand[]=invoice`. Expandable. |
+| `customer` | string \| [Customer](/reference/objects/customer) | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `status` | string | One of `issued`, `void`. |
+| `type` | string | One of `pre_payment`, `post_payment`. |
+| `reason` | string \| null | One of `duplicate`, `fraudulent`, `order_change`, `product_unsatisfactory`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `lines` | object |  |
+| `lines.object` | `"list"` |  |
+| `lines.data` | array of [CreditNoteLineItem](/reference/objects/credit-note-line-item) |  |
+| `lines.has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `lines.url` | string | The path that was listed. |
+| `subtotal` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `tax` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `total` | string | What is credited, tax included. Matches `^(0\|[1-9][0-9]*)$`. |
+| `refund_amount` | string | Of `total`: refunded through the invoice's payment. Matches `^(0\|[1-9][0-9]*)$`. |
+| `credit_amount` | string | Of `total`: credited to the customer balance. Matches `^(0\|[1-9][0-9]*)$`. |
+| `out_of_band_amount` | string | Of `total`: recorded as returned outside Orbit. Matches `^(0\|[1-9][0-9]*)$`. |
+| `refund` | string \| null | The Refund (`re_…`) when part of it was refunded. |
+| `customer_balance_transaction` | string \| null | The customer balance transaction (`cbtxn_…`) of `credit_amount`. |
+| `memo` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `voided_at` | integer \| null | Unix seconds. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `customer` → [Customer](/reference/objects/customer)
+
+## Returned by
+
+- [`POST /v1/credit_notes`](/reference/credit-notes#issue-a-credit-note) — Issue a credit note
+- [`GET /v1/credit_notes`](/reference/credit-notes#list-credit-notes) — List credit notes
+- [`GET /v1/credit_notes/{id}`](/reference/credit-notes#retrieve-a-credit-note) — Retrieve a credit note
+- [`POST /v1/credit_notes/{id}/void`](/reference/credit-notes#void-a-credit-note) — Void a credit note
+- [`GET /v1/credit_notes/preview`](/reference/credit-notes#preview-a-credit-note) — Preview a credit note
+
+## Events
+
+- [`credit_note.created`](/reference/webhook-events#credit_notecreated)
+- [`credit_note.updated`](/reference/webhook-events#credit_noteupdated)
+- [`credit_note.voided`](/reference/webhook-events#credit_notevoided)
+
+## Used in
+
+[Event](/reference/objects/event)

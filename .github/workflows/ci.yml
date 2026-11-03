@@ -196,9 +196,26 @@ jobs:
       # `@peable.to/shared-types`' compiled output, and `@peable.to/checkout` imports
       # `@peable.to/sdk/checkout`. Without these, the typecheck fails with a TS2307
       # that says nothing about the change under review.
-      - run: bun run check:contribution-contracts
+      - run: bun run check:openapi
+
+      # Peable's docs (packages/sdk/docs, published at
+      # oxy.so/developers/docs/peable/ by the Oxy website's docs sync): the API
+      # reference generated from docs/openapi.json and the error-code page every
+      # `doc_url` points at, generated from the contracts' error vocabulary. A
+      # contract change without `bun run generate:api-docs`, an error code whose
+      # anchor is not the code, or a dead link between pages fails here.
+      - name: Generated docs pages match their sources
+        run: bun run check:api-docs
+      - name: The docs generators and link check can fail
+        run: bun run test:api-docs
       - run: bun run build:contracts
       - run: bun run build:shared-types
+
+      # The SDK's resource methods are generated from the BUILT route contracts
+      # (ADR 0014 D5): the committed `packages/sdk/src/generated/resources.ts`
+      # must be exactly what the generator writes for them.
+      - name: SDK resources match the route contracts
+        run: bun run check:sdk-resources
 
       # `@peable.to/pay` is consumed from its build output, same as
       # shared-types. Stated rather than left to `postinstall`, for the same
@@ -213,6 +230,20 @@ jobs:
 
       - name: Typecheck every package
         run: bun run --filter '*' typecheck
+
+      # The examples are what integrators copy, so a change to the SDK's
+      # surface must not leave them stale. They are NOT workspace members — the
+      # backend image's frozen install needs every member's manifest, and an
+      # example is not part of it — so `--filter '*'` above does not reach them.
+      # Each resolves the workspace SDK built above through the root
+      # node_modules.
+      - name: Typecheck the examples
+        run: |
+          for example in examples/*/; do
+            echo "::group::$example"
+            (cd "$example" && bun run typecheck) || exit 1
+            echo "::endgroup::"
+          done
 
       - name: Migrations match the schema
         # A schema edited without regenerating produces DDL that never reaches

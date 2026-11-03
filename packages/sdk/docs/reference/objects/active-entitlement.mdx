@@ -1,0 +1,40 @@
+---
+title: "ActiveEntitlement"
+description: "The entitlements.active_entitlement object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ActiveEntitlement
+
+Object type: `entitlements.active_entitlement`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Stable per customer and feature. |
+| `object` | `"entitlements.active_entitlement"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `feature` | string | The feature (`feat_…`). |
+| `lookup_key` | string |  |
+
+## Example
+
+```json
+{
+  "id": "ent_5f1c0a9e2b7d4c3a8e6f1b2d",
+  "object": "entitlements.active_entitlement",
+  "livemode": false,
+  "feature": "feat_0193b8f2c1a87d3e9f4f",
+  "lookup_key": "mention_plus"
+}
+```
+
+## Returned by
+
+- [`GET /v1/entitlements/active_entitlements`](/reference/entitlements#list-a-customers-active-entitlements) — List a customer's active entitlements
+
+## Used in
+
+[ActiveEntitlementSummary](/reference/objects/active-entitlement-summary)

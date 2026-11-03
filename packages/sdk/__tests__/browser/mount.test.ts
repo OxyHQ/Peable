@@ -19,7 +19,7 @@ import {
   isMobileUserAgent,
   type PayDeepLinkParams,
 } from '../../src/browser/mount';
-import { PeableInvalidRequestError, PeableApiError, PeableError } from '../../src/core/errors';
+import { PeableInvalidRequestError, PeableAPIError, PeableError } from '../../src/core/errors';
 // The wallet's REAL deep-link parser — imported directly (not re-implemented)
 // so the round-trip test below proves byte-for-byte compatibility instead of
 // just asserting against my own possibly-mistaken re-reading of its contract.
@@ -195,7 +195,7 @@ describe('createEmitter', () => {
 
   test('emitting an event with no registered handlers does not throw', () => {
     const emitter = createEmitter();
-    expect(() => emitter.emit('error', new PeableApiError('boom'))).not.toThrow();
+    expect(() => emitter.emit('error', new PeableAPIError('boom'))).not.toThrow();
   });
 
   test('removeAll tears down every handler for every event', () => {

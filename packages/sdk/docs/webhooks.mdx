@@ -1,0 +1,147 @@
+---
+title: "Webhooks and events"
+description: "Endpoints, the event envelope, signatures, retries and local forwarding."
+order: 15
+---
+
+# Webhooks and events
+
+Every change Peable records is an **event** (`evt_…`), stored once in the same
+transaction as the change it describes — so an event is never lost and never
+early. A **webhook delivery** is that event sent to one of your endpoints.
+Webhooks are the source of truth for fulfilment: a browser redirect or a
+closed sheet proves nothing.
+
+## Register an endpoint
+
+```ts
+const endpoint = await peable.webhookEndpoints.create({
+  url: 'https://shop.example/webhooks/peable',
+  enabled_events: ['payment_intent.succeeded', 'payment_intent.canceled'], // or ['*']
+});
+// endpoint.secret (whsec_…) is shown ONLY in this answer: store it now.
+```
+
+- Up to 16 endpoints (`we_…`) per merchant, each with its own
+  `enabled_events` and its own secret.
+- The URL must be `https` (plain `http` only in test mode), on port 443 or 80,
+  and name a public host. To receive test events on localhost, use the
+  [CLI's `listen`](#local-development).
+- `peable.webhookEndpoints.list()`, `retrieve`, `update(id, { … })`, `del(id)`.
+
+## The event
+
+```json
+{
+  "id": "evt_…",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "created": 1793750400,
+  "livemode": false,
+  "api_version": "2026-11-03",
+  "account": "ca_…",
+  "data": { "object": { "id": "pi_…", "object": "payment_intent", "…": "…" }, "previous_attributes": { "status": "processing" } },
+  "request": { "id": "req_…", "idempotency_key": "order:123" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `data.object` | The object the event is about, exactly as the API returns it — the PaymentIntent for `payment_intent.*`, the Charge for `charge.refunded`, the Dispute for `charge.dispute.*`, and so on |
+| `data.previous_attributes` | On a change, the prior values of the fields that moved |
+| `api_version` | The wire the event was stored under ([Versioning](/versioning)) |
+| `account` | The seller (`ca_…`) an on-behalf payment is for; absent on your own payments |
+| `request` | `{ id, idempotency_key }` of the API call that caused it; `null` for a background change |
+| `created` | Unix seconds |
+
+Every event is listable for 30 days: `peable.events.list({ type:
+'payment_intent.*' })`, `peable.events.retrieve('evt_…')`. Webhook payloads
+always carry ids, never expanded objects.
+
+## Verify the signature
+
+Every delivery is signed in the `Peable-Signature` header:
+`t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`. Verify it with
+the SDK, against the **raw** body — a body your framework parsed and
+re-serialized no longer matches:
+
+```ts
+import express from 'express';
+import { PeableSignatureVerificationError, WEBHOOK_SIGNATURE_HEADER } from '@peable.to/sdk';
+
+app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, res) => {
+  let event;
+  try {
+    event = peable.webhooks.constructEvent(
+      req.body.toString('utf8'),
+      req.header(WEBHOOK_SIGNATURE_HEADER), // 'Peable-Signature'
+      process.env.PEABLE_WEBHOOK_SECRET,
+    );
+  } catch (err) {
+    if (err instanceof PeableSignatureVerificationError) return res.status(400).send('bad signature');
+    throw err;
+  }
+
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      fulfil(event.data.object.metadata.order_id);
+      break;
+    case 'payment_intent.canceled':
+      releaseHold(event.data.object); // see cancellation_reason
+      break;
+  }
+  res.json({ received: true });
+});
+```
+
+`constructEvent(payload, header, secret, tolerance?)` refuses a signature
+older than five minutes (`tolerance`, in seconds, changes that) and returns
+the event typed by its
+`type`: `WebhookEventPayload` in `@peable.to/shared-types` maps every event
+type to its object, so a handler cannot read the wrong shape.
+
+### Rolling a secret without a gap
+
+```ts
+const rolled = await peable.webhookEndpoints.rollSecret(endpoint.id, { expires_in_seconds: 3600 });
+```
+
+`rolled.secret` is the new secret. For the window you choose (up to 24 hours)
+every delivery carries one `v1=` signature per secret, so deploy the new one
+at your own pace — `constructEvent` accepts either, or pass both:
+`constructEvent(raw, header, [newSecret, oldSecret])`.
+
+## Delivery and retries
+
+- Answer any `2xx` quickly; anything else, or no answer, is a failure.
+- A failed delivery is retried with backoff for about **three days**. An
+  endpoint that fails every delivery for three days is **disabled**
+  (`disabled_reason: 'delivery_failures'`); re-enable it with
+  `webhookEndpoints.update(id, { disabled: false })`.
+- Deliveries can arrive more than once and out of order. Make your handler
+  idempotent on `event.id`, and re-read the object when order matters.
+- `peable.webhookDeliveries.list({ webhook_endpoint: 'we_…' })` is the
+  delivery log; `peable.webhookDeliveries.redeliver(id)` sends the same stored
+  event again.
+
+## Event types
+
+Every event type, with the object its `data.object` carries and the whole
+payload, is in the reference's [webhook events](/reference/webhook-events).
+
+## Local development
+
+`peable listen` streams every event your test-mode merchant records, as it
+commits, and POSTs each one to your local server — signed with a `whsec_…` it
+prints for the session, with the same algorithm and header as a real
+delivery, so the handler above verifies it unchanged:
+
+```sh
+peable listen --forward-to http://localhost:3000/webhooks/peable
+peable trigger payment_intent.succeeded
+```
+
+No public URL and no registered endpoint are needed. `listen` reads
+`GET /v1/events/stream`, a Server-Sent Events stream fed from the same
+transaction that stores each event (never a rolled-back one); the SDK exposes
+it as `peable.events.stream({ types: 'payment_intent.*' }, { signal, onConnect })` — `types` is a comma-separated string, and the stream reconnects after the last event it received. See [Testing](/testing#the-cli).

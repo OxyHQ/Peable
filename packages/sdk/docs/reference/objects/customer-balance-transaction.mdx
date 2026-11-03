@@ -1,0 +1,41 @@
+---
+title: "CustomerBalanceTransaction"
+description: "The customer_balance_transaction object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CustomerBalanceTransaction
+
+Object type: `customer_balance_transaction`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"customer_balance_transaction"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `customer` | string \| [Customer](/reference/objects/customer) | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `type` | string | One of `adjustment`, `applied_to_invoice`, `credit_note`, `invoice_overpaid`, `unapplied_from_invoice`. |
+| `amount` | string | SIGNED: negative credits the customer, positive debits. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `ending_balance` | string | SIGNED: the balance after this transaction. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `description` | string \| null |  |
+| `invoice` | string \| [Invoice](/reference/objects/invoice) \| null | The invoice it moved with (`in_…`, or the Invoice with `expand[]=invoice`). Expandable. |
+| `credit_note` | string \| null | The credit note (`cn_…`) it came from. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+## Returned by
+
+- [`POST /v1/customers/{id}/balance_transactions`](/reference/customer-balance#adjust-a-customers-balance) — Adjust a customer's balance
+- [`GET /v1/customers/{id}/balance_transactions`](/reference/customer-balance#list-a-customers-balance-transactions) — List a customer's balance transactions
+- [`GET /v1/customers/{id}/balance_transactions/{transaction}`](/reference/customer-balance#retrieve-a-customer-balance-transaction) — Retrieve a customer balance transaction

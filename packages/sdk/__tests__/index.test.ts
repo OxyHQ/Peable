@@ -5,19 +5,15 @@ import {
   PEABLE_SERVICE_AUDIENCE,
   type PeableOxyHost,
 } from '../src/index';
-import { PaymentIntentsResource } from '../src/resources/paymentIntents';
-import { PaymentLinksResource } from '../src/resources/paymentLinks';
-import { CheckoutResource, CheckoutSessionsResource } from '../src/resources/checkoutSessions';
 import { WebhooksResource } from '../src/resources/webhooks';
 
 describe('Peable', () => {
   test('wires paymentIntents/paymentLinks/checkout.sessions/webhooks', () => {
     const peable = new Peable({ publicKey: 'oxy_dk_test', secret: 'sk_test' });
 
-    expect(peable.paymentIntents).toBeInstanceOf(PaymentIntentsResource);
-    expect(peable.paymentLinks).toBeInstanceOf(PaymentLinksResource);
-    expect(peable.checkout).toBeInstanceOf(CheckoutResource);
-    expect(peable.checkout.sessions).toBeInstanceOf(CheckoutSessionsResource);
+    expect(typeof peable.paymentIntents.create).toBe('function');
+    expect(typeof peable.paymentLinks.create).toBe('function');
+    expect(typeof peable.checkout.sessions.create).toBe('function');
     expect(peable.webhooks).toBeInstanceOf(WebhooksResource);
   });
 
@@ -34,8 +30,8 @@ describe('Peable', () => {
       tokenProvider: { getToken: async () => 'token', invalidate: () => {} },
     });
 
-    expect(peable.paymentIntents).toBeInstanceOf(PaymentIntentsResource);
-    expect(peable.checkout.sessions).toBeInstanceOf(CheckoutSessionsResource);
+    expect(typeof peable.paymentIntents.retrieve).toBe('function');
+    expect(typeof peable.checkout.sessions.retrieve).toBe('function');
     expect(peable.webhooks).toBeInstanceOf(WebhooksResource);
   });
 

@@ -1,0 +1,50 @@
+---
+title: "TaxRegistration"
+description: "The tax.registration object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxRegistration
+
+Object type: `tax.registration`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.registration"` |  |
+| `id` | string | `taxreg_…`. |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `scheme` | string | One of `standard`, `simplified`, `eu_oss_union`, `eu_oss_non_union`, `us_state_sales_tax`, `ca_provincial`. |
+| `registration_number` | string \| null | The government-issued number (VAT id, state permit), when there is one. |
+| `active_from` | integer | Unix seconds. |
+| `expires_at` | integer \| null | Unix seconds. |
+| `status` | string | `pending_approval` until the owner approves; `scheduled` before `active_from`. One of `pending_approval`, `scheduled`, `active`, `expired`. |
+| `approved_at` | integer \| null | Unix seconds. |
+| `provider_registration_ref` | string \| null | The mirrored registration at the calculating provider, once synced. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.registration",
+  "id": "taxreg_0193b8f2c1a87d3e9f4a",
+  "country": "ES",
+  "state": null,
+  "scheme": "eu_oss_union",
+  "registration_number": "ESB12345678",
+  "active_from": 1793750400,
+  "expires_at": null,
+  "status": "active",
+  "approved_at": 1793750400,
+  "provider_registration_ref": "taxreg_1QxYz2AbCdEf",
+  "created": 1793664000
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/registrations`](/reference/tax#list-tax-registrations) — List tax registrations

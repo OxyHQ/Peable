@@ -1,0 +1,22 @@
+---
+title: "PaymentIntentFaircoin"
+description: "The PaymentIntentFaircoin shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentIntentFaircoin
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `network` | string | One of `mainnet`, `testnet`. |
+| `address` | string | Watch-only receive address derived per intent from the merchant's (or seller's) xpub. |
+| `txid` | string \| null |  |
+| `confirmations` | integer |  |
+| `required_confirmations` | integer |  |
+
+## Used in
+
+[PaymentIntent](/reference/objects/payment-intent)

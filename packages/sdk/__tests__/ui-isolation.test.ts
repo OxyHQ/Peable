@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve, relative } from 'node:path';
 import ts from 'typescript';
 const root = resolve(import.meta.dir, '..');
-function graph(entry: string) {
+function graph(entry: string, runtimeOnly = false) {
   const files = new Set<string>();
   const external = new Set<string>();
   function visit(file: string) {
@@ -32,10 +32,14 @@ function graph(entry: string) {
       visit(target);
     }
     function walk(node: ts.Node) {
+      const typeOnly =
+        (ts.isImportDeclaration(node) && node.importClause?.isTypeOnly === true) ||
+        (ts.isExportDeclaration(node) && node.isTypeOnly);
       if (
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
         node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier)
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        !(runtimeOnly && typeOnly)
       )
         follow(node.moduleSpecifier.text);
       if (
@@ -47,6 +51,7 @@ function graph(entry: string) {
         if (first && ts.isStringLiteral(first)) follow(first.text);
       }
       if (
+        !runtimeOnly &&
         ts.isImportTypeNode(node) &&
         ts.isLiteralTypeNode(node.argument) &&
         ts.isStringLiteral(node.argument.literal)
@@ -59,6 +64,18 @@ function graph(entry: string) {
   visit(resolve(root, entry));
   return { files, external };
 }
+describe('no schema at runtime', () => {
+  // The generated resources take every type from the contracts at compile
+  // time; constructing the schemas belongs to the backend and the generator.
+  for (const entry of ['src/index.ts', 'src/checkout.ts', 'src/display.ts'])
+    test(`${entry} reaches neither zod nor the contracts root at runtime`, () => {
+      const { external } = graph(entry, true);
+      expect(
+        [...external].filter((name) => name === 'zod' || name === '@peable.to/contracts'),
+      ).toEqual([]);
+    });
+});
+
 describe('optional checkout UI boundary', () => {
   for (const entry of ['src/index.ts', 'src/checkout.ts'])
     test(`${entry} never imports UI peers or the UI module graph`, () => {

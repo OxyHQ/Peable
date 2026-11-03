@@ -1,0 +1,138 @@
+---
+title: "Subscription"
+description: "The subscription object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Subscription
+
+Object type: `subscription`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"subscription"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `customer` | string \| [Customer](/reference/objects/customer) | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `status` | string | One of `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `unpaid`, `canceled`, `paused`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `items` | object | Every live item, on one page. |
+| `items.object` | `"list"` |  |
+| `items.data` | array of [SubscriptionItem](/reference/objects/subscription-item) |  |
+| `items.has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `items.url` | string | The path that was listed. |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `days_until_due` | integer \| null | `send_invoice` only: days from finalization to the invoice's due date. At least -9007199254740991. |
+| `default_payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | `pm_…`, or the PaymentMethod with `expand[]=default_payment_method`. Expandable. |
+| `description` | string \| null |  |
+| `billing_cycle_anchor` | integer | Unix seconds. |
+| `current_period_start` | integer | Unix seconds. |
+| `current_period_end` | integer | Unix seconds. |
+| `start_date` | integer | Unix seconds. |
+| `trial_start` | integer \| null | Unix seconds. |
+| `trial_end` | integer \| null | Unix seconds. |
+| `trial_settings` | object |  |
+| `trial_settings.end_behavior` | object |  |
+| `trial_settings.end_behavior.missing_payment_method` | string | One of `cancel`, `create_invoice`, `pause`. |
+| `cancel_at_period_end` | boolean |  |
+| `cancel_at` | integer \| null | Unix seconds. |
+| `canceled_at` | integer \| null | Unix seconds. |
+| `ended_at` | integer \| null | Unix seconds. |
+| `cancellation_details` | object |  |
+| `cancellation_details.reason` | string \| null | One of `cancellation_requested`, `payment_failed`. |
+| `cancellation_details.comment` | string \| null |  |
+| `pause_collection` | object \| null |  |
+| `pause_collection.behavior` | string | One of `keep_as_draft`, `mark_uncollectible`, `void`. |
+| `pause_collection.resumes_at` | integer \| null | Unix seconds. |
+| `automatic_tax` | object |  |
+| `automatic_tax.enabled` | boolean |  |
+| `discount` | [Discount](/reference/objects/discount) \| null |  |
+| `latest_invoice` | string \| [Invoice](/reference/objects/invoice) \| null | `in_…`, or the Invoice with `expand[]=latest_invoice`. Expandable. |
+| `test_clock` | string \| null | The test clock (`clock_…`) the customer is attached to; test mode only. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+## Example
+
+```json
+{
+  "id": "sub_0193b8f2c1a87d3e9f4a",
+  "object": "subscription",
+  "livemode": false,
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "currency": "EUR",
+  "items": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+  },
+  "collection_method": "charge_automatically",
+  "days_until_due": null,
+  "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "billing_cycle_anchor": 1793750400,
+  "current_period_start": 1793750400,
+  "current_period_end": 1796428800,
+  "start_date": 1793750400,
+  "trial_start": null,
+  "trial_end": null,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "canceled_at": null,
+  "ended_at": null,
+  "cancellation_details": {
+    "reason": null,
+    "comment": null
+  },
+  "pause_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "discount": null,
+  "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/subscriptions`](/reference/subscriptions#create-a-subscription) — Create a subscription
+- [`GET /v1/subscriptions`](/reference/subscriptions#list-subscriptions) — List subscriptions
+- [`GET /v1/subscriptions/{id}`](/reference/subscriptions#retrieve-a-subscription) — Retrieve a subscription
+- [`POST /v1/subscriptions/{id}`](/reference/subscriptions#update-a-subscription) — Update a subscription
+- [`DELETE /v1/subscriptions/{id}`](/reference/subscriptions#cancel-a-subscription) — Cancel a subscription
+- [`POST /v1/subscriptions/{id}/resume`](/reference/subscriptions#resume-a-paused-subscription) — Resume a paused subscription
+- [`GET /v1/subscriptions/search`](/reference/subscriptions#search-subscriptions) — Search subscriptions
+
+## Events
+
+- [`customer.subscription.created`](/reference/webhook-events#customersubscriptioncreated)
+- [`customer.subscription.deleted`](/reference/webhook-events#customersubscriptiondeleted)
+- [`customer.subscription.paused`](/reference/webhook-events#customersubscriptionpaused)
+- [`customer.subscription.resumed`](/reference/webhook-events#customersubscriptionresumed)
+- [`customer.subscription.trial_will_end`](/reference/webhook-events#customersubscriptiontrial_will_end)
+- [`customer.subscription.updated`](/reference/webhook-events#customersubscriptionupdated)
+
+## Used in
+
+[Event](/reference/objects/event) · [Invoice](/reference/objects/invoice) · [InvoiceItem](/reference/objects/invoice-item)

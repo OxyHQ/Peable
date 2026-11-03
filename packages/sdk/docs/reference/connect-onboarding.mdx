@@ -1,0 +1,61 @@
+---
+title: "Connect onboarding"
+description: "The Connect onboarding endpoints of the Peable API."
+order: 909
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Connect onboarding
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/connect/onboarding/{token}`](#retrieve-an-onboarding-link) | Retrieve an onboarding link |
+| [`POST /v1/connect/onboarding/{token}/faircoin`](#register-the-sellers-faircoin-key) | Register the seller's FairCoin key |
+
+## Retrieve an onboarding link
+
+`GET /v1/connect/onboarding/{token}`
+
+What the seller is being asked to do. Looking consumes nothing. An expired link answers 410 `link_expired` with the platform’s `refresh_url`.
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The onboarding link token (the last segment of its `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ConnectOnboarding](/reference/objects/connect-onboarding).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Register the seller's FairCoin key
+
+`POST /v1/connect/onboarding/{token}/faircoin`
+
+The ONLY way a key reaches a connected account: runs the non-custody firewall, consumes the link and tells the platform (`connected_account.updated`), in one transaction. The key is immutable once registered and never appears on any response.
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The onboarding link token (the last segment of its `url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `xpub` **required** | string | A watch-only extended PUBLIC key. A private extended key is refused (`watch_only_violation`) and never stored. 1–200 characters. |
+
+**Response `200`**
+
+Returns [ConnectOnboardingComplete](/reference/objects/connect-onboarding-complete).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

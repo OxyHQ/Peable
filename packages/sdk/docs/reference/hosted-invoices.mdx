@@ -1,0 +1,79 @@
+---
+title: "Hosted invoices"
+description: "The Hosted invoices endpoints of the Peable API."
+order: 921
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Hosted invoices
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/invoices/public/{token}`](#retrieve-a-hosted-invoice) | Retrieve a hosted invoice |
+| [`POST /v1/invoices/public/{token}/pay`](#pay-a-hosted-invoice) | Pay a hosted invoice |
+| [`GET /v1/invoices/public/{token}/pdf`](#download-a-hosted-invoices-pdf) | Download a hosted invoice's PDF |
+
+## Retrieve a hosted invoice
+
+`GET /v1/invoices/public/{token}`
+
+A finalized invoice as its payer sees it.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The hosted invoice token (from `hosted_invoice_url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PublicInvoice](/reference/objects/public-invoice).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Pay a hosted invoice
+
+`POST /v1/invoices/public/{token}/pay`
+
+The PaymentIntent the payer completes — a card through the provider’s own fields, FairCoin from the payer’s wallet. The same invoice answers the same intent while it can still be paid.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The hosted invoice token (from `hosted_invoice_url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [PublicInvoicePayment](/reference/objects/public-invoice-payment).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Download a hosted invoice's PDF
+
+`GET /v1/invoices/public/{token}/pdf`
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `token` **required** | path | string | The hosted invoice token (from `hosted_invoice_url`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+The bytes, as `application/pdf`.
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

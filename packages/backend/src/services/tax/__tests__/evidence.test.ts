@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { createTaxLocationEvidenceSchema, evaluateEvidence } from '../evidence';
+import { createTaxLocationEvidenceParams } from '@peable.to/contracts';
+import { evaluateEvidence } from '../evidence';
 import { registrationCovers, validateRegistration } from '../jurisdictions';
 
 const billing = (country: string, extra: Record<string, string> = {}) => ({
@@ -58,14 +59,14 @@ describe('customer location evidence', () => {
   it('refuses language, currency or timezone as evidence', () => {
     // The same request with a real kind of evidence is accepted, so the type is what is refused.
     expect(
-      createTaxLocationEvidenceSchema.safeParse({
+      createTaxLocationEvidenceParams.safeParse({
         customer_ref: 'acct_1',
         evidence: [{ type: 'bank_country', country: 'DE' }],
       }).success,
     ).toBe(true);
     for (const type of ['language', 'currency', 'timezone', 'locale'])
       expect(
-        createTaxLocationEvidenceSchema.safeParse({
+        createTaxLocationEvidenceParams.safeParse({
           customer_ref: 'acct_1',
           evidence: [{ type, country: 'DE' }],
         }).success,

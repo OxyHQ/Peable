@@ -2,8 +2,8 @@ import type { Request, Response } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
+import { SEARCH_QUERY_MAX_LENGTH, searchQuery } from '@peable.to/contracts';
 import {
-  SEARCH_QUERY_MAX_LENGTH,
   SEARCH_SUBSTRING_MIN_LENGTH,
   SEARCHABLE_RESOURCES,
   type SearchableResource,
@@ -11,7 +11,7 @@ import {
 import { getDb } from '../../db/postgres';
 import { expandObjects, parseExpand } from '../expand';
 import { sendError } from '../http';
-import { expandParam, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, listUrl, parseQuery } from '../list';
+import { dashboardQuery, listUrl, parseQuery } from '../list';
 import type { QuerySurface } from '../list';
 import { compileSearch } from './compile';
 import { decodeSearchPage, encodeSearchPage } from './page';
@@ -35,23 +35,14 @@ import { SEARCH_RESOURCES, type SearchResource } from './resources';
 
 const TOTAL_COUNT = 'total_count';
 
-const searchShape = {
-  query: z
-    .string({ required_error: 'query is required' })
-    .min(1, 'query is required')
-    .max(
-      SEARCH_QUERY_MAX_LENGTH,
-      `a query is at most ${String(SEARCH_QUERY_MAX_LENGTH)} characters`,
-    ),
-  limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
-  page: z.string().min(1).max(512).optional(),
-  expand: expandParam.optional(),
-};
-
-/** Strict, as every list: an unknown parameter is a 400 naming it. */
+/**
+ * Strict, as every list: an unknown parameter is a 400 naming it. The API
+ * surface is the contract's `searchQuery`; the dashboard's adds its Test/Live
+ * toggle.
+ */
 export const searchQuerySchema = {
-  api: z.object(searchShape).strict(),
-  dashboard: z.object({ ...searchShape, environment: z.enum(OXY_SERVICE_ENVIRONMENTS) }).strict(),
+  api: searchQuery,
+  dashboard: dashboardQuery(searchQuery),
 } as const;
 
 /** A refusal of the query, answered as Stripe does: 400 naming `query`. */

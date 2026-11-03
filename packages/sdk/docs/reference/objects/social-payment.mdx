@@ -1,0 +1,22 @@
+---
+title: "SocialPayment"
+description: "The SocialPayment shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SocialPayment
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `address` | string | The single-use social-receive address minted for this payment. |
+| `direction` | string | One of `sent`, `received`. |
+| `counterparty` | [EnrichmentResult](/reference/objects/enrichment-result) | The other party; `{ kind: 'unknown' }` when the identity lookup failed. |
+| `source` | [SocialPaymentSource](/reference/objects/social-payment-source) | What it was for, as the paying app named it; absent when it named nothing. |
+| `created` | integer | When the address was minted. |
+
+## Used in
+
+[SocialPayments](/reference/objects/social-payments)

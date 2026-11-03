@@ -1,0 +1,35 @@
+---
+title: "AccountLink"
+description: "The account_link object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# AccountLink
+
+Object type: `account_link`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"account_link"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `url` | string | Where to send the person. Single use. |
+| `expires_at` | integer | When the link stops working (minutes, not days). |
+
+## Example
+
+```json
+{
+  "object": "account_link",
+  "livemode": false,
+  "url": "https://connect.peable.to/onboarding/Zk3s9v…",
+  "expires_at": 1793750700
+}
+```
+
+## Returned by
+
+- [`POST /v1/account_links`](/reference/account-links#create-an-account-link) — Create an account link
+- [`POST /v1/connected_accounts/{accountId}/account_links`](/reference/connected-accounts#create-a-sellers-onboarding-link) — Create a seller's onboarding link

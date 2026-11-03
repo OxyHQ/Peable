@@ -1,0 +1,21 @@
+---
+title: "TaxComplianceCapability"
+description: "The TaxComplianceCapability shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxComplianceCapability
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `category` | string | VAT/sales tax, corporate income tax and annual company filings are different obligations. One of `vat_sales_tax`, `corporate_income_tax`, `annual_company_filings`, `workflow`. |
+| `status` | string | One of `available`, `limited`, `not_available`, `out_of_scope`. |
+| `reason` | string |  |
+
+## Used in
+
+[TaxComplianceCapabilities](/reference/objects/tax-compliance-capabilities)

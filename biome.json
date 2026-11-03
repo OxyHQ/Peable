@@ -14,7 +14,8 @@
       "!**/drizzle/meta",
       "!**/*.generated.*",
       "!docs/audits",
-      "!packages/backend/src/db/migrations"
+      "!packages/backend/src/db/migrations",
+      "!docs/openapi.json"
     ]
   },
   "formatter": {

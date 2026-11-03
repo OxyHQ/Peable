@@ -3,13 +3,26 @@
  * customer balance ledger — ADR 0018 §2–4.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
-  COLLECTION_METHODS,
-  CREDIT_NOTE_REASONS,
-  INVOICE_STATUSES,
-  PRORATION_BEHAVIORS,
-} from '@peable.to/shared-types';
+  createCreditNoteParams,
+  createCustomerBalanceTransactionParams,
+  createInvoiceItemParams,
+  createInvoiceParams,
+  expandOnlyQuery,
+  finalizeInvoiceParams,
+  invoiceActionParams,
+  listCreditNotesQuery,
+  listCustomerBalanceTransactionsQuery,
+  listInvoiceItemsQuery,
+  listInvoicesQuery,
+  payInvoiceParams,
+  previewCreditNoteQuery,
+  upcomingInvoiceQuery,
+  updateInvoiceItemParams,
+  updateInvoiceParams,
+  voidCreditNoteParams,
+} from '@peable.to/contracts';
 import {
   findCustomerForMerchant,
   findLiveCustomerForMerchant,
@@ -35,17 +48,13 @@ import {
   listCustomerSubscriptions,
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
-import { priceDataSchema, currencySchema, amountSchema } from '../../services/catalog/params';
 import {
   answerList,
-  expandParam,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
+  surfaceQuery,
 } from '../../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../../lib/metadata';
 import {
   renderInvoice,
   renderInvoiceItems,
@@ -79,113 +88,17 @@ import {
 import { upcomingInvoice } from '../../services/billingEngine/upcoming';
 import { invoicePdf } from '../../services/billingEngine/invoicePdf';
 import type { CatalogRoute } from '../catalogRoutes';
-import {
-  answerObject,
-  cleared,
-  idParam,
-  idString,
-  parseBody,
-  quantity,
-  queryUnixSeconds,
-  rangeQuery,
-  shortText,
-  signedAmount,
-  unixSeconds,
-} from './helpers';
+import { answerObject, cleared, idParam, parseBody } from './helpers';
 
-const discountsSchema = z
-  .array(z.object({ coupon: idString.optional(), promotion_code: idString.optional() }).strict())
-  .max(20);
-
-const createBody = z
-  .object({
-    customer: idString,
-    currency: currencySchema.optional(),
-    subscription: idString.optional(),
-    auto_advance: z.boolean().optional(),
-    collection_method: z.enum(COLLECTION_METHODS).optional(),
-    days_until_due: z.number().int().min(0).max(365).optional(),
-    due_date: unixSeconds.optional(),
-    description: shortText(1500).optional(),
-    default_payment_method: idString.optional(),
-    discounts: discountsSchema.optional(),
-    automatic_tax: z.object({ enabled: z.boolean() }).strict().optional(),
-    pending_invoice_items_behavior: z.enum(['include', 'exclude']).optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const updateBody = z
-  .object({
-    auto_advance: z.boolean().optional(),
-    collection_method: z.enum(COLLECTION_METHODS).optional(),
-    days_until_due: z.number().int().min(0).max(365).optional(),
-    due_date: unixSeconds.optional(),
-    description: z.union([shortText(1500), z.literal('')]).optional(),
-    default_payment_method: z.union([idString, z.literal('')]).optional(),
-    discounts: z.union([discountsSchema, z.literal('')]).optional(),
-    automatic_tax: z.object({ enabled: z.boolean() }).strict().optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const finalizeBody = z
-  .object({ auto_advance: z.boolean().optional(), expand: expandParam.optional() })
-  .strict();
-const payBody = z
-  .object({
-    payment_method: idString.optional(),
-    paid_out_of_band: z.boolean().optional(),
-    off_session: z.boolean().optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-const plainBody = z.object({ expand: expandParam.optional() }).strict();
-
-const listQuery = surfaceListQuery({
-  customer: idString.optional(),
-  subscription: idString.optional(),
-  status: z.enum(INVOICE_STATUSES).optional(),
-  collection_method: z.enum(COLLECTION_METHODS).optional(),
-  due_date: rangeQuery.optional(),
-});
-const retrieveQuery = surfaceRetrieveQuery();
-
-const upcomingQuery = {
-  api: z
-    .object({
-      customer: idString,
-      subscription: idString.optional(),
-      subscription_items: z
-        .array(
-          z
-            .object({
-              id: idString.optional(),
-              price: idString.optional(),
-              quantity: z.coerce.number().int().min(0).optional(),
-              deleted: z
-                .enum(['true', 'false'])
-                .transform((v) => v === 'true')
-                .optional(),
-            })
-            .strict(),
-        )
-        .max(20)
-        .optional(),
-      subscription_proration_behavior: z.enum(PRORATION_BEHAVIORS).optional(),
-      subscription_proration_date: queryUnixSeconds.optional(),
-      expand: expandParam.optional(),
-    })
-    .strict(),
-};
-const upcomingSurface = {
-  api: upcomingQuery.api,
-  dashboard: upcomingQuery.api.extend({
-    environment: z.enum(['development', 'staging', 'production']),
-  }),
-} as const;
+/**
+ * Every request schema is the contract's (`@peable.to/contracts`
+ * `invoiceRoutes`, `invoiceItemRoutes`, `creditNoteRoutes`,
+ * `customerBalanceTransactionRoutes`); the dashboard's reads add only its
+ * Test/Live toggle.
+ */
+const listQuery = surfaceQuery(listInvoicesQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
+const upcomingSurface = surfaceQuery(upcomingInvoiceQuery);
 
 async function answer(
   res: Response,
@@ -200,7 +113,7 @@ async function answer(
 }
 
 async function create(req: Request, res: Response, merchant: MerchantRow) {
-  const body = parseBody(req, res, createBody);
+  const body = parseBody(req, res, createInvoiceParams);
   if (!body) return;
   const row = await createInvoice(merchant, {
     customer: body.customer,
@@ -233,7 +146,7 @@ async function retrieve(req: Request, res: Response, merchant: MerchantRow, surf
 async function update(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, updateBody);
+  const body = parseBody(req, res, updateInvoiceParams);
   if (!body) return;
   const row = await updateInvoice(merchant, id, {
     ...(body.auto_advance !== undefined ? { autoAdvance: body.auto_advance } : {}),
@@ -251,21 +164,23 @@ async function update(req: Request, res: Response, merchant: MerchantRow) {
   await answer(res, merchant, row.publicId, body.expand);
 }
 
+type InvoiceActionBody = z.output<typeof payInvoiceParams> & z.output<typeof finalizeInvoiceParams>;
+
 function action(
   run: (
     merchant: MerchantRow,
     id: string,
-    body: z.infer<typeof payBody> & z.infer<typeof finalizeBody>,
+    body: InvoiceActionBody,
   ) => Promise<{ publicId: string }>,
-  schema: z.ZodTypeAny,
+  schema: typeof payInvoiceParams | typeof finalizeInvoiceParams | typeof invoiceActionParams,
 ) {
   return async (req: Request, res: Response, merchant: MerchantRow) => {
     const id = idParam(req, res);
     if (!id) return;
-    const body = parseBody(req, res, schema);
+    const body: InvoiceActionBody | null = parseBody(req, res, schema);
     if (!body) return;
-    const row = await run(merchant, id, body as z.infer<typeof payBody>);
-    await answer(res, merchant, row.publicId, (body as { expand?: string[] }).expand);
+    const row = await run(merchant, id, body);
+    await answer(res, merchant, row.publicId, body.expand);
   };
 }
 
@@ -417,42 +332,7 @@ async function pdf(req: Request, res: Response, merchant: MerchantRow) {
 
 // ---- Invoice items --------------------------------------------------------------------
 
-const createItemBody = z
-  .object({
-    customer: idString,
-    invoice: idString.optional(),
-    subscription: idString.optional(),
-    price: idString.optional(),
-    price_data: priceDataSchema.optional(),
-    quantity: quantity.optional(),
-    amount: amountSchema.optional(),
-    currency: currencySchema.optional(),
-    description: shortText(500).optional(),
-    discountable: z.boolean().optional(),
-    period: z.object({ start: unixSeconds, end: unixSeconds }).strict().optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const updateItemBody = z
-  .object({
-    description: z.union([shortText(500), z.literal('')]).optional(),
-    quantity: quantity.optional(),
-    discountable: z.boolean().optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listItemsQuery = surfaceListQuery({
-  customer: idString.optional(),
-  invoice: idString.optional(),
-  pending: z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true')
-    .optional(),
-});
+const listItemsQuery = surfaceQuery(listInvoiceItemsQuery);
 
 async function answerItem(
   res: Response,
@@ -469,7 +349,7 @@ async function answerItem(
 }
 
 async function createItem(req: Request, res: Response, merchant: MerchantRow) {
-  const body = parseBody(req, res, createItemBody);
+  const body = parseBody(req, res, createInvoiceItemParams);
   if (!body) return;
   const row = await createInvoiceItem(merchant, {
     customer: body.customer,
@@ -504,7 +384,7 @@ async function retrieveItem(
 async function updateItem(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, updateItemBody);
+  const body = parseBody(req, res, updateInvoiceItemParams);
   if (!body) return;
   const row = await updateInvoiceItem(merchant, id, {
     ...(body.description !== undefined ? { description: cleared(body.description) ?? null } : {}),
@@ -565,35 +445,11 @@ async function listItems(
 
 // ---- Credit notes ------------------------------------------------------------------------
 
-const creditLineSchema = z
-  .object({
-    type: z.enum(['invoice_line_item', 'custom_line_item']),
-    invoice_line_item: idString.optional(),
-    amount: amountSchema.optional(),
-    quantity: quantity.optional(),
-    description: shortText(500).optional(),
-  })
-  .strict();
-
-const creditNoteFields = {
-  invoice: idString,
-  lines: z.array(creditLineSchema).min(1).max(100).optional(),
-  amount: amountSchema.optional(),
-  reason: z.enum(CREDIT_NOTE_REASONS).optional(),
-  memo: shortText(5000).optional(),
-  refund_amount: amountSchema.optional(),
-  credit_amount: amountSchema.optional(),
-  out_of_band_amount: amountSchema.optional(),
+type CreditNoteFields = z.output<typeof previewCreditNoteQuery> & {
+  readonly metadata?: Record<string, string> | undefined;
 };
-const createCreditNoteBody = z
-  .object({
-    ...creditNoteFields,
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
 
-function creditNoteInput(body: z.infer<typeof createCreditNoteBody>) {
+function creditNoteInput(body: CreditNoteFields) {
   return {
     invoice: body.invoice,
     ...(body.lines
@@ -617,40 +473,8 @@ function creditNoteInput(body: z.infer<typeof createCreditNoteBody>) {
   };
 }
 
-/** The preview takes the create's fields as a query (`lines[0][type]=…`). */
-const previewQuery = (dashboard: boolean) =>
-  z
-    .object({
-      invoice: idString,
-      lines: z
-        .array(
-          z
-            .object({
-              type: z.enum(['invoice_line_item', 'custom_line_item']),
-              invoice_line_item: idString.optional(),
-              amount: amountSchema.optional(),
-              quantity: z.coerce.number().int().min(0).optional(),
-              description: shortText(500).optional(),
-            })
-            .strict(),
-        )
-        .max(100)
-        .optional(),
-      amount: amountSchema.optional(),
-      reason: z.enum(CREDIT_NOTE_REASONS).optional(),
-      memo: shortText(5000).optional(),
-      refund_amount: amountSchema.optional(),
-      credit_amount: amountSchema.optional(),
-      out_of_band_amount: amountSchema.optional(),
-      ...(dashboard ? { environment: z.enum(['development', 'staging', 'production']) } : {}),
-    })
-    .strict();
-const previewSurface = { api: previewQuery(false), dashboard: previewQuery(true) } as const;
-
-const listCreditNotesQuery = surfaceListQuery({
-  invoice: idString.optional(),
-  customer: idString.optional(),
-});
+const previewSurface = surfaceQuery(previewCreditNoteQuery);
+const listCreditNotesSurface = surfaceQuery(listCreditNotesQuery);
 
 async function answerCreditNote(
   res: Response,
@@ -667,7 +491,7 @@ async function answerCreditNote(
 }
 
 async function createNote(req: Request, res: Response, merchant: MerchantRow) {
-  const body = parseBody(req, res, createCreditNoteBody);
+  const body = parseBody(req, res, createCreditNoteParams);
   if (!body) return;
   const row = await createCreditNote(merchant, creditNoteInput(body));
   await answerCreditNote(res, merchant, row.publicId, body.expand);
@@ -681,15 +505,7 @@ async function previewNote(
 ) {
   const query = parseQuery(req, res, previewSurface[surface]);
   if (!query) return;
-  const { environment: _environment, ...fields } = query as typeof query & { environment?: string };
-  res
-    .status(200)
-    .json(
-      await previewCreditNote(
-        merchant,
-        creditNoteInput(fields as z.infer<typeof createCreditNoteBody>),
-      ),
-    );
+  res.status(200).json(await previewCreditNote(merchant, creditNoteInput(query)));
 }
 
 async function retrieveNote(
@@ -708,7 +524,7 @@ async function retrieveNote(
 async function voidNote(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, plainBody);
+  const body = parseBody(req, res, voidCreditNoteParams);
   if (!body) return;
   const row = await voidCreditNote(merchant, id);
   await answerCreditNote(res, merchant, row.publicId, body.expand);
@@ -720,7 +536,7 @@ async function listNotes(
   merchant: MerchantRow,
   surface: QuerySurface,
 ) {
-  const query = parseQuery(req, res, listCreditNotesQuery[surface]);
+  const query = parseQuery(req, res, listCreditNotesSurface[surface]);
   if (!query) return;
   const db = getDb();
   const invoice = await resolveListReference(
@@ -756,16 +572,7 @@ async function listNotes(
 
 // ---- Customer balance ---------------------------------------------------------------------
 
-const balanceBody = z
-  .object({
-    amount: signedAmount,
-    currency: currencySchema,
-    description: shortText(350).optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-const listBalanceQuery = surfaceListQuery({});
+const listBalanceQuery = surfaceQuery(listCustomerBalanceTransactionsQuery);
 
 async function customerOf(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
@@ -778,7 +585,7 @@ async function customerOf(req: Request, res: Response, merchant: MerchantRow) {
 async function createBalance(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, balanceBody);
+  const body = parseBody(req, res, createCustomerBalanceTransactionParams);
   if (!body) return;
   const row = await adjustCustomerBalance(merchant, id, {
     amount: BigInt(body.amount),
@@ -856,7 +663,7 @@ export const INVOICE_ROUTES: readonly CatalogRoute[] = [
         finalizeInvoice(m, id, {
           ...(b.auto_advance !== undefined ? { autoAdvance: b.auto_advance } : {}),
         }),
-      finalizeBody,
+      finalizeInvoiceParams,
     ),
   },
   {
@@ -869,23 +676,23 @@ export const INVOICE_ROUTES: readonly CatalogRoute[] = [
           ...(b.paid_out_of_band ? { paidOutOfBand: true } : {}),
           ...(b.off_session !== undefined ? { offSession: b.off_session } : {}),
         }),
-      payBody,
+      payInvoiceParams,
     ),
   },
   {
     method: 'post',
     path: '/invoices/:id/send',
-    core: action((m, id) => sendInvoice(m, id), plainBody),
+    core: action((m, id) => sendInvoice(m, id), invoiceActionParams),
   },
   {
     method: 'post',
     path: '/invoices/:id/void',
-    core: action((m, id) => voidInvoice(m, id), plainBody),
+    core: action((m, id) => voidInvoice(m, id), invoiceActionParams),
   },
   {
     method: 'post',
     path: '/invoices/:id/mark_uncollectible',
-    core: action((m, id) => markInvoiceUncollectible(m, id), plainBody),
+    core: action((m, id) => markInvoiceUncollectible(m, id), invoiceActionParams),
   },
   { method: 'get', path: '/invoices/:id/lines', core: lines },
   { method: 'get', path: '/invoices/:id/pdf', core: pdf },

@@ -21,7 +21,11 @@ import type {
   SetupIntent,
   UpdateCheckoutSessionPublicParams,
 } from '@peable.to/shared-types';
-import { errorFromResponse, PeableApiError, PeableInvalidRequestError } from '../core/errors';
+import {
+  errorFromResponse,
+  PeableConnectionError,
+  PeableInvalidRequestError,
+} from '../core/errors';
 
 const DEFAULT_GATEWAY_URL = 'https://api.peable.to';
 
@@ -175,7 +179,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
         headers: { 'X-Peable-Client-Secret': clientSecret },
       });
     } catch (cause) {
-      throw new PeableApiError(
+      throw new PeableConnectionError(
         `Failed to reach the Peable Gateway at ${baseUrl}: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,
@@ -196,7 +200,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
         body: JSON.stringify({ client_secret: clientSecret, txid }),
       });
     } catch (cause) {
-      throw new PeableApiError(
+      throw new PeableConnectionError(
         `Failed to reach the Peable Gateway at ${baseUrl}: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,
@@ -222,7 +226,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
         },
       );
     } catch (cause) {
-      throw new PeableApiError(
+      throw new PeableConnectionError(
         `Failed to reach the Peable Gateway at ${baseUrl}: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,
@@ -258,7 +262,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
       ack = await socket.emitWithAck('subscribe', { intent_id: id, client_secret: clientSecret });
     } catch (cause) {
       socket.disconnect();
-      throw new PeableApiError(
+      throw new PeableConnectionError(
         `Failed to reach the Peable Gateway realtime layer at ${baseUrl}: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,
@@ -366,7 +370,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
       });
     } catch (cause) {
-      throw new PeableApiError(
+      throw new PeableConnectionError(
         `Failed to reach the Peable Gateway at ${baseUrl}: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,

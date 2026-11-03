@@ -9,14 +9,7 @@ import { sendError, sendValidationError } from '../../lib/http';
 export const unixSeconds = z.number().int().min(0).max(253_402_300_799);
 export const queryUnixSeconds = z.coerce.number().int().min(0).max(253_402_300_799);
 export const idString = z.string().min(1).max(255);
-export const quantity = z.number().int().min(0).max(1_000_000_000);
 export const shortText = (max: number) => z.string().min(1).max(max);
-export const signedAmount = z
-  .string()
-  .regex(
-    /^(0|-?[1-9][0-9]{0,30})$/,
-    'must be an integer string in the smallest currency unit, optionally negative',
-  );
 
 export function idParam(req: Request, res: Response, name = 'id'): string | null {
   const value = req.params[name];
@@ -27,11 +20,7 @@ export function idParam(req: Request, res: Response, name = 'id'): string | null
   return value;
 }
 
-export function parseBody<T>(
-  req: Request,
-  res: Response,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-): T | null {
+export function parseBody<T>(req: Request, res: Response, schema: z.ZodType<T, unknown>): T | null {
   const parsed = schema.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
@@ -61,15 +50,7 @@ export function cleared<T>(value: T | '' | undefined): T | null | undefined {
   return value === '' ? null : value;
 }
 
-/** A Unix-seconds range query (`due_date[gte]=…`). */
-export const rangeQuery = z.union([
-  queryUnixSeconds.transform((x) => ({ gte: x, lte: x })),
-  z
-    .object({
-      gt: queryUnixSeconds.optional(),
-      gte: queryUnixSeconds.optional(),
-      lt: queryUnixSeconds.optional(),
-      lte: queryUnixSeconds.optional(),
-    })
-    .strict(),
-]);
+/**
+ * A contract's query on both surfaces of a shared core: the contract's own
+ * schema on the API, plus the Test/Live toggle on the dashboard.
+ */

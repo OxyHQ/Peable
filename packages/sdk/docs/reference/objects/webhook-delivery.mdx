@@ -1,0 +1,54 @@
+---
+title: "WebhookDelivery"
+description: "The webhook_delivery object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# WebhookDelivery
+
+Object type: `webhook_delivery`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"webhook_delivery"` |  |
+| `livemode` | boolean | The mode of the merchant it was sent for (ADR 0017). |
+| `event_id` | string | The `evt_…` delivered — `GET /v1/events/:id` returns it. |
+| `event_type` | string | One of `payment_intent.created`, `payment_intent.requires_action`, `payment_intent.processing`, `payment_intent.amount_capturable_updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`, `charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated`, `refund.created`, `refund.updated`, `refund.failed`, `customer.created`, `customer.updated`, `customer.deleted`, `payment_method.attached`, `payment_method.detached`, `payment_method.updated`, `setup_intent.created`, `setup_intent.requires_action`, `setup_intent.succeeded`, `setup_intent.setup_failed`, `setup_intent.canceled`, `billing.observation.updated`, `connected_account.updated`, `product.created`, `product.updated`, `product.deleted`, `price.created`, `price.updated`, `coupon.created`, `coupon.updated`, `coupon.deleted`, `promotion_code.created`, `promotion_code.updated`, `account.updated`, `application_fee.created`, `application_fee.refunded`, `payout.created`, `payout.updated`, `payout.paid`, `payout.failed`, `payout.canceled`, `balance.available`, `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `payment_link.created`, `payment_link.updated`, `reporting.report_run.succeeded`, `reporting.report_run.failed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.created`, `invoice.updated`, `invoice.deleted`, `invoice.finalized`, `invoice.paid`, `invoice.payment_failed`, `invoice.payment_action_required`, `invoice.voided`, `invoice.marked_uncollectible`, `invoice.upcoming`, `invoice.sent`, `invoiceitem.created`, `invoiceitem.deleted`, `credit_note.created`, `credit_note.updated`, `credit_note.voided`, `test_helpers.test_clock.created`, `test_helpers.test_clock.advancing`, `test_helpers.test_clock.ready`, `test_helpers.test_clock.deleted`, `billing.meter.created`, `billing.meter.updated`, `billing.meter.deactivated`, `billing.meter.reactivated`, `entitlements.active_entitlement_summary.updated`, `billing_portal.configuration.created`, `billing_portal.configuration.updated`, `billing_portal.session.created`, `tax.assessment.created`, `tax.review_item.created`, `tax.review_item.updated`, `webhook_endpoint.test`. |
+| `webhook_endpoint_id` | string | The `we_…` it was sent to. |
+| `url` | string | The URL actually POSTed to, as of the latest attempt. |
+| `attempts` | integer |  |
+| `delivered` | boolean |  |
+| `last_status` | string | `pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address) or was disabled first — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered. |
+| `last_error` | string | Why the last attempt did not succeed — operator-facing, never a secret. |
+| `next_attempt_at` | integer | Unix seconds. |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "0193b8f2-c1a8-7d3e-9f4a-7d3e0193b8f2",
+  "object": "webhook_delivery",
+  "livemode": false,
+  "event_id": "evt_0193b8f2c1a87d3e9f4b",
+  "event_type": "payment_intent.succeeded",
+  "webhook_endpoint_id": "we_0193b8f2c1a87d3e9f4c",
+  "url": "https://example.com/peable/webhooks",
+  "attempts": 1,
+  "delivered": true,
+  "last_status": "delivered",
+  "created": 1793750400,
+  "updated_at": 1793750401
+}
+```
+
+## Returned by
+
+- [`GET /v1/webhook_deliveries`](/reference/webhook-deliveries#list-webhook-deliveries) — List webhook deliveries
+- [`POST /v1/webhook_deliveries/{id}/redeliver`](/reference/webhook-deliveries#redeliver-a-webhook-delivery) — Redeliver a webhook delivery
+- [`POST /v1/webhook_endpoints/{id}/test`](/reference/webhook-endpoints#send-a-test-event) — Send a test event

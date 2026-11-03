@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { RestClient, RestClientRequestOptions } from '../../src/core/client';
-import { TaxResource } from '../../src/resources/tax';
+import { resources } from '../support/testGateway';
+import type { GatewayClient, RestClientRequestOptions } from '../../src/core/client';
 
 function recordingClient() {
   const calls: { method: string; path: string; options?: RestClientRequestOptions }[] = [];
@@ -9,14 +9,14 @@ function recordingClient() {
       calls.push({ method, path, options });
       return { object: 'list', data: [], has_more: false, url: path };
     },
-  } as unknown as RestClient;
+  } as unknown as GatewayClient;
   return { client, calls };
 }
 
 describe('tax.compliance', () => {
   it('reads the owner’s records and runs assessments on the merchant API paths', async () => {
     const { client, calls } = recordingClient();
-    const { compliance } = new TaxResource(client);
+    const { compliance } = resources(client).tax;
     await compliance.retrieveBusinessProfile();
     await compliance.createAssessment({ as_of: 1_790_000_000 });
     await compliance.replayAssessment('taxasm_1');
@@ -35,9 +35,7 @@ describe('tax.compliance', () => {
 
   it('offers no way to record an onboarding fact or decide a review item', () => {
     const { client } = recordingClient();
-    const methods = Object.getOwnPropertyNames(
-      Object.getPrototypeOf(new TaxResource(client).compliance),
-    );
+    const methods = Object.keys(resources(client).tax.compliance);
     for (const forbidden of [
       'updateBusinessProfile',
       'resolveReviewItem',

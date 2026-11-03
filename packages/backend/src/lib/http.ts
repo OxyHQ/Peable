@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response, RequestHandler } from 'express';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { ProviderError } from '../services/providers/provider';
+import { type ErrorCode, type ErrorType, errorDocUrl } from '@peable.to/contracts/vocabulary';
+import { oxy } from '../oxy';
 import { redactProviderMessage } from '../services/providers/redact';
 import { requestIdOf } from './requestId';
 
@@ -41,6 +43,9 @@ export function sendProviderError(res: Response, error: ProviderError): void {
  *   (`account_not_ready`, `idempotency_error`, …).
  * - `param` names the offending request field in bracket notation
  *   (`metadata[order_id]`, `line_items[0][price]`), when there is one.
+ * - `doc_url` is the code's entry on Peable's error-code page (`ERROR_DOCS_BASE_URL`). `code` is
+ *   an `ErrorCode`, the contract's closed list the errors page is rendered
+ *   from, so a code without documentation does not compile.
  * - `request_id` is the `Request-Id` of this response, so support can find it.
  *
  * 422 is never used: a request that is well-formed JSON but invalid is a 400,
@@ -49,20 +54,35 @@ export function sendProviderError(res: Response, error: ProviderError): void {
 export function sendError(
   res: Response,
   status: number,
-  type: string,
+  type: ErrorType,
   message: string,
-  code?: string,
+  code?: ErrorCode,
   param?: string,
+  extra?: { readonly decline_code?: string },
 ): void {
-  res.status(status).json({
+  res.status(status).json(errorBody(res, type, message, code, param, extra));
+}
+
+/** The envelope `sendError` answers with, for a caller that writes the response itself. */
+export function errorBody(
+  res: Response,
+  type: ErrorType,
+  message: string,
+  code?: ErrorCode,
+  param?: string,
+  extra?: { readonly decline_code?: string },
+) {
+  return {
     error: {
       type,
       ...(code ? { code } : {}),
+      ...(extra?.decline_code ? { decline_code: extra.decline_code } : {}),
       ...(param ? { param } : {}),
       message,
+      ...(code ? { doc_url: errorDocUrl(code) } : {}),
       request_id: requestIdOf(res) ?? null,
     },
-  });
+  };
 }
 
 /** A Zod issue path in Stripe's bracket notation: `['metadata','a']` → `metadata[a]`. */
@@ -154,3 +174,83 @@ export const requireAuthenticated: RequestHandler = (req, res, next) => {
   if (!requireServiceApp(req, res)) return;
   next();
 };
+
+/** The `error.type` an HTTP status carries (ADR 0014 D1). */
+function errorTypeForStatus(status: number): ErrorType {
+  if (status === 401) return 'authentication_error';
+  if (status === 403) return 'permission_error';
+  if (status === 429) return 'rate_limit_error';
+  if (status >= 500) return 'api_error';
+  return 'invalid_request_error';
+}
+
+/** Whether a body already is the ONE error envelope. */
+function isErrorEnvelope(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null) return false;
+  const { error } = body as { error?: unknown };
+  return typeof error === 'object' && error !== null;
+}
+
+function refusalMessage(body: unknown): string {
+  const message =
+    typeof body === 'object' && body !== null ? (body as { message?: unknown }).message : undefined;
+  return typeof message === 'string' ? message : 'the request could not be authenticated';
+}
+
+/**
+ * An Oxy middleware (`oxy.middleware.service()`, `.auth()`, `.requireScope()`,
+ * `createOxyAuthMiddleware(oxy)`) that refuses in the ONE error envelope
+ * (ADR 0014 D1).
+ *
+ * The library answers its refusals in its own shape —
+ * `{ error: 'INSUFFICIENT_SCOPE', message, code, status }` — which no contract
+ * describes and no SDK parses: a 401 or 403 on an Orbit route is
+ * `{ error: { type, message, request_id } }` like every other refusal. The
+ * library's status and message are kept; its code is not an `ErrorCode` and is
+ * dropped (the status and `type` are what a caller branches on).
+ */
+export function oxyGuard(middleware: RequestHandler, code?: ErrorCode): RequestHandler {
+  return (req, res, next) => {
+    const json = res.json;
+    const restore = () => {
+      res.json = json;
+    };
+    res.json = function guardedJson(body?: unknown) {
+      restore();
+      if (res.statusCode >= 400 && !isErrorEnvelope(body)) {
+        return res.json(
+          errorBody(res, errorTypeForStatus(res.statusCode), refusalMessage(body), code),
+        );
+      }
+      return res.json(body);
+    } as Response['json'];
+    return middleware(req, res, (err?: unknown) => {
+      restore();
+      next(err);
+    });
+  };
+}
+
+/**
+ * `oxy.middleware.requireScope(scope)`, refusing in the ONE error envelope:
+ * 403 `permission_error` / `insufficient_scope`. Oxy decides (the token's
+ * scopes, a delegation narrowing them, first-party authority); only the
+ * refusal's spelling is Peable's. Every scope-checked route uses this — never
+ * the bare Oxy middleware, whose body no contract describes.
+ */
+export function requireScope(scope: string): RequestHandler {
+  return oxyGuard(oxy.middleware.requireScope(scope), 'insufficient_scope');
+}
+
+/**
+ * The scope check of a route EITHER party may call (a merchant credential or a
+ * payer's `client_secret`): run only on the merchant branch, inline. Answers
+ * the 403 itself and returns `false` when the scope is missing.
+ */
+export function hasScope(req: Request, res: Response, scope: string): boolean {
+  let granted = false;
+  requireScope(scope)(req, res, () => {
+    granted = true;
+  });
+  return granted;
+}

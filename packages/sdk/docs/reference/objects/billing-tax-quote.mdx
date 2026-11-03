@@ -1,0 +1,50 @@
+---
+title: "BillingTaxQuote"
+description: "The BillingTaxQuote shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingTaxQuote
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `schema_version` | `2` |  |
+| `source` | object |  |
+| `source.merchant_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `source.app_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `source.store_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `source.plan_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `source.mode` | string | One of `test`, `live`. |
+| `source.environment` | string | One of `development`, `staging`, `production`. |
+| `quote` | object |  |
+| `quote.id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.currency` | string | Matches `^[A-Z]{3}$`. |
+| `quote.gross_minor_units` | integer |  |
+| `quote.net_minor_units` | integer |  |
+| `quote.tax_minor_units` | integer |  |
+| `quote.tax_treatment` | string | One of `inclusive`, `exclusive`. |
+| `quote.seller_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.invoice_issuer_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.tax_remitter_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.tax_service_ref` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.country` | string | Matches `^[A-Z]{2}$`. |
+| `quote.coverage_evidence_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.tax_rate_evidence_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.customer_location_evidence_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `quote.quoted_at` | integer |  |
+| `quote.expires_at` | integer |  |
+| `signature` | object | Ed25519 over the canonical JSON (v1) of everything beside it. |
+| `signature.algorithm` | `"Ed25519"` |  |
+| `signature.key_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `signature.value` | string | Matches `^[A-Za-z0-9_-]{86}$`. |
+
+## Returned by
+
+- [`POST /v1/billing/tax_quotes`](/reference/recurring-billing#quote-the-tax-of-a-plan) — Quote the tax of a plan
+
+## Used in
+
+[BillingEmbeddedCheckoutBinding](/reference/objects/billing-embedded-checkout-binding)

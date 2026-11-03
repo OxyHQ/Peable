@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AccountNode, Application } from '@oxy.so/core';
 import { useAuth } from '@oxy.so/services/ui/client';
 import { useQuery } from '@tanstack/react-query';
-import type { ContributionScope } from '@peable.to/sdk/contributions';
+import type { ContributionScope } from '../api/contributions';
 import { oxyServices } from '../api/client';
 import type { DashboardScope, OrbitEnvironment } from '../api/dashboard';
 import {

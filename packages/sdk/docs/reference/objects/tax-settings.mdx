@@ -1,0 +1,55 @@
+---
+title: "TaxSettings"
+description: "The tax.settings object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxSettings
+
+Object type: `tax.settings`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.settings"` |  |
+| `merchant_id` | string | The merchant (`merch_…`) these settings belong to. |
+| `status` | string | `active` once the owner approved; any edit returns it to `draft`. |
+| `legal_name` | string \| null |  |
+| `head_office` | [TaxAddress](/reference/objects/tax-address) \| null |  |
+| `default_tax_code` | string | The `txcd_…` a line without its own code uses. |
+| `default_tax_behavior` | string | One of `inclusive`, `exclusive`. |
+| `calculation_account` | string | `platform`: Peable's own provider account (official Oxy applications only). `none`: registered sales cannot be calculated and fail closed. |
+| `provider` | string \| null | The provider that calculates registered sales, when one is reachable. |
+| `approved_at` | integer \| null | Unix seconds. |
+| `approved_by` | string \| null | The Oxy user who approved collection. |
+| `updated_at` | integer \| null | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.settings",
+  "merchant_id": "merch_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "legal_name": "Example Software SL",
+  "head_office": {
+    "country": "ES",
+    "state": null,
+    "postal_code": "08001",
+    "city": "Barcelona"
+  },
+  "default_tax_code": "txcd_10103001",
+  "default_tax_behavior": "exclusive",
+  "calculation_account": "platform",
+  "provider": "stripe_tax",
+  "approved_at": 1793750400,
+  "approved_by": "user_42",
+  "updated_at": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/settings`](/reference/tax#retrieve-tax-settings) — Retrieve tax settings

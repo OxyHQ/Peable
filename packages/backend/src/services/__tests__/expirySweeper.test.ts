@@ -1,6 +1,5 @@
 import { test, expect, describe } from 'bun:test';
 import { PAYMENT_INTENT_STATUSES } from '@peable.to/shared-types';
-import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import {
   EXPIRABLE_STATUSES,
   expireDueIntents,
@@ -48,7 +47,7 @@ describe('EXPIRABLE_STATUSES agrees with the transition table', () => {
   // `"canceled"` rather than throwing for an already-cancelled intent. A
   // sweeper that trusted `applyEvent` alone would re-claim those rows on every
   // tick and re-fire `payment_intent.canceled` forever.
-  const derived = (PAYMENT_INTENT_STATUSES as PaymentIntentStatus[]).filter((status) => {
+  const derived = PAYMENT_INTENT_STATUSES.filter((status) => {
     if (status === 'canceled') return false;
     try {
       return (

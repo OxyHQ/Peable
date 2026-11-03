@@ -1,0 +1,21 @@
+---
+title: "ChargeOutcome"
+description: "The ChargeOutcome shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ChargeOutcome
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `network_status` | string \| null | `approved_by_network`, `declined_by_network`, `not_sent_to_network`, `reversed_after_approval`. |
+| `risk_level` | string \| null | `normal`, `elevated`, `highest`, or `not_assessed`. |
+| `type` | string \| null | `authorized`, `manual_review`, `issuer_declined`, `blocked`, `invalid`. |
+| `seller_message` | string \| null | Peable's own one-line explanation for the merchant — never the provider's prose. |
+
+## Used in
+
+[Charge](/reference/objects/charge)

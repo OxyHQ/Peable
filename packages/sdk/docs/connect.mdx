@@ -1,0 +1,186 @@
+---
+title: "Connect and money"
+description: "Your provider account, balance and payouts, destination charges, fees and card sellers."
+order: 11
+---
+
+# Connect and money
+
+Peable never holds your money. Card funds stay at the acquirer, in **your own
+provider account**, opened and onboarded through Peable; Peable instructs the
+provider and mirrors what happened. FairCoin is paid straight to the
+receiving wallet and never passes through anyone. Identity documents are
+collected by the provider's hosted onboarding and never reach Peable.
+
+This page covers your own account and money, and a marketplace's card
+sellers. Paying sellers in FairCoin is [FairCoin sellers](/connect-faircoin).
+
+## Your account
+
+```ts
+// 1. Open your account (once), then send yourself through onboarding.
+await peable.account.update({ country: 'ES', business_type: 'company' }); // 201 the first time
+const link = await peable.accountLinks.create({
+  refresh_url: 'https://you.example/account?refresh=1',
+  return_url: 'https://you.example/account',
+});
+redirect(link.url); // readiness arrives as `account.updated`
+
+const account = await peable.account.retrieve();
+// charges_enabled, payouts_enabled, requirements, settings
+
+// 2. Settings live at the provider and are read back.
+await peable.account.update({
+  settings: {
+    payouts: { schedule: { interval: 'manual' } },
+    payments: { statement_descriptor: 'MY SHOP' },
+  },
+});
+```
+
+A merchant that opened an account but has not finished onboarding is refused
+card payments (`409 account_not_ready`) rather than silently charged as the
+platform.
+
+## Balance and payouts
+
+```ts
+await peable.balance.retrieve(); // { available, pending, informational }
+await peable.balanceTransactions.list({ type: 'payment', payout: 'po_…' });
+
+await peable.payouts.create({ amount: '5000', currency: 'EUR' }); // on a manual schedule
+await peable.payouts.list({ status: 'paid' });
+await peable.reports.payoutReconciliation({ payout: 'po_…' }); // the transactions it paid out
+```
+
+- **No account, no balance.** Without an account, `GET /v1/balance` is
+  `404 account_missing`; Peable never shows zeros it does not have.
+- **A figure the provider did not give is `null`, not `0`.** Balance
+  transactions are the provider's own, verbatim; amounts are signed strings.
+- **FairCoin is informational.** A succeeded FairCoin payment is recorded
+  under `informational` — it is in the receiving wallet already. It is never
+  payable, and no payout draws on it.
+- Payouts are scheduled by the provider, or instructed by you on a manual
+  schedule.
+
+## Charges and fees
+
+How a card payment is charged is decided once, when the intent is created,
+and is visible on it (`transfer_data`, `on_behalf_of`,
+`application_fee_amount`):
+
+| You are | Charge | Merchant of record | Fee |
+|---|---|---|---|
+| An Oxy product (a verified first-party workload) | Platform charge | Oxy | None |
+| A merchant with an onboarded account | Destination charge `on_behalf_of` your account | You: your descriptor, your chargebacks | Your fee schedule |
+| A marketplace without an own account | Platform charge, then separate transfers to sellers | The platform | None |
+| A platform naming `transfer_data` / `on_behalf_of` for its seller | Destination charge to that seller | The seller, with `on_behalf_of` | The `application_fee_amount` you send |
+
+```ts
+await peable.paymentIntents.create({
+  amount: '10000',
+  rail: 'card',
+  currency: 'EUR',
+  transfer_data: { destination: 'ca_…' },
+  on_behalf_of: 'ca_…',
+  application_fee_amount: '500',
+});
+
+await peable.applicationFees.list({ payment_intent: 'pi_…' }); // your fee on each charge, and its refunds
+```
+
+Refunding a destination charge can refund the fee too
+(`refund_application_fee: true`) and pull the funds back from the seller
+(`reverse_transfer: true`).
+
+> **Live payments for third parties are gated**
+>
+> Until the legal release gate for third-party live payments is signed off, a
+> deployment answers `403 live_payments_gated` to a non-Oxy merchant opening a
+> live account, taking a live destination charge or instructing a live payout.
+> Test mode is always open.
+
+## Acting on a connected account
+
+`Peable-Account: ca_…` lets a platform act on one of its connected accounts
+(Stripe's `Stripe-Account`), on exactly these routes: `/v1/account`,
+`/v1/account_links`, `/v1/balance`, `/v1/balance_transactions`, `/v1/payouts`
+and `/v1/reports/payout_reconciliation`. In the SDK it is the `peableAccount`
+request option:
+
+```ts
+await peable.balance.retrieve({}, { peableAccount: 'ca_…' });
+await peable.payouts.create({ amount: '5000', currency: 'EUR' }, { peableAccount: 'ca_…' });
+```
+
+Any other route answers a 400 naming the header (`account_invalid` when it
+names no account of yours). A payment's destination is a body field
+(`transfer_data`), never a header.
+
+## Card sellers
+
+A marketplace gives each seller a **connected account** (`ca_…`) and settles
+them out of funded payments:
+
+```ts
+const seller = await peable.connectedAccounts.create({
+  external_ref: store.id, // YOUR id for the seller: the account's idempotency
+  country: 'ES',
+  business_type: 'individual',
+});
+const onboarding = await peable.connectedAccounts.createAccountLink(seller.id, {
+  return_url: 'https://market.example/sell/done',
+  refresh_url: 'https://market.example/sell/refresh',
+});
+redirect(onboarding.url); // the provider's KYC
+
+await peable.transfers.create({
+  payment_intent: 'pi_…',      // a settled payment
+  connected_account: seller.id, // or connected_account_ref: store.id
+  external_ref: 'order-123',   // YOUR id for what this settles
+  amount: '9000',
+});
+await peable.transfers.reverse('tr_…', { amount: '9000', external_ref: 'order-123-return' });
+await peable.transfers.list({ connected_account: seller.id });
+```
+
+- **`external_ref` is the identity, on accounts, transfers and reversals.**
+  Unlike a header key you cannot lose it, so a retry after a timeout converges
+  instead of paying a seller twice: a transfer answers `201` when new and `200`
+  for an order already settled. A reversal needs its own `external_ref` in the
+  body — two reversals of one settlement for the same amount are two
+  operations, and an amount is not an identity.
+- **The amount comes from you.** Peable never computes a marketplace's split;
+  it records that a stated amount moved. The total settled out of one payment
+  cannot exceed what it brought in.
+- **A transfer's `amount_reversed` is cumulative**, from the provider — not
+  the sum of the reversals you made, which may not be all of them.
+- `connectedAccounts.retrieveByRef(external_ref)` reads a seller by your id —
+  a create whose answer never arrived is recoverable without a list scan.
+- `accountLinks.create` onboards **your own** account (`POST /v1/account_links`),
+  or a seller's with `{ peableAccount }`; a seller's link from its `ca_…` is
+  `connectedAccounts.createAccountLink(id, { … })`.
+
+### Learn when a seller is ready
+
+`connected_account.updated` fires when something a marketplace acts on
+changes about a seller — payability, either capability, the requirement
+counts, the disabled reasons — and not on every refresh. Its `data.object` is
+a `ConnectedAccount`, and it names no payment:
+
+```ts
+if (event.type === 'connected_account.updated') {
+  const seller = event.data.object;
+  if (seller.payable) enableCheckoutFor(seller.external_ref);
+}
+```
+
+`payable` is a convenience about **card** settlements, not the authority:
+every field it is derived from is on the same object, and a marketplace with
+its own readiness policy should read those.
+
+## Events
+
+`account.updated`, `connected_account.updated`,
+`application_fee.created` / `.refunded`, `payout.created` / `.updated` /
+`.paid` / `.failed` / `.canceled`, `balance.available`.

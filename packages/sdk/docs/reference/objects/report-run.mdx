@@ -1,0 +1,60 @@
+---
+title: "ReportRun"
+description: "The reporting.report_run object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ReportRun
+
+Object type: `reporting.report_run`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"reporting.report_run"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `created` | integer | Unix seconds. |
+| `report_type` | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `parameters` | [ReportRunParameters](/reference/objects/report-run-parameters) |  |
+| `status` | string | One of `pending`, `succeeded`, `failed`. |
+| `error` | string \| null | Why a `failed` run failed; `null` otherwise. |
+| `result` | [File](/reference/objects/file) \| null | The CSV once `succeeded` — a File of purpose `finance_report_run` (`GET /v1/files/{id}/contents` reads it). |
+| `succeeded_at` | integer \| null | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "frr_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_run",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {
+    "interval_start": 1790985600,
+    "interval_end": 1793577600
+  },
+  "status": "pending",
+  "error": null,
+  "result": null,
+  "succeeded_at": null
+}
+```
+
+## Returned by
+
+- [`POST /v1/reporting/report_runs`](/reference/reporting#create-a-report-run) — Create a report run
+- [`GET /v1/reporting/report_runs`](/reference/reporting#list-report-runs) — List report runs
+- [`GET /v1/reporting/report_runs/{id}`](/reference/reporting#retrieve-a-report-run) — Retrieve a report run
+
+## Events
+
+- [`reporting.report_run.failed`](/reference/webhook-events#reportingreport_runfailed)
+- [`reporting.report_run.succeeded`](/reference/webhook-events#reportingreport_runsucceeded)
+
+## Used in
+
+[Event](/reference/objects/event)

@@ -91,7 +91,7 @@ export function entryFor(
     available: value === 'on' && unavailable_reason === null,
     display_preference: { preference: row.preferences[type] ?? 'none', value },
     unavailable_reason,
-    currencies: PAYMENT_METHOD_CURRENCIES[type],
+    currencies: [...PAYMENT_METHOD_CURRENCIES[type]],
   };
 }
 

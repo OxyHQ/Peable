@@ -4,13 +4,8 @@ import { PeableSignatureVerificationError } from '../core/errors';
 /** The header every delivery is signed in. */
 export const WEBHOOK_SIGNATURE_HEADER = 'Peable-Signature';
 
-/** Default replay-tolerance window, matching the backend's own tests/usage. */
-const DEFAULT_TOLERANCE_SEC = 300;
-
-export interface ConstructEventOptions {
-  /** Max allowed drift (seconds) between the signed timestamp and now. */
-  toleranceSec?: number;
-}
+/** The default replay window: how far (seconds) the signed timestamp may be from now. */
+export const DEFAULT_WEBHOOK_TOLERANCE_SEC = 300;
 
 // Exhaustive against the published union: adding a backend event makes this
 // fail compilation until the SDK accepts it. Own-key lookup excludes prototype
@@ -178,28 +173,34 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
 export class WebhooksResource {
   /**
    * Verify a webhook delivery and parse it into a typed `WebhookEvent`.
-   * Verifies via the SAME `verifyWebhook` the Gateway signs with
-   * (`@peable.to/shared-types`) so the algorithm can never drift between the two
-   * sides. Throws `PeableSignatureVerificationError` on a bad/stale/tampered
-   * signature or a malformed payload — never returns a partially-trusted
-   * event.
    *
-   * `endpointSecret` is the endpoint's `whsec_…` — or several, while you are
-   * rotating: the event is accepted when ANY `v1=` signature in the header
-   * matches ANY of them. During a `roll_secret` overlap Peable signs every
-   * delivery with both the new and the previous secret, so either side of
-   * your switch verifies it.
+   * `payload` is the RAW request body — the exact bytes Peable signed (a
+   * `Buffer` or `Uint8Array`, or that body decoded as UTF-8); a body parsed
+   * and re-serialized will not verify. `signatureHeader` is the
+   * `Peable-Signature` header. `secret` is the endpoint's `whsec_…` — or
+   * several, while you rotate: the event is accepted when ANY `v1=` signature
+   * in the header matches ANY of them, and during a `roll_secret` overlap
+   * Peable signs every delivery with both the new and the previous secret.
+   * `tolerance` is the replay window in seconds (default 300).
+   *
+   * Verifies with the SAME `verifyWebhook` the gateway signs with
+   * (`@peable.to/shared-types`, timing-safe), so the two sides cannot drift.
+   * Throws `PeableSignatureVerificationError` on a bad, stale or tampered
+   * signature or a malformed payload — never returns a partially trusted event.
    */
   constructEvent(
-    rawBody: string,
+    payload: string | Uint8Array,
     signatureHeader: string,
-    endpointSecret: string | readonly string[],
-    opts: ConstructEventOptions = {},
+    secret: string | readonly string[],
+    tolerance: number = DEFAULT_WEBHOOK_TOLERANCE_SEC,
   ): WebhookEvent {
-    const toleranceSec = opts.toleranceSec ?? DEFAULT_TOLERANCE_SEC;
+    if (!Number.isFinite(tolerance) || tolerance < 0) {
+      throw new TypeError('Peable: the webhook tolerance is a non-negative number of seconds');
+    }
+    const rawBody = typeof payload === 'string' ? payload : new TextDecoder().decode(payload);
     const nowSec = Math.floor(Date.now() / 1000);
 
-    const verified = verifyWebhook(endpointSecret, rawBody, signatureHeader, toleranceSec, nowSec);
+    const verified = verifyWebhook(secret, rawBody, signatureHeader, tolerance, nowSec);
     if (!verified) {
       throw new PeableSignatureVerificationError(
         'Webhook signature verification failed — the payload, signature header, or secret do not match, or the timestamp is stale.',

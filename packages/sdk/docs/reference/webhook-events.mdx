@@ -1,0 +1,2551 @@
+---
+title: "Webhook events"
+description: "Every webhook event type and its payload."
+order: 951
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Webhook events
+
+Every event Peable sends to a [webhook endpoint](/webhooks), and records as an event you can list for 30 days. Each delivery is a `POST` of the event envelope, signed in `Peable-Signature`; `data.object` is the object the event is about, exactly as the API returns it.
+
+| Event | Summary |
+| --- | --- |
+| [`account.updated`](#accountupdated) | The merchant's own account changed: readiness, requirements or settings. |
+| [`application_fee.created`](#application_feecreated) | Orbit's fee was taken on a succeeded charge. |
+| [`application_fee.refunded`](#application_feerefunded) | Part or all of an application fee went back. |
+| [`balance.available`](#balanceavailable) | Funds became available in the balance. |
+| [`billing_portal.configuration.created`](#billing_portalconfigurationcreated) | A customer portal configuration was created. |
+| [`billing_portal.configuration.updated`](#billing_portalconfigurationupdated) | A customer portal configuration was updated. |
+| [`billing_portal.session.created`](#billing_portalsessioncreated) | A customer portal session was created. |
+| [`billing.meter.created`](#billingmetercreated) | A billing Meter was created. |
+| [`billing.meter.deactivated`](#billingmeterdeactivated) | A billing Meter was deactivated. |
+| [`billing.meter.reactivated`](#billingmeterreactivated) | A billing Meter was reactivated. |
+| [`billing.meter.updated`](#billingmeterupdated) | A billing Meter was updated. |
+| [`billing.observation.updated`](#billingobservationupdated) | A recurring billing resource was observed to change. |
+| [`charge.dispute.closed`](#chargedisputeclosed) | A Dispute closed; `status` carries the outcome. |
+| [`charge.dispute.created`](#chargedisputecreated) | A cardholder disputed a charge. |
+| [`charge.dispute.funds_reinstated`](#chargedisputefunds_reinstated) | The network returned the disputed amount (the dispute was won, or withdrawn). |
+| [`charge.dispute.funds_withdrawn`](#chargedisputefunds_withdrawn) | The network took the disputed amount from the balance. |
+| [`charge.dispute.updated`](#chargedisputeupdated) | A Dispute changed: evidence was staged or submitted. |
+| [`charge.refunded`](#chargerefunded) | A Charge was refunded, partially or fully: `amount_refunded` moved. |
+| [`checkout.session.async_payment_failed`](#checkoutsessionasync_payment_failed) | A completed Checkout Session's FairCoin payment failed. |
+| [`checkout.session.async_payment_succeeded`](#checkoutsessionasync_payment_succeeded) | A completed Checkout Session's FairCoin payment confirmed. |
+| [`checkout.session.completed`](#checkoutsessioncompleted) | The payer finished a Checkout Session (paid, authorized, or a FairCoin payment confirming). |
+| [`checkout.session.expired`](#checkoutsessionexpired) | A Checkout Session expired, or the merchant expired it. |
+| [`connected_account.updated`](#connected_accountupdated) | A seller's connected account changed — its readiness, in practice. |
+| [`coupon.created`](#couponcreated) | A Coupon was created. |
+| [`coupon.deleted`](#coupondeleted) | A Coupon was deleted. |
+| [`coupon.updated`](#couponupdated) | A Coupon was updated. |
+| [`credit_note.created`](#credit_notecreated) | A CreditNote was issued. |
+| [`credit_note.updated`](#credit_noteupdated) | A CreditNote was updated. |
+| [`credit_note.voided`](#credit_notevoided) | A CreditNote was voided. |
+| [`customer.created`](#customercreated) | A Customer was created. |
+| [`customer.deleted`](#customerdeleted) | A Customer was deleted. |
+| [`customer.subscription.created`](#customersubscriptioncreated) | A Subscription was created. |
+| [`customer.subscription.deleted`](#customersubscriptiondeleted) | A Subscription ended. |
+| [`customer.subscription.paused`](#customersubscriptionpaused) | A Subscription was paused (a trial ended with no payment method). |
+| [`customer.subscription.resumed`](#customersubscriptionresumed) | A paused Subscription resumed. |
+| [`customer.subscription.trial_will_end`](#customersubscriptiontrial_will_end) | A Subscription's trial ends in three days. |
+| [`customer.subscription.updated`](#customersubscriptionupdated) | A Subscription changed; `previous_attributes` names what moved. |
+| [`customer.updated`](#customerupdated) | A Customer was updated; `previous_attributes` names what moved. |
+| [`entitlements.active_entitlement_summary.updated`](#entitlementsactive_entitlement_summaryupdated) | A customer's active entitlements changed — re-read them, then grant or withdraw access. |
+| [`invoice.created`](#invoicecreated) | An Invoice was created. |
+| [`invoice.deleted`](#invoicedeleted) | A draft Invoice was deleted. |
+| [`invoice.finalized`](#invoicefinalized) | An Invoice was finalized. |
+| [`invoice.marked_uncollectible`](#invoicemarked_uncollectible) | An Invoice was marked uncollectible. |
+| [`invoice.paid`](#invoicepaid) | An Invoice was paid. |
+| [`invoice.payment_action_required`](#invoicepayment_action_required) | Paying an Invoice needs the customer to act. |
+| [`invoice.payment_failed`](#invoicepayment_failed) | An attempt to pay an Invoice failed. |
+| [`invoice.sent`](#invoicesent) | An Invoice was emailed to the customer. |
+| [`invoice.upcoming`](#invoiceupcoming) | A renewal is days away; it carries a preview Invoice (`id` empty). |
+| [`invoice.updated`](#invoiceupdated) | An Invoice changed. |
+| [`invoice.voided`](#invoicevoided) | An Invoice was voided. |
+| [`invoiceitem.created`](#invoiceitemcreated) | An InvoiceItem was created. |
+| [`invoiceitem.deleted`](#invoiceitemdeleted) | An InvoiceItem was deleted. |
+| [`payment_intent.amount_capturable_updated`](#payment_intentamount_capturable_updated) | A PaymentIntent was authorized and awaits capture (`capture_method: manual`). |
+| [`payment_intent.canceled`](#payment_intentcanceled) | A PaymentIntent was canceled — by the merchant, by expiry, or underpaid. |
+| [`payment_intent.created`](#payment_intentcreated) | A PaymentIntent was created. |
+| [`payment_intent.payment_failed`](#payment_intentpayment_failed) | A payment attempt failed; a card PaymentIntent returns to `requires_payment_method`. |
+| [`payment_intent.processing`](#payment_intentprocessing) | A PaymentIntent is processing: a FairCoin payment was broadcast, or a card payment is pending. |
+| [`payment_intent.requires_action`](#payment_intentrequires_action) | A PaymentIntent needs the payer to act (pay, authenticate). |
+| [`payment_intent.succeeded`](#payment_intentsucceeded) | A PaymentIntent succeeded: the payment is final. |
+| [`payment_link.created`](#payment_linkcreated) | A PaymentLink was created. |
+| [`payment_link.updated`](#payment_linkupdated) | A PaymentLink was updated. |
+| [`payment_method.attached`](#payment_methodattached) | A PaymentMethod was attached to a Customer. |
+| [`payment_method.detached`](#payment_methoddetached) | A PaymentMethod was detached from its Customer. |
+| [`payment_method.updated`](#payment_methodupdated) | A PaymentMethod was updated. |
+| [`payout.canceled`](#payoutcanceled) | A Payout was canceled. |
+| [`payout.created`](#payoutcreated) | A Payout was created. |
+| [`payout.failed`](#payoutfailed) | A Payout failed. |
+| [`payout.paid`](#payoutpaid) | A Payout arrived in the bank account. |
+| [`payout.updated`](#payoutupdated) | A Payout changed. |
+| [`price.created`](#pricecreated) | A Price was created. |
+| [`price.updated`](#priceupdated) | A Price was updated (archiving one is `active: false`). |
+| [`product.created`](#productcreated) | A Product was created. |
+| [`product.deleted`](#productdeleted) | A Product was deleted (it carries the product as it stood before). |
+| [`product.updated`](#productupdated) | A Product was updated; `previous_attributes` names what moved. |
+| [`promotion_code.created`](#promotion_codecreated) | A PromotionCode was created. |
+| [`promotion_code.updated`](#promotion_codeupdated) | A PromotionCode was updated (archiving one is `active: false`). |
+| [`refund.created`](#refundcreated) | A Refund was created. |
+| [`refund.failed`](#refundfailed) | A Refund failed: the bank rejected it. |
+| [`refund.updated`](#refundupdated) | A Refund changed state. |
+| [`reporting.report_run.failed`](#reportingreport_runfailed) | A ReportRun could not be produced; `error` says why. |
+| [`reporting.report_run.succeeded`](#reportingreport_runsucceeded) | A ReportRun finished: its CSV is `result`. |
+| [`setup_intent.canceled`](#setup_intentcanceled) | A SetupIntent was canceled. |
+| [`setup_intent.created`](#setup_intentcreated) | A SetupIntent was created. |
+| [`setup_intent.requires_action`](#setup_intentrequires_action) | A SetupIntent needs the customer to authenticate. |
+| [`setup_intent.setup_failed`](#setup_intentsetup_failed) | A SetupIntent attempt failed. |
+| [`setup_intent.succeeded`](#setup_intentsucceeded) | A SetupIntent succeeded: its PaymentMethod is saved. |
+| [`tax.assessment.created`](#taxassessmentcreated) | A tax compliance assessment was run. |
+| [`tax.review_item.created`](#taxreview_itemcreated) | A tax assessment finding opened a review item. |
+| [`tax.review_item.updated`](#taxreview_itemupdated) | A tax review item was decided, or found again. |
+| [`test_helpers.test_clock.advancing`](#test_helperstest_clockadvancing) | A test clock started advancing. |
+| [`test_helpers.test_clock.created`](#test_helperstest_clockcreated) | A test clock was created. |
+| [`test_helpers.test_clock.deleted`](#test_helperstest_clockdeleted) | A test clock was deleted. |
+| [`test_helpers.test_clock.ready`](#test_helperstest_clockready) | A test clock finished advancing. |
+| [`webhook_endpoint.test`](#webhook_endpointtest) | A test event, sent to ONE endpoint when its owner asks. |
+
+## `account.updated`
+
+The merchant's own account changed: readiness, requirements or settings.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"account.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Account](/reference/objects/account) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `application_fee.created`
+
+Orbit's fee was taken on a succeeded charge.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"application_fee.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [ApplicationFee](/reference/objects/application-fee) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `application_fee.refunded`
+
+Part or all of an application fee went back.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"application_fee.refunded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [ApplicationFee](/reference/objects/application-fee) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `balance.available`
+
+Funds became available in the balance.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"balance.available"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Balance](/reference/objects/balance) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing_portal.configuration.created`
+
+A customer portal configuration was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing_portal.configuration.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingPortalConfiguration](/reference/objects/billing-portal-configuration) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing_portal.configuration.updated`
+
+A customer portal configuration was updated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing_portal.configuration.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingPortalConfiguration](/reference/objects/billing-portal-configuration) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing_portal.session.created`
+
+A customer portal session was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing_portal.session.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingPortalSession](/reference/objects/billing-portal-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing.meter.created`
+
+A billing Meter was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing.meter.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingMeter](/reference/objects/billing-meter) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing.meter.deactivated`
+
+A billing Meter was deactivated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing.meter.deactivated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingMeter](/reference/objects/billing-meter) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing.meter.reactivated`
+
+A billing Meter was reactivated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing.meter.reactivated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingMeter](/reference/objects/billing-meter) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing.meter.updated`
+
+A billing Meter was updated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing.meter.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingMeter](/reference/objects/billing-meter) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `billing.observation.updated`
+
+A recurring billing resource was observed to change. A wake-up only: re-read the resource.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"billing.observation.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [BillingObservation](/reference/objects/billing-observation) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `charge.dispute.closed`
+
+A Dispute closed; `status` carries the outcome.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"charge.dispute.closed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Dispute](/reference/objects/dispute) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `charge.dispute.created`
+
+A cardholder disputed a charge. Evidence is due by its deadline.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"charge.dispute.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Dispute](/reference/objects/dispute) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `charge.dispute.funds_reinstated`
+
+The network returned the disputed amount (the dispute was won, or withdrawn).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"charge.dispute.funds_reinstated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Dispute](/reference/objects/dispute) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `charge.dispute.funds_withdrawn`
+
+The network took the disputed amount from the balance.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"charge.dispute.funds_withdrawn"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Dispute](/reference/objects/dispute) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `charge.dispute.updated`
+
+A Dispute changed: evidence was staged or submitted.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"charge.dispute.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Dispute](/reference/objects/dispute) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `charge.refunded`
+
+A Charge was refunded, partially or fully: `amount_refunded` moved.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"charge.refunded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Charge](/reference/objects/charge) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `checkout.session.async_payment_failed`
+
+A completed Checkout Session's FairCoin payment failed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"checkout.session.async_payment_failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CheckoutSession](/reference/objects/checkout-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `checkout.session.async_payment_succeeded`
+
+A completed Checkout Session's FairCoin payment confirmed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"checkout.session.async_payment_succeeded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CheckoutSession](/reference/objects/checkout-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `checkout.session.completed`
+
+The payer finished a Checkout Session (paid, authorized, or a FairCoin payment confirming).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"checkout.session.completed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CheckoutSession](/reference/objects/checkout-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `checkout.session.expired`
+
+A Checkout Session expired, or the merchant expired it.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"checkout.session.expired"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CheckoutSession](/reference/objects/checkout-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `connected_account.updated`
+
+A seller's connected account changed — its readiness, in practice.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"connected_account.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [ConnectedAccount](/reference/objects/connected-account) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `coupon.created`
+
+A Coupon was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"coupon.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Coupon](/reference/objects/coupon) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `coupon.deleted`
+
+A Coupon was deleted.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"coupon.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Coupon](/reference/objects/coupon) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `coupon.updated`
+
+A Coupon was updated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"coupon.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Coupon](/reference/objects/coupon) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `credit_note.created`
+
+A CreditNote was issued.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"credit_note.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CreditNote](/reference/objects/credit-note) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `credit_note.updated`
+
+A CreditNote was updated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"credit_note.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CreditNote](/reference/objects/credit-note) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `credit_note.voided`
+
+A CreditNote was voided.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"credit_note.voided"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [CreditNote](/reference/objects/credit-note) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.created`
+
+A Customer was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Customer](/reference/objects/customer) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.deleted`
+
+A Customer was deleted.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Customer](/reference/objects/customer) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.subscription.created`
+
+A Subscription was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.subscription.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Subscription](/reference/objects/subscription) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.subscription.deleted`
+
+A Subscription ended.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.subscription.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Subscription](/reference/objects/subscription) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.subscription.paused`
+
+A Subscription was paused (a trial ended with no payment method).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.subscription.paused"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Subscription](/reference/objects/subscription) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.subscription.resumed`
+
+A paused Subscription resumed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.subscription.resumed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Subscription](/reference/objects/subscription) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.subscription.trial_will_end`
+
+A Subscription's trial ends in three days.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.subscription.trial_will_end"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Subscription](/reference/objects/subscription) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.subscription.updated`
+
+A Subscription changed; `previous_attributes` names what moved.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.subscription.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Subscription](/reference/objects/subscription) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `customer.updated`
+
+A Customer was updated; `previous_attributes` names what moved.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"customer.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Customer](/reference/objects/customer) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `entitlements.active_entitlement_summary.updated`
+
+A customer's active entitlements changed — re-read them, then grant or withdraw access.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"entitlements.active_entitlement_summary.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [ActiveEntitlementSummary](/reference/objects/active-entitlement-summary) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.created`
+
+An Invoice was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.deleted`
+
+A draft Invoice was deleted.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.finalized`
+
+An Invoice was finalized.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.finalized"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.marked_uncollectible`
+
+An Invoice was marked uncollectible.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.marked_uncollectible"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.paid`
+
+An Invoice was paid.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.paid"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.payment_action_required`
+
+Paying an Invoice needs the customer to act.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.payment_action_required"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.payment_failed`
+
+An attempt to pay an Invoice failed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.payment_failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.sent`
+
+An Invoice was emailed to the customer.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.sent"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.upcoming`
+
+A renewal is days away; it carries a preview Invoice (`id` empty).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.upcoming"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.updated`
+
+An Invoice changed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoice.voided`
+
+An Invoice was voided.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoice.voided"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Invoice](/reference/objects/invoice) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoiceitem.created`
+
+An InvoiceItem was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoiceitem.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [InvoiceItem](/reference/objects/invoice-item) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `invoiceitem.deleted`
+
+An InvoiceItem was deleted.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"invoiceitem.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [InvoiceItem](/reference/objects/invoice-item) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.amount_capturable_updated`
+
+A PaymentIntent was authorized and awaits capture (`capture_method: manual`).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.amount_capturable_updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.canceled`
+
+A PaymentIntent was canceled — by the merchant, by expiry, or underpaid.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.canceled"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.created`
+
+A PaymentIntent was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.payment_failed`
+
+A payment attempt failed; a card PaymentIntent returns to `requires_payment_method`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.payment_failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.processing`
+
+A PaymentIntent is processing: a FairCoin payment was broadcast, or a card payment is pending.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.processing"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.requires_action`
+
+A PaymentIntent needs the payer to act (pay, authenticate).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.requires_action"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_intent.succeeded`
+
+A PaymentIntent succeeded: the payment is final.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_intent.succeeded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentIntent](/reference/objects/payment-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_link.created`
+
+A PaymentLink was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_link.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentLink](/reference/objects/payment-link) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_link.updated`
+
+A PaymentLink was updated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_link.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentLink](/reference/objects/payment-link) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_method.attached`
+
+A PaymentMethod was attached to a Customer.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_method.attached"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentMethod](/reference/objects/payment-method) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_method.detached`
+
+A PaymentMethod was detached from its Customer.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_method.detached"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentMethod](/reference/objects/payment-method) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payment_method.updated`
+
+A PaymentMethod was updated.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payment_method.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PaymentMethod](/reference/objects/payment-method) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payout.canceled`
+
+A Payout was canceled.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payout.canceled"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Payout](/reference/objects/payout) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payout.created`
+
+A Payout was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payout.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Payout](/reference/objects/payout) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payout.failed`
+
+A Payout failed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payout.failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Payout](/reference/objects/payout) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payout.paid`
+
+A Payout arrived in the bank account.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payout.paid"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Payout](/reference/objects/payout) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `payout.updated`
+
+A Payout changed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"payout.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Payout](/reference/objects/payout) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `price.created`
+
+A Price was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"price.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Price](/reference/objects/price) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `price.updated`
+
+A Price was updated (archiving one is `active: false`).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"price.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Price](/reference/objects/price) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `product.created`
+
+A Product was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"product.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Product](/reference/objects/product) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `product.deleted`
+
+A Product was deleted (it carries the product as it stood before).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"product.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Product](/reference/objects/product) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `product.updated`
+
+A Product was updated; `previous_attributes` names what moved.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"product.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Product](/reference/objects/product) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `promotion_code.created`
+
+A PromotionCode was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"promotion_code.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PromotionCode](/reference/objects/promotion-code) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `promotion_code.updated`
+
+A PromotionCode was updated (archiving one is `active: false`).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"promotion_code.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [PromotionCode](/reference/objects/promotion-code) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `refund.created`
+
+A Refund was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"refund.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Refund](/reference/objects/refund) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `refund.failed`
+
+A Refund failed: the bank rejected it.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"refund.failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Refund](/reference/objects/refund) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `refund.updated`
+
+A Refund changed state.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"refund.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Refund](/reference/objects/refund) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `reporting.report_run.failed`
+
+A ReportRun could not be produced; `error` says why.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"reporting.report_run.failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [ReportRun](/reference/objects/report-run) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `reporting.report_run.succeeded`
+
+A ReportRun finished: its CSV is `result`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"reporting.report_run.succeeded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [ReportRun](/reference/objects/report-run) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `setup_intent.canceled`
+
+A SetupIntent was canceled.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"setup_intent.canceled"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [SetupIntent](/reference/objects/setup-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `setup_intent.created`
+
+A SetupIntent was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"setup_intent.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [SetupIntent](/reference/objects/setup-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `setup_intent.requires_action`
+
+A SetupIntent needs the customer to authenticate.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"setup_intent.requires_action"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [SetupIntent](/reference/objects/setup-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `setup_intent.setup_failed`
+
+A SetupIntent attempt failed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"setup_intent.setup_failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [SetupIntent](/reference/objects/setup-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `setup_intent.succeeded`
+
+A SetupIntent succeeded: its PaymentMethod is saved.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"setup_intent.succeeded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [SetupIntent](/reference/objects/setup-intent) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `tax.assessment.created`
+
+A tax compliance assessment was run. Nothing was registered, filed or collected.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"tax.assessment.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TaxAssessment](/reference/objects/tax-assessment) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `tax.review_item.created`
+
+A tax assessment finding opened a review item.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"tax.review_item.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TaxReviewItem](/reference/objects/tax-review-item) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `tax.review_item.updated`
+
+A tax review item was decided, or found again.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"tax.review_item.updated"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TaxReviewItem](/reference/objects/tax-review-item) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `test_helpers.test_clock.advancing`
+
+A test clock started advancing.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"test_helpers.test_clock.advancing"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TestClock](/reference/objects/test-clock) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `test_helpers.test_clock.created`
+
+A test clock was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"test_helpers.test_clock.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TestClock](/reference/objects/test-clock) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `test_helpers.test_clock.deleted`
+
+A test clock was deleted.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"test_helpers.test_clock.deleted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TestClock](/reference/objects/test-clock) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `test_helpers.test_clock.ready`
+
+A test clock finished advancing.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"test_helpers.test_clock.ready"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TestClock](/reference/objects/test-clock) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `webhook_endpoint.test`
+
+A test event, sent to ONE endpoint when its owner asks. It cannot be subscribed to.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"webhook_endpoint.test"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [WebhookEndpoint](/reference/objects/webhook-endpoint) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |

@@ -3,8 +3,12 @@
  * `metadata`), list (`code` case-insensitive, `coupon`, `customer`, `active`).
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
-import type { CreatePromotionCodeParams } from '@peable.to/shared-types';
+import {
+  createPromotionCodeParams,
+  expandOnlyQuery,
+  listPromotionCodesQuery,
+  updatePromotionCodeParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findCouponForMerchant } from '../db/catalog/couponRepository';
@@ -20,84 +24,22 @@ import {
   notFound,
   updatePromotionCode,
 } from '../services/catalog/catalogService';
-import {
-  amountSchema,
-  booleanQuery,
-  checkAmountBound,
-  currencySchema,
-  promotionCodeSchema,
-  redemptionsSchema,
-  unixSecondsSchema,
-} from '../services/catalog/params';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError } from '../lib/http';
 import {
   answerList,
-  expandParam,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
+  surfaceQuery,
 } from '../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../lib/metadata';
 import { toPromotionCodeDTO } from '../lib/serializeCatalog';
 import { fromUnix } from '../lib/time';
 import type { CatalogRoute } from './catalogRoutes';
 
-const idSchema = z.string().min(1).max(255);
-
-const createBodySchema = z
-  .object({
-    coupon: idSchema,
-    code: promotionCodeSchema.optional(),
-    customer: idSchema.optional(),
-    active: z.boolean().optional(),
-    max_redemptions: redemptionsSchema.optional(),
-    expires_at: unixSecondsSchema.optional(),
-    restrictions: z
-      .object({
-        first_time_transaction: z.boolean().optional(),
-        minimum_amount: amountSchema.optional(),
-        minimum_amount_currency: currencySchema.optional(),
-      })
-      .strict()
-      .superRefine((restrictions, ctx) => {
-        if (
-          (restrictions.minimum_amount === undefined) !==
-          (restrictions.minimum_amount_currency === undefined)
-        ) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['minimum_amount_currency'],
-            message: 'minimum_amount and minimum_amount_currency go together',
-          });
-        }
-        checkAmountBound(ctx, restrictions.minimum_amount, restrictions.minimum_amount_currency, [
-          'minimum_amount',
-        ]);
-      })
-      .optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CreatePromotionCodeParams | 'expand', z.ZodTypeAny>)
-  .strict();
-
-const updateBodySchema = z
-  .object({
-    active: z.boolean().optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listPromotionCodesQuery = surfaceListQuery({
-  code: z.string().min(1).max(255).optional(),
-  coupon: idSchema.optional(),
-  customer: idSchema.optional(),
-  active: booleanQuery.optional(),
-});
-const retrievePromotionCodeQuery = surfaceRetrieveQuery();
+// The request schemas are the contract's (`@peable.to/contracts` `promotionCodeRoutes`).
+const listQuery = surfaceQuery(listPromotionCodesQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -122,7 +64,7 @@ async function answerPromotionCode(
 }
 
 async function create(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
-  const parsed = createBodySchema.safeParse(req.body ?? {});
+  const parsed = createPromotionCodeParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -155,7 +97,7 @@ async function retrieve(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const query = parseQuery(req, res, retrievePromotionCodeQuery[surface]);
+  const query = parseQuery(req, res, retrieveQuery[surface]);
   if (!query) return;
   if (!parseExpand(res, 'promotion_code', query.expand, { list: false })) return;
   const code = await findPromotionCodeForMerchant(getDb(), id, merchant.id);
@@ -166,7 +108,7 @@ async function retrieve(
 async function update(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  const parsed = updatePromotionCodeParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -186,7 +128,7 @@ async function list(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const query = parseQuery(req, res, listPromotionCodesQuery[surface]);
+  const query = parseQuery(req, res, listQuery[surface]);
   if (!query) return;
   const db = getDb();
   const coupon = await resolveListReference(

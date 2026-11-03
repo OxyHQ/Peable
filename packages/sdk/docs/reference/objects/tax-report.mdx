@@ -1,0 +1,49 @@
+---
+title: "TaxReport"
+description: "The tax.report object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxReport
+
+Object type: `tax.report`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.report"` |  |
+| `from` | integer | Inclusive. |
+| `to` | integer | Exclusive. |
+| `rows` | array of [TaxReportRow](/reference/objects/tax-report-row) |  |
+
+## Example
+
+```json
+{
+  "object": "tax.report",
+  "from": 1790812800,
+  "to": 1798761600,
+  "rows": [
+    {
+      "country": "DE",
+      "state": null,
+      "registration_id": "taxreg_0193b8f2c1a87d3e9f4a",
+      "scheme": "eu_oss_union",
+      "collection": "collect",
+      "tax_type": "vat",
+      "rate_percentage": "19.0",
+      "currency": "EUR",
+      "transactions": 42,
+      "reversals": 1,
+      "taxable_amount": 41000,
+      "tax_amount": 7790
+    }
+  ]
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/reports/summary`](/reference/tax#summarize-collected-tax) — Summarize collected tax

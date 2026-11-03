@@ -1,0 +1,20 @@
+---
+title: "TaxLocationEvidenceResultItem"
+description: "The TaxLocationEvidenceResultItem shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxLocationEvidenceResultItem
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | One of `billing_address`, `ip_address`, `payment_method_country`, `bank_country`, `sim_country`, `landline_country`. |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+
+## Used in
+
+[TaxLocationEvidence](/reference/objects/tax-location-evidence)

@@ -3,16 +3,11 @@
  * the create body, list pagination by `report_type`, and the CSV bytes from
  * `files.contents`.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import type { ReportRun, ReportType } from '@peable.to/shared-types';
 import { Peable } from '../../src';
 import { PeableInvalidRequestError } from '../../src/core/errors';
-import { FilesResource } from '../../src/resources/files';
-import {
-  ReportingResource,
-  ReportRunsResource,
-  ReportTypesResource,
-} from '../../src/resources/reporting';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import { buildTestClient, serviceTokenMintResponse } from '../support/testGateway';
 
@@ -58,12 +53,12 @@ function callOf(requests: CapturedRequest[]): CapturedRequest {
 describe('reporting.reportTypes', () => {
   test('list and retrieve', async () => {
     const many = gateway({ object: 'list', data: [TYPE], has_more: false, url: '/x' });
-    const page = await new ReportTypesResource(buildTestClient(many.fetch)).list();
+    const page = await resources(buildTestClient(many.fetch)).reporting.reportTypes.list();
     expect(page.data[0]?.id).toBe('balance.summary.1');
     expect(new URL(callOf(many.requests).url).pathname).toBe('/v1/reporting/report_types');
 
     const one = gateway(TYPE);
-    await new ReportTypesResource(buildTestClient(one.fetch)).retrieve('balance.summary.1');
+    await resources(buildTestClient(one.fetch)).reporting.reportTypes.retrieve('balance.summary.1');
     expect(new URL(callOf(one.requests).url).pathname).toBe(
       '/v1/reporting/report_types/balance.summary.1',
     );
@@ -73,7 +68,7 @@ describe('reporting.reportTypes', () => {
 describe('reporting.reportRuns', () => {
   test('create posts the report type and parameters, with an idempotency key', async () => {
     const mock = gateway(RUN);
-    const run = await new ReportRunsResource(buildTestClient(mock.fetch)).create({
+    const run = await resources(buildTestClient(mock.fetch)).reporting.reportRuns.create({
       report_type: 'payments.itemized.1',
       parameters: {
         interval_start: 1_779_900_000,
@@ -102,7 +97,7 @@ describe('reporting.reportRuns', () => {
 
   test('retrieve, and a list filtered by report_type that pages on', async () => {
     const one = gateway(RUN);
-    await new ReportRunsResource(buildTestClient(one.fetch)).retrieve('frr_1');
+    await resources(buildTestClient(one.fetch)).reporting.reportRuns.retrieve('frr_1');
     expect(new URL(callOf(one.requests).url).pathname).toBe('/v1/reporting/report_runs/frr_1');
 
     const pages = [
@@ -121,8 +116,8 @@ describe('reporting.reportRuns', () => {
       served += 1;
       return { status: 200, json: page };
     });
-    const ids = await new ReportRunsResource(buildTestClient(many.fetch))
-      .list({ report_type: 'payments.itemized.1' })
+    const ids = await resources(buildTestClient(many.fetch))
+      .reporting.reportRuns.list({ report_type: 'payments.itemized.1' })
       .autoPagingToArray({ limit: 10 });
     expect(ids.map((run) => run.id)).toEqual(['frr_1', 'frr_0']);
     const urls = many.requests
@@ -137,9 +132,9 @@ describe('reporting.reportRuns', () => {
 
   test('is wired on the client as peable.reporting', () => {
     const peable = new Peable({ publicKey: 'oxy_dk_test', secret: 'sk_test' });
-    expect(peable.reporting).toBeInstanceOf(ReportingResource);
-    expect(peable.reporting.reportRuns).toBeInstanceOf(ReportRunsResource);
-    expect(peable.reporting.reportTypes).toBeInstanceOf(ReportTypesResource);
+    expect(typeof peable.reporting).toBe('object');
+    expect(typeof peable.reporting.reportRuns).toBe('object');
+    expect(typeof peable.reporting.reportTypes).toBe('object');
   });
 });
 
@@ -157,7 +152,7 @@ describe('files.contents', () => {
         },
       };
     });
-    const downloaded = await new FilesResource(buildTestClient(mock.fetch)).contents('file_1');
+    const downloaded = await resources(buildTestClient(mock.fetch)).files.contents('file_1');
     expect(new TextDecoder().decode(downloaded.bytes)).toBe(csv);
     expect(downloaded.contentType).toBe('text/csv; charset=utf-8');
     expect(downloaded.filename).toBe('payments.itemized.1-frr_1.csv');
@@ -180,7 +175,7 @@ describe('files.contents', () => {
       404,
     );
     await expect(
-      new FilesResource(buildTestClient(mock.fetch)).contents('file_evidence'),
+      resources(buildTestClient(mock.fetch)).files.contents('file_evidence'),
     ).rejects.toBeInstanceOf(PeableInvalidRequestError);
   });
 });

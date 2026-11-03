@@ -1,0 +1,98 @@
+---
+title: "Account"
+description: "The account object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Account
+
+Object type: `account`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `ca_…` — the same id space as a marketplace seller. |
+| `object` | `"account"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `type` | string | One of `merchant`, `connected`. |
+| `country` | string | ISO 3166-1 alpha-2. Fixed at the provider once created. |
+| `default_currency` | string \| null |  |
+| `business_profile` | [AccountBusinessProfile](/reference/objects/account-business-profile) |  |
+| `capabilities` | object | `null`: never requested — a different fact from the provider declining it. |
+| `capabilities.card_payments` | string \| null | One of `active`, `pending`, `inactive`. |
+| `capabilities.transfers` | string \| null | One of `active`, `pending`, `inactive`. |
+| `requirements` | [AccountRequirements](/reference/objects/account-requirements) |  |
+| `charges_enabled` | boolean | Whether the account can take payments as merchant of record (`on_behalf_of`). |
+| `payouts_enabled` | boolean | Whether the provider will pay this account's balance out. |
+| `settings` | [AccountSettings](/reference/objects/account-settings) |  |
+| `last_synced_at` | integer \| null | The last provider read; `null` before the first one completed. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "ca_0193b8f2c1a87d3e9f4a",
+  "object": "account",
+  "livemode": false,
+  "type": "merchant",
+  "country": "ES",
+  "default_currency": "EUR",
+  "business_profile": {
+    "name": "Rosen Ceramics",
+    "url": "https://rosen.example",
+    "support_email": "help@rosen.example",
+    "support_url": null,
+    "product_description": "Handmade tableware",
+    "mcc": "5719"
+  },
+  "capabilities": {
+    "card_payments": "active",
+    "transfers": "active"
+  },
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "charges_enabled": true,
+  "payouts_enabled": true,
+  "settings": {
+    "payouts": {
+      "schedule": {
+        "interval": "weekly",
+        "delay_days": 7,
+        "weekly_anchor": "friday",
+        "monthly_anchor": null
+      },
+      "statement_descriptor": "ROSEN CERAMICS"
+    },
+    "payments": {
+      "statement_descriptor": "ROSEN CERAMICS"
+    },
+    "branding": {
+      "primary_color": "#1f2937",
+      "secondary_color": null
+    }
+  },
+  "last_synced_at": 1793750460,
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/account`](/reference/account#retrieve-the-account) — Retrieve the account
+- [`POST /v1/account`](/reference/account#open-or-update-the-account) — Open or update the account
+
+## Events
+
+- [`account.updated`](/reference/webhook-events#accountupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

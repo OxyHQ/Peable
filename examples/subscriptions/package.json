@@ -1,0 +1,19 @@
+{
+  "name": "peable-example-subscriptions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Peable's billing engine: a recurring price, a subscription through Checkout, the customer portal and the billing webhooks.",
+  "scripts": {
+    "setup": "bun run setup.ts",
+    "start": "bun run server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@peable.to/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "~5.9.2"
+  }
+}

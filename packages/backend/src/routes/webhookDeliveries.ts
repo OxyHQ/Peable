@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
+import { type ErrorCode, listWebhookDeliveriesQuery } from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findEventForMerchant } from '../db/events/eventRepository';
@@ -15,20 +14,27 @@ import { enqueueDelivery } from '../db/webhooks/webhookOutboxRepository';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { runWebhookOutboxPass } from '../services/webhookOutbox';
 import { toWebhookDeliveryDTO } from '../lib/serialize';
-import { sendError, wrap, requireAuthenticated } from '../lib/http';
+import { sendError, wrap, requireAuthenticated, requireScope } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import {
   answerList,
+  dashboardQuery,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
 } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
 export type RedeliverResult =
   | { ok: true; delivery: WebhookDeliveryRow }
-  | { ok: false; status: number; message: string };
+  | { ok: false; status: 400 | 404; code: ErrorCode; message: string };
+
+const DELIVERY_NOT_FOUND = {
+  ok: false,
+  status: 404,
+  code: 'resource_missing',
+  message: 'webhook delivery not found',
+} as const satisfies RedeliverResult;
 
 /**
  * Shared redeliver core — `POST /v1/webhook_deliveries/:id/redeliver`
@@ -51,17 +57,14 @@ export async function redeliverWebhookDelivery(
   // No id-shape guard before the lookup: the ids are `text`, and the
   // ownership-scoped read answers "unknown" and "not yours" identically.
   const delivery = await findDeliveryForMerchant(db, deliveryId, merchant.id);
-  if (!delivery) {
-    return { ok: false, status: 404, message: 'webhook delivery not found' };
-  }
+  if (!delivery) return DELIVERY_NOT_FOUND;
   const endpoint = await findEndpointForMerchant(db, delivery.endpointPublicId, merchant.id);
-  if (!endpoint) {
-    return { ok: false, status: 404, message: 'webhook delivery not found' };
-  }
+  if (!endpoint) return DELIVERY_NOT_FOUND;
   if (endpoint.status !== 'enabled') {
     return {
       ok: false,
       status: 400,
+      code: 'webhook_endpoint_disabled',
       message: 'the webhook endpoint of this delivery is disabled; enable it before redelivering',
     };
   }
@@ -79,20 +82,15 @@ export async function redeliverWebhookDelivery(
   await runWebhookOutboxPass(deps.safeFetch ? { safeFetch: deps.safeFetch } : {});
 
   const redelivery = await findDeliveryForMerchant(db, enqueuedId, merchant.id);
-  if (!redelivery) {
-    return { ok: false, status: 404, message: 'webhook delivery not found' };
-  }
+  if (!redelivery) return DELIVERY_NOT_FOUND;
   return { ok: true, delivery: redelivery };
 }
 
-const deliveryListFilters = {
-  /** Only the deliveries of this event (`evt_…`). */
-  event: z.string().min(1).max(255).optional(),
-  /** Only the deliveries to this endpoint (`we_…`). */
-  webhook_endpoint: z.string().min(1).max(255).optional(),
+/** The contract's query (`@peable.to/contracts` `webhookDeliveryRoutes`), per surface. */
+const listQueries = {
+  api: listWebhookDeliveriesQuery,
+  dashboard: dashboardQuery(listWebhookDeliveriesQuery),
 } as const;
-
-const listDeliveriesQuery = surfaceListQuery(deliveryListFilters);
 
 /**
  * `GET /v1/webhook_deliveries` — the delivery log, newest first, optionally one
@@ -106,7 +104,7 @@ export async function answerWebhookDeliveryList(
   merchant: MerchantRow,
   surface: QuerySurface = 'api',
 ): Promise<void> {
-  const query = parseQuery(req, res, listDeliveriesQuery[surface]);
+  const query = parseQuery(req, res, listQueries[surface]);
   if (!query) return;
   const db = getDb();
   const event = await resolveListReference(
@@ -154,7 +152,7 @@ export function createWebhookDeliveriesRouter(deps: {
     '/v1/webhook_deliveries',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -166,7 +164,7 @@ export function createWebhookDeliveriesRouter(deps: {
     '/v1/webhook_deliveries/:id/redeliver',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -180,7 +178,7 @@ export function createWebhookDeliveriesRouter(deps: {
 
       const result = await redeliverWebhookDelivery(merchant, deliveryId, { safeFetch });
       if (!result.ok) {
-        sendError(res, result.status, 'invalid_request_error', result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message, result.code);
         return;
       }
       res.status(200).json(toWebhookDeliveryDTO(result.delivery));

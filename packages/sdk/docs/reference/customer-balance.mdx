@@ -1,0 +1,121 @@
+---
+title: "Customer balance"
+description: "The Customer balance endpoints of the Peable API."
+order: 914
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Customer balance
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/customers/{id}/balance_transactions`](#adjust-a-customers-balance) | Adjust a customer's balance |
+| [`GET /v1/customers/{id}/balance_transactions`](#list-a-customers-balance-transactions) | List a customer's balance transactions |
+| [`GET /v1/customers/{id}/balance_transactions/{transaction}`](#retrieve-a-customer-balance-transaction) | Retrieve a customer balance transaction |
+
+## Adjust a customer's balance
+
+`POST /v1/customers/{id}/balance_transactions`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.customerBalanceTransactions.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The customer (`cus_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` **required** | string | SIGNED: negative credits the customer, positive debits. Matches `^(0\|-?[1-9][0-9]{0,30})$`. |
+| `currency` **required** | string | One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `description` | string | 1–350 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a customer's balance transactions
+
+`GET /v1/customers/{id}/balance_transactions`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.customerBalanceTransactions.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The customer (`cus_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a customer balance transaction
+
+`GET /v1/customers/{id}/balance_transactions/{transaction}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.customerBalanceTransactions.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The customer (`cus_…`). |
+| `transaction` **required** | path | string | The balance transaction (`cbtxn_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

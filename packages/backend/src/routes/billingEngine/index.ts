@@ -2,6 +2,7 @@ import type { RequestHandler, Router } from 'express';
 import { type CatalogRoute, createCatalogApiRouter } from '../catalogRoutes';
 import { INVOICE_ROUTES } from './invoices';
 import { PLATFORM_ROUTES } from './platform';
+import { PORTAL_ROUTES } from './portal';
 import { SUBSCRIPTION_ROUTES } from './subscriptions';
 
 /**
@@ -16,6 +17,7 @@ export const BILLING_ENGINE_ROUTES: readonly CatalogRoute[] = [
   ...SUBSCRIPTION_ROUTES,
   ...INVOICE_ROUTES,
   ...PLATFORM_ROUTES,
+  ...PORTAL_ROUTES,
 ];
 
 export function createBillingEngineRouter(deps: { requireMerchant: RequestHandler }): Router {

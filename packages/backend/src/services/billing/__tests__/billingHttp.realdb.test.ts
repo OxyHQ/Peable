@@ -139,6 +139,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         publicKey: 'fixture-public',
         secret: 'fixture-secret',
       }).billing;
+    /** Recover a checkout operation by its key, with the rest of its identity as the query. */
+    const recoverOperation = ({
+      idempotency_key,
+      ...query
+    }: {
+      idempotency_key: string;
+      provider_customer_id: string;
+      provider_price_id: string;
+      store_id: string;
+      plan_id: string;
+    }) => sdk().retrieveCheckoutOperation(idempotency_key, query);
     async function bindSubscription() {
       const c = await bindBillingObject(gatewayDb(), deployment, owner, {
         kind: 'customer',
@@ -332,7 +343,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const auth: RequestHandler = (req, _res, next) => {
         if (retry401) {
           retry401 = false;
-          _res.status(401).json({ error: { message: 'synthetic_expiry' } });
+          // The gateway's own envelope, as `requireServiceApp` answers an expired token.
+          _res.status(401).json({
+            error: { type: 'authentication_error', message: 'synthetic_expiry', request_id: null },
+          });
           return;
         }
         const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -1144,7 +1158,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         current_period_end: 1793707200,
       });
       expect(
-        await sdk().cancelAtPeriodEnd('sub_one', { idempotencyKey: 'cancel:one' }),
+        await sdk().cancelAtPeriodEnd('sub_one', {}, { idempotencyKey: 'cancel:one' }),
       ).toMatchObject({ cancel_at_period_end: true, store_id: 'store:one', cancel_at: 1793707200 });
       expect(calls.find((c) => c.method === 'cancel')?.params).toEqual({
         ref: 'sub_one',
@@ -1744,8 +1758,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     });
     it('reconciles same cancellation intent and allows a new action after external resume', async () => {
       await bindSubscription();
-      await sdk().cancelAtPeriodEnd('sub_one', { idempotencyKey: 'cancel:action1' });
-      await sdk().cancelAtPeriodEnd('sub_one', { idempotencyKey: 'cancel:action1' });
+      await sdk().cancelAtPeriodEnd('sub_one', {}, { idempotencyKey: 'cancel:action1' });
+      await sdk().cancelAtPeriodEnd('sub_one', {}, { idempotencyKey: 'cancel:action1' });
       expect(calls.filter((c) => c.method === 'cancel')).toHaveLength(1);
       cancelled = false;
       expect(
@@ -1759,7 +1773,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         ).status,
       ).toBe(409);
       expect(calls.filter((c) => c.method === 'cancel')).toHaveLength(1);
-      await sdk().cancelAtPeriodEnd('sub_one', { idempotencyKey: 'cancel:action2' });
+      await sdk().cancelAtPeriodEnd('sub_one', {}, { idempotencyKey: 'cancel:action2' });
       expect(cancelled).toBe(true);
       expect(calls.filter((c) => c.method === 'cancel')).toHaveLength(2);
     });
@@ -1920,7 +1934,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         store_id: checkout.store_id,
         plan_id: checkout.plan_id,
       };
-      const recovered = await sdk().retrieveCheckoutOperation(params);
+      const recovered = await recoverOperation(params);
       expect(recovered).toMatchObject({
         state: 'succeeded',
         source: { ...params, tax_quote_id: fixture.quote.quote.id },
@@ -1929,7 +1943,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
       expect(recovered.checkout.url).toBeUndefined();
       expect(calls).toHaveLength(before);
-      expect(await sdk().retrieveCheckoutOperation(params)).toEqual(recovered);
+      expect(await recoverOperation(params)).toEqual(recovered);
       const freshProvider = createStripeBillingProvider(deployment, client, {
         portalConfigurationRef: 'bpc_one',
         embeddedPublishableKey: 'pk_test_fixture',
@@ -2003,7 +2017,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         bindingEvidenceRef: 'fixture:second',
       });
       await expect(
-        sdk().retrieveCheckoutOperation({
+        recoverOperation({
           ...params,
           provider_customer_id: 'cus_second',
           store_id: 'store:second',
@@ -2020,7 +2034,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         store_id: checkout.store_id,
         plan_id: checkout.plan_id,
       };
-      const missing = await sdk().retrieveCheckoutOperation(params);
+      const missing = await recoverOperation(params);
       expect(missing.state).toBe('not_found');
       const customer = await requireBillingBinding(
         gatewayDb(),
@@ -2052,7 +2066,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       if (claim.kind !== 'claimed') throw new Error('Expected claim');
       time = new Date(time.getTime() + 120_000);
       const before = calls.length;
-      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('pending');
+      expect((await recoverOperation(params)).state).toBe('pending');
       let reads = 0;
       checkoutOperationReader = {
         async read() {
@@ -2060,7 +2074,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           return { state: 'not_found' };
         },
       };
-      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('indeterminate');
+      expect((await recoverOperation(params)).state).toBe('indeterminate');
       checkoutOperationReader = {
         async read(input) {
           reads++;
@@ -2076,7 +2090,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           };
         },
       };
-      await expect(sdk().retrieveCheckoutOperation(params)).rejects.toThrow();
+      await expect(recoverOperation(params)).rejects.toThrow();
       expect(
         (
           await gatewayDb()
@@ -2099,10 +2113,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           };
         },
       };
-      const concurrent = await Promise.all([
-        sdk().retrieveCheckoutOperation(params),
-        sdk().retrieveCheckoutOperation(params),
-      ]);
+      const concurrent = await Promise.all([recoverOperation(params), recoverOperation(params)]);
       expect(
         concurrent.every(
           (value) =>
@@ -2112,7 +2123,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         ),
       ).toBe(true);
       const readCount = reads;
-      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('succeeded');
+      expect((await recoverOperation(params)).state).toBe('succeeded');
       expect(reads).toBe(readCount);
       expect(calls).toHaveLength(before);
       expect(fixture.quote).toBeDefined();
@@ -2252,7 +2263,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           };
         },
       };
-      await expect(sdk().retrieveCheckoutOperation(params)).rejects.toThrow();
+      await expect(recoverOperation(params)).rejects.toThrow();
       const [operation] = await gatewayDb()
         .select()
         .from(billingOperations)
@@ -2272,7 +2283,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           };
         },
       };
-      const recovered = await sdk().retrieveCheckoutOperation(params);
+      const recovered = await recoverOperation(params);
       expect(recovered.state).toBe('succeeded');
       expect(recovered.source.tax_quote_id).toBe(fixture.quote.quote.id);
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
@@ -2329,7 +2340,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           };
         },
       };
-      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('pending');
+      expect((await recoverOperation(params)).state).toBe('pending');
       expect(
         (
           await gatewayDb()
@@ -2365,7 +2376,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           };
         },
       };
-      const recovered = await sdk().retrieveCheckoutOperation(params);
+      const recovered = await recoverOperation(params);
       expect(recovered.state).toBe('succeeded');
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
       expect(recovered.checkout.id).toBe('cs_test_original');

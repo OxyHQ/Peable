@@ -1,0 +1,66 @@
+---
+title: "TaxReviewItem"
+description: "The tax.review_item object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxReviewItem
+
+Object type: `tax.review_item`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.review_item"` |  |
+| `id` | string | `taxrev_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `code` | string | Machine reason, e.g. `threshold_exceeded`, `registration_status_unknown`. |
+| `severity` | string | One of `action_required`, `review`. |
+| `status` | string | One of `open`, `resolved`, `dismissed`. |
+| `rule` | string \| null |  |
+| `country` | string \| null |  |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `message` | string |  |
+| `first_assessment` | string \| null | The assessment (`taxasm_…`) that opened it. |
+| `latest_assessment` | string \| null | The latest assessment (`taxasm_…`) that found it again. |
+| `decision` | [TaxReviewDecision](/reference/objects/tax-review-decision) \| null |  |
+| `created` | integer | Unix seconds. |
+| `updated` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.review_item",
+  "id": "taxrev_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "code": "threshold_approaching",
+  "severity": "review",
+  "status": "open",
+  "rule": "us_tx_sales_tax",
+  "country": "US",
+  "state": "TX",
+  "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+  "first_assessment": "taxasm_0193b8f2c1a87d3e9f4a",
+  "latest_assessment": "taxasm_0193b8f2c1a87d3e9f4a",
+  "decision": null,
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/review_items`](/reference/tax-compliance#list-review-items) — List review items
+- [`GET /v1/tax/review_items/{id}`](/reference/tax-compliance#retrieve-a-review-item) — Retrieve a review item
+
+## Events
+
+- [`tax.review_item.created`](/reference/webhook-events#taxreview_itemcreated)
+- [`tax.review_item.updated`](/reference/webhook-events#taxreview_itemupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

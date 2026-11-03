@@ -1,8 +1,7 @@
 import { idempotent } from '../lib/idempotency';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
+import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import {
@@ -20,6 +19,7 @@ import {
   requireServiceApp,
   requireAuthenticated,
   sendValidationError,
+  requireScope,
 } from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 import { enqueueReferenceSync } from '../db/oxyFiles/referenceSyncRepository';
@@ -27,59 +27,6 @@ import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client
 import { acceptOxyFile, type FileActor } from '../services/oxyFiles/fileOwnership';
 import { findFileByPublicId } from '../db/files/fileRepository';
 import { kickReferenceSync } from '../services/oxyFiles/referenceSync';
-
-/** Exported: `routes/dashboard.ts` parses the SAME registration body for its dashboard-authed register route (F2.5) so the two never drift. */
-// The branding columns are bare `text()` with no CHECK, so these bounds are
-// the ONLY thing between a merchant and an unbounded write. `display_name` is
-// rendered in a payer's transaction history and on the checkout chip, so it is
-// held to a chip-sized length rather than a paragraph.
-const DISPLAY_NAME_MAX = 64;
-const AVATAR_FILE_ID_MAX = 128;
-const FILE_ID_MAX = 255;
-const DESCRIPTION_MAX = 512;
-
-const brandingFields = {
-  display_name: z.string().min(1).max(DISPLAY_NAME_MAX).optional(),
-  avatar_file_id: z.string().min(1).max(AVATAR_FILE_ID_MAX).optional(),
-  description: z.string().min(1).max(DESCRIPTION_MAX).optional(),
-};
-
-export const createMerchantBodySchema = z
-  .object({
-    /**
-     * The FairCoin half. OPTIONAL — both fields or neither.
-     *
-     * Required unconditionally until now, so a merchant who only wanted to
-     * take cards had to supply a watch-only extended key for a chain they had
-     * no intention of using. Whatever they supplied was then either a real key
-     * they had to custody, or a fixture that silently made their FairCoin
-     * receive addresses underivable by their own wallet.
-     */
-    network: z.enum(['mainnet', 'testnet']).optional(),
-    xpub: z.string().min(1).optional(),
-    required_confirmations: z.number().int().positive().optional(),
-    ...brandingFields,
-  })
-  .strict()
-  .refine((body) => (body.network === undefined) === (body.xpub === undefined), {
-    message:
-      'accepting FairCoin needs both a network and a watch-only xpub, or neither — ' +
-      'omit both to register a card-only merchant',
-  });
-
-/** Exported: `routes/dashboard.ts` reuses the SAME patch body for its dashboard-authed PATCH route (F2.5). */
-export const patchMerchantBodySchema = z
-  .object({
-    required_confirmations: z.number().int().positive().optional(),
-    // `.nullable()` on top of the create bounds: `null` clears the field.
-    display_name: brandingFields.display_name.unwrap().nullable().optional(),
-    avatar_file_id: brandingFields.avatar_file_id.unwrap().nullable().optional(),
-    // A `file_…` of purpose `business_logo` — a File needs a merchant to own
-    // it, so the logo is set on an update, never at registration.
-    business_logo: z.string().min(1).max(FILE_ID_MAX).nullable().optional(),
-    description: brandingFields.description.unwrap().nullable().optional(),
-  })
-  .strict();
 
 export type RegisterMerchantResult =
   | { ok: true; merchant: MerchantRow }
@@ -348,12 +295,12 @@ export function createMerchantsRouter(deps: {
     '/v1/merchants',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     wrap(async (req, res) => {
       const serviceApp = requireServiceApp(req, res);
       if (!serviceApp) return;
 
-      const parsed = createMerchantBodySchema.safeParse(req.body);
+      const parsed = registerMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -374,7 +321,7 @@ export function createMerchantsRouter(deps: {
     '/v1/merchants/me',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -387,13 +334,13 @@ export function createMerchantsRouter(deps: {
     '/v1/merchants/me',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const parsed = patchMerchantBodySchema.safeParse(req.body);
+      const parsed = updateMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

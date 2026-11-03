@@ -1,0 +1,253 @@
+---
+title: "Merchants"
+description: "The Merchants endpoints of the Peable API."
+order: 925
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Merchants
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/merchants`](#register-the-merchant) | Register the merchant |
+| [`GET /v1/merchants/me`](#retrieve-your-merchant) | Retrieve your merchant |
+| [`POST /v1/merchants/me`](#update-your-merchant) | Update your merchant |
+| [`GET /v1/merchants/me/branding`](#retrieve-your-branding) | Retrieve your branding |
+| [`POST /v1/merchants/me/branding`](#update-your-branding) | Update your branding |
+| [`GET /v1/merchants/me/email_settings`](#retrieve-your-customer-email-settings) | Retrieve your customer email settings |
+| [`POST /v1/merchants/me/email_settings`](#update-your-customer-email-settings) | Update your customer email settings |
+
+## Register the merchant
+
+`POST /v1/merchants`
+
+Registers the calling application's merchant in the credential's environment. A non-production credential can register a testnet merchant only. A second registration for the same application and environment answers 409. Outside the generic idempotency layer: the merchant is the scope it keys on.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.merchants.register()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `network` | string | One of `mainnet`, `testnet`. |
+| `xpub` | string | A watch-only account xpub. A private extended key is refused. |
+| `required_confirmations` | integer |  |
+| `display_name` | string | 1–64 characters. |
+| `avatar_file_id` | string | 1–128 characters. |
+| `description` | string | 1–512 characters. |
+
+**Response `201`**
+
+Returns [Merchant](/reference/objects/merchant).
+
+```json
+{
+  "id": "merch_0193b8f2c1a87d3e9f4a",
+  "object": "merchant",
+  "livemode": false,
+  "oxy_app_id": "app_0193b8f2c1a87d3e9f4b",
+  "environment": "development",
+  "network": "testnet",
+  "xpub": "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba",
+  "required_confirmations": 6,
+  "display_name": "Jenny’s Plants",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve your merchant
+
+`GET /v1/merchants/me`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.merchants.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Merchant](/reference/objects/merchant).
+
+```json
+{
+  "id": "merch_0193b8f2c1a87d3e9f4a",
+  "object": "merchant",
+  "livemode": false,
+  "oxy_app_id": "app_0193b8f2c1a87d3e9f4b",
+  "environment": "development",
+  "network": "testnet",
+  "xpub": "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba",
+  "required_confirmations": 6,
+  "display_name": "Jenny’s Plants",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update your merchant
+
+`POST /v1/merchants/me`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.merchants.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `required_confirmations` | integer |  |
+| `display_name` | string \| null | 1–64 characters. |
+| `avatar_file_id` | string \| null | 1–128 characters. |
+| `business_logo` | string \| null | A `file_…` of purpose `business_logo` — set on an update, never at registration. 1–255 characters. |
+| `description` | string \| null | 1–512 characters. |
+
+**Response `200`**
+
+Returns [Merchant](/reference/objects/merchant).
+
+```json
+{
+  "id": "merch_0193b8f2c1a87d3e9f4a",
+  "object": "merchant",
+  "livemode": false,
+  "oxy_app_id": "app_0193b8f2c1a87d3e9f4b",
+  "environment": "development",
+  "network": "testnet",
+  "xpub": "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba",
+  "required_confirmations": 6,
+  "display_name": "Jenny’s Plants",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve your branding
+
+`GET /v1/merchants/me/branding`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.merchants.branding.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [BrandingSettings](/reference/objects/branding-settings).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update your branding
+
+`POST /v1/merchants/me/branding`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.merchants.branding.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `use_avatar_as_icon` | boolean |  |
+| `logo` | string \| null | A `file_…` of purpose `business_logo`; `null` removes it. 1–255 characters. |
+| `primary_color` | string \| null | `#rrggbb` (any case; stored lowercase), `null` for Peable’s default. Matches `^#(?:[0-9a-fA-F]{3}\|[0-9a-fA-F]{6})$`. |
+| `accent_color` | string \| null | Matches `^#(?:[0-9a-fA-F]{3}\|[0-9a-fA-F]{6})$`. |
+| `font` | string \| null | One of `system`, `inter`, `roboto`, `open_sans`, `lato`, `source_sans`, `noto_sans`, `serif`, `monospace`. |
+| `border_style` | string \| null | One of `rounded`, `rectangular`, `pill`. |
+| `terms_of_service_url` | string \| null | At most 2048 characters. Matches `^https:\/\/\S+$`. |
+
+**Response `200`**
+
+Returns [BrandingSettings](/reference/objects/branding-settings).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve your customer email settings
+
+`GET /v1/merchants/me/email_settings`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.merchants.emailSettings.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [EmailSettings](/reference/objects/email-settings).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update your customer email settings
+
+`POST /v1/merchants/me/email_settings`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.merchants.emailSettings.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `payment_receipts` | boolean |  |
+| `refund_notices` | boolean |  |
+| `checkout_confirmations` | boolean |  |
+| `support_email` | string (email) \| null | At most 254 characters. |
+
+**Response `200`**
+
+Returns [EmailSettings](/reference/objects/email-settings).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

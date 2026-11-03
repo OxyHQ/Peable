@@ -1,0 +1,60 @@
+---
+title: "BillingSettings"
+description: "The billing_settings object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingSettings
+
+Object type: `billing_settings`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"billing_settings"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `invoice_prefix` | string | Invoice numbers are `PREFIX-0001`, gapless. |
+| `next_invoice_sequence` | integer | The next invoice number that will be assigned. At least -9007199254740991. |
+| `default_days_until_due` | integer | At least -9007199254740991. |
+| `dunning` | object |  |
+| `dunning.retry_schedule_days` | array of integer | Each retry so many days after the previous attempt. |
+| `dunning.final_action` | string | What happens to the subscription once the last retry fails. One of `cancel`, `unpaid`, `past_due`. |
+| `dunning.invoice_action` | string | What happens to the invoice once the last retry fails. One of `leave_open`, `mark_uncollectible`. |
+| `emails` | object |  |
+| `emails.invoice_finalized` | boolean |  |
+| `emails.payment_failed` | boolean |  |
+| `updated` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "billing_settings",
+  "livemode": false,
+  "invoice_prefix": "MENTION",
+  "next_invoice_sequence": 1,
+  "default_days_until_due": 30,
+  "dunning": {
+    "retry_schedule_days": [
+      1,
+      3,
+      5,
+      7
+    ],
+    "final_action": "cancel",
+    "invoice_action": "mark_uncollectible"
+  },
+  "emails": {
+    "invoice_finalized": true,
+    "payment_failed": true
+  },
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/billing_settings`](/reference/billing-settings#retrieve-the-billing-settings) — Retrieve the billing settings
+- [`POST /v1/billing_settings`](/reference/billing-settings#update-the-billing-settings) — Update the billing settings

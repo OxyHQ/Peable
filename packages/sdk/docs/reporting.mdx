@@ -1,0 +1,63 @@
+---
+title: "Reporting"
+description: "Report runs: itemized payments, balance summaries and payouts as CSV files."
+order: 13
+---
+
+# Reporting
+
+Report runs are Stripe's `reporting.*`: ask for a report over an interval, and
+Peable writes it as a CSV file in the background.
+
+```ts
+const types = await peable.reporting.reportTypes.list();
+
+const run = await peable.reporting.reportRuns.create({
+  report_type: 'payouts.itemized.1',
+  parameters: { interval_start: start, interval_end: end, currency: 'EUR' },
+});
+
+// On reporting.report_run.succeeded:
+const { bytes } = await peable.files.contents(event.data.object.result.id);
+```
+
+## Report types
+
+`GET /v1/reporting/report_types` lists what can be run, each with its
+`columns`, `default_columns` and `data_available_start` / `_end` (the end is
+now: the data is live). The ids are versioned like Stripe's — the trailing
+`.1` is the column layout, so a layout change is a new id, never a change
+under one you parse.
+
+| Report type | One row per | Reads |
+|---|---|---|
+| `payments.itemized.1` | Payment intent created in the interval | Payments |
+| `balance.summary.1` | Category (`starting_balance`, `activity_gross`, `activity_fee`, `activity`, `payouts`, `ending_balance`) per currency | Your ledger |
+| `payouts.itemized.1` | Payout created in the interval | Your ledger |
+
+## Runs
+
+`POST /v1/reporting/report_runs` with `report_type` and `parameters`
+(`interval_start`, `interval_end`, optional `columns` and `currency`) answers
+a `pending` `reporting.report_run` (`frr_…`) at once. The run then becomes
+`succeeded` — with `result`, a [file](/refunds-and-disputes#files) of purpose
+`finance_report_run` — or `failed`, with `error`, announced by
+`reporting.report_run.succeeded` / `.failed`.
+
+- `interval_start` is inclusive and `interval_end` exclusive, in Unix seconds;
+  the end may not be in the future.
+- `columns` picks a subset, written in the layout's order.
+- A ledger report for a merchant without a provider account is
+  `404 account_missing` at creation.
+
+## The CSV
+
+Amounts are base-unit strings, as on the API; times are ISO 8601 UTC. A
+balance figure built on a transaction whose fee the provider has not reported
+yet is an empty cell — never `0`. A text cell a spreadsheet would run as a
+formula (starting with `=`, `+`, `-` or `@`) is written with a leading `'`.
+
+In Orbit, **Reports** runs them and downloads the CSV. The payout
+reconciliation of one payout is also a direct read:
+`peable.reports.payoutReconciliation({ payout: 'po_…' })`
+([Connect and money](/connect#balance-and-payouts)).

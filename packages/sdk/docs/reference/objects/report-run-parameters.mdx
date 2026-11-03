@@ -1,0 +1,21 @@
+---
+title: "ReportRunParameters"
+description: "The ReportRunParameters shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ReportRunParameters
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `interval_start` | integer | Inclusive. |
+| `interval_end` | integer | Exclusive. |
+| `columns` | array of string | The columns, in the layout's order; the report type's `default_columns` when absent. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+
+## Used in
+
+[ReportRun](/reference/objects/report-run)

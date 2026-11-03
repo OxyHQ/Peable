@@ -3,14 +3,10 @@
  * routes, methods, query spellings and bodies an integrator would otherwise
  * have to guess.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import type { WebhookEndpoint, WebhookEvent } from '@peable.to/shared-types';
 import { Peable } from '../../src/index';
-import {
-  EventsResource,
-  WebhookDeliveriesResource,
-  WebhookEndpointsResource,
-} from '../../src/resources/webhookEndpoints';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
   buildTestClient,
@@ -63,7 +59,7 @@ function last(gateway: CapturedRequest[]): CapturedRequest {
 describe('webhookEndpoints', () => {
   test('create POSTs the body with an Idempotency-Key and returns the secret', async () => {
     const { client, gateway } = harness({ ...ENDPOINT, secret: 'whsec_abc' });
-    const endpoints = new WebhookEndpointsResource(client);
+    const endpoints = resources(client).webhookEndpoints;
     const created = await endpoints.create(
       { url: ENDPOINT.url, enabled_events: ['payment_intent.succeeded'] },
       { idempotencyKey: 'we-1' },
@@ -81,7 +77,7 @@ describe('webhookEndpoints', () => {
 
   test('retrieve, update, list, del and rollSecret address the endpoint', async () => {
     const { client, gateway } = harness(ENDPOINT);
-    const endpoints = new WebhookEndpointsResource(client);
+    const endpoints = resources(client).webhookEndpoints;
 
     await endpoints.retrieve('we_1');
     expect([last(gateway).method, last(gateway).url]).toEqual([
@@ -111,7 +107,7 @@ describe('webhookEndpoints', () => {
       has_more: false,
       url: '/v1/webhook_endpoints',
     });
-    const all = await new WebhookEndpointsResource(client).list({ limit: 5 }).autoPagingToArray({
+    const all = await resources(client).webhookEndpoints.list({ limit: 5 }).autoPagingToArray({
       limit: 10,
     });
     expect(all).toEqual([ENDPOINT]);
@@ -127,7 +123,7 @@ describe('events', () => {
       has_more: false,
       url: '/v1/events',
     });
-    const page = await new EventsResource(client).list({
+    const page = await resources(client).events.list({
       type: 'payment_intent.*',
       delivery_success: false,
     });
@@ -140,7 +136,7 @@ describe('events', () => {
 
   test('retrieve reads one event', async () => {
     const { client, gateway } = harness(EVENT);
-    expect(await new EventsResource(client).retrieve('evt_1')).toEqual(EVENT);
+    expect(await resources(client).events.retrieve('evt_1')).toEqual(EVENT);
     expect(last(gateway).url).toBe(`${TEST_GATEWAY_URL}/v1/events/evt_1`);
   });
 });
@@ -153,7 +149,7 @@ describe('webhookDeliveries', () => {
       has_more: false,
       url: '/v1/webhook_deliveries',
     });
-    const deliveries = new WebhookDeliveriesResource(client);
+    const deliveries = resources(client).webhookDeliveries;
     await deliveries.list({ event: 'evt_1', webhook_endpoint: 'we_1' });
     const url = new URL(last(gateway).url);
     expect(url.searchParams.get('event')).toBe('evt_1');
@@ -169,7 +165,7 @@ describe('webhookDeliveries', () => {
 
 test('the client exposes the three namespaces', () => {
   const peable = new Peable({ publicKey: 'oxy_dk_test', secret: 'sk_test' });
-  expect(peable.webhookEndpoints).toBeInstanceOf(WebhookEndpointsResource);
-  expect(peable.events).toBeInstanceOf(EventsResource);
-  expect(peable.webhookDeliveries).toBeInstanceOf(WebhookDeliveriesResource);
+  expect(typeof peable.webhookEndpoints).toBe('object');
+  expect(typeof peable.events).toBe('object');
+  expect(typeof peable.webhookDeliveries).toBe('object');
 });

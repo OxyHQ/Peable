@@ -1,0 +1,30 @@
+---
+title: "BrandingSettings"
+description: "The branding_settings object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BrandingSettings
+
+Object type: `branding_settings`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"branding_settings"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `use_avatar_as_icon` | boolean | Show the merchant avatar (`avatar_file_id`) as the square icon. |
+| `logo` | string \| null | The wide logo: a `file_…` of purpose `business_logo`, or `null` — the same field as `POST /v1/merchants/me {business_logo}`. |
+| `primary_color` | string \| null | `#rrggbb`; `null` for Peable’s default. |
+| `accent_color` | string \| null |  |
+| `font` | string \| null | One of `system`, `inter`, `roboto`, `open_sans`, `lato`, `source_sans`, `noto_sans`, `serif`, `monospace`. |
+| `border_style` | string \| null | One of `rounded`, `rectangular`, `pill`. |
+| `terms_of_service_url` | string \| null | Your terms (`https://`). Required before a session or link can ask for terms acceptance. |
+| `updated_at` | integer \| null | Unix seconds. |
+
+## Returned by
+
+- [`GET /v1/merchants/me/branding`](/reference/merchants#retrieve-your-branding) — Retrieve your branding
+- [`POST /v1/merchants/me/branding`](/reference/merchants#update-your-branding) — Update your branding

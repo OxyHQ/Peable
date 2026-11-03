@@ -1,0 +1,20 @@
+---
+title: "PromotionCodeRestrictions"
+description: "The PromotionCodeRestrictions shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PromotionCodeRestrictions
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `first_time_transaction` | boolean | Only a customer's first transaction may redeem it. |
+| `minimum_amount` | string \| null | The smallest order total it applies to, in `minimum_amount_currency`. Matches `^(0\|[1-9][0-9]*)$`. |
+| `minimum_amount_currency` | string \| null | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+
+## Used in
+
+[PromotionCode](/reference/objects/promotion-code)

@@ -1,0 +1,62 @@
+---
+title: "TaxRegistrationDeclaration"
+description: "The tax.registration_declaration object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxRegistrationDeclaration
+
+Object type: `tax.registration_declaration`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.registration_declaration"` |  |
+| `id` | string | `taxrd_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `scheme` | string \| null | The scheme, when the owner knows it; `null` for `unknown`. One of `standard`, `simplified`, `eu_oss_union`, `eu_oss_non_union`, `us_state_sales_tax`, `ca_provincial`. |
+| `status` | string | One of `unknown`, `not_registered`, `application_pending`, `registered`, `rejected`, `ended`. |
+| `effective_from` | integer \| null | Unix seconds. |
+| `effective_to` | integer \| null | Unix seconds. |
+| `filing_frequency` | string | One of `monthly`, `quarterly`, `annual`, `unknown`. |
+| `collection_registration` | string \| null | The Peable Tax collection registration (`taxreg_…`) it corresponds to, when there is one. |
+| `verification` | [TaxRegistrationDeclarationVerification](/reference/objects/tax-registration-declaration-verification) |  |
+| `note` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+| `updated` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.registration_declaration",
+  "id": "taxrd_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "country": "ES",
+  "state": null,
+  "scheme": "eu_oss_union",
+  "status": "registered",
+  "effective_from": 1767225600,
+  "effective_to": null,
+  "filing_frequency": "quarterly",
+  "collection_registration": "taxreg_0193b8f2c1a87d3e9f4a",
+  "verification": {
+    "status": "unverified",
+    "reason": "no_authority_integration"
+  },
+  "note": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/registration_declarations`](/reference/tax-compliance#list-registration-declarations) — List registration declarations
+- [`GET /v1/tax/registration_declarations/{id}`](/reference/tax-compliance#retrieve-a-registration-declaration) — Retrieve a registration declaration

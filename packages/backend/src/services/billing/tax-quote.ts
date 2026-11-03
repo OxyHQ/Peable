@@ -1,3 +1,8 @@
+import {
+  billingReference,
+  billingTaxQuoteSchema,
+  createBillingTaxQuoteParams,
+} from '@peable.to/contracts';
 import { createPublicKey, verify } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -5,13 +10,7 @@ import {
   type BillingTaxQuote,
   type CreateBillingTaxQuoteParams,
 } from '@peable.to/shared-types';
-import {
-  billingRailId,
-  billingReference,
-  billingTaxQuoteSchema,
-  BillingError,
-  type BillingOwner,
-} from './contracts';
+import { BillingError, type BillingOwner } from './contracts';
 import { toUnix } from '../../lib/time';
 
 const amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -19,15 +18,6 @@ const timestamp = z.string().datetime();
 const mode = z.enum(['test', 'live']);
 const environment = z.enum(['development', 'staging', 'production']);
 const country = z.string().regex(/^[A-Z]{2}$/);
-export const billingTaxQuoteRequestSchema = z
-  .object({
-    rail: billingRailId.optional(),
-    store_id: billingReference,
-    plan_id: billingReference,
-    provider_price_id: billingReference.optional(),
-    customer_location_evidence_id: billingReference,
-  })
-  .strict();
 export const billingTaxProductSchema = z
   .object({
     configurationApproved: z.literal(true),
@@ -89,7 +79,7 @@ export async function createVerifiedBillingTaxQuote(
   raw: CreateBillingTaxQuoteParams,
   now: () => Date = () => new Date(),
 ): Promise<BillingTaxQuote> {
-  const request = billingTaxQuoteRequestSchema.parse(raw);
+  const request = createBillingTaxQuoteParams.parse(raw);
   const product = billingTaxProductSchema.parse(
     await calculator.resolveProduct(owner, request.plan_id, request.provider_price_id),
   );

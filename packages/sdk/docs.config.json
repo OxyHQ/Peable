@@ -1,0 +1,12 @@
+{
+  "package": "@peable.to/sdk",
+  "displayName": "Peable",
+  "shortName": "peable",
+  "repo": "https://github.com/OxyHQ/Peable",
+  "category": "sdk",
+  "versioned": false,
+  "versions": ["main"],
+  "defaultVersion": "main",
+  "docsPath": "docs/",
+  "description": "Payments for the Oxy ecosystem: FairCoin (non-custodial) and cards, Checkout, Billing, Connect and Tax. Guides, the SDK and the API reference."
+}

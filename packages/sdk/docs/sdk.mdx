@@ -1,0 +1,170 @@
+---
+title: "The SDK"
+description: "Install and configure @peable.to/sdk: credentials, request options, retries, errors, lists."
+order: 2
+---
+
+# The SDK
+
+`@peable.to/sdk` is the server client for the Peable API, plus a browser entry
+for the payer side. It passes your parameters and returns objects exactly as
+the API spells them — `snake_case` fields, Unix-second instants, base-unit
+amount strings — and its methods are generated from the same route contracts as
+the [API reference](/reference), so their parameter and return types are the
+gateway's own and every merchant operation there names its SDK method. Only the
+SDK's own options are camelCase JavaScript (`publicKey`, `idempotencyKey`,
+`timeout`, `maxNetworkRetries`, `peableAccount`).
+
+```sh
+bun add @peable.to/sdk    # Node 18+, or Bun
+```
+
+| Entry | For |
+|---|---|
+| `@peable.to/sdk` | Your server: every resource, `webhooks.constructEvent`, typed errors |
+| `@peable.to/sdk/checkout` | The payer's browser: the pay button, embedded checkout and Elements ([Elements](/elements)) |
+
+## Construct a client
+
+An external integration authenticates with its Oxy application credential;
+the SDK mints and refreshes the service token for you:
+
+```ts
+import { Peable } from '@peable.to/sdk';
+
+const peable = new Peable({
+  publicKey: process.env.PEABLE_PUBLIC_KEY, // oxy_dk_…
+  secret: process.env.PEABLE_SECRET,
+});
+```
+
+If your platform mints Oxy service tokens itself, pass a token provider
+instead of the credential:
+
+```ts
+const peable = new Peable({
+  tokenProvider: {
+    getToken: () => myTokens.current(),
+    invalidate: () => myTokens.drop(),
+  },
+});
+```
+
+| Option | Meaning |
+|---|---|
+| `baseURL` | The gateway. Default `https://api.peable.to` — one host serves test and live |
+| `oxyApiUrl` | Where the service token is minted. Default `https://api.oxy.so`; unused with `tokenProvider` |
+| `apiVersion` | The wire date, sent as `Peable-Version` on every request. Default: the version this SDK's types describe ([Versioning](/versioning)) |
+| `timeout` | Milliseconds one attempt may take, headers and body together. Default `80000` |
+| `maxNetworkRetries` | Retries of a failed attempt ([below](#retries-and-timeouts)). Default `2`; `0` disables |
+| `peableAccount` | A connected account (`ca_…`) to act on by default, sent as `Peable-Account` on the routes that accept it |
+
+### Own Oxy applications
+
+An Oxy product running as a registered Oxy workload uses the shared workload
+transport instead of an application credential:
+
+```ts
+import { peableForOxyService } from '@peable.to/sdk';
+
+const peable = peableForOxyService({ oxy: mySharedOxyServer });
+// …
+peable.dispose(); // when finished with the client
+```
+
+The factory uses `OxyServer.createServiceClient` with Peable's registered
+audience. Own workloads need no payment scopes or application consent, but the
+gateway still resolves the merchant from the verified application and
+environment and enforces every account, rail, settlement, idempotency and
+business rule. An optional `requester: { accountId, token | taskId |
+requesterContext }` carries verified account context for a person-bound call;
+never supply a user header, persist a session bearer or share a
+requester-bound client between accounts.
+
+An external credential on an official app stays external: branding never
+grants own authority, and only this factory bypasses application permission
+configuration — never merchant or resource rules.
+
+## Request options
+
+Every method has the same shape — `(…pathParams, params?, options?)`: the
+path parameters in path order, the operation's parameters (its body, or its
+query), and last the request options:
+
+```ts
+await peable.paymentIntents.create(
+  { amount: '250000000', network: 'testnet' },
+  { idempotencyKey: `order:${order.id}` },
+);
+
+await peable.balance.retrieve({}, { peableAccount: 'ca_…' });
+await peable.refunds.retrieve('re_…', {}, { timeout: 10_000, maxNetworkRetries: 0 });
+```
+
+| Option | Header | Meaning |
+|---|---|---|
+| `idempotencyKey` | `Idempotency-Key` | On a `POST`: your own key ([Idempotency](/idempotency)). Without one the SDK mints one per call, the same on every attempt of it |
+| `peableAccount` | `Peable-Account` | A platform acting on one of its connected accounts ([Connect](/connect#acting-on-a-connected-account)), on the routes that accept it |
+| `apiVersion` | `Peable-Version` | Replaces the client's for this request |
+| `timeout` | | Replaces the client's per-attempt deadline, in milliseconds |
+| `maxNetworkRetries` | | Replaces the client's retry count |
+| `signal` | | An `AbortSignal`: aborts the attempt in flight and any backoff wait |
+
+## Retries and timeouts
+
+A request that failed on the network, timed out, or was answered `5xx`, `429`
+or `409 idempotency_error` (its first attempt still running) is retried up to
+`maxNetworkRetries` times (default 2), with exponential backoff and jitter,
+honouring `Retry-After`. Every attempt of a `POST` carries the same
+`Idempotency-Key`, so a retry can never run an operation twice: the gateway
+answers it with the stored result. Each attempt has a deadline of `timeout`
+milliseconds (default 80 000).
+
+When every attempt failed, the outcome may still be unknown — the request may
+have succeeded with its answer lost. Recover by repeating it with the **same**
+key, which converges on the first outcome, rather than with a new one.
+
+## Errors
+
+Every non-2xx answer throws a typed error carrying the envelope's fields:
+
+```ts
+import { PeableCardError, PeableInvalidRequestError } from '@peable.to/sdk';
+
+try {
+  await peable.refunds.create({ payment_intent: 'pi_…', external_ref: 'refund-1', amount: '0' });
+} catch (err) {
+  if (err instanceof PeableInvalidRequestError) {
+    err.statusCode; // 400
+    err.code;       // 'parameter_invalid'
+    err.param;      // 'amount'
+    err.docUrl;     // 'https://oxy.so/developers/docs/peable/errors/#parameter_invalid'
+    err.requestId;  // 'req_…' — quote it to Peable support
+  }
+}
+```
+
+`err.code` is the gateway's code, or `undefined` when it sent none — branch on
+`err.type` first. The classes, what each means and the full code list are in
+[handling errors](/handling-errors).
+
+## Lists and search
+
+`list()` returns a promise of one page that is also an async iterator over
+every page; `search()` does the same over a search query:
+
+```ts
+const page = await peable.customers.list({ limit: 20 });
+for await (const intent of peable.paymentIntents.list({ status: 'succeeded' })) {
+  // every page, newest first
+}
+const recent = await peable.transfers.list({ created: { gte: since } }).autoPagingToArray({ limit: 500 });
+```
+
+See [Pagination, expand and search](/lists).
+
+## Webhooks
+
+`peable.webhooks.constructEvent(rawBody, signatureHeader, secret)` verifies a
+delivery and returns the typed event; `secret` may be an array while a secret
+is rolling. See [Webhooks and events](/webhooks#verify-the-signature).

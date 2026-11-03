@@ -1,0 +1,22 @@
+---
+title: "AccountRequirements"
+description: "The AccountRequirements shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# AccountRequirements
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `currently_due` | array of string |  |
+| `eventually_due` | array of string |  |
+| `past_due` | array of string |  |
+| `pending_verification` | array of string | Submitted and being checked — nothing for the merchant to do. |
+| `disabled_reason` | string \| null | Why charges or payouts are disabled, in the provider's own code, or `null`. |
+
+## Used in
+
+[Account](/reference/objects/account) · [ConnectedAccount](/reference/objects/connected-account)

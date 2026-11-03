@@ -1,0 +1,173 @@
+---
+title: "Subscription items"
+description: "The Subscription items endpoints of the Peable API."
+order: 942
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Subscription items
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/subscription_items`](#add-an-item-to-a-subscription) | Add an item to a subscription |
+| [`GET /v1/subscription_items`](#list-a-subscriptions-items) | List a subscription's items |
+| [`GET /v1/subscription_items/{id}`](#retrieve-a-subscription-item) | Retrieve a subscription item |
+| [`POST /v1/subscription_items/{id}`](#update-a-subscription-item) | Update a subscription item |
+| [`DELETE /v1/subscription_items/{id}`](#remove-an-item-from-a-subscription) | Remove an item from a subscription |
+
+## Add an item to a subscription
+
+`POST /v1/subscription_items`
+
+Prorated as `proration_behavior` says.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptionItems.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `subscription` **required** | string | 1–255 characters. |
+| `price` **required** | string | 1–255 characters. |
+| `quantity` | integer | Between 0 and 1000000000. |
+| `proration_behavior` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `proration_date` | integer | Between 0 and 253402300799. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [SubscriptionItem](/reference/objects/subscription-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a subscription's items
+
+`GET /v1/subscription_items`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.subscriptionItems.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `subscription` **required** | query | string | The subscription (`sub_…`) whose items to list. 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [SubscriptionItem](/reference/objects/subscription-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [SubscriptionItem](/reference/objects/subscription-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a subscription item
+
+`GET /v1/subscription_items/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.subscriptionItems.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription item (`si_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [SubscriptionItem](/reference/objects/subscription-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a subscription item
+
+`POST /v1/subscription_items/{id}`
+
+Its price or quantity, prorated as `proration_behavior` says.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptionItems.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription item (`si_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `price` | string | 1–255 characters. |
+| `quantity` | integer | Between 0 and 1000000000. |
+| `proration_behavior` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `proration_date` | integer | Between 0 and 253402300799. |
+| `metadata` | map of string |  |
+
+**Response `200`**
+
+Returns [SubscriptionItem](/reference/objects/subscription-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Remove an item from a subscription
+
+`DELETE /v1/subscription_items/{id}`
+
+Prorated as `proration_behavior` says.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptionItems.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription item (`si_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `proration_behavior` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `proration_date` | integer | Between 0 and 253402300799. |
+
+**Response `200`**
+
+Returns [DeletedSubscriptionItem](/reference/objects/deleted-subscription-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1,0 +1,403 @@
+---
+title: "Customers"
+description: "The Customers endpoints of the Peable API."
+order: 916
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Customers
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/customers`](#create-a-customer) | Create a customer |
+| [`GET /v1/customers`](#list-customers) | List customers |
+| [`GET /v1/customers/{id}`](#retrieve-a-customer) | Retrieve a customer |
+| [`POST /v1/customers/{id}`](#update-a-customer) | Update a customer |
+| [`DELETE /v1/customers/{id}`](#delete-a-customer) | Delete a customer |
+| [`GET /v1/customers/search`](#search-customers) | Search customers |
+
+## Create a customer
+
+`POST /v1/customers`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.customers.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `email` | string (email) | At most 512 characters. |
+| `name` | string | At most 500 characters. |
+| `phone` | string | At most 40 characters. |
+| `description` | string | At most 1000 characters. |
+| `address` | object |  |
+| `address[line1]` | string | At most 500 characters. |
+| `address[line2]` | string | At most 500 characters. |
+| `address[city]` | string | At most 500 characters. |
+| `address[state]` | string | At most 500 characters. |
+| `address[postal_code]` | string | At most 40 characters. |
+| `address[country]` | string | Matches `^[A-Z]{2}$`. |
+| `shipping` | object |  |
+| `shipping[name]` **required** | string | 1–500 characters. |
+| `shipping[phone]` | string | At most 40 characters. |
+| `shipping[address]` **required** | object |  |
+| `shipping[address][line1]` | string | At most 500 characters. |
+| `shipping[address][line2]` | string | At most 500 characters. |
+| `shipping[address][city]` | string | At most 500 characters. |
+| `shipping[address][state]` | string | At most 500 characters. |
+| `shipping[address][postal_code]` | string | At most 40 characters. |
+| `shipping[address][country]` | string | Matches `^[A-Z]{2}$`. |
+| `shipping[carrier]` | string | At most 200 characters. |
+| `shipping[tracking_number]` | string | At most 200 characters. |
+| `invoice_settings` | object |  |
+| `invoice_settings[default_payment_method]` | string | 1–255 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `test_clock` | string | Create only, test mode only: attach the customer to a test clock (`clock_…`). 1–255 characters. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `201`**
+
+Returns [Customer](/reference/objects/customer).
+
+```json
+{
+  "id": "cus_0193b8f2c1a87d3e9f4a",
+  "object": "customer",
+  "livemode": false,
+  "email": "jenny@example.com",
+  "name": "Jenny Rosen",
+  "phone": null,
+  "description": null,
+  "address": null,
+  "shipping": null,
+  "invoice_settings": {
+    "default_payment_method": null
+  },
+  "metadata": {
+    "order_id": "6735"
+  },
+  "balance": "0",
+  "currency": "EUR",
+  "test_clock": null,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `invoice_settings.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List customers
+
+`GET /v1/customers`
+
+Your live customers, newest first. Deleted customers are not listed.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.customers.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `email` | query | string | Exact match. 1–512 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Customer](/reference/objects/customer) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Customer](/reference/objects/customer) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "cus_0193b8f2c1a87d3e9f4a",
+      "object": "customer",
+      "livemode": false,
+      "email": "jenny@example.com",
+      "name": "Jenny Rosen",
+      "phone": null,
+      "description": null,
+      "address": null,
+      "shipping": null,
+      "invoice_settings": {
+        "default_payment_method": null
+      },
+      "metadata": {
+        "order_id": "6735"
+      },
+      "balance": "0",
+      "currency": "EUR",
+      "test_clock": null,
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/customers"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.invoice_settings.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a customer
+
+`GET /v1/customers/{id}`
+
+A deleted customer answers `{ id, object: "customer", deleted: true }`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.customers.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The customer (`cus_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Customer](/reference/objects/customer) or [DeletedCustomer](/reference/objects/deleted-customer).
+
+```json
+{
+  "id": "cus_0193b8f2c1a87d3e9f4a",
+  "object": "customer",
+  "livemode": false,
+  "email": "jenny@example.com",
+  "name": "Jenny Rosen",
+  "phone": null,
+  "description": null,
+  "address": null,
+  "shipping": null,
+  "invoice_settings": {
+    "default_payment_method": null
+  },
+  "metadata": {
+    "order_id": "6735"
+  },
+  "balance": "0",
+  "currency": "EUR",
+  "test_clock": null,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `invoice_settings.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a customer
+
+`POST /v1/customers/{id}`
+
+A field sent as `""` is cleared; `metadata` is a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.customers.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The customer (`cus_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `email` | string (email) \| `""` | At most 512 characters. |
+| `name` | string \| `""` | At most 500 characters. |
+| `phone` | string \| `""` | At most 40 characters. |
+| `description` | string \| `""` | At most 1000 characters. |
+| `address` | object \| `""` |  |
+| `address[line1]` | string | At most 500 characters. |
+| `address[line2]` | string | At most 500 characters. |
+| `address[city]` | string | At most 500 characters. |
+| `address[state]` | string | At most 500 characters. |
+| `address[postal_code]` | string | At most 40 characters. |
+| `address[country]` | string | Matches `^[A-Z]{2}$`. |
+| `shipping` | object \| `""` |  |
+| `shipping[name]` **required** | string | 1–500 characters. |
+| `shipping[phone]` | string | At most 40 characters. |
+| `shipping[address]` **required** | object |  |
+| `shipping[address][line1]` | string | At most 500 characters. |
+| `shipping[address][line2]` | string | At most 500 characters. |
+| `shipping[address][city]` | string | At most 500 characters. |
+| `shipping[address][state]` | string | At most 500 characters. |
+| `shipping[address][postal_code]` | string | At most 40 characters. |
+| `shipping[address][country]` | string | Matches `^[A-Z]{2}$`. |
+| `shipping[carrier]` | string | At most 200 characters. |
+| `shipping[tracking_number]` | string | At most 200 characters. |
+| `invoice_settings` | object |  |
+| `invoice_settings[default_payment_method]` | string \| `""` | 1–255 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Customer](/reference/objects/customer).
+
+```json
+{
+  "id": "cus_0193b8f2c1a87d3e9f4a",
+  "object": "customer",
+  "livemode": false,
+  "email": "jenny@example.com",
+  "name": "Jenny Rosen",
+  "phone": null,
+  "description": null,
+  "address": null,
+  "shipping": null,
+  "invoice_settings": {
+    "default_payment_method": null
+  },
+  "metadata": {
+    "order_id": "6735"
+  },
+  "balance": "0",
+  "currency": "EUR",
+  "test_clock": null,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `invoice_settings.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a customer
+
+`DELETE /v1/customers/{id}`
+
+A tombstone, with every saved payment method of the customer detached. Deleting a deleted customer answers the tombstone again.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.customers.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The customer (`cus_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedCustomer](/reference/objects/deleted-customer).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search customers
+
+`GET /v1/customers/search`
+
+Stripe's query language over `email`, `name`, `phone`, `created` and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.customers.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Customer](/reference/objects/customer) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Customer](/reference/objects/customer) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "cus_0193b8f2c1a87d3e9f4a",
+      "object": "customer",
+      "livemode": false,
+      "email": "jenny@example.com",
+      "name": "Jenny Rosen",
+      "phone": null,
+      "description": null,
+      "address": null,
+      "shipping": null,
+      "invoice_settings": {
+        "default_payment_method": null
+      },
+      "metadata": {
+        "order_id": "6735"
+      },
+      "balance": "0",
+      "currency": "EUR",
+      "test_clock": null,
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/customers/search"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.invoice_settings.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

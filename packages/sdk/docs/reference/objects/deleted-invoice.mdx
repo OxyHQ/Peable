@@ -1,0 +1,22 @@
+---
+title: "DeletedInvoice"
+description: "The invoice object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# DeletedInvoice
+
+Object type: `invoice`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"invoice"` |  |
+| `deleted` | `true` |  |
+
+## Returned by
+
+- [`DELETE /v1/invoices/{id}`](/reference/invoices#delete-a-draft-invoice) — Delete a draft invoice

@@ -250,10 +250,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('GET /v1/events/stream', () => {
       ready = resolve;
     });
     const received = (async () => {
-      for await (const event of peable.events.stream({
-        signal: controller.signal,
-        onConnect: () => ready(),
-      })) {
+      for await (const event of peable.events.stream(
+        {},
+        { signal: controller.signal, onConnect: () => ready() },
+      )) {
         controller.abort();
         return event;
       }

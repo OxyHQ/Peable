@@ -73,6 +73,7 @@ import type {
   UpdateWebhookEndpointParams,
   WebhookDelivery,
   WebhookEndpoint,
+  WebhookEndpointWithSecret,
   WebhookEvent,
   ConnectedAccount,
   RequestLog,
@@ -797,9 +798,11 @@ export function createDashboardApi(transport: OrbitTransport) {
       list: (scope: DashboardScope, params: PageParams = {}) =>
         list<WebhookEndpoint>(dashboardPath(scope, '/webhook_endpoints', { ...params })),
       create: (scope: DashboardScope, body: CreateWebhookEndpointParams) =>
-        transport.request<WebhookEndpoint>('POST', dashboardPath(scope, '/webhook_endpoints'), {
-          body,
-        }),
+        transport.request<WebhookEndpointWithSecret>(
+          'POST',
+          dashboardPath(scope, '/webhook_endpoints'),
+          { body },
+        ),
       update: (scope: DashboardScope, endpointId: string, body: UpdateWebhookEndpointParams) =>
         transport.request<WebhookEndpoint>(
           'POST',
@@ -813,7 +816,7 @@ export function createDashboardApi(transport: OrbitTransport) {
         ),
       /** `expiresInSeconds` keeps the previous secret signing beside the new one (≤ 24h). */
       rollSecret: (scope: DashboardScope, endpointId: string, expiresInSeconds: number) =>
-        transport.request<WebhookEndpoint>(
+        transport.request<WebhookEndpointWithSecret>(
           'POST',
           dashboardPath(scope, `/webhook_endpoints/${id(endpointId)}/roll_secret`),
           { body: { expires_in_seconds: expiresInSeconds } },

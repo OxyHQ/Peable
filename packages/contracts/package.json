@@ -1,7 +1,7 @@
 {
   "name": "@peable.to/contracts",
-  "version": "0.4.0",
-  "description": "Validated Peable contribution-link contracts",
+  "version": "1.0.0",
+  "description": "The Peable wire, declared once: Zod contracts of every public route, the OpenAPI 3.1 generator and the closed value sets (ADR 0014 D5).",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
@@ -24,26 +24,53 @@
       },
       "default": "./dist/esm/index.js"
     },
-    "./package.json": "./package.json",
-    "./openapi": {
+    "./vocabulary": {
+      "react-native": "./dist/esm/vocabulary/index.js",
       "import": {
-        "types": "./dist/types/openapi.d.ts",
-        "default": "./dist/esm/openapi.js"
+        "types": "./dist/types/vocabulary/index.d.ts",
+        "default": "./dist/esm/vocabulary/index.js"
       },
       "require": {
-        "types": "./dist/types/openapi.d.ts",
-        "default": "./dist/cjs/openapi.js"
-      }
-    }
+        "types": "./dist/types/vocabulary/index.d.ts",
+        "default": "./dist/cjs/vocabulary/index.js"
+      },
+      "default": "./dist/esm/vocabulary/index.js"
+    },
+    "./contributions": {
+      "react-native": "./dist/esm/contributions.js",
+      "import": {
+        "types": "./dist/types/contributions.d.ts",
+        "default": "./dist/esm/contributions.js"
+      },
+      "require": {
+        "types": "./dist/types/contributions.d.ts",
+        "default": "./dist/cjs/contributions.js"
+      },
+      "default": "./dist/esm/contributions.js"
+    },
+    "./openapi": {
+      "react-native": "./dist/esm/openapi/index.js",
+      "import": {
+        "types": "./dist/types/openapi/index.d.ts",
+        "default": "./dist/esm/openapi/index.js"
+      },
+      "require": {
+        "types": "./dist/types/openapi/index.d.ts",
+        "default": "./dist/cjs/openapi/index.js"
+      },
+      "default": "./dist/esm/openapi/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
   ],
   "keywords": [
     "peable",
-    "gateway",
     "payments",
-    "types"
+    "openapi",
+    "zod",
+    "contracts"
   ],
   "repository": {
     "type": "git",
@@ -73,5 +100,18 @@
   },
   "dependencies": {
     "zod": "^4.6.7"
+  },
+  "typesVersions": {
+    "*": {
+      "vocabulary": [
+        "./dist/types/vocabulary/index.d.ts"
+      ],
+      "contributions": [
+        "./dist/types/contributions.d.ts"
+      ],
+      "openapi": [
+        "./dist/types/openapi/index.d.ts"
+      ]
+    }
   }
 }

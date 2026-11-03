@@ -1,0 +1,55 @@
+---
+title: "Versioning"
+description: "The wire conventions and Peable-Version."
+order: 21
+---
+
+# Versioning
+
+## The wire
+
+Peable has **one wire**, and its conventions hold on every resource:
+
+| Concern | Rule |
+|---|---|
+| Field names | `snake_case` in requests, responses, query strings and events |
+| Identity | A prefixed public `id` (`pi_…`, `cus_…`) and an `object` on every object |
+| Mode | `livemode: true \| false` on every object and event |
+| Time | `created` and every other instant as **integer Unix seconds** |
+| Money | `amount` as a base-unit **string** — a FAIR amount does not fit a JavaScript number — and an uppercase `currency` (`EUR`, `USD`; `FAIR` for FairCoin) |
+| Updates | A `POST` to the object's path; there is no `PATCH` |
+| Lists | `{ object: 'list', data, has_more, url }`, newest first ([Pagination](/lists)) |
+| Errors | `{ error: { type, code?, param?, message, doc_url?, request_id } }` ([Errors](/handling-errors)) |
+| Request id | A `Request-Id` header on every response |
+
+These are Stripe's conventions, so an integrator who knows Stripe finds the
+same objects and behaviour. The one deliberate departure is that amounts are
+strings.
+
+## `Peable-Version`
+
+Every response carries `Peable-Version: <date>`, the date of the wire it is
+spelled in, and every event records the same date as `api_version`. There is
+one wire, and its date — named on the [API reference](/reference) — is the
+only value a request may send in `Peable-Version`.
+
+The SDK sends the version it was built for. Pin it explicitly with
+`apiVersion` when you construct the client, so a client upgrade never changes
+the wire under you without a code change:
+
+```ts
+const peable = new Peable({ publicKey, secret, apiVersion: '2026-11-03' });
+```
+
+## How the wire changes
+
+Peable changes the wire at the root and in lockstep: the gateway, the SDKs
+and Peable's own apps move together, and no legacy spelling of an object is
+kept alive beside its replacement. Should dated versions ever run side by side
+for external integrations, each will be a whole wire with its own date,
+selected by `Peable-Version` — never a translation layer that spells one
+object two ways.
+
+The [API reference](/reference) is generated from the same route contracts the
+gateway validates every request and response with, so it always describes
+the wire the gateway speaks.

@@ -1,6 +1,7 @@
+import { Peable } from '../../src';
 import { describe, expect, test } from 'bun:test';
+import { resources } from '../support/testGateway';
 import type { PaymentIntent } from '@peable.to/shared-types';
-import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
 import { PeableCardError, PeableInvalidRequestError } from '../../src/core/errors';
 import { cardIntentFixture, paymentIntentFixture } from '../support/intentFixture';
 import { createMockFetch } from '../support/mockFetch';
@@ -18,7 +19,7 @@ describe('PaymentIntentsResource', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 201, json: SAMPLE_INTENT };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     const intent = await resource.create(
       { amount: '100000', network: 'testnet' },
@@ -39,7 +40,7 @@ describe('PaymentIntentsResource', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 201, json: SAMPLE_INTENT };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     await resource.create({ amount: '100000', network: 'testnet' });
 
@@ -52,7 +53,7 @@ describe('PaymentIntentsResource', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { id: 'pi_1', object: 'payment_intent', status: 'succeeded' } };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     await resource.retrieve('pi_1');
 
@@ -66,7 +67,7 @@ describe('PaymentIntentsResource', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { object: 'list', data: [], has_more: false } };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     await resource.list({ status: 'succeeded', limit: 5, customer: 'cus_1' });
 
@@ -92,7 +93,7 @@ describe('PaymentIntentsResource', () => {
         }),
       };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     const intent = await resource.cancel('pi_1', { cancellation_reason: 'duplicate' });
 
@@ -112,7 +113,7 @@ describe('PaymentIntentsResource', () => {
         json: cardIntentFixture({ id: 'pi_1', status: 'succeeded', amount_received: '700' }),
       };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     const intent = await resource.capture('pi_1', { amount_to_capture: '700' });
 
@@ -149,7 +150,7 @@ describe('PaymentIntentsResource', () => {
         },
       };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     const error = await resource
       .confirm('pi_1', { payment_method: 'pm_1', off_session: true })
@@ -167,7 +168,8 @@ describe('PaymentIntentsResource', () => {
   });
 
   test('there is no reject(): /cancel replaced it (ADR 0019)', () => {
-    expect('reject' in PaymentIntentsResource.prototype).toBe(false);
+    const peable = new Peable({ publicKey: 'oxy_dk_test', secret: 'sk_test' });
+    expect('reject' in peable.paymentIntents).toBe(false);
   });
 
   test('propagates a mapped PeableError on a non-2xx Gateway response', async () => {
@@ -178,7 +180,7 @@ describe('PaymentIntentsResource', () => {
         json: { error: { type: 'invalid_request_error', message: 'payment intent not found' } },
       };
     });
-    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     await expect(resource.retrieve('pi_missing')).rejects.toBeInstanceOf(PeableInvalidRequestError);
   });

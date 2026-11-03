@@ -1,0 +1,22 @@
+---
+title: "DisputeEvidenceDetails"
+description: "The DisputeEvidenceDetails shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# DisputeEvidenceDetails
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `due_by` | integer \| null | When the network stops accepting evidence; `null` once the dispute is closed. |
+| `has_evidence` | boolean | Whether any evidence has been staged or submitted. |
+| `past_due` | boolean | Whether the deadline passed without a submission. |
+| `submission_count` | integer | `0` or `1`: a response is one-shot at the network. Between 0 and 1. |
+| `submitted_at` | integer \| null | When the response reached the network; `null` while it has not. |
+
+## Used in
+
+[Dispute](/reference/objects/dispute)

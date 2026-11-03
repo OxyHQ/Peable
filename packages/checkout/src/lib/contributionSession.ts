@@ -1,4 +1,7 @@
-import { contributionAmountSchema, contributionOperationKeySchema } from '@peable.to/contracts';
+import {
+  contributionAmountSchema,
+  contributionOperationKeySchema,
+} from '@peable.to/contracts/contributions';
 interface Operation {
   key: string;
   amount: string;

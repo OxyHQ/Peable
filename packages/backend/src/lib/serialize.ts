@@ -16,10 +16,11 @@ import type {
   SocialPaymentSource,
   WebhookDelivery,
   WebhookEndpoint,
+  WebhookEndpointWithSecret,
   WebhookEvent,
 } from '@peable.to/shared-types';
 import { UNITS_PER_COIN, canExpire, normalizeDisputeReason } from '@peable.to/shared-types';
-import type { ContributionDetails } from '@peable.to/contracts';
+import type { ContributionDetails } from '@peable.to/contracts/contributions';
 import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
@@ -297,11 +298,8 @@ export function toRequestLogDTO(row: RequestLogRow): RequestLog {
   };
 }
 
-/**
- * Serialize an endpoint. `secret` is passed ONLY by the two responses that
- * show it — the create and a roll; the row never carries it.
- */
-export function toWebhookEndpointDTO(row: WebhookEndpointRow, secret?: string): WebhookEndpoint {
+/** Serialize an endpoint, as every answer but a create and a roll renders it: never the secret. */
+export function toWebhookEndpointDTO(row: WebhookEndpointRow): WebhookEndpoint {
   return {
     id: row.publicId,
     object: 'webhook_endpoint',
@@ -313,10 +311,21 @@ export function toWebhookEndpointDTO(row: WebhookEndpointRow, secret?: string): 
     disabled_reason: row.disabledReason,
     api_version: row.apiVersion,
     metadata: row.metadata,
-    ...(secret !== undefined ? { secret } : {}),
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
   };
+}
+
+/**
+ * The endpoint with its signing secret — ONLY the two responses that show it,
+ * the create and a roll, call this. The row never carries the secret; the
+ * caller passes the one it just generated.
+ */
+export function toWebhookEndpointWithSecretDTO(
+  row: WebhookEndpointRow,
+  secret: string,
+): WebhookEndpointWithSecret {
+  return { ...toWebhookEndpointDTO(row), secret };
 }
 
 /**

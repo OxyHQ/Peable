@@ -1,0 +1,25 @@
+---
+title: "ConnectOnboarding"
+description: "The connect_onboarding object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ConnectOnboarding
+
+Object type: `connect_onboarding`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"connect_onboarding"` |  |
+| `account_id` | string | The `ca_…` being onboarded. |
+| `platform` | [MerchantDisplay](/reference/objects/merchant-display) | Who is asking: the PLATFORM's public display, as a payer would see it. |
+| `network` | string | The chain the seller will be paid on. Their key must be for it. One of `mainnet`, `testnet`. |
+| `expires_at` | integer | When this link stops working. |
+| `return_url` | string | Where to send the seller once the key is registered. |
+
+## Returned by
+
+- [`GET /v1/connect/onboarding/{token}`](/reference/connect-onboarding#retrieve-an-onboarding-link) — Retrieve an onboarding link

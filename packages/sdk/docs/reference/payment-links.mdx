@@ -1,0 +1,519 @@
+---
+title: "Payment Links"
+description: "The Payment Links endpoints of the Peable API."
+order: 927
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Payment Links
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/payment_links`](#create-a-payment-link) | Create a payment link |
+| [`GET /v1/payment_links`](#list-payment-links) | List payment links |
+| [`GET /v1/payment_links/{id}`](#retrieve-a-payment-link) | Retrieve a payment link |
+| [`POST /v1/payment_links/{id}`](#update-a-payment-link) | Update a payment link |
+| [`POST /v1/payment_links/{id}/checkout_sessions`](#start-checkout-from-a-payment-link) | Start checkout from a payment link |
+| [`GET /v1/payment_links/{id}/line_items`](#list-a-payment-links-line-items) | List a payment link's line items |
+| [`GET /v1/payment_links/{id}/public`](#retrieve-a-payment-link-as-a-visitor) | Retrieve a payment link as a visitor |
+
+## Create a payment link
+
+`POST /v1/payment_links`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentLinks.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `line_items` **required** | array of object | At most 20 items. At least 1 item. |
+| `line_items[][price]` **required** | string | 1–255 characters. |
+| `line_items[][quantity]` **required** | integer | Between 1 and 999999. |
+| `line_items[][adjustable_quantity]` | object |  |
+| `line_items[][adjustable_quantity][enabled]` **required** | boolean |  |
+| `line_items[][adjustable_quantity][minimum]` | integer | Between 0 and 999999. |
+| `line_items[][adjustable_quantity][maximum]` | integer | Between 1 and 999999. |
+| `allow_promotion_codes` | boolean |  |
+| `billing_address_collection` | string | One of `auto`, `required`. |
+| `shipping_address_collection` | object |  |
+| `shipping_address_collection[allowed_countries]` **required** | array of string | At most 250 items. At least 1 item. |
+| `phone_number_collection` | object |  |
+| `phone_number_collection[enabled]` **required** | boolean |  |
+| `tax_id_collection` | object |  |
+| `tax_id_collection[enabled]` **required** | boolean |  |
+| `consent_collection` | object |  |
+| `consent_collection[terms_of_service]` | string | One of `none`, `required`. |
+| `custom_fields` | array of object | At most 3 items. |
+| `custom_fields[][key]` **required** | string | Matches `^[A-Za-z0-9_]{1,200}$`. |
+| `custom_fields[][label]` **required** | object |  |
+| `custom_fields[][label][type]` **required** | `"custom"` |  |
+| `custom_fields[][label][custom]` **required** | string | 1–50 characters. |
+| `custom_fields[][type]` **required** | string | One of `text`, `numeric`, `dropdown`. |
+| `custom_fields[][optional]` | boolean |  |
+| `custom_fields[][dropdown]` | object |  |
+| `custom_fields[][dropdown][options]` **required** | array of object | At most 200 items. At least 1 item. |
+| `custom_fields[][dropdown][options][][label]` **required** | string | 1–100 characters. |
+| `custom_fields[][dropdown][options][][value]` **required** | string | Matches `^[A-Za-z0-9]{1,100}$`. |
+| `custom_fields[][text]` | object |  |
+| `custom_fields[][text][minimum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][text][maximum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][numeric]` | object |  |
+| `custom_fields[][numeric][minimum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][numeric][maximum_length]` | integer | Between 1 and 255. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `customer_creation` | string | One of `always`, `if_required`. |
+| `after_completion` | object |  |
+| `after_completion[type]` **required** | string | One of `redirect`, `hosted_confirmation`. |
+| `after_completion[redirect]` | object |  |
+| `after_completion[redirect][url]` **required** | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |
+| `after_completion[hosted_confirmation]` | object |  |
+| `after_completion[hosted_confirmation][custom_message]` | string | 1–500 characters. |
+| `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
+| `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
+| `restrictions` | object |  |
+| `restrictions[completed_sessions]` **required** | object |  |
+| `restrictions[completed_sessions][limit]` **required** | integer | Between 1 and 1000000. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `201`**
+
+Returns [PaymentLink](/reference/objects/payment-link).
+
+```json
+{
+  "id": "link_0193b8f2c1a87d3e9f4a",
+  "object": "payment_link",
+  "livemode": false,
+  "active": true,
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "line_items": [],
+  "allow_promotion_codes": false,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "customer_creation": "if_required",
+  "after_completion": {
+    "type": "hosted_confirmation",
+    "redirect": null,
+    "hosted_confirmation": {
+      "custom_message": null
+    }
+  },
+  "restrictions": null,
+  "submit_type": "auto",
+  "locale": null,
+  "metadata": {},
+  "url": "https://checkout.peable.to/l/link_0193b8f2c1a87d3e9f4a",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List payment links
+
+`GET /v1/payment_links`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentLinks.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `active` | query | boolean |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [PaymentLink](/reference/objects/payment-link) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [PaymentLink](/reference/objects/payment-link) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "link_0193b8f2c1a87d3e9f4a",
+      "object": "payment_link",
+      "livemode": false,
+      "active": true,
+      "currency": "EUR",
+      "rail": "card",
+      "network": null,
+      "line_items": [],
+      "allow_promotion_codes": false,
+      "billing_address_collection": "auto",
+      "shipping_address_collection": null,
+      "phone_number_collection": {
+        "enabled": false
+      },
+      "tax_id_collection": {
+        "enabled": false
+      },
+      "custom_fields": [],
+      "consent_collection": null,
+      "automatic_tax": {
+        "enabled": false
+      },
+      "customer_creation": "if_required",
+      "after_completion": {
+        "type": "hosted_confirmation",
+        "redirect": null,
+        "hosted_confirmation": {
+          "custom_message": null
+        }
+      },
+      "restrictions": null,
+      "submit_type": "auto",
+      "locale": null,
+      "metadata": {},
+      "url": "https://checkout.peable.to/l/link_0193b8f2c1a87d3e9f4a",
+      "created": 1793750400,
+      "updated_at": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_links"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a payment link
+
+`GET /v1/payment_links/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentLinks.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment link (`link_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PaymentLink](/reference/objects/payment-link).
+
+```json
+{
+  "id": "link_0193b8f2c1a87d3e9f4a",
+  "object": "payment_link",
+  "livemode": false,
+  "active": true,
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "line_items": [],
+  "allow_promotion_codes": false,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "customer_creation": "if_required",
+  "after_completion": {
+    "type": "hosted_confirmation",
+    "redirect": null,
+    "hosted_confirmation": {
+      "custom_message": null
+    }
+  },
+  "restrictions": null,
+  "submit_type": "auto",
+  "locale": null,
+  "metadata": {},
+  "url": "https://checkout.peable.to/l/link_0193b8f2c1a87d3e9f4a",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a payment link
+
+`POST /v1/payment_links/{id}`
+
+Everything but the line items. `""` clears a field; `metadata` is a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentLinks.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment link (`link_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `active` | boolean |  |
+| `allow_promotion_codes` | boolean |  |
+| `billing_address_collection` | string | One of `auto`, `required`. |
+| `shipping_address_collection` | object \| `""` |  |
+| `shipping_address_collection[allowed_countries]` **required** | array of string | At most 250 items. At least 1 item. |
+| `phone_number_collection` | object |  |
+| `phone_number_collection[enabled]` **required** | boolean |  |
+| `tax_id_collection` | object |  |
+| `tax_id_collection[enabled]` **required** | boolean |  |
+| `consent_collection` | object |  |
+| `consent_collection[terms_of_service]` | string | One of `none`, `required`. |
+| `custom_fields` | array of object \| `""` | At most 3 items. |
+| `custom_fields[][key]` **required** | string | Matches `^[A-Za-z0-9_]{1,200}$`. |
+| `custom_fields[][label]` **required** | object |  |
+| `custom_fields[][label][type]` **required** | `"custom"` |  |
+| `custom_fields[][label][custom]` **required** | string | 1–50 characters. |
+| `custom_fields[][type]` **required** | string | One of `text`, `numeric`, `dropdown`. |
+| `custom_fields[][optional]` | boolean |  |
+| `custom_fields[][dropdown]` | object |  |
+| `custom_fields[][dropdown][options]` **required** | array of object | At most 200 items. At least 1 item. |
+| `custom_fields[][dropdown][options][][label]` **required** | string | 1–100 characters. |
+| `custom_fields[][dropdown][options][][value]` **required** | string | Matches `^[A-Za-z0-9]{1,100}$`. |
+| `custom_fields[][text]` | object |  |
+| `custom_fields[][text][minimum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][text][maximum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][numeric]` | object |  |
+| `custom_fields[][numeric][minimum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][numeric][maximum_length]` | integer | Between 1 and 255. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `customer_creation` | string | One of `always`, `if_required`. |
+| `after_completion` | object |  |
+| `after_completion[type]` **required** | string | One of `redirect`, `hosted_confirmation`. |
+| `after_completion[redirect]` | object |  |
+| `after_completion[redirect][url]` **required** | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |
+| `after_completion[hosted_confirmation]` | object |  |
+| `after_completion[hosted_confirmation][custom_message]` | string | 1–500 characters. |
+| `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
+| `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
+| `restrictions` | object \| `""` |  |
+| `restrictions[completed_sessions]` **required** | object |  |
+| `restrictions[completed_sessions][limit]` **required** | integer | Between 1 and 1000000. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [PaymentLink](/reference/objects/payment-link).
+
+```json
+{
+  "id": "link_0193b8f2c1a87d3e9f4a",
+  "object": "payment_link",
+  "livemode": false,
+  "active": true,
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "line_items": [],
+  "allow_promotion_codes": false,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "customer_creation": "if_required",
+  "after_completion": {
+    "type": "hosted_confirmation",
+    "redirect": null,
+    "hosted_confirmation": {
+      "custom_message": null
+    }
+  },
+  "restrictions": null,
+  "submit_type": "auto",
+  "locale": null,
+  "metadata": {},
+  "url": "https://checkout.peable.to/l/link_0193b8f2c1a87d3e9f4a",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Start checkout from a payment link
+
+`POST /v1/payment_links/{id}/checkout_sessions`
+
+Anonymous and rate-limited. Creates a Checkout Session from the STORED link — never a payment. A contribution link requires a UUID `Idempotency-Key` header, written by the page before the request, so a lost answer recovers the same session.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment link (`link_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | string | A free contribution's amount, in FAIR base units. |
+
+**Response `201`**
+
+Returns [PaymentLinkSessionStart](/reference/objects/payment-link-session-start).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a payment link's line items
+
+`GET /v1/payment_links/{id}/line_items`
+
+A complete set of at most twenty lines: `has_more` is always `false`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentLinks.listLineItems()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment link (`link_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [CheckoutLineItem](/reference/objects/checkout-line-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [CheckoutLineItem](/reference/objects/checkout-line-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "li_0193b8f2c1a87d3e9f4a",
+      "object": "item",
+      "description": "Pro plan",
+      "price": "price_0193b8f2c1a87d3e9f4b",
+      "product": "prod_0193b8f2c1a87d3e9f4c",
+      "images": [],
+      "quantity": 1,
+      "adjustable_quantity": null,
+      "currency": "EUR",
+      "unit_amount": "1999",
+      "amount_subtotal": "1999",
+      "amount_discount": "0",
+      "amount_tax": "0",
+      "amount_total": "1999"
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_links/{id}/line_items"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.price` → [Price](/reference/objects/price)
+- `data.product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a payment link as a visitor
+
+`GET /v1/payment_links/{id}/public`
+
+Anonymous and rate-limited: what a visitor sees before checkout starts. An inactive (or expired contribution) link answers with `active: false`, so the page can say so.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment link (`link_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PublicPaymentLink](/reference/objects/public-payment-link).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

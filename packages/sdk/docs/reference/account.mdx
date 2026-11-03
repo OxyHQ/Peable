@@ -1,0 +1,192 @@
+---
+title: "Account"
+description: "The Account endpoints of the Peable API."
+order: 901
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Account
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/account`](#retrieve-the-account) | Retrieve the account |
+| [`POST /v1/account`](#open-or-update-the-account) | Open or update the account |
+
+## Retrieve the account
+
+`GET /v1/account`
+
+The merchant's own fiat account, or with `Peable-Account: ca_…` one of a platform's sellers. A merchant without one is told so (404 `account_missing`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.account.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Account` | header | string | A platform acting on one of its connected accounts (`ca_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Account](/reference/objects/account).
+
+```json
+{
+  "id": "ca_0193b8f2c1a87d3e9f4a",
+  "object": "account",
+  "livemode": false,
+  "type": "merchant",
+  "country": "ES",
+  "default_currency": "EUR",
+  "business_profile": {
+    "name": "Rosen Ceramics",
+    "url": "https://rosen.example",
+    "support_email": "help@rosen.example",
+    "support_url": null,
+    "product_description": "Handmade tableware",
+    "mcc": "5719"
+  },
+  "capabilities": {
+    "card_payments": "active",
+    "transfers": "active"
+  },
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "charges_enabled": true,
+  "payouts_enabled": true,
+  "settings": {
+    "payouts": {
+      "schedule": {
+        "interval": "weekly",
+        "delay_days": 7,
+        "weekly_anchor": "friday",
+        "monthly_anchor": null
+      },
+      "statement_descriptor": "ROSEN CERAMICS"
+    },
+    "payments": {
+      "statement_descriptor": "ROSEN CERAMICS"
+    },
+    "branding": {
+      "primary_color": "#1f2937",
+      "secondary_color": null
+    }
+  },
+  "last_synced_at": 1793750460,
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Open or update the account
+
+`POST /v1/account`
+
+The first call, with `country` and `business_type`, opens the account (201); every later one writes its settings to the provider and answers the account read back (200).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.account.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Account` | header | string | A platform acting on one of its connected accounts (`ca_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `country` | string | Exactly 2 characters. |
+| `business_type` | string | One of `individual`, `company`. |
+| `business_profile` | object |  |
+| `business_profile[name]` | string | 1–200 characters. |
+| `business_profile[url]` | string (uri) | At most 2048 characters. |
+| `business_profile[support_email]` | string (email) | At most 320 characters. |
+| `business_profile[support_url]` | string (uri) | At most 2048 characters. |
+| `business_profile[product_description]` | string | At most 1000 characters. |
+| `business_profile[mcc]` | string | Matches `^[0-9]{4}$`. |
+| `settings` | object |  |
+| `settings[payouts]` | object |  |
+| `settings[payouts][schedule]` | object |  |
+| `settings[payouts][schedule][interval]` **required** | string | One of `manual`, `daily`, `weekly`, `monthly`. |
+| `settings[payouts][schedule][delay_days]` | integer | Between 1 and 365. |
+| `settings[payouts][schedule][weekly_anchor]` | string | One of `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`. |
+| `settings[payouts][schedule][monthly_anchor]` | integer | Between 1 and 31. |
+| `settings[payouts][statement_descriptor]` | string | 5–22 characters. Matches `^[^<>\\'"*]*$`. |
+| `settings[payments]` | object |  |
+| `settings[payments][statement_descriptor]` | string | 5–22 characters. Matches `^[^<>\\'"*]*$`. |
+| `settings[branding]` | object |  |
+| `settings[branding][primary_color]` | string | Matches `^#[0-9a-fA-F]{6}$`. |
+| `settings[branding][secondary_color]` | string | Matches `^#[0-9a-fA-F]{6}$`. |
+
+**Response `200`**
+
+Returns [Account](/reference/objects/account).
+
+```json
+{
+  "id": "ca_0193b8f2c1a87d3e9f4a",
+  "object": "account",
+  "livemode": false,
+  "type": "merchant",
+  "country": "ES",
+  "default_currency": "EUR",
+  "business_profile": {
+    "name": "Rosen Ceramics",
+    "url": "https://rosen.example",
+    "support_email": "help@rosen.example",
+    "support_url": null,
+    "product_description": "Handmade tableware",
+    "mcc": "5719"
+  },
+  "capabilities": {
+    "card_payments": "active",
+    "transfers": "active"
+  },
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "charges_enabled": true,
+  "payouts_enabled": true,
+  "settings": {
+    "payouts": {
+      "schedule": {
+        "interval": "weekly",
+        "delay_days": 7,
+        "weekly_anchor": "friday",
+        "monthly_anchor": null
+      },
+      "statement_descriptor": "ROSEN CERAMICS"
+    },
+    "payments": {
+      "statement_descriptor": "ROSEN CERAMICS"
+    },
+    "branding": {
+      "primary_color": "#1f2937",
+      "secondary_color": null
+    }
+  },
+  "last_synced_at": 1793750460,
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1,0 +1,23 @@
+---
+title: "PaymentMethodConfigurationEntry"
+description: "The PaymentMethodConfigurationEntry shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentMethodConfigurationEntry
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `available` | boolean | Whether payers can be offered this method: it is on and nothing prevents it. |
+| `display_preference` | object |  |
+| `display_preference.preference` | string | One of `on`, `off`, `none`. |
+| `display_preference.value` | string | One of `on`, `off`. |
+| `unavailable_reason` | string \| null | Why it cannot be offered whatever the merchant chooses; `null` when it can. One of `provider_unsupported`, `requires_card`. |
+| `currencies` | array of string | The payment currencies it is offered on. |
+
+## Used in
+
+[PaymentMethodConfiguration](/reference/objects/payment-method-configuration)

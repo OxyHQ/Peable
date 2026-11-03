@@ -40,8 +40,8 @@ not an internal refactor.
 | `packages/cli/` | **`@peable.to/cli`** | The `peable` command, to be published (`private` until the owner configures its npm trusted publisher) (ESM bin, `dist/bin.js`): `login` (Oxy application credential per profile and mode, 0600 config), `listen` (test-mode events from `GET /v1/events/stream`, signed with a per-session `whsec_` by the SDK's own `signWebhook`, forwarded to localhost), `trigger` (fixtures over the public API and `/v1/test_helpers/*`), `logs tail`, resource commands. Built on `@peable.to/sdk` and `shared-types`; see `packages/cli/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
 | `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `merchants.branding` / `products` / `prices` / `coupons` / `promotionCodes` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core (sessions, `mountCheckout`, `createPeableElements`, `appearance`) |
-| `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
-| `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
+| `packages/contracts/` | **`@peable.to/contracts`** | THE wire, declared once (ADR 0014 D5): Zod route contracts for every public route, the object registry, the OpenAPI 3.1 generator (`/openapi`) and the zod-free closed value sets (`/vocabulary`); built first |
+| `packages/shared-types/` | **`@peable.to/shared-types`** | The zod-free face of the contract for consumers: wire types re-exported from `contracts` as TYPES, the vocabulary re-exported from `contracts/vocabulary`, and the runtime helpers (state machine, webhook signer, report layouts) |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
 
 `packages/pay` is consumed from its BUILD OUTPUT, like `shared-types`: root
@@ -71,6 +71,19 @@ ABSENCE — not `Platform.OS` — is what selects the "continue on your phone" s
 with the `faircoin:` QR, same capability-over-platform rule as the wallet's own
 web build.
 
+**`@peable.to/sdk`'s resource methods are GENERATED from the route contracts**
+(ADR 0014 D5): `packages/sdk/src/generated/resources.ts` is written by
+`bun run generate:sdk-resources` from every `service` contract with an `sdk` path
+(payer and user-session routes never become server-SDK methods), and CI's
+`check:sdk-resources` fails when the committed file drifts. Never edit it by hand;
+change the contract and regenerate. It imports the contracts as TYPES only — the
+SDK never constructs a schema at runtime (`ui-isolation.test.ts` walks the
+runtime graph), and `__tests__/generated/types.test.ts` proves every generated
+signature equals what the contract's `BodyOf` / `QueryOf` / `ResponseOf` derive. There is no
+hand-written resource: the only hand-written behaviour is `webhooks` and
+`src/overlays/billingAuthority.ts` (pinned-key verification of the signed tax
+quote and invoice authority, wrapping the generated methods with the same types).
+
 `bunfig.toml` sets `linker = "hoisted"`. Expo, Metro and Babel resolve transitive
 deps through the standard `node_modules` chain, and the default isolated linker
 breaks that plus ECS image resolution. Copy `bunfig.toml` into any Dockerfile
@@ -81,6 +94,40 @@ The root `overrides` entry `"@peable.to/sdk": "workspace:*"` points
 `@peable.to/sdk/display` for display prices) at this workspace. Without it bun
 nests the published copy under services, with its own older
 `@peable.to/contracts`, and the wallet bundles two SDKs.
+
+## Contracts are the source of truth (ADR 0014 D5)
+
+Every public route — merchant API, payer routes, user-session routes — is ONE
+`defineRoute({...})` in `packages/contracts/src/resources/<group>/<resource>.ts`:
+method, path, auth, scope, the request schemas (`params`, `query`, `body`, with
+their transforms: the SDK sends `z.input`, the handler receives `z.output`) and
+the response schema. Dashboard routes (`/v1/dashboard/…`) are Orbit's private
+surface and are not contracts.
+
+- **The backend validates with the contract objects** (`import { createCustomerParams } from '@peable.to/contracts'`); a route file
+  never declares a public request schema of its own. A dashboard variant is the contract's schema plus
+  `environment` (`surfaceQuery` / `dashboardQuery` in `lib/list.ts`).
+- **Every route test answer is checked against its contract**: `packages/backend/bunfig.toml`
+  preloads `src/__tests__/setup/contractCheck.ts`, which fails the test whose 2xx body does not parse
+  with the route's response schema or whose 4xx body is not the error envelope. A violation means the
+  contract does not describe the API — fix the contract (or the serializer), never the check.
+- **`contractCoverage.test.ts` proves the mounted Express routes and the contracts are the same set.**
+  A new route without a contract fails it.
+- **Objects are registered once** (`defineObject('<object>', '<Component>', schema)`), with an
+  `ObjectMap` entry by declaration merging. An expandable reference is `expandable('<type>')`, an
+  always-embedded one `embedded('<type>')`; the wire type is `Expand<z.output<…>>`, which resolves
+  references without the schemas referencing each other at the type level. A reference to an
+  unregistered type throws.
+- **Error codes are a closed list** (`contracts/src/vocabulary/errors.ts`, each with its description):
+  `sendError` takes an `ErrorCode` and answers `doc_url`; a scope refusal goes through
+  `requireScope` (`lib/http.ts`), never the bare Oxy middleware, whose body no contract describes.
+- **`docs/openapi.json` is generated** (`bun run generate:openapi`) and served at `/openapi.json`;
+  CI's `check:openapi` fails when it drifts. It is plain JSON outside Biome (2 MiB).
+- **`shared-types` never imports the contracts root at runtime** — only `export type` from it and
+  values from `@peable.to/contracts/vocabulary`, so the wallet and the hosted checkout do not bundle
+  every schema. A closed value set a schema needs lives in `contracts/src/vocabulary/`.
+- **`sdk`** on a route is its server-SDK method path; every `service` route has one and no other route
+  does (`openapi.test.ts`). Renaming it renames a published method.
 
 ## Commands
 
@@ -271,9 +318,12 @@ the key the address derives from is the one the reservation was taken against.
 One Stripe-style wire, changed at the root — there is no legacy shape and no
 translation layer. Request bodies, query strings, responses, socket frames and
 webhook payloads are `snake_case`; every instant is integer Unix seconds
-(`lib/time.ts` `toUnix`); amounts are base-unit strings and currencies uppercase.
-Errors are `{error:{type, code?, param?, message, request_id}}` through
-`lib/http.ts` `sendError` / `sendValidationError`; 422 is never used. Request
+(`lib/time.ts` `toUnix`); amounts are base-unit strings and currencies uppercase
+— with ONE known exception still to cut: Peable Tax calculations, transactions and
+the report answer integer minor units (JSON numbers), and their contracts say so.
+Errors are `{error:{type, code?, decline_code?, param?, message, doc_url?, request_id}}`
+through `lib/http.ts` `sendError` / `sendValidationError` (`code` is an `ErrorCode`,
+`doc_url` its entry on the published errors page); 422 is never used. Request
 body schemas are strict: an unknown field is a 400 naming it. Internal
 TypeScript, repositories and columns stay camelCase; a jsonb column that stores
 a wire object stores the wire shape (migration `0036` converted them).

@@ -10,7 +10,9 @@ import { sendError, sendValidationError } from './http';
  *
  * - query: `limit` (1–100, default 10), `starting_after` | `ending_before`
  *   (public ids, mutually exclusive), `created` / `created[gt|gte|lt|lte]`
- *   (Unix seconds), `expand[]` (`data.`-prefixed paths);
+ *   (Unix seconds), `expand[]` (`data.`-prefixed paths) — the contract's
+ *   `listQuery` (`@peable.to/contracts`), which every route's query is built
+ *   from;
  * - response: `{ object: 'list', data, has_more, url }`, `url` being the path
  *   that was listed.
  *
@@ -18,75 +20,6 @@ import { sendError, sendValidationError } from './http';
  * `answerList`, so a list cannot exist that pages differently from its
  * siblings — the drift this replaced had three envelopes and four limits.
  */
-
-export const LIST_LIMIT_DEFAULT = 10;
-export const LIST_LIMIT_MAX = 100;
-
-const unixSeconds = z.coerce.number().int().nonnegative();
-
-/**
- * `created=X` (exactly that second) or `created[op]=X`. The bare form is
- * normalized to the range `[X, X]` so the repository has one shape to read.
- */
-const createdParam = z.union([
-  unixSeconds.transform((x): CreatedRange => ({ gte: x, lte: x })),
-  z
-    .object({
-      gt: unixSeconds.optional(),
-      gte: unixSeconds.optional(),
-      lt: unixSeconds.optional(),
-      lte: unixSeconds.optional(),
-    })
-    .strict()
-    .transform((range): CreatedRange => range),
-]);
-
-/**
- * `expand[]=a&expand[]=b` arrives as an array; `expand=a` as a string. Both
- * mean the same request, so both are accepted.
- */
-export const expandParam = z.preprocess(
-  (value) => (typeof value === 'string' ? [value] : value),
-  z.array(z.string().min(1).max(200)).max(20),
-);
-
-/** The public id of a cursor. Bounded so a cursor is never an unbounded index probe. */
-const cursorParam = z.string().min(1).max(255);
-
-const listShape = {
-  limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
-  starting_after: cursorParam.optional(),
-  ending_before: cursorParam.optional(),
-  created: createdParam.optional(),
-  expand: expandParam.optional(),
-};
-
-/**
- * A list query: the shared parameters plus the route's own filters.
- *
- * `.strict()`: an unknown parameter is a 400 naming it, never silently ignored
- * — `?stauts=settled` answering every intent is a filter the caller believes
- * they applied.
- */
-export function listQuerySchema<S extends z.ZodRawShape>(filters: S) {
-  return z
-    .object({ ...listShape, ...filters })
-    .strict()
-    .superRefine((query, ctx) => {
-      if (query.starting_after !== undefined && query.ending_before !== undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['ending_before'],
-          message: 'starting_after and ending_before are mutually exclusive',
-        });
-      }
-    });
-}
-
-/** A retrieve's query: `expand[]` and nothing else unless the route says so. */
-export function retrieveQuerySchema<S extends z.ZodRawShape>(extra: S) {
-  return z.object({ expand: expandParam.optional(), ...extra }).strict();
-}
 
 /**
  * Which route family a shared handler core answers for. A dashboard request
@@ -96,22 +29,26 @@ export function retrieveQuerySchema<S extends z.ZodRawShape>(extra: S) {
  */
 export type QuerySurface = 'api' | 'dashboard';
 
-const dashboardQueryScope = { environment: z.enum(OXY_SERVICE_ENVIRONMENTS) } as const;
+/** The dashboard's Test/Live toggle, the one parameter its routes add to a contract's query. */
+export const dashboardQueryScope = { environment: z.enum(OXY_SERVICE_ENVIRONMENTS) } as const;
 
-/** One list schema per surface, for a core shared by the API and the dashboard. */
-export function surfaceListQuery<S extends z.ZodRawShape>(filters: S) {
-  return {
-    api: listQuerySchema(filters),
-    dashboard: listQuerySchema({ ...filters, ...dashboardQueryScope }),
-  } as const;
+/**
+ * A contract's query, as the dashboard surface accepts it: the same schema
+ * plus `environment`. The API surface uses the contract's schema itself.
+ */
+export function dashboardQuery<S extends z.ZodRawShape, C extends z.core.$ZodObjectConfig>(
+  apiQuery: z.ZodObject<S, C>,
+): z.ZodObject<S & typeof dashboardQueryScope, C> {
+  // `safeExtend`: it keeps the contract's refinements (cursor exclusivity),
+  // which `extend` refuses to carry over.
+  return apiQuery.safeExtend(dashboardQueryScope as never) as never;
 }
 
-/** One retrieve schema per surface. */
-export function surfaceRetrieveQuery() {
-  return {
-    api: retrieveQuerySchema({}),
-    dashboard: retrieveQuerySchema(dashboardQueryScope),
-  } as const;
+/** A contract's query for a core shared by both surfaces: the contract's own, and its dashboard copy. */
+export function surfaceQuery<S extends z.ZodRawShape, C extends z.core.$ZodObjectConfig>(
+  apiQuery: z.ZodObject<S, C>,
+) {
+  return { api: apiQuery, dashboard: dashboardQuery(apiQuery) } as const;
 }
 
 export interface ListQuery {
@@ -123,11 +60,11 @@ export interface ListQuery {
 }
 
 /** Parse a query with `schema`, or answer the 400 and return `null`. */
-export function parseQuery<T>(
+export function parseQuery<S extends z.ZodType>(
   req: Request,
   res: Response,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-): T | null {
+  schema: S,
+): z.output<S> | null {
   const parsed = schema.safeParse(req.query);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);

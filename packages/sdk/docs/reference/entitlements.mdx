@@ -1,0 +1,387 @@
+---
+title: "Entitlements"
+description: "The Entitlements endpoints of the Peable API."
+order: 918
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Entitlements
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/entitlements/active_entitlements`](#list-a-customers-active-entitlements) | List a customer's active entitlements |
+| [`POST /v1/entitlements/features`](#create-a-feature) | Create a feature |
+| [`GET /v1/entitlements/features`](#list-features) | List features |
+| [`GET /v1/entitlements/features/{id}`](#retrieve-a-feature) | Retrieve a feature |
+| [`POST /v1/entitlements/features/{id}`](#update-a-feature) | Update a feature |
+| [`POST /v1/products/{id}/features`](#attach-a-feature-to-a-product) | Attach a feature to a product |
+| [`GET /v1/products/{id}/features`](#list-a-products-features) | List a product's features |
+| [`DELETE /v1/products/{id}/features/{feature}`](#detach-a-feature-from-a-product) | Detach a feature from a product |
+
+## List a customer's active entitlements
+
+`GET /v1/entitlements/active_entitlements`
+
+What the customer may access NOW: one entitlement per feature, however many products grant it. A complete set, never paged (`has_more` is always `false`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.entitlements.activeEntitlements.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` **required** | query | string | The customer (`cus_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ActiveEntitlement](/reference/objects/active-entitlement) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ActiveEntitlement](/reference/objects/active-entitlement) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "ent_5f1c0a9e2b7d4c3a8e6f1b2d",
+      "object": "entitlements.active_entitlement",
+      "livemode": false,
+      "feature": "feat_0193b8f2c1a87d3e9f4f",
+      "lookup_key": "mention_plus"
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/entitlements/active_entitlements"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a feature
+
+`POST /v1/entitlements/features`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.entitlements.features.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `lookup_key` **required** | string | Matches `^[A-Za-z0-9_.:-]{1,80}$`. |
+| `name` **required** | string | 1–80 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [EntitlementFeature](/reference/objects/entitlement-feature).
+
+```json
+{
+  "id": "feat_0193b8f2c1a87d3e9f4f",
+  "object": "entitlements.feature",
+  "livemode": false,
+  "lookup_key": "mention_plus",
+  "name": "Mention Plus",
+  "active": true,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List features
+
+`GET /v1/entitlements/features`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.entitlements.features.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `lookup_key` | query | string | 1–80 characters. |
+| `archived` | query | boolean |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [EntitlementFeature](/reference/objects/entitlement-feature) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [EntitlementFeature](/reference/objects/entitlement-feature) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "feat_0193b8f2c1a87d3e9f4f",
+      "object": "entitlements.feature",
+      "livemode": false,
+      "lookup_key": "mention_plus",
+      "name": "Mention Plus",
+      "active": true,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/entitlements/features"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a feature
+
+`GET /v1/entitlements/features/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.entitlements.features.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The feature (`feat_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [EntitlementFeature](/reference/objects/entitlement-feature).
+
+```json
+{
+  "id": "feat_0193b8f2c1a87d3e9f4f",
+  "object": "entitlements.feature",
+  "livemode": false,
+  "lookup_key": "mention_plus",
+  "name": "Mention Plus",
+  "active": true,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a feature
+
+`POST /v1/entitlements/features/{id}`
+
+`active: false` archives it and withdraws it from every customer that held it.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.entitlements.features.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The feature (`feat_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | 1–80 characters. |
+| `active` | boolean | `false` archives it and withdraws it from every customer that held it. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [EntitlementFeature](/reference/objects/entitlement-feature).
+
+```json
+{
+  "id": "feat_0193b8f2c1a87d3e9f4f",
+  "object": "entitlements.feature",
+  "livemode": false,
+  "lookup_key": "mention_plus",
+  "name": "Mention Plus",
+  "active": true,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Attach a feature to a product
+
+`POST /v1/products/{id}/features`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.entitlements.productFeatures.attach()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The product (`prod_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `entitlement_feature` **required** | string | The feature (`feat_…`) to grant. 1–255 characters. |
+
+**Response `200`**
+
+Returns [ProductFeature](/reference/objects/product-feature).
+
+```json
+{
+  "id": "prodft_0193b8f2c1a87d3e9f50",
+  "object": "product_feature",
+  "livemode": false,
+  "product": "prod_0193b8f2c1a87d3e9f4a",
+  "entitlement_feature": {
+    "id": "feat_0193b8f2c1a87d3e9f4f",
+    "object": "entitlements.feature",
+    "livemode": false,
+    "lookup_key": "mention_plus",
+    "name": "Mention Plus",
+    "active": true,
+    "metadata": {},
+    "created": 1793750400
+  }
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a product's features
+
+`GET /v1/products/{id}/features`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.entitlements.productFeatures.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The product (`prod_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ProductFeature](/reference/objects/product-feature) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ProductFeature](/reference/objects/product-feature) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "prodft_0193b8f2c1a87d3e9f50",
+      "object": "product_feature",
+      "livemode": false,
+      "product": "prod_0193b8f2c1a87d3e9f4a",
+      "entitlement_feature": {
+        "id": "feat_0193b8f2c1a87d3e9f4f",
+        "object": "entitlements.feature",
+        "livemode": false,
+        "lookup_key": "mention_plus",
+        "name": "Mention Plus",
+        "active": true,
+        "metadata": {},
+        "created": 1793750400
+      }
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/products/{id}/features"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Detach a feature from a product
+
+`DELETE /v1/products/{id}/features/{feature}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.entitlements.productFeatures.detach()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The product (`prod_…`). |
+| `feature` **required** | path | string | The attachment (`prodft_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedProductFeature](/reference/objects/deleted-product-feature).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

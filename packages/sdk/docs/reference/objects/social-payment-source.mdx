@@ -1,0 +1,19 @@
+---
+title: "SocialPaymentSource"
+description: "The SocialPaymentSource shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SocialPaymentSource
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `app` | string | The calling app's slug, e.g. `mention`. |
+| `ref` | string | That app's own opaque id for what the payment was for; absent when it named none. |
+
+## Used in
+
+[SocialPayment](/reference/objects/social-payment)

@@ -19,19 +19,24 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import {
-  BALANCE_TRANSACTION_TYPES,
-  CURRENCY_CODES,
-  PAYOUT_INTERVALS,
-  PAYOUT_STATUSES,
-  PAYOUT_WEEKLY_ANCHORS,
-  isBaseUnitString,
   type AccountLink,
   type Balance,
+  cancelPayoutParams,
+  createAccountLinkParams,
+  createPayoutParams,
+  emptyQuery,
+  expandOnlyQuery,
+  listApplicationFeesQuery,
+  listBalanceTransactionsQuery,
+  listPayoutsQuery,
+  listReconciliationMismatchesQuery,
   type PayoutReconciliationReport,
-} from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+  payoutReconciliationQuery,
+  type RouteContract,
+  routes,
+  updateAccountParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import {
   findAccountByPublicId,
@@ -77,26 +82,42 @@ import {
   toPayoutDTO,
   toReconciliationMismatchDTO,
 } from '../lib/serializeMoney';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { idempotent } from '../lib/idempotency';
-import { metadataCreateSchema } from '../lib/metadata';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { toUnix } from '../lib/time';
-import {
-  answerList,
-  completeList,
-  parseQuery,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-  type QuerySurface,
-} from '../lib/list';
+import { answerList, completeList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
 export const PEABLE_ACCOUNT_HEADER = 'Peable-Account';
 
-/** The routes that take `Peable-Account` (see the module comment). */
-export const PEABLE_ACCOUNT_ROUTES =
-  /^\/v1\/(account|account_links|balance|balance_transactions|payouts|reports\/payout_reconciliation)(\/|$)/;
+/**
+ * The routes that take `Peable-Account` (see the module comment): exactly the
+ * contracts that declare `peableAccount` (ADR 0014 D5), so the header the
+ * OpenAPI document and the SDK offer on a route is the header it accepts.
+ */
+export const PEABLE_ACCOUNT_ROUTES = new RegExp(
+  `^(?:${[
+    ...new Set(
+      (routes as readonly RouteContract[])
+        .filter((route) => route.peableAccount === true)
+        .map((route) => route.path),
+    ),
+  ]
+    .map((path) =>
+      path
+        .split(/\{[^}]+\}/)
+        .map((literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('[^/]+'),
+    )
+    .join('|')})/?$`,
+);
 
 /**
  * `Peable-Account` anywhere but {@link PEABLE_ACCOUNT_ROUTES} is refused by
@@ -178,125 +199,18 @@ async function resolveAccount(
 }
 
 // ---------------------------------------------------------------------------
-// Schemas
+// Schemas: the contract's (`@peable.to/contracts` `accountRoutes`,
+// `balanceRoutes`, `payoutRoutes`, `applicationFeeRoutes`); the dashboard
+// surface accepts the same plus its `environment` toggle.
 // ---------------------------------------------------------------------------
 
-const baseUnit = (name: string) =>
-  z.string().refine(isBaseUnitString, `${name} must be a minor-unit integer string`);
-
-const descriptor = z
-  .string()
-  .min(5)
-  .max(22)
-  .regex(/^[^<>\\'"*]*$/, 'a statement descriptor may not contain < > \\ \' " *');
-
-const updateAccountBodySchema = z
-  .object({
-    country: z.string().length(2).optional(),
-    business_type: z.enum(['individual', 'company']).optional(),
-    business_profile: z
-      .object({
-        name: z.string().min(1).max(200).optional(),
-        url: z.string().url().max(2048).optional(),
-        support_email: z.string().email().max(320).optional(),
-        support_url: z.string().url().max(2048).optional(),
-        product_description: z.string().max(1000).optional(),
-        mcc: z
-          .string()
-          .regex(/^[0-9]{4}$/)
-          .optional(),
-      })
-      .strict()
-      .optional(),
-    settings: z
-      .object({
-        payouts: z
-          .object({
-            schedule: z
-              .object({
-                interval: z.enum(PAYOUT_INTERVALS),
-                delay_days: z.number().int().min(1).max(365).optional(),
-                weekly_anchor: z.enum(PAYOUT_WEEKLY_ANCHORS).optional(),
-                monthly_anchor: z.number().int().min(1).max(31).optional(),
-              })
-              .strict()
-              .superRefine((schedule, ctx) => {
-                if (schedule.weekly_anchor !== undefined && schedule.interval !== 'weekly') {
-                  ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    path: ['weekly_anchor'],
-                    message: 'weekly_anchor is for a weekly schedule',
-                  });
-                }
-                if (schedule.monthly_anchor !== undefined && schedule.interval !== 'monthly') {
-                  ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    path: ['monthly_anchor'],
-                    message: 'monthly_anchor is for a monthly schedule',
-                  });
-                }
-              })
-              .optional(),
-            statement_descriptor: descriptor.optional(),
-          })
-          .strict()
-          .optional(),
-        payments: z.object({ statement_descriptor: descriptor.optional() }).strict().optional(),
-        branding: z
-          .object({
-            primary_color: z
-              .string()
-              .regex(/^#[0-9a-fA-F]{6}$/)
-              .optional(),
-            secondary_color: z
-              .string()
-              .regex(/^#[0-9a-fA-F]{6}$/)
-              .optional(),
-          })
-          .strict()
-          .optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
-
-const accountLinkBodySchema = z
-  .object({
-    refresh_url: z.string().url(),
-    return_url: z.string().url(),
-    type: z.enum(['account_onboarding', 'account_update']).optional(),
-  })
-  .strict();
-
-const createPayoutBodySchema = z
-  .object({
-    amount: baseUnit('amount').refine((value) => value !== '0', 'amount must be positive'),
-    currency: z.enum(CURRENCY_CODES),
-    description: z.string().max(1000).optional(),
-    statement_descriptor: z.string().min(1).max(22).optional(),
-    method: z.enum(['standard', 'instant']).optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-
-const balanceTransactionsQuery = surfaceListQuery({
-  type: z.enum(BALANCE_TRANSACTION_TYPES).optional(),
-  payout: z.string().min(1).max(255).optional(),
-  source: z.string().min(1).max(255).optional(),
-  currency: z
-    .string()
-    .regex(/^[A-Za-z]{3,4}$/)
-    .optional(),
-});
-const payoutsQuery = surfaceListQuery({ status: z.enum(PAYOUT_STATUSES).optional() });
-const applicationFeesQuery = surfaceListQuery({
-  payment_intent: z.string().min(1).max(255).optional(),
-});
-const reconciliationReportQuery = surfaceListQuery({ payout: z.string().min(1).max(255) });
-const mismatchesQuery = surfaceListQuery({ open: z.enum(['true', 'false']).optional() });
-const retrieveQuery = surfaceRetrieveQuery();
-const emptyBody = z.object({}).strict();
+const balanceTransactionsQuery = surfaceQuery(listBalanceTransactionsQuery);
+const payoutsQuery = surfaceQuery(listPayoutsQuery);
+const applicationFeesQuery = surfaceQuery(listApplicationFeesQuery);
+const reconciliationReportQuery = surfaceQuery(payoutReconciliationQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
+/** Orbit's reconciliation findings: listed by the dashboard only, not a public route. */
+const mismatchesQuery = surfaceQuery(listReconciliationMismatchesQuery);
 
 function paramId(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -333,7 +247,7 @@ export async function updateAccount(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const parsed = updateAccountBodySchema.safeParse(req.body);
+  const parsed = updateAccountParams.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -377,7 +291,7 @@ export async function createAccountOnboardingLink(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const parsed = accountLinkBodySchema.safeParse(req.body);
+  const parsed = createAccountLinkParams.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -566,7 +480,7 @@ export async function createPayoutCore(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const parsed = createPayoutBodySchema.safeParse(req.body);
+  const parsed = createPayoutParams.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -598,7 +512,7 @@ export async function cancelPayoutCore(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const parsed = emptyBody.safeParse(req.body ?? {});
+  const parsed = cancelPayoutParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -732,6 +646,7 @@ export async function answerFeeRefundList(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
+  if (!parseQuery(req, res, emptyQuery)) return;
   const id = paramId(req, res);
   if (!id) return;
   const db = getDb();
@@ -779,17 +694,8 @@ type Core = (
 export function createMoneyRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write'), idempotent];
   const api = (core: Core) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

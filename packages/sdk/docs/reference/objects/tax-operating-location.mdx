@@ -1,0 +1,49 @@
+---
+title: "TaxOperatingLocation"
+description: "The tax.operating_location object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxOperatingLocation
+
+Object type: `tax.operating_location`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.operating_location"` |  |
+| `id` | string | `taxol_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `kind` | string | One of `head_office`, `fixed_establishment`, `office`, `warehouse`, `employees`, `inventory`, `other`. |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `description` | string \| null |  |
+| `started` | integer \| null | Unix seconds. |
+| `ended` | integer \| null | Set once the business no longer operates there. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.operating_location",
+  "id": "taxol_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "kind": "head_office",
+  "country": "ES",
+  "state": null,
+  "description": "Registered office, Barcelona",
+  "started": 1735689600,
+  "ended": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/operating_locations`](/reference/tax-compliance#list-operating-locations) — List operating locations
+- [`GET /v1/tax/operating_locations/{id}`](/reference/tax-compliance#retrieve-an-operating-location) — Retrieve an operating location

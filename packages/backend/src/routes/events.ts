@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
+import {
+  type EventTypeFilter,
+  listEventsQuery,
+  retrieveEventQuery,
+  streamEventsQuery,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -9,7 +13,6 @@ import {
   findEventForMerchant,
   listEventsForMerchant,
   type EventRow,
-  type EventTypeFilter,
 } from '../db/events/eventRepository';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import { serveLiveStream } from '../lib/liveStream';
@@ -17,69 +20,24 @@ import { LIVE_TAIL_CHANNELS } from '../services/liveTail';
 import { expandObjects, parseExpand } from '../lib/expand';
 import {
   answerList,
+  dashboardQuery,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
 } from '../lib/list';
 import { toEventDTO } from '../lib/serialize';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 
 /**
  * `/v1/events` (ADR 0014 D4) — every event of the last 30 days, rendered
  * exactly as its webhook deliveries carried it. Read-only: events are written
  * by the changes they record, never by a request for one.
+ *
+ * Every request schema is the contract's (`@peable.to/contracts`
+ * `eventRoutes`), the `type` / `types` filters already parsed into
+ * {@link EventTypeFilter}s.
  */
-
-/**
- * `type=payment_intent.settled` (exact) or `type=payment_intent.*` (a dotted
- * prefix). `*` alone is no filter. Lowercase dotted names only, so the value is
- * never a LIKE pattern of the caller's choosing.
- */
-const TYPE_FILTER_PATTERN = /^(\*|[a-z_]+(\.[a-z_]+)*(\.\*)?)$/;
-
-function toTypeFilter(value: string): EventTypeFilter | undefined {
-  if (value === '*') return undefined;
-  if (value.endsWith('.*')) return { kind: 'prefix', prefix: value.slice(0, -1) };
-  return { kind: 'exact', type: value };
-}
-
-const typeFilter = z
-  .string()
-  .max(100)
-  .regex(TYPE_FILTER_PATTERN, 'type is an event type, or a prefix ending in .* (payment_intent.*)')
-  .transform(toTypeFilter);
-
-/**
- * The stream's `types`: a comma-separated list of the same filters
- * (`payment_intent.settled,connected_account.*`). Absent, or any `*`, is every
- * event.
- */
-const streamQuery = z
-  .object({
-    types: z
-      .string()
-      .max(2_000)
-      .transform((value) => value.split(',').map((part) => part.trim()))
-      .pipe(
-        z
-          .array(
-            z
-              .string()
-              .max(100)
-              .regex(
-                TYPE_FILTER_PATTERN,
-                'types is a comma-separated list of event types, or prefixes ending in .*',
-              ),
-          )
-          .min(1)
-          .max(32),
-      )
-      .optional(),
-  })
-  .strict();
 
 function eventMatches(filters: readonly (EventTypeFilter | undefined)[] | null, row: EventRow) {
   if (filters === null) return true;
@@ -92,15 +50,11 @@ function eventMatches(filters: readonly (EventTypeFilter | undefined)[] | null, 
   );
 }
 
-const eventListFilters = {
-  type: typeFilter.optional(),
-  delivery_success: z.enum(['true', 'false']).optional(),
-  /** `pi_…`: only the events about that payment — the timeline Orbit shows on a payment. */
-  payment_intent: z.string().min(1).max(255).optional(),
+const listQueries = { api: listEventsQuery, dashboard: dashboardQuery(listEventsQuery) } as const;
+const retrieveQueries = {
+  api: retrieveEventQuery,
+  dashboard: dashboardQuery(retrieveEventQuery),
 } as const;
-
-const listEventsQuery = surfaceListQuery(eventListFilters);
-const retrieveEventQuery = surfaceRetrieveQuery();
 
 /**
  * `GET /v1/events`, newest first, filtered by `type`, `created`,
@@ -112,10 +66,9 @@ export async function answerEventList(
   merchant: MerchantRow,
   surface: QuerySurface = 'api',
 ): Promise<void> {
-  const query = parseQuery(req, res, listEventsQuery[surface]);
+  const query = parseQuery(req, res, listQueries[surface]);
   if (!query) return;
   const db = getDb();
-  const deliverySuccess = query.delivery_success;
   // Resolved inside the merchant's scope: another merchant's `pi_…` is the same
   // 400 as an unknown one.
   const intent = await resolveListReference(
@@ -135,7 +88,7 @@ export async function answerEventList(
         merchantId: merchant.id,
         page,
         type: query.type,
-        deliverySuccess: deliverySuccess === undefined ? undefined : deliverySuccess === 'true',
+        deliverySuccess: query.delivery_success,
         paymentIntentId: intent.id,
       }),
     serialize: toEventDTO,
@@ -154,7 +107,7 @@ export async function retrieveEvent(
     sendError(res, 400, 'invalid_request_error', 'id is required');
     return;
   }
-  const query = parseQuery(req, res, retrieveEventQuery[surface]);
+  const query = parseQuery(req, res, retrieveQueries[surface]);
   if (!query) return;
   const expand = parseExpand(res, 'event', query.expand, { list: false });
   if (!expand) return;
@@ -179,9 +132,9 @@ export async function streamEvents(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const query = parseQuery(req, res, streamQuery);
+  const query = parseQuery(req, res, streamEventsQuery);
   if (!query) return;
-  const filters = query.types ? query.types.map(toTypeFilter) : null;
+  const filters = query.types ?? null;
   const db = getDb();
   await serveLiveStream(req, res, merchant, {
     channel: LIVE_TAIL_CHANNELS.events,
@@ -207,11 +160,7 @@ export async function streamEvents(
 export function createEventsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const { requireMerchant } = deps;
   const router = Router();
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
   ) =>

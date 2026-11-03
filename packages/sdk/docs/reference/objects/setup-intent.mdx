@@ -1,0 +1,81 @@
+---
+title: "SetupIntent"
+description: "The setup_intent object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SetupIntent
+
+Object type: `setup_intent`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"setup_intent"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `status` | string | One of `requires_payment_method`, `requires_confirmation`, `requires_action`, `processing`, `canceled`, `succeeded`. |
+| `usage` | string | One of `on_session`, `off_session`. |
+| `payment_method_types` | array | At most 1 items. At least 1 item. |
+| `customer` | string \| [Customer](/reference/objects/customer) \| null | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | The `pm_…` it saved, once `succeeded`, or the PaymentMethod with `expand[]=payment_method`. Expandable. |
+| `client_secret` | string | Possession of it lets the payer's browser confirm this SetupIntent. |
+| `next_action` | object \| null |  |
+| `next_action.type` | `"use_peable_sdk"` |  |
+| `last_setup_error` | [PaymentError](/reference/objects/payment-error) \| null |  |
+| `cancellation_reason` | string \| null | One of `abandoned`, `duplicate`, `requested_by_customer`. |
+| `description` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+## Example
+
+```json
+{
+  "id": "seti_0193b8f2c1a87d3e9f4a",
+  "object": "setup_intent",
+  "livemode": false,
+  "status": "requires_payment_method",
+  "usage": "off_session",
+  "payment_method_types": [
+    "card"
+  ],
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "payment_method": null,
+  "client_secret": "seti_0193b8f2c1a87d3e9f4a_secret_9a1b2c",
+  "next_action": null,
+  "last_setup_error": null,
+  "cancellation_reason": null,
+  "description": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/setup_intents`](/reference/setup-intents#create-a-setup-intent) — Create a setup intent
+- [`GET /v1/setup_intents`](/reference/setup-intents#list-setup-intents) — List setup intents
+- [`GET /v1/setup_intents/{id}`](/reference/setup-intents#retrieve-a-setup-intent) — Retrieve a setup intent
+- [`POST /v1/setup_intents/{id}/cancel`](/reference/setup-intents#cancel-a-setup-intent) — Cancel a setup intent
+
+## Events
+
+- [`setup_intent.canceled`](/reference/webhook-events#setup_intentcanceled)
+- [`setup_intent.created`](/reference/webhook-events#setup_intentcreated)
+- [`setup_intent.requires_action`](/reference/webhook-events#setup_intentrequires_action)
+- [`setup_intent.setup_failed`](/reference/webhook-events#setup_intentsetup_failed)
+- [`setup_intent.succeeded`](/reference/webhook-events#setup_intentsucceeded)
+
+## Used in
+
+[CheckoutSession](/reference/objects/checkout-session) · [Event](/reference/objects/event)

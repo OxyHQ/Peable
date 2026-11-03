@@ -1,0 +1,33 @@
+---
+title: "TaxJurisdictionRule"
+description: "The tax.jurisdiction_rule object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxJurisdictionRule
+
+Object type: `tax.jurisdiction_rule`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.jurisdiction_rule"` |  |
+| `id` | string | Stable, e.g. `eu_vat_b2c_cross_border`. |
+| `rule_set_version` | string |  |
+| `name` | string |  |
+| `tax_type` | string | One of `vat`, `sales_tax`. |
+| `countries` | array of string | ISO 3166-1 alpha-2 codes the rule covers. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `effective_from` | integer | Unix seconds. |
+| `threshold` | [TaxRuleThreshold](/reference/objects/tax-rule-threshold) \| null |  |
+| `sources` | array of [TaxRuleSource](/reference/objects/tax-rule-source) |  |
+| `coverage_limits` | array of [TaxCoverageLimit](/reference/objects/tax-coverage-limit) |  |
+| `review` | object |  |
+| `review.status` | string | One of `unreviewed`, `reviewed`. |
+| `review.note` | string |  |
+
+## Used in
+
+[TaxRuleSet](/reference/objects/tax-rule-set)

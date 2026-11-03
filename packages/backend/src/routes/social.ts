@@ -1,103 +1,26 @@
 import { Router } from 'express';
 import type { Request, RequestHandler } from 'express';
-import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
 import { isNotFoundError } from '@oxy.so/core';
 import { oxy } from '../oxy';
 import { createOxyAuthMiddleware, getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
-  SOCIAL_SOURCE_APP_MAX_LENGTH,
-  SOCIAL_SOURCE_REF_MAX_LENGTH,
-  type SocialNextAddressRequest,
   type SocialNextAddressResponse,
   type SocialPayment,
   type SocialPaymentsResponse,
   type SocialReceiveCursorResponse,
-} from '@peable.to/shared-types';
+  socialNextAddressParams,
+  socialPaymentsQuery,
+  socialReceiveCursorQuery,
+} from '@peable.to/contracts';
 import { config } from '../config';
 import { reserveNextSocialAddress, getReservedThrough } from '../services/socialReceive';
 import { getDb } from '../db/postgres';
 import { insertSendAttribution, listAttributionsForViewer } from '../db/social/sendAttribution';
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
-import { sendError, sendValidationError, wrap } from '../lib/http';
+import { sendError, sendValidationError, wrap, oxyGuard } from '../lib/http';
 import { toSocialPaymentSource } from '../lib/serialize';
 import { toUnix } from '../lib/time';
-
-/**
- * Optional, display-only context for one social payment: which app the payer
- * was in, and that app's own id for what they were paying for (a Mention post,
- * say).
- *
- * **Optional, and it stays optional.** A plain person-to-person payment is for
- * nothing in particular; requiring this would make every caller invent an
- * answer, and an invented context is worse than none.
- *
- * `.strict()` is the "reject anything else" half and is load-bearing rather
- * than tidy. Zod strips an unknown key silently by default, so `{ app, postId }`
- * — the obvious misspelling of `ref` — would reserve an address and record a
- * context missing the only part the recipient cares about, with a 200 to say it
- * worked. The bounds come from `@peable.to/shared-types`, which is also where
- * the column CHECKs read them, so the request, the contract and the table
- * cannot drift apart.
- *
- * `ref` is validated for SHAPE and never for meaning: printable non-space ASCII
- * bounds it to something id-shaped, so the field cannot quietly become a free
- * text memo the gateway is then storing on behalf of two users. Peable never
- * parses it beyond this.
- */
-const paymentSourceSchema = z
-  .object({
-    app: z
-      .string()
-      .min(1)
-      .max(SOCIAL_SOURCE_APP_MAX_LENGTH)
-      .regex(/^[a-z0-9][a-z0-9._-]*$/, 'source.app must be a lowercase app slug'),
-    ref: z
-      .string()
-      .min(1)
-      .max(SOCIAL_SOURCE_REF_MAX_LENGTH)
-      .regex(/^[\x21-\x7e]+$/, 'source.ref must be an opaque id, without spaces')
-      .optional(),
-  })
-  .strict();
-
-const nextAddressBodySchema = z
-  .object({
-    network: z.enum(['mainnet', 'testnet']),
-    source: paymentSourceSchema.optional(),
-  })
-  .strict();
-
-/** True only when `A` and `B` are the SAME type, not merely assignable to each other. */
-type Exact<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-/** Fails to compile when its argument is anything but `true`. */
-type AssertTrue<T extends true> = T;
-
-/**
- * Compile-time proof that what this route PARSES and what
- * `@peable.to/shared-types` PUBLISHES are one shape — a field accepted here
- * that the contract does not name, or a contract field this parser would strip,
- * is an error on this line instead of a mismatch a consumer of the published
- * package meets at runtime.
- *
- * `Exact`, not an annotation of `z.ZodType<SocialNextAddressRequest>` on the
- * schema. MEASURED: that annotation accepts an extra required field without a
- * word, because `ZodType`'s output parameter appears in method positions and is
- * therefore bivariant — the obvious spelling of this check does not check
- * anything.
- */
-export type NextAddressBodyIsTheContract = AssertTrue<
-  Exact<z.infer<typeof nextAddressBodySchema>, SocialNextAddressRequest>
->;
-
-const cursorQuerySchema = z.object({
-  network: z.enum(['mainnet', 'testnet']),
-});
-
-const paymentsQuerySchema = z.object({
-  network: z.enum(['mainnet', 'testnet']),
-});
 
 /**
  * Anti-grief limit for `POST /:username/next_address`, keyed on the
@@ -133,7 +56,8 @@ interface PairRateLimitedRequest extends Request {
  * session, distinct from the merchant service-auth `paymentIntents.ts` uses.
  */
 export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
-  const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
+  const requireOxyUser: RequestHandler =
+    deps?.requireOxyUser ?? oxyGuard(createOxyAuthMiddleware(oxy));
   const router = Router();
 
   // Built once per router (so tests building a fresh router via
@@ -163,7 +87,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
     wrap(async (req, res) => {
       const senderUserId = getRequiredOxyUserId(req);
 
-      const parsed = nextAddressBodySchema.safeParse(req.body);
+      const parsed = socialNextAddressParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -232,7 +156,13 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
       // address with no attribution row.
       const reservation = await reserveNextSocialAddress(recipient.id, network);
       if (!reservation) {
-        sendError(res, 409, 'keyless_recipient', 'recipient has not set up an Oxy identity yet');
+        sendError(
+          res,
+          409,
+          'invalid_request_error',
+          'recipient has not set up an Oxy identity yet',
+          'keyless_recipient',
+        );
         return;
       }
 
@@ -264,7 +194,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
     wrap(async (req, res) => {
       const oxyUserId = getRequiredOxyUserId(req);
 
-      const parsed = cursorQuerySchema.safeParse(req.query);
+      const parsed = socialReceiveCursorQuery.safeParse(req.query);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -308,7 +238,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
     wrap(async (req, res) => {
       const oxyUserId = getRequiredOxyUserId(req);
 
-      const parsed = paymentsQuerySchema.safeParse(req.query);
+      const parsed = socialPaymentsQuery.safeParse(req.query);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

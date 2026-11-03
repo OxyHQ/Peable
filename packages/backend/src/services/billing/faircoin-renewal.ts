@@ -1,10 +1,16 @@
+import {
+  billingFaircoinRenewalConsentSchema,
+  billingFaircoinRenewalRevocationSchema,
+  billingIdempotencyKey,
+  billingReference,
+} from '@peable.to/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type {
   BillingFaircoinRenewalConsent,
   BillingFaircoinRenewalRevocation,
 } from '@peable.to/shared-types';
-import { billingIdempotencyKey, billingReference, BillingError, unixSeconds } from './contracts';
+import { BillingError } from './contracts';
 import { toUnix } from '../../lib/time';
 
 const timestamp = z.string().datetime();
@@ -12,42 +18,6 @@ const positiveBaseUnits = z
   .string()
   .regex(/^[1-9][0-9]*$/)
   .max(80);
-/** The wire consent (`BillingFaircoinRenewalConsent`): snake_case, Unix seconds. */
-export const faircoinRenewalConsentSchema = z
-  .object({
-    authorization_id: billingReference,
-    payer_account_id: billingReference,
-    merchant_id: billingReference,
-    app_id: billingReference,
-    subscription_id: billingReference,
-    plan_id: billingReference,
-    mode: z.enum(['test', 'live']),
-    environment: z.enum(['development', 'staging', 'production']),
-    explicit_consent: z.literal(true),
-    consent_evidence_id: billingReference,
-    maximum_amount_base_units: positiveBaseUnits,
-    interval: z.literal('month'),
-    interval_count: z.literal(1),
-    starts_at: unixSeconds,
-    expires_at: unixSeconds,
-    accepted_at: unixSeconds,
-  })
-  .strict()
-  .refine(
-    (value) =>
-      value.expires_at > value.starts_at &&
-      value.accepted_at <= value.starts_at &&
-      (value.mode === 'live') === (value.environment === 'production'),
-    'Invalid consent period or environment',
-  );
-/** The wire revocation (`BillingFaircoinRenewalRevocation`). */
-export const faircoinRenewalRevocationSchema = z
-  .object({
-    authorization_id: billingReference,
-    revoked_at: unixSeconds,
-    revocation_evidence_id: billingReference,
-  })
-  .strict();
 export interface FaircoinRenewalActor {
   payerAccountId: string;
   merchantId: string;
@@ -181,7 +151,7 @@ export function createFaircoinRenewalAuthorization(options: {
 }) {
   const now = options.now ?? (() => new Date());
   async function revokeWithDispatchAcknowledgement(actor: FaircoinRenewalActor, raw: unknown) {
-    const revocation = faircoinRenewalRevocationSchema.parse(raw);
+    const revocation = billingFaircoinRenewalRevocationSchema.parse(raw);
     if (
       revocation.revoked_at > toUnix(now()) ||
       !(await options.verifyRevocation(revocation, actor))
@@ -211,7 +181,7 @@ export function createFaircoinRenewalAuthorization(options: {
   }
   return {
     async accept(actor: FaircoinRenewalActor, raw: unknown) {
-      const consent = faircoinRenewalConsentSchema.parse(raw);
+      const consent = billingFaircoinRenewalConsentSchema.parse(raw);
       assertFaircoinRenewalActor(consent, actor);
       if (
         consent.accepted_at > toUnix(now()) ||
@@ -226,7 +196,7 @@ export function createFaircoinRenewalAuthorization(options: {
           if (record) {
             if (
               record.revocation ||
-              JSON.stringify(faircoinRenewalConsentSchema.parse(record.consent)) !==
+              JSON.stringify(billingFaircoinRenewalConsentSchema.parse(record.consent)) !==
                 JSON.stringify(consent)
             )
               throw new BillingError('idempotency_conflict');

@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import type { ErrorCode } from '@peable.to/contracts/vocabulary';
 import { sendError } from '../../lib/http';
 
 /**
@@ -8,7 +9,7 @@ import { sendError } from '../../lib/http';
 export class CheckoutError extends Error {
   constructor(
     readonly status: 400 | 404 | 409 | 502 | 503,
-    readonly code: string,
+    readonly code: ErrorCode,
     message: string,
     readonly param?: string,
     readonly type: 'invalid_request_error' | 'api_error' = status >= 500
@@ -20,7 +21,7 @@ export class CheckoutError extends Error {
   }
 }
 
-export const invalid = (code: string, message: string, param?: string) =>
+export const invalid = (code: ErrorCode, message: string, param?: string) =>
   new CheckoutError(400, code, message, param);
 
 /** The ADR 0014 answer for a {@link CheckoutError}; anything else is rethrown. */

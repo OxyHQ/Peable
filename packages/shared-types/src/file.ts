@@ -1,53 +1,20 @@
 // Files (`file_…`) — bytes a merchant gives Orbit for one stated purpose
 // (ADR 0016: Orbit owns the object; the storage is Oxy Files, a binding that
-// never reaches the wire). Stripe's Files API, with Oxy Files underneath.
+// never reaches the wire). The wire types are the contract's
+// (`@peable.to/contracts` `fileSchema`); the closed sets are its vocabulary.
+import type { FilePurpose, FileType } from '@peable.to/contracts/vocabulary';
 
-/**
- * What a file is FOR. Decided at upload and never changed: the purpose is what
- * sets the type and size policy, who may see the bytes, and which objects may
- * reference the file — a `business_logo` is public, a `dispute_evidence` file
- * is private and can only be attached to the merchant's own disputes.
- */
-export const FILE_PURPOSES = [
-  'dispute_evidence',
-  'business_logo',
-  'identity_document',
-  'additional_verification',
-  'finance_report_run',
-  'tax_document',
-] as const;
-export type FilePurpose = (typeof FILE_PURPOSES)[number];
-
-/**
- * The purposes a merchant may upload or import. `finance_report_run` is not
- * among them: a report's CSV is written by Peable's report runs
- * (`/v1/reporting/report_runs`) and nobody else, so a file of that purpose is
- * always a report Peable produced.
- */
-export const FILE_UPLOAD_PURPOSES = [
-  'dispute_evidence',
-  'business_logo',
-  'identity_document',
-  'additional_verification',
-  'tax_document',
-] as const satisfies readonly FilePurpose[];
-export type FileUploadPurpose = (typeof FILE_UPLOAD_PURPOSES)[number];
-
-/** The stored format, by its conventional extension (Stripe's `type`). */
-export const FILE_TYPES = ['pdf', 'png', 'jpg', 'csv'] as const;
-export type FileType = (typeof FILE_TYPES)[number];
-
-/**
- * Whether the bytes can be used right now.
- *
- *  - `available` — Oxy serves the file; it can be shown or forwarded.
- *  - `withheld` — the file still exists and is not being served (its owner
- *    trashed it or made it private); it can come back.
- *  - `removed` — Oxy said the file is gone for good (deleted, taken down, lost).
- *    The object stays so whatever referenced it can say why it stopped working.
- */
-export const FILE_STATUSES = ['available', 'withheld', 'removed'] as const;
-export type FileStatus = (typeof FILE_STATUSES)[number];
+export {
+  FILE_PURPOSES,
+  FILE_STATUSES,
+  FILE_TYPES,
+  FILE_UPLOAD_PURPOSES,
+  type FilePurpose,
+  type FileStatus,
+  type FileType,
+  type FileUploadPurpose,
+} from '@peable.to/contracts/vocabulary';
+export type { CreateFileFromOxyParams, FileObject, ListFilesParams } from '@peable.to/contracts';
 
 /**
  * The policy of each purpose: the formats it takes, recognised from the bytes
@@ -56,7 +23,7 @@ export type FileStatus = (typeof FILE_STATUSES)[number];
  * The provider's own ceilings, restated where the upload is parsed, so a file
  * the card network would refuse is refused at upload — not at the one-shot
  * dispute submission it was meant for. `finance_report_run` is Peable's own
- * output (see {@link FILE_UPLOAD_PURPOSES}); its ceiling bounds a report.
+ * output (see `FILE_UPLOAD_PURPOSES`); its ceiling bounds a report.
  */
 export const FILE_PURPOSE_POLICIES: Readonly<
   Record<FilePurpose, { readonly types: readonly FileType[]; readonly max_bytes: number }>
@@ -70,56 +37,3 @@ export const FILE_PURPOSE_POLICIES: Readonly<
   // own `tax.document`s, never forwarded to a provider.
   tax_document: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
 });
-
-/**
- * The API's `file` object. Named `FileObject` rather than `File` so it never
- * shadows the DOM's `File` in a browser that imports both.
- */
-export interface FileObject {
-  /** `file_…`. */
-  id: string;
-  object: 'file';
-  /** The mode of the merchant that uploaded it (ADR 0017). */
-  livemode: boolean;
-  purpose: FilePurpose;
-  /** The name it was uploaded with, if it had a printable one. */
-  filename: string | null;
-  /** Bytes. */
-  size: number;
-  type: FileType;
-  status: FileStatus;
-  /**
-   * Where the bytes can be read, while the file is `available`:
-   *
-   *  - a `business_logo`: a PUBLIC URL — what a payer surface renders;
-   *  - a `finance_report_run`: the gateway's `GET /v1/files/:id/contents`,
-   *    which answers the CSV to the merchant's own credential (Stripe's
-   *    `files.stripe.com/v1/files/:id/contents`).
-   *
-   * `null` for every other purpose: evidence and identity documents are never
-   * addressable by URL, and their bytes leave Peable only to the provider they
-   * are submitted to.
-   */
-  url: string | null;
-  created: number;
-}
-
-/**
- * `POST /v1/files` — exactly one source:
- *
- *  - the bytes, as `multipart/form-data` with a `purpose` field and a `file`
- *    part (the SDK's `files.create({ purpose, file })` builds it);
- *  - `oxy_file`: as JSON, an Oxy file the caller already owns (their
- *    application's, or an account they are or act for). Its ownership is
- *    checked once, here, and never again.
- */
-export interface CreateFileFromOxyParams {
-  purpose: FileUploadPurpose;
-  /** Oxy file id. */
-  oxy_file: string;
-}
-
-/** `GET /v1/files`. */
-export interface ListFilesParams {
-  purpose?: FilePurpose;
-}

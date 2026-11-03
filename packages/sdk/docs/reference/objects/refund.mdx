@@ -1,0 +1,76 @@
+---
+title: "Refund"
+description: "The refund object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Refund
+
+Object type: `refund`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"refund"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `external_ref` | string \| null | YOUR id for this refund (its idempotency); `null` on a refund imported from the provider (`origin: 'provider'`). |
+| `origin` | string | `provider`: it appeared at the acquirer (a dashboard refund, a dispute resolved) and was imported. One of `merchant`, `provider`. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | The refunded payment (`pi_…`), or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `status` | string | The MONEY's own lifecycle: a bank can reject a refund days later (`failed`); `canceled` only through `POST /v1/refunds/{id}/cancel`. One of `pending`, `succeeded`, `failed`, `canceled`. |
+| `reason` | string \| null | One of `duplicate`, `fraudulent`, `requested_by_customer`. |
+| `failure_code` | string \| null | The provider's machine-readable reason, when it failed. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+## Example
+
+```json
+{
+  "id": "re_0193b8f2c1a87d3e9f4a",
+  "object": "refund",
+  "livemode": false,
+  "external_ref": "order_6735_refund_1",
+  "origin": "merchant",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "amount": "1000",
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "failure_code": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750460
+}
+```
+
+## Returned by
+
+- [`GET /v1/payment_intents/{intentId}/refunds`](/reference/refunds#list-a-payments-refunds) — List a payment's refunds
+- [`POST /v1/refunds`](/reference/refunds#create-a-refund) — Create a refund
+- [`GET /v1/refunds`](/reference/refunds#list-refunds) — List refunds
+- [`GET /v1/refunds/{id}`](/reference/refunds#retrieve-a-refund) — Retrieve a refund
+- [`POST /v1/refunds/{id}`](/reference/refunds#update-a-refund) — Update a refund
+- [`POST /v1/refunds/{id}/cancel`](/reference/refunds#cancel-a-refund) — Cancel a refund
+- [`GET /v1/refunds/search`](/reference/refunds#search-refunds) — Search refunds
+
+## Events
+
+- [`refund.created`](/reference/webhook-events#refundcreated)
+- [`refund.failed`](/reference/webhook-events#refundfailed)
+- [`refund.updated`](/reference/webhook-events#refundupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

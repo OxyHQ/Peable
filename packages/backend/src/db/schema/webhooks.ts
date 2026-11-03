@@ -10,6 +10,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import { WEBHOOK_ENDPOINT_DESCRIPTION_MAX } from '@peable.to/shared-types';
 import { events } from './events';
 import { merchants } from './merchants';
 import {
@@ -21,8 +22,8 @@ import {
 
 /** The URL bound `safeFetch` itself enforces (`MAX_URL_LENGTH`). */
 const WEBHOOK_URL_MAX = 2048;
-/** Stripe's bound on an endpoint's description. */
-export const WEBHOOK_ENDPOINT_DESCRIPTION_MAX = 5000;
+/** Stripe's bound on an endpoint's description, the contract's. */
+export { WEBHOOK_ENDPOINT_DESCRIPTION_MAX };
 
 /**
  * A webhook endpoint (`we_…`) — one URL a merchant receives events at

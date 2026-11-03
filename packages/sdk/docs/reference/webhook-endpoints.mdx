@@ -1,0 +1,349 @@
+---
+title: "Webhook endpoints"
+description: "The Webhook endpoints endpoints of the Peable API."
+order: 950
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Webhook endpoints
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/webhook_endpoints`](#create-a-webhook-endpoint) | Create a webhook endpoint |
+| [`GET /v1/webhook_endpoints`](#list-webhook-endpoints) | List webhook endpoints |
+| [`GET /v1/webhook_endpoints/{id}`](#retrieve-a-webhook-endpoint) | Retrieve a webhook endpoint |
+| [`POST /v1/webhook_endpoints/{id}`](#update-a-webhook-endpoint) | Update a webhook endpoint |
+| [`DELETE /v1/webhook_endpoints/{id}`](#delete-a-webhook-endpoint) | Delete a webhook endpoint |
+| [`POST /v1/webhook_endpoints/{id}/roll_secret`](#roll-the-signing-secret) | Roll the signing secret |
+| [`POST /v1/webhook_endpoints/{id}/test`](#send-a-test-event) | Send a test event |
+
+## Create a webhook endpoint
+
+`POST /v1/webhook_endpoints`
+
+The answer is the ONLY one that shows `secret`. A retry with the same `Idempotency-Key` replays it, secret included, for 24 hours. At most 16 endpoints per merchant and mode.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.webhookEndpoints.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `url` **required** | string | An `https` URL (a test-mode endpoint may also use `http`), ports 80/443 only. |
+| `enabled_events` **required** | array of string | At most 94 items. At least 1 item. |
+| `description` | string | 1–5000 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [WebhookEndpointWithSecret](/reference/objects/webhook-endpoint-with-secret).
+
+```json
+{
+  "id": "we_0193b8f2c1a87d3e9f4c",
+  "object": "webhook_endpoint",
+  "livemode": false,
+  "url": "https://example.com/peable/webhooks",
+  "description": "Order fulfilment",
+  "enabled_events": [
+    "payment_intent.succeeded",
+    "charge.refunded"
+  ],
+  "status": "enabled",
+  "disabled_reason": null,
+  "api_version": "2026-11-03",
+  "metadata": {},
+  "created": 1793750000,
+  "updated_at": 1793750000,
+  "secret": "whsec_9f4a7d3e0193b8f2c1a87d3e9f4a7d3e"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List webhook endpoints
+
+`GET /v1/webhook_endpoints`
+
+Newest first. Never the secret.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.webhookEndpoints.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [WebhookEndpoint](/reference/objects/webhook-endpoint) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [WebhookEndpoint](/reference/objects/webhook-endpoint) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "we_0193b8f2c1a87d3e9f4c",
+      "object": "webhook_endpoint",
+      "livemode": false,
+      "url": "https://example.com/peable/webhooks",
+      "description": "Order fulfilment",
+      "enabled_events": [
+        "payment_intent.succeeded",
+        "charge.refunded"
+      ],
+      "status": "enabled",
+      "disabled_reason": null,
+      "api_version": "2026-11-03",
+      "metadata": {},
+      "created": 1793750000,
+      "updated_at": 1793750000
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/webhook_endpoints"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a webhook endpoint
+
+`GET /v1/webhook_endpoints/{id}`
+
+Never the secret: a lost secret is rolled, not retrieved.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.webhookEndpoints.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The webhook endpoint (`we_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [WebhookEndpoint](/reference/objects/webhook-endpoint).
+
+```json
+{
+  "id": "we_0193b8f2c1a87d3e9f4c",
+  "object": "webhook_endpoint",
+  "livemode": false,
+  "url": "https://example.com/peable/webhooks",
+  "description": "Order fulfilment",
+  "enabled_events": [
+    "payment_intent.succeeded",
+    "charge.refunded"
+  ],
+  "status": "enabled",
+  "disabled_reason": null,
+  "api_version": "2026-11-03",
+  "metadata": {},
+  "created": 1793750000,
+  "updated_at": 1793750000
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a webhook endpoint
+
+`POST /v1/webhook_endpoints/{id}`
+
+`url`, `enabled_events`, `disabled`, `description` (`""` clears it) and `metadata` (a patch).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.webhookEndpoints.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The webhook endpoint (`we_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `url` | string | An `https` URL (a test-mode endpoint may also use `http`), ports 80/443 only. |
+| `enabled_events` | array of string | At most 94 items. At least 1 item. |
+| `disabled` | boolean | `true` stops deliveries; `false` re-enables an endpoint, whatever disabled it. |
+| `description` | string | `""` clears it. At most 5000 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [WebhookEndpoint](/reference/objects/webhook-endpoint).
+
+```json
+{
+  "id": "we_0193b8f2c1a87d3e9f4c",
+  "object": "webhook_endpoint",
+  "livemode": false,
+  "url": "https://example.com/peable/webhooks",
+  "description": "Order fulfilment",
+  "enabled_events": [
+    "payment_intent.succeeded",
+    "charge.refunded"
+  ],
+  "status": "enabled",
+  "disabled_reason": null,
+  "api_version": "2026-11-03",
+  "metadata": {},
+  "created": 1793750000,
+  "updated_at": 1793750000
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a webhook endpoint
+
+`DELETE /v1/webhook_endpoints/{id}`
+
+Its deliveries go with it, pending ones included.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.webhookEndpoints.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The webhook endpoint (`we_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedWebhookEndpoint](/reference/objects/deleted-webhook-endpoint).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Roll the signing secret
+
+`POST /v1/webhook_endpoints/{id}/roll_secret`
+
+Mint a new secret and show it once. With `expires_in_seconds` (≤ 24h) the previous one keeps signing beside it until then; without, it stops now.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.webhookEndpoints.rollSecret()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The webhook endpoint (`we_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expires_in_seconds` | integer | How long the PREVIOUS secret keeps signing beside the new one, in seconds (0–86400, default 0). While both are live every delivery carries two `v1=` signatures, so a receiver can switch secrets without a gap. Between 0 and 86400. |
+
+**Response `200`**
+
+Returns [WebhookEndpointWithSecret](/reference/objects/webhook-endpoint-with-secret).
+
+```json
+{
+  "id": "we_0193b8f2c1a87d3e9f4c",
+  "object": "webhook_endpoint",
+  "livemode": false,
+  "url": "https://example.com/peable/webhooks",
+  "description": "Order fulfilment",
+  "enabled_events": [
+    "payment_intent.succeeded",
+    "charge.refunded"
+  ],
+  "status": "enabled",
+  "disabled_reason": null,
+  "api_version": "2026-11-03",
+  "metadata": {},
+  "created": 1793750000,
+  "updated_at": 1793750000,
+  "secret": "whsec_9f4a7d3e0193b8f2c1a87d3e9f4a7d3e"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Send a test event
+
+`POST /v1/webhook_endpoints/{id}/test`
+
+Send this endpoint a `webhook_endpoint.test` event now and answer the delivery after its first attempt. A disabled endpoint is refused (`webhook_endpoint_disabled`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.webhookEndpoints.sendTestEvent()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The webhook endpoint (`we_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [WebhookDelivery](/reference/objects/webhook-delivery).
+
+```json
+{
+  "id": "0193b8f2-c1a8-7d3e-9f4a-7d3e0193b8f2",
+  "object": "webhook_delivery",
+  "livemode": false,
+  "event_id": "evt_0193b8f2c1a87d3e9f4b",
+  "event_type": "payment_intent.succeeded",
+  "webhook_endpoint_id": "we_0193b8f2c1a87d3e9f4c",
+  "url": "https://example.com/peable/webhooks",
+  "attempts": 1,
+  "delivered": true,
+  "last_status": "delivered",
+  "created": 1793750400,
+  "updated_at": 1793750401
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

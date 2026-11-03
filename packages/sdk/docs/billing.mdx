@@ -1,0 +1,165 @@
+---
+title: "Subscriptions and invoices"
+description: "The native billing engine: subscriptions, invoices, credit notes, usage, entitlements and the customer portal."
+order: 9
+---
+
+# Subscriptions and invoices
+
+Peable runs its own billing engine on your [catalog](/catalog):
+subscriptions (`sub_…`), invoices (`in_…`) with gapless numbers, credit notes
+(`cn_…`), a customer balance, dunning, usage meters, entitlements and a hosted
+customer portal. The payment provider only collects: a card invoice is charged
+off-session against the customer's saved `pm_…`; a FairCoin invoice is paid by
+the payer from their own wallet on the hosted invoice page — never debited.
+
+## Create a subscription
+
+```ts
+// A monthly plan with a 14-day trial, charged automatically after it.
+const sub = await peable.subscriptions.create({
+  customer: 'cus_…', // with invoice_settings.default_payment_method set
+  items: [{ price: 'price_plus_monthly' }],
+  trial_period_days: 14,
+  automatic_tax: { enabled: true }, // Peable Tax before every invoice finalizes
+  expand: ['latest_invoice'],
+});
+
+// Upgrade now, prorated by the second and invoiced at once.
+await peable.subscriptions.update(sub.id, {
+  items: [{ id: sub.items.data[0].id, price: 'price_pro_monthly' }],
+  proration_behavior: 'always_invoice',
+});
+
+await peable.subscriptions.cancel(sub.id);
+```
+
+- **Statuses** are Stripe's: `incomplete`, `incomplete_expired`, `trialing`,
+  `active`, `past_due`, `unpaid`, `canceled`, `paused`.
+- **The first payment**: `payment_behavior: 'allow_incomplete'` (the default)
+  charges at once; `'default_incomplete'` leaves
+  `latest_invoice.payment_intent` for the payer to confirm on-session;
+  `'error_if_incomplete'` answers 402 when the charge fails.
+- **FairCoin**: a `FAIR` price makes a `send_invoice` subscription; each
+  period's invoice is paid on its `hosted_invoice_url`.
+  `collection_method: 'charge_automatically'` is refused
+  (`faircoin_cannot_debit`) — the payer signs every payment.
+- `subscriptionItems` manages one item at a time; `subscriptions.resume`
+  resumes a paused subscription; `subscriptions.search` and `list` find them.
+
+## Sell a subscription with Checkout
+
+```ts
+const session = await peable.checkout.sessions.create({
+  mode: 'subscription',
+  customer: 'cus_…',
+  line_items: [{ price: 'price_…' }],
+  success_url: 'https://app.example/welcome',
+});
+```
+
+The lines must be stored, licensed recurring prices of one currency and one
+interval, with a non-zero first invoice. When the payer confirms, the
+subscription and its first (taxed) invoice are created and the session
+collects that invoice's payment; a card is saved for the renewals. The
+subscription is `active` once that payment succeeds
+(`checkout.session.completed`, `invoice.paid`).
+
+## Invoices
+
+```ts
+const invoice = await peable.invoices.create({ customer: 'cus_…', collection_method: 'send_invoice', days_until_due: 30 });
+await peable.invoiceItems.create({ customer: 'cus_…', invoice: invoice.id, amount: '5000', currency: 'EUR', description: 'Setup' });
+await peable.invoices.finalizeInvoice(invoice.id);
+
+await peable.invoices.pay(invoice.id);          // card, off-session; 402 on a decline
+await peable.invoices.sendInvoice(invoice.id);  // email it; the payer pays on the hosted page
+await peable.invoices.voidInvoice(invoice.id);
+await peable.invoices.markUncollectible(invoice.id);
+await peable.invoices.retrieveUpcoming({ customer: 'cus_…', subscription: 'sub_…' }); // a preview
+```
+
+**Credit notes** — `peable.creditNotes.create({ invoice, amount | lines })`:
+on an open invoice it reduces what is due; on a paid one it refunds (card),
+credits the customer balance or is recorded as settled out of band. Tax is
+reversed, never deleted.
+
+**Tax** (`automatic_tax.enabled`) is calculated before finalization from the
+customer's billing address and card country. An invoice that cannot be taxed
+stays a draft (`automatic_tax.status: 'requires_location_inputs' | 'failed'`):
+it is never finalized untaxed. A customer where you are not registered is
+`not_registered` and pays no tax. See [Tax](/tax).
+
+**Dunning** — `peable.billingSettings.update({ dunning: {
+retry_schedule_days: [1, 3, 5, 7], final_action: 'cancel' } })` (the defaults,
+shown) decides how a failed renewal is retried and what happens after the
+last retry.
+
+## Usage-based billing
+
+```ts
+const meter = await peable.billing.meters.create({
+  display_name: 'API requests',
+  event_name: 'api_requests',
+  default_aggregation: { formula: 'sum' }, // or 'count', 'last'
+});
+await peable.prices.create({
+  product: 'prod_…',
+  currency: 'EUR',
+  unit_amount: '2',
+  recurring: { interval: 'month', usage_type: 'metered', meter: meter.id },
+});
+await peable.billing.meterEvents.create({
+  event_name: 'api_requests',
+  payload: { peable_customer_id: 'cus_…', value: '42' },
+  identifier: 'req-2026-11-03-0001', // makes a retry the same event
+});
+```
+
+## Entitlements
+
+Access is the set of **active entitlements** — whichever product grants the
+feature, so a plan change or a bundle needs no change in your app:
+
+```ts
+const { data } = await peable.entitlements.activeEntitlements.list({ customer: 'cus_…' });
+const hasPlus = data.some((entitlement) => entitlement.lookup_key === 'plus');
+```
+
+Listen for `entitlements.active_entitlement_summary.updated` and re-read.
+
+## The customer portal
+
+```ts
+const portal = await peable.billingPortal.sessions.create({
+  customer: 'cus_…',
+  return_url: 'https://app.example/account',
+});
+redirect(portal.url);
+```
+
+A one-hour URL for that customer: cancel, change plan, billing details,
+invoices and card update, as `billingPortal.configurations` allows. Create it
+when the customer asks and send them at once.
+
+## Events
+
+`customer.subscription.created`, `.updated`, `.deleted`, `.trial_will_end`,
+`.paused`, `.resumed`; `invoice.created`, `.finalized`, `.paid`,
+`.payment_failed`, `.payment_action_required`, `.upcoming`, `.voided`,
+`.marked_uncollectible`, `.sent`; `invoiceitem.*`; `credit_note.*`;
+`billing.meter.*`; `entitlements.active_entitlement_summary.updated`. Re-read
+the object when one arrives rather than trusting the order of delivery.
+
+## Test clocks
+
+In test mode a test clock moves time for the customers on it, so trials,
+renewals and dunning run in seconds — see
+[Testing](/testing#test-clocks).
+
+## The Stripe Billing rail
+
+`peable.billing.*` (checkout sessions, embedded checkout, portal sessions on
+the provider's own billing) keeps serving the subscribers it already has until
+they move onto the objects above; new integrations use the native engine.
+Its Peable Tax quotes are in [Tax](/tax#the-stripe-billing-rail).

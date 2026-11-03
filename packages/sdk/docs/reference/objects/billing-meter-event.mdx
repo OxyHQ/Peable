@@ -1,0 +1,43 @@
+---
+title: "BillingMeterEvent"
+description: "The billing.meter_event object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingMeterEvent
+
+Object type: `billing.meter_event`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"billing.meter_event"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `identifier` | string |  |
+| `event_name` | string |  |
+| `payload` | map of string | The payload as received: the customer key and the value, as strings. |
+| `timestamp` | integer | Unix seconds. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "billing.meter_event",
+  "livemode": false,
+  "identifier": "req_8f3a2c",
+  "event_name": "api_call",
+  "payload": {
+    "peable_customer_id": "cus_0193b8f2c1a87d3e9f4a",
+    "value": "25"
+  },
+  "timestamp": 1793750400,
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/billing/meter_events`](/reference/meters#record-a-meter-event) — Record a meter event

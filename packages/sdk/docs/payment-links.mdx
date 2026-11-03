@@ -1,0 +1,47 @@
+---
+title: "Payment Links"
+description: "Shareable URLs over your prices; every visit opens a Checkout Session."
+order: 5
+---
+
+# Payment Links
+
+A **Payment Link** (`link_…`) is a shareable URL over your prices: send it,
+print it as a QR code, and every visit opens a fresh checkout. No code runs
+on your side per payment.
+
+```ts
+const link = await peable.paymentLinks.create({
+  line_items: [
+    { price: 'price_…', quantity: 1, adjustable_quantity: { enabled: true, maximum: 5 } },
+  ],
+  allow_promotion_codes: true,
+  after_completion: {
+    type: 'redirect',
+    redirect: { url: 'https://shop.example/thanks?cs={CHECKOUT_SESSION_ID}' },
+  },
+  // or { type: 'hosted_confirmation', hosted_confirmation: { custom_message: 'Thanks!' } }
+  restrictions: { completed_sessions: { limit: 100 } }, // deactivates itself at 100
+});
+
+link.url; // https://checkout.peable.to/l/<id>
+```
+
+- **One-time prices of one currency**, up to twenty lines. The lines are fixed
+  once the link is shared; `active`, `metadata` and every option change with
+  `peable.paymentLinks.update(id, …)`, and `payment_link.updated` names the
+  fields that moved.
+- **A visit creates a Checkout Session** with the link's lines and options —
+  never a payment. The payment exists only once the payer confirms that
+  session, and the session names the link (`payment_link`), so everything in
+  [Checkout](/checkout) — events, fulfilment, branding — applies unchanged.
+- `peable.paymentLinks.listLineItems(id)` lists the lines;
+  `peable.paymentLinks.list({ active: true })` your links.
+- Orbit → Payment Links builds links from your products and copies the URL or
+  the QR code.
+
+Deactivate a link with `update(id, { active: false })`: new visits are
+refused (`payment_link_inactive`).
+
+A FairCoin [contribution link](/contributions) is a Payment Link whose one
+line is the contribution.

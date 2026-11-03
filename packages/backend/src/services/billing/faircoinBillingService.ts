@@ -1,3 +1,8 @@
+import {
+  billingIdempotencyKey,
+  createBillingCheckoutParams,
+  ensureBillingCustomerParams,
+} from '@peable.to/contracts';
 import { createHash, createPrivateKey, createPublicKey, sign, type KeyObject } from 'node:crypto';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -28,13 +33,7 @@ import {
 } from '../../db/payments/checkoutSessionRepository';
 import { createIntent } from '../createIntent';
 import { config } from '../../config';
-import {
-  BillingError,
-  billingIdempotencyKey,
-  checkoutSchema,
-  ensureCustomerSchema,
-  type BillingOwner,
-} from './contracts';
+import { BillingError, type BillingOwner } from './contracts';
 import { createVerifiedBillingTaxQuote, type BillingTaxQuoteCalculator } from './tax-quote';
 import { prepareBillingTaxCheckout, type BillingTaxCheckoutAdapter } from './tax-checkout';
 import { verifyFinalInvoiceAuthority } from './invoice-authority';
@@ -358,7 +357,7 @@ export function createFaircoinBillingService(options: {
     renewal?: string,
   ) {
     const key = billingIdempotencyKey.parse(rawKey);
-    const input = checkoutSchema.parse(raw);
+    const input = createBillingCheckoutParams.parse(raw);
     const cohort = authorize(owner);
     const m = await merchant(owner);
     const offers = cohort.offers.filter(
@@ -555,7 +554,7 @@ export function createFaircoinBillingService(options: {
   } = {
     async ensureCustomer(owner, input, _key) {
       authorize(owner);
-      const parsed = ensureCustomerSchema.parse(input);
+      const parsed = ensureBillingCustomerParams.parse(input);
       await merchant(owner);
       return { provider_customer_id: customerRef(owner, parsed.store_id) };
     },

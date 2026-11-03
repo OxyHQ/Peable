@@ -1,0 +1,34 @@
+---
+title: "SubscriptionItem"
+description: "The subscription_item object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SubscriptionItem
+
+Object type: `subscription_item`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"subscription_item"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `subscription` | string | The subscription (`sub_…`) it belongs to. |
+| `price` | [Price](/reference/objects/price) | The Price, always embedded (Stripe’s shape). |
+| `quantity` | integer |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Returned by
+
+- [`POST /v1/subscription_items`](/reference/subscription-items#add-an-item-to-a-subscription) — Add an item to a subscription
+- [`GET /v1/subscription_items`](/reference/subscription-items#list-a-subscriptions-items) — List a subscription's items
+- [`GET /v1/subscription_items/{id}`](/reference/subscription-items#retrieve-a-subscription-item) — Retrieve a subscription item
+- [`POST /v1/subscription_items/{id}`](/reference/subscription-items#update-a-subscription-item) — Update a subscription item
+
+## Used in
+
+[Subscription](/reference/objects/subscription)

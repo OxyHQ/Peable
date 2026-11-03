@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 import { createServiceTokenProvider } from '../../src/core/serviceToken';
-import { PeableApiError, PeableAuthenticationError } from '../../src/core/errors';
+import {
+  PeableAPIError,
+  PeableConnectionError,
+  PeableAuthenticationError,
+} from '../../src/core/errors';
 import { createMockFetch } from '../support/mockFetch';
 import {
   SERVICE_TOKEN_MINT_URL,
@@ -125,7 +129,7 @@ describe('createServiceTokenProvider', () => {
     await expect(provider.getToken()).rejects.toBeInstanceOf(PeableAuthenticationError);
   });
 
-  test('throws PeableApiError when the mint response data envelope is missing token/expiresIn', async () => {
+  test('throws PeableAPIError when the mint response data envelope is missing token/expiresIn', async () => {
     const { fetch: fetchImpl } = createMockFetch(() => ({
       status: 200,
       json: { data: { appName: 'x' } },
@@ -135,10 +139,10 @@ describe('createServiceTokenProvider', () => {
       { fetch: fetchImpl },
     );
 
-    await expect(provider.getToken()).rejects.toBeInstanceOf(PeableApiError);
+    await expect(provider.getToken()).rejects.toBeInstanceOf(PeableAPIError);
   });
 
-  test('throws PeableApiError when the mint response has no `data` envelope at all', async () => {
+  test('throws PeableAPIError when the mint response has no `data` envelope at all', async () => {
     const { fetch: fetchImpl } = createMockFetch(() => ({
       status: 200,
       json: { token: 'svc_abc', expiresIn: 3600 },
@@ -148,10 +152,10 @@ describe('createServiceTokenProvider', () => {
       { fetch: fetchImpl },
     );
 
-    await expect(provider.getToken()).rejects.toBeInstanceOf(PeableApiError);
+    await expect(provider.getToken()).rejects.toBeInstanceOf(PeableAPIError);
   });
 
-  test('wraps a network-level fetch failure as PeableApiError', async () => {
+  test('wraps a network-level fetch failure as PeableConnectionError', async () => {
     const failingFetch = (() =>
       Promise.reject(new Error('ECONNREFUSED'))) as unknown as typeof fetch;
     const provider = createServiceTokenProvider(
@@ -159,6 +163,6 @@ describe('createServiceTokenProvider', () => {
       { fetch: failingFetch },
     );
 
-    await expect(provider.getToken()).rejects.toBeInstanceOf(PeableApiError);
+    await expect(provider.getToken()).rejects.toBeInstanceOf(PeableConnectionError);
   });
 });

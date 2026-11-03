@@ -1,10 +1,96 @@
+# @peable.to/sdk
+
+The Peable server SDK. Its resource methods are **generated from the API
+contracts** (`@peable.to/contracts`, ADR 0014 D5): every parameter and return
+type is the route's own `BodyOf` / `QueryOf` / `ResponseOf`, so a field the
+gateway renames is a compile error in your code, not a runtime 400.
+
+```ts
+import { Peable } from '@peable.to/sdk';
+
+const peable = new Peable({ publicKey: process.env.OXY_PUBLIC_KEY!, secret: process.env.OXY_SECRET! });
+
+const customer = await peable.customers.create({ email: 'jenny@example.com', name: 'Jenny Rosen' });
+await peable.customers.update(customer.id, { metadata: { order_id: '6735' } });
+for await (const method of peable.paymentMethods.list({ customer: customer.id })) {
+  console.log(method.card.last4);
+}
+```
+
+### Every method has one shape
+
+`resource.method(...pathParams, params?, options?)`: the path parameters as
+leading strings in path order, then `params` — the body of a write, the query
+of a read; optional exactly when nothing in it is required — then the request
+options. What comes back depends on the route:
+
+| Route answers | The method returns |
+|---|---|
+| an object | `Promise<Object>` |
+| a list (`{ object: 'list' }`) | a page promise that is also an async iterable over every item, with `autoPagingEach` and `autoPagingToArray({ limit })` |
+| a search (`{ object: 'search_result' }`) | the same, paging forward over `next_page` |
+| bytes | `Promise<{ bytes, contentType, filename }>` |
+| a live tail (Server-Sent Events) | an async iterable that reconnects and resumes on its own |
+
+A route that uploads (`multipart/form-data`) takes the bytes as a `Blob`,
+`Uint8Array` or `ArrayBuffer` in `params` and sends them as a form.
+
+### Retries, timeouts, idempotency, version, account
+
+| Option | Client default | Per request |
+|---|---|---|
+| `maxNetworkRetries` | `2` | yes |
+| `timeout` (ms, each attempt, headers and body) | `80_000` | yes |
+| `apiVersion` (`Peable-Version`) | `PEABLE_API_VERSION` | yes |
+| `peableAccount` (`Peable-Account: ca_…`) | none | on routes that accept it |
+| `idempotencyKey` | a fresh uuid per call | on every `POST` |
+| `signal` | — | yes |
+
+A request that fails on the network, times out, or is answered 5xx, 429 or
+409 `idempotency_error` (its first attempt still running) is retried with
+exponential backoff (0.5 s doubling to 8 s, jittered) and never sooner than
+`Retry-After` (honoured up to 60 s). Every attempt of a `POST` carries the
+SAME `Idempotency-Key`, so the gateway runs it once and answers later attempts
+with the stored response. Any other 4xx is never retried. A 401 is re-attempted
+once with a freshly minted token, outside the retry count.
+
+The client's `peableAccount` is sent only on the routes that accept the header
+(the gateway refuses it elsewhere), which the generated method types say: a
+method whose route does not accept it has no `peableAccount` option.
+
+### Errors: one class per `error.type`
+
+| Class | `type` | Typically |
+|---|---|---|
+| `PeableInvalidRequestError` | `invalid_request_error` | 400, 404, 409 |
+| `PeableAuthenticationError` | `authentication_error` | 401 |
+| `PeableCardError` | `card_error` | 402 — `declineCode`, `paymentIntent` |
+| `PeablePermissionError` | `permission_error` | 403 |
+| `PeableIdempotencyError` | `idempotency_error` | 400 (key reused), 409 (in flight) |
+| `PeableRateLimitError` | `rate_limit_error` | 429 |
+| `PeableAPIError` | `api_error` | 5xx, or `code: 'invalid_response'` |
+| `PeableConnectionError` | `api_connection_error` | no answer: network, `code: 'timeout'`, `code: 'response_interrupted'` |
+| `PeableSignatureVerificationError` | `signature_verification_error` | `webhooks.constructEvent` |
+
+Each carries `statusCode`, `type`, `code`, `declineCode`, `param`, `message`,
+`docUrl`, `requestId` (the body's `request_id`, else the `Request-Id` header)
+and `raw` (the parsed body, or the underlying failure).
+
+### Entries
+
+- `@peable.to/sdk` — this server client (Node built-ins; never bundle it in a browser).
+- `@peable.to/sdk/checkout` — the anonymous payer-side browser client and Elements.
+- `@peable.to/sdk/checkout/ui` — the optional Bloom checkout sheet (React,
+  React Native and `@oxy.so/bloom` are optional peers; never reachable from the
+  other entries).
+- `@peable.to/sdk/display` — read-only display rates; imports nothing else.
+
 ### The wire: snake_case, Unix seconds, one error envelope
 
 Request parameters and returned objects are exactly the gateway's wire
 (ADR 0014): `snake_case` field names, every instant an integer of **Unix
 seconds**, amounts as base-unit strings. Only SDK options stay camelCase
-JavaScript — constructor config, `{ idempotencyKey }` request options and
-`toleranceSec`:
+JavaScript — constructor config and request options (`{ idempotencyKey }`):
 
 ```ts
 const intent = await peable.paymentIntents.create(
@@ -14,7 +100,7 @@ const intent = await peable.paymentIntents.create(
 new Date(intent.created * 1000); // Unix seconds, not an ISO string
 ```
 
-Every failure is a typed `PeableError` built from
+Every failure is a typed `PeableError` (above) built from
 `{ error: { type, code?, param?, message, request_id } }`: `err.code` is the
 specific reason (`account_not_ready`, `parameter_invalid`, …), `err.param` the
 offending field in bracket notation (`metadata[order_id]`), and `err.requestId`
@@ -36,7 +122,8 @@ const endpoint = await peable.webhookEndpoints.create({
 });
 endpoint.secret; // whsec_… — returned only here and by rollSecret; store it
 
-// In the handler, with the RAW body:
+// In the handler, with the RAW body (a Buffer, Uint8Array or string), and an
+// optional replay tolerance in seconds (default 300):
 const event = peable.webhooks.constructEvent(rawBody, req.header(WEBHOOK_SIGNATURE_HEADER), secret);
 event.request; // { id, idempotency_key } of the API call that caused it, or nulls
 
@@ -55,8 +142,8 @@ events are sent.
 ### Idempotency: every POST, automatically
 
 Every `POST` the client sends carries an `Idempotency-Key` (ADR 0014 D3). When
-you pass none, the client mints a uuid for that call and reuses it for the
-call's own re-attempt, so a retried call never runs twice. Pass your own — one
+you pass none, the client mints a uuid for that call and reuses it for every
+retry of it, so a retried call never runs twice. Pass your own — one
 stable key per order — to make a retry from ANOTHER call (after a crash, from a
 job queue) converge too:
 
@@ -67,8 +154,9 @@ await peable.checkout.sessions.create(params, { idempotencyKey: `checkout:${orde
 Within 24 hours, per merchant (application + environment), the gateway answers:
 
 - same key, same request → the stored response, with `Idempotent-Replayed: true`;
-- same key, different request → `PeableInvalidRequestError`, `code: 'idempotency_error'` (400);
-- same key while the first is still running → `code: 'idempotency_error'` (409) — retry later.
+- same key, different request → `PeableIdempotencyError` (400), never retried;
+- same key while the first is still running → 409 `idempotency_error`, retried
+  automatically until the first answers (then `PeableIdempotencyError`).
 
 A 5xx is never stored, so retrying it with the same key runs it again. The
 key is a request-retry layer, not a business identity: refunds, transfers and
@@ -97,7 +185,7 @@ const sellers = await peable.connectedAccounts.list().autoPagingToArray({ limit:
 
 Listable (and, for six of them, searchable — see Search below): `paymentIntents`, `charges`, `paymentLinks`, `checkout.sessions`, `refunds`,
 `transfers`, `disputes`, `connectedAccounts`, `tax.transactions`, the
-per-payment `listForPaymentIntent` sub-lists and contributions. Iterating from
+per-payment `listForPaymentIntent` sub-lists. Iterating from
 `ending_before` walks backwards, away from the cursor.
 
 A reference to another object (`payment_intent`, `connected_account`) is its id
@@ -146,7 +234,7 @@ amounts (base units) and `created` (Unix seconds), `-field:value` to negate,
 clauses join with spaces / `AND` or with `OR`, never both; at most 10 clauses
 and 1000 characters. A malformed query is a `PeableInvalidRequestError` with
 `param: 'query'` and the position in its message. Searchable fields per
-resource are in `docs/integrating-peable.md` › Search.
+resource are at <https://oxy.so/developers/docs/peable/lists/#searchable-fields>.
 
 ### Reporting: report runs (0.19.0)
 
@@ -221,8 +309,7 @@ The purpose sets the policy, and the format is recognised from the bytes:
 ```ts
 const receipt = await peable.files.create({
   purpose: 'dispute_evidence',
-  file: await readFile('receipt.pdf'), // Blob, Uint8Array or ArrayBuffer
-  filename: 'receipt.pdf',
+  file: new File([await readFile('receipt.pdf')], 'receipt.pdf'),
 });
 // An Oxy file you already own, without uploading it again:
 const logo = await peable.files.create({ purpose: 'business_logo', oxy_file: 'oxy_file_id' });
@@ -588,12 +675,11 @@ factory bypasses app permission configuration, never merchant/resource rules.
 
 ### HTTP deadlines and existing operation keys
 
-SDK0.2.1 accepts `requestTimeoutMs` on `new Peable(...)`. It bounds each token
-mint and gateway HTTP attempt, including reading its body. Omitting it preserves
-the previous timeout behavior. A consumer replacing a20s HTTP client should
-pass `requestTimeoutMs: 20_000`. A401 may still trigger the existing single token
-refresh/retry; timeouts and interrupted responses never retry a payment POST.
-The remote outcome may be unknown: recover explicitly with the same durable key.
+`timeout` (default 80 000 ms, on the client or per request) bounds each token
+mint and each gateway attempt, including reading its body. A timed-out or
+interrupted attempt is a `PeableConnectionError` and is retried under the same
+`Idempotency-Key` (above); set `maxNetworkRetries: 0` to recover yourself, with
+the same durable key.
 
 `paymentIntents.cancel` / `confirm` / `capture`, `refunds.create`, and `transfers.create` accept an
 optional second `{ idempotencyKey }` argument; without it the client mints one
@@ -603,15 +689,15 @@ identity; the key neither replaces it nor changes gateway financial semantics.
 ### Connect for FairCoin (0.4.0)
 
 Pay a marketplace's sellers in FairCoin straight to their own wallets
-(ADR 0012, guide in `docs/connect-faircoin.md`):
+(ADR 0012, guide at <https://oxy.so/developers/docs/peable/connect-faircoin/>):
 
 ```ts
-const seller = await peable.accounts.create({
+const seller = await peable.connectedAccounts.create({
   external_ref: store.id,
   faircoin: { network: 'testnet', oxy_user_id: store.ownerOxyUserId },
 });
-const link = await peable.accountLinks.create({
-  account: seller.id, rail: 'faircoin', return_url: returnUrl, refresh_url: refreshUrl,
+const link = await peable.connectedAccounts.createAccountLink(seller.id, {
+  rail: 'faircoin', return_url: returnUrl, refresh_url: refreshUrl,
 });
 // the seller registers their key at link.url, signed in with Oxy;
 // you receive connected_account.updated with faircoin.status === 'active'
@@ -621,8 +707,7 @@ const intent = await peable.paymentIntents.create(
 );
 ```
 
-`peable.accounts` is `peable.connectedAccounts` under its Stripe name. Events for
-an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once a
+Events for an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once a
 payer has broadcast, so never cancel an order on `expires_at` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
 
@@ -670,15 +755,16 @@ const fees = await peable.applicationFees.list({ payment_intent: 'pi_…' });
 await peable.applicationFees.listRefunds(fees.data[0].id);
 ```
 
-**`peableAccount` — a platform acting for a seller.** `account`, `accountLinks`
-(without `account`), `balance`, `balanceTransactions`, `payouts` and
-`reports.payoutReconciliation` take a last `{ peableAccount: 'ca_…' }` option,
-sent as the `Peable-Account` header, to read or act on one of the platform's
-connected accounts with the platform's own credential. Every other route refuses
-the header with a 400.
+**`peableAccount` — a platform acting for a seller.** `account`, `accountLinks`,
+`balance`, `balanceTransactions`, `payouts` and `reports.payoutReconciliation`
+take `{ peableAccount: 'ca_…' }` in their last (options) argument — or the
+client's `peableAccount` default — sent as the `Peable-Account` header, to read
+or act on one of the platform's connected accounts with the platform's own
+credential. No other method has the option: the gateway refuses the header
+elsewhere.
 
 ```ts
-await peable.balance.retrieve({ peableAccount: seller.id });
+await peable.balance.retrieve({}, { peableAccount: seller.id });
 await peable.payouts.create(
   { amount: '5000', currency: 'EUR' },
   { peableAccount: seller.id, idempotencyKey: `payout:${seller.id}:${day}` },

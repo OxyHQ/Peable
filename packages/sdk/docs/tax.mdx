@@ -1,0 +1,140 @@
+---
+title: "Tax"
+description: "Peable Tax on every rail: evidence, calculations, reversals, reports and business compliance."
+order: 10
+---
+
+# Tax
+
+**Peable Tax** decides whether a sale is taxed, on every rail — card and
+FairCoin — the way Stripe Tax does: your account owner records where the
+business is registered, and Peable collects only there. The provider only
+says how much.
+
+- Registrations and the approval that activates them live in Orbit
+  (Settings → Business tax), under the owner's own session with
+  `billing:manage`. Your server never approves or registers anything.
+- **A covered sale Peable cannot price fails closed** — the request fails
+  (`tax_calculation_unavailable`), it is never taxed at zero.
+- **An uncovered sale is zero and recorded**: `collection: 'not_registered'`.
+
+## Tax on Checkout, invoices and subscriptions
+
+Turn it on where you sell; Peable does the rest:
+
+```ts
+await peable.checkout.sessions.create({ /* … */ automatic_tax: { enabled: true } });
+await peable.subscriptions.create({ /* … */ automatic_tax: { enabled: true } });
+```
+
+A Checkout Session taxes the discounted lines from the address the payer
+gives. An invoice is taxed before it finalizes, from the customer's billing
+address and card country; one that cannot be taxed stays a draft
+(`automatic_tax.status: 'requires_location_inputs' | 'failed'`) and is never
+finalized untaxed. Set each product's tax code with `tax_code` on the product
+(the codes: `peable.tax.listCodes()`, `GET /v1/tax/codes`).
+
+## Calculate tax yourself
+
+Record where the customer is, then calculate:
+
+```ts
+const evidence = await peable.tax.locationEvidence.create({
+  customer_ref: 'store_42',
+  evidence: [
+    { type: 'billing_address', address: { country: 'DE', postal_code: '10115' } },
+    { type: 'ip_address', ip_address: clientIp, country: geoCountry },
+  ],
+});
+// evidence.status: 'sufficient' | 'insufficient' | 'conflicting'
+
+const calculation = await peable.tax.calculations.create({
+  currency: 'EUR',
+  customer_location_evidence_id: evidence.id,
+  line_items: [/* … inclusive or exclusive amounts … */],
+});
+// Frozen once made: peable.tax.calculations.retrieve(calculation.id)
+```
+
+- **EU and UK** customers need two agreeing kinds of evidence; **US and
+  Canadian** customers need a billing address with state or province and a
+  postal code; elsewhere one item is enough.
+- **Language, currency and timezone are never evidence**, and are refused.
+- Insufficient or conflicting evidence answers
+  `customer_location_insufficient` / `customer_location_conflicting`; stale
+  evidence `customer_location_expired`.
+
+## Refunds
+
+Refunds are reversals netted into the same report rows, never deletions of
+the sale. A card refund or credit note is observed and reversed
+automatically. A FairCoin sale you refund from your own wallet is recorded
+with a reversal:
+
+```ts
+await peable.tax.transactions.createReversal(saleTransaction.id, {
+  reference: 'refund-123',
+  amount: '5000', // gross refunded; omit for the rest
+});
+```
+
+Reversals list as `type: 'reversal'` transactions naming the sale they
+reverse.
+
+## Transactions and reports
+
+```ts
+await peable.tax.transactions.list({ created: { gte, lt } }); // newest first; `created` is the tax date
+await peable.tax.reports.summary({ from, to }); // Unix seconds; from inclusive, to exclusive
+```
+
+`GET /v1/tax/reports/summary?format=csv` is the same summary as a CSV — the
+filing export, per jurisdiction and rate. Rows are net of reversals and count
+them in `reversals`. It is a summary, not a return.
+
+## Business compliance
+
+`peable.tax.compliance` reads what the owner recorded in Orbit's tax
+onboarding — the business profile, operating locations, sales destinations,
+registration declarations, documents and their checklist, the versioned rule
+set, deadlines — and runs an **assessment** that compares those facts with the
+rule set:
+
+```ts
+const assessment = await peable.tax.compliance.createAssessment();
+const queue = await peable.tax.compliance.listReviewItems();
+```
+
+An assessment says what the rule indicates and sends each finding to a person
+as a review item (`tax.assessment.created`, `tax.review_item.created`,
+`tax.review_item.updated`). It never concludes and never acts: nothing in
+the API records onboarding facts or review decisions, turns collection on, or
+registers, files or pays anything with an authority. Those are the owner's,
+in Orbit.
+
+## The Stripe Billing rail
+
+Subscriptions sold through the provider's own billing (`peable.billing.*`,
+[Subscriptions](/billing#the-stripe-billing-rail)) are taxed with a signed
+Peable Tax **quote**:
+
+```ts
+const quote = await peable.billing.createTaxQuote({
+  store_id: storeId,
+  plan_id: planId,
+  customer_location_evidence_id: evidence.id,
+});
+await peable.billing.createCheckoutSession({ /* … */ tax_quote: quote });
+```
+
+- The provider's checkout charges exactly the quoted total, its own tax stays
+  off, and the paid invoice is recorded as a tax transaction. A card quote
+  stands two hours, and the checkout needs at least 31 minutes of it left.
+- Each renewal is repriced by Peable before the provider finalizes it, from
+  the billing address and card country the provider holds, and gets its own
+  signed quote and tax transaction. A renewal Peable cannot price stays an
+  unfinalized draft and is retried — it is never released at a stale total.
+- `peable.tax.products.setTaxCode(planId, { tax_code: 'txcd_10103000' })` sets
+  a plan's tax code; `billing.retrieveFinalInvoiceAuthority(sub, inv, {
+  include: 'tax_lines' })` returns the signed invoice with its tax lines inside the
+  signature.

@@ -1,0 +1,19 @@
+---
+title: "SocialReceiveCursor"
+description: "The SocialReceiveCursor shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SocialReceiveCursor
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `reserved_through` | integer | The highest social-receive index ever reserved for the caller on this network; `0` when none was. |
+| `identity_public_key` | string \| null | The identity public key (hex) those addresses derive from; `null` exactly when no address was ever reserved. |
+
+## Returned by
+
+- [`GET /v1/social/me/cursor`](/reference/social-payments#retrieve-the-callers-receive-cursor) — Retrieve the caller's receive cursor

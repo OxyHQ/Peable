@@ -1,0 +1,23 @@
+---
+title: "ConnectOnboardingComplete"
+description: "The connect_onboarding object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ConnectOnboardingComplete
+
+Object type: `connect_onboarding`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"connect_onboarding"` |  |
+| `account_id` | string |  |
+| `status` | `"active"` |  |
+| `return_url` | string |  |
+
+## Returned by
+
+- [`POST /v1/connect/onboarding/{token}/faircoin`](/reference/connect-onboarding#register-the-sellers-faircoin-key) — Register the seller's FairCoin key

@@ -1,12 +1,15 @@
 import type {
   CheckoutLineItem,
   CheckoutSessionPublic,
+  PaymentIntent,
   PublicPaymentLink,
 } from '@peable.to/shared-types';
 
 /** One complete `CheckoutSessionPublic` for every suite, a card order by default. */
 export function sessionFixture(
-  overrides: Partial<CheckoutSessionPublic> = {},
+  overrides: Partial<Omit<CheckoutSessionPublic, 'payment_intent'>> & {
+    payment_intent?: PaymentIntent | null;
+  } = {},
 ): CheckoutSessionPublic {
   const now = Math.floor(Date.now() / 1000);
   return {
@@ -40,7 +43,6 @@ export function sessionFixture(
     consent_collection: null,
     consent: null,
     terms_of_service_url: null,
-    payment_intent: null,
     setup_intent: null,
     success_url: null,
     cancel_url: null,
@@ -57,6 +59,7 @@ export function sessionFixture(
     publishable_key: 'pk_test_abc',
     expires_at: now + 3600,
     ...overrides,
+    payment_intent: overrides.payment_intent ?? null,
   };
 }
 

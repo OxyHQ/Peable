@@ -1,0 +1,24 @@
+---
+title: "TaxComplianceCapabilities"
+description: "The tax.compliance_capabilities object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxComplianceCapabilities
+
+Object type: `tax.compliance_capabilities`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.compliance_capabilities"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `rule_set_version` | string |  |
+| `supported_rules` | array of string | The ids of the rules assessed. |
+| `capabilities` | array of [TaxComplianceCapability](/reference/objects/tax-compliance-capability) |  |
+
+## Returned by
+
+- [`GET /v1/tax/capabilities`](/reference/tax-compliance#retrieve-compliance-capabilities) — Retrieve compliance capabilities

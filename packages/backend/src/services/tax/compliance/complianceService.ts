@@ -13,18 +13,14 @@
  * items, its event) in the change's own transaction.
  */
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
-  TAX_CUSTOMER_TYPES,
-  TAX_DOCUMENT_KINDS,
-  TAX_FILING_FREQUENCIES,
-  TAX_LEGAL_ENTITY_TYPES,
-  TAX_OPERATING_LOCATION_KINDS,
-  TAX_REGISTRATION_DECLARATION_STATUSES,
-  TAX_REGISTRATION_SCHEMES,
-  TAX_REVIEW_DECISIONS,
-  TAX_REVIEW_ITEM_STATUSES,
-  TAX_SUPPLY_TYPES,
+  createTaxAssessmentParams,
+  createTaxDocumentParams,
+  createTaxOperatingLocationParams,
+  createTaxRegistrationDeclarationParams,
+  createTaxSalesDestinationParams,
+  resolveTaxReviewItemParams,
   type TaxAssessment,
   type TaxAssessmentReplay,
   type TaxAssessmentResult,
@@ -41,7 +37,11 @@ import {
   type TaxReviewItem,
   type TaxRuleSet,
   type TaxSalesDestination,
-} from '@peable.to/shared-types';
+  updateTaxBusinessProfileParams,
+  updateTaxOperatingLocationParams,
+  updateTaxRegistrationDeclarationParams,
+  updateTaxSalesDestinationParams,
+} from '@peable.to/contracts';
 import type { Database, DatabaseOrTransaction } from '../../../db/postgres';
 import type { KeysetPage } from '../../../db/keyset';
 import type { MerchantRow } from '../../../db/merchants/merchantRepository';
@@ -95,7 +95,6 @@ import {
 } from '../../../db/taxCompliance/taxComplianceRepository';
 import { newId } from '../../../lib/ids';
 import { paramFromPath } from '../../../lib/http';
-import { metadataCreateSchema, metadataUpdateSchema } from '../../../lib/metadata';
 import { fromUnix, toUnix, toUnixOrNull } from '../../../lib/time';
 import {
   taxComplianceActions,
@@ -161,7 +160,7 @@ export class TaxComplianceError extends Error {
 
 const notFound = (what: string) => new TaxComplianceError('not_found', `No such ${what}`);
 
-function parse<T extends z.ZodTypeAny>(schema: T, raw: unknown): z.infer<T> {
+function parse<T extends z.ZodType>(schema: T, raw: unknown): z.output<T> {
   const result = schema.safeParse(raw ?? {});
   if (!result.success) {
     const issue = result.error.issues[0];
@@ -174,127 +173,6 @@ function parse<T extends z.ZodTypeAny>(schema: T, raw: unknown): z.infer<T> {
   }
   return result.data;
 }
-
-// ── Inputs ───────────────────────────────────────────────────────────────────
-
-const unix = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const country = z.string().regex(/^[A-Z]{2}$/, 'a country is an ISO 3166-1 alpha-2 code');
-const state = z
-  .string()
-  .regex(/^[A-Z0-9]{1,3}$/, 'a state is its ISO 3166-2 subdivision code')
-  .nullable();
-const text = (max: number) => z.string().trim().min(1).max(max).nullable();
-
-const profileSchema = z
-  .object({
-    entity_type: z.enum(TAX_LEGAL_ENTITY_TYPES).optional(),
-    incorporation_country: country.nullable().optional(),
-    incorporation_state: state.optional(),
-    fiscal_year_end_month: z.number().int().min(1).max(12).nullable().optional(),
-    customer_types: z.enum(TAX_CUSTOMER_TYPES).optional(),
-    supply_types: z
-      .array(z.enum(TAX_SUPPLY_TYPES))
-      .max(TAX_SUPPLY_TYPES.length)
-      .refine((list) => new Set(list).size === list.length, 'supply_types must be distinct')
-      .optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-
-const locationCreateSchema = z
-  .object({
-    kind: z.enum(TAX_OPERATING_LOCATION_KINDS),
-    country,
-    state: state.optional(),
-    description: text(500).optional(),
-    started: unix.nullable().optional(),
-    ended: unix.nullable().optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-const locationUpdateSchema = z
-  .object({
-    description: text(500).optional(),
-    started: unix.nullable().optional(),
-    ended: unix.nullable().optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-
-const destinationCreateSchema = z
-  .object({
-    country,
-    state: state.optional(),
-    customer_types: z.enum(TAX_CUSTOMER_TYPES).optional(),
-    started: unix.nullable().optional(),
-    ended: unix.nullable().optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-const destinationUpdateSchema = z
-  .object({
-    customer_types: z.enum(TAX_CUSTOMER_TYPES).optional(),
-    started: unix.nullable().optional(),
-    ended: unix.nullable().optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-
-const declarationFields = {
-  scheme: z.enum(TAX_REGISTRATION_SCHEMES).nullable().optional(),
-  status: z.enum(TAX_REGISTRATION_DECLARATION_STATUSES),
-  effective_from: unix.nullable().optional(),
-  effective_to: unix.nullable().optional(),
-  filing_frequency: z.enum(TAX_FILING_FREQUENCIES).optional(),
-  collection_registration: z.string().min(1).max(64).nullable().optional(),
-  note: text(1000).optional(),
-};
-const declarationCreateSchema = z
-  .object({
-    country,
-    state: state.optional(),
-    ...declarationFields,
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-const declarationUpdateSchema = z
-  .object({
-    ...declarationFields,
-    status: declarationFields.status.optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-
-const documentCreateSchema = z
-  .object({
-    file: z.string().min(1).max(64),
-    kind: z.enum(TAX_DOCUMENT_KINDS),
-    country: country.nullable().optional(),
-    state: state.optional(),
-    registration_declaration: z.string().min(1).max(64).nullable().optional(),
-    description: text(500).optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-
-const assessmentCreateSchema = z.object({ as_of: unix.optional() }).strict();
-
-const resolveSchema = z
-  .object({
-    decision: z.enum(TAX_REVIEW_DECISIONS),
-    note: text(1000).optional(),
-  })
-  .strict()
-  .superRefine((input, ctx) => {
-    if ((input.decision === 'not_required' || input.decision === 'accepted_risk') && !input.note)
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['note'],
-        message: `a ${input.decision} decision records the owner's reason in note`,
-      });
-  });
-
-export const reviewItemStatusFilter = z.enum(TAX_REVIEW_ITEM_STATUSES);
 
 // ── Actors and history ───────────────────────────────────────────────────────
 
@@ -658,7 +536,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor,
     ): Promise<TaxBusinessProfile> {
-      const input = parse(profileSchema, raw);
+      const input = parse(updateTaxBusinessProfileParams, raw);
       const row = await db.transaction(async (tx) => {
         const updated = await upsertBusinessProfile(
           tx,
@@ -704,7 +582,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
     },
 
     async createLocation(merchant: MerchantRow, raw: unknown, actor: TaxComplianceActor) {
-      const input = parse(locationCreateSchema, raw);
+      const input = parse(createTaxOperatingLocationParams, raw);
       const startedAt = date(input.started) ?? null;
       const endedAt = date(input.ended) ?? null;
       assertPeriod(startedAt, endedAt, 'ended');
@@ -748,7 +626,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor,
     ) {
-      const input = parse(locationUpdateSchema, raw);
+      const input = parse(updateTaxOperatingLocationParams, raw);
       const current = await findOperatingLocation(db, merchant.id, id);
       if (!current) throw notFound('operating location');
       const startedAt =
@@ -792,7 +670,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
     },
 
     async createDestination(merchant: MerchantRow, raw: unknown, actor: TaxComplianceActor) {
-      const input = parse(destinationCreateSchema, raw);
+      const input = parse(createTaxSalesDestinationParams, raw);
       const startedAt = date(input.started) ?? null;
       const endedAt = date(input.ended) ?? null;
       assertPeriod(startedAt, endedAt, 'ended');
@@ -834,7 +712,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor,
     ) {
-      const input = parse(destinationUpdateSchema, raw);
+      const input = parse(updateTaxSalesDestinationParams, raw);
       const current = await findSalesDestination(db, merchant.id, id);
       if (!current) throw notFound('sales destination');
       const startedAt =
@@ -879,7 +757,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
 
     // ── Registration declarations ─────────────────────────────────────────────
     async createDeclaration(merchant: MerchantRow, raw: unknown, actor: TaxComplianceActor) {
-      const input = parse(declarationCreateSchema, raw);
+      const input = parse(createTaxRegistrationDeclarationParams, raw);
       const merged = {
         country: input.country,
         state: input.state ?? null,
@@ -927,7 +805,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor,
     ) {
-      const input = parse(declarationUpdateSchema, raw);
+      const input = parse(updateTaxRegistrationDeclarationParams, raw);
       const registrationId = await collectionRegistrationId(
         merchant,
         input.collection_registration,
@@ -1005,7 +883,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor,
     ): Promise<{ document: TaxDocument; created: boolean }> {
-      const input = parse(documentCreateSchema, raw);
+      const input = parse(createTaxDocumentParams, raw);
       const file = await findFileByPublicId(db, merchant.id, input.file);
       if (file?.purpose !== 'tax_document')
         throw new TaxComplianceError(
@@ -1334,7 +1212,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor,
     ): Promise<TaxAssessment> {
-      const input = parse(assessmentCreateSchema, raw);
+      const input = parse(createTaxAssessmentParams, raw);
       const at = now();
       const asOf = input.as_of === undefined ? at : fromUnix(input.as_of);
       if (+asOf > +at + 60_000)
@@ -1475,7 +1353,7 @@ export function createTaxComplianceService(options: TaxComplianceServiceOptions)
       raw: unknown,
       actor: TaxComplianceActor & { type: 'user'; id: string },
     ): Promise<TaxReviewItem> {
-      const input = parse(resolveSchema, raw);
+      const input = parse(resolveTaxReviewItemParams, raw);
       const row = await db.transaction(async (tx) => {
         const decided = await decideReviewItem(tx, merchant.id, id, {
           status: input.decision === 'dismissed' ? 'dismissed' : 'resolved',

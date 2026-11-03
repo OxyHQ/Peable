@@ -1,0 +1,4 @@
+# `bun test` in this package: every route test answer is checked against its
+# contract (ADR 0014 D5, `src/__tests__/setup/contractCheck.ts`).
+[test]
+preload = ["./src/__tests__/setup/contractCheck.ts"]
