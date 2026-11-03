@@ -131,3 +131,13 @@ provider's object graph through the production Billing readback. Output is the
 sanitized domain status, not a provider payload or a hosted URL. The optional
 interval variable selects the annual artifact. A returned page by itself is not
 proof of completion.
+
+Recurring observations also require the signed event API version to match the
+version pinned in `services/providers/stripe/client.ts`. The CLI listener normally
+uses the test account's default version; that can differ from the API requests
+made by this gateway. A successful payment and a successful Billing readback do
+not prove that recurring events were projected. Check the stored event version
+and processed state separately. Configure supported test event delivery to the
+pinned version; never rewrite stored events or relax the observation identity
+guard to make a local test pass. Events arriving before verified object binding
+remain pending for a supported explicit observation retry after binding.
