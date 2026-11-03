@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Orbit by Peable",
+    "slug": "peable-orbit",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "peable-orbit",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "to.peable.orbit",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["oxycommons"]
+      },
+      "entitlements": {
+        "keychain-access-groups": ["$(AppIdentifierPrefix)group.so.oxy.shared"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "to.peable.orbit"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "Orbit by Peable",
+      "shortName": "Orbit"
+    },
+    "plugins": [
+      ["expo-router", { "asyncRoutes": { "web": false } }],
+      "expo-secure-store",
+      "@oxy.so/services/plugins/withOxySharedPermissions",
+      "expo-font",
+      "expo-system-ui",
+      "expo-web-browser"
+    ]
+  }
+}

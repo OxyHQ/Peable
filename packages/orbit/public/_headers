@@ -1,0 +1,8 @@
+# Cloudflare Pages response headers for orbit.peable.to. Orbit is a signed-in
+# merchant console: it is never framed, never sniffed, and never leaks its URLs
+# (which carry payment ids) to another origin.
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin

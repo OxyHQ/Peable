@@ -185,6 +185,72 @@
         "lightningcss-linux-x64-gnu": "1.30.1",
       },
     },
+    "packages/orbit": {
+      "name": "@peable.to/orbit",
+      "version": "0.1.0",
+      "dependencies": {
+        "@expo/app-integrity": "~58.0.2",
+        "@expo/vector-icons": "^15.1.1",
+        "@oxy.so/app-preset": "^5.0.0",
+        "@oxy.so/bloom": "16.10.0",
+        "@oxy.so/contracts": "6.3.0",
+        "@oxy.so/core": "7.11.1",
+        "@oxy.so/services": "^14.0.1",
+        "@peable.to/contracts": "workspace:0.4.0",
+        "@peable.to/sdk": "workspace:0.11.0",
+        "@peable.to/shared-types": "*",
+        "@react-native-async-storage/async-storage": "^2.2.0",
+        "@react-native-community/netinfo": "^12.0.1",
+        "@tanstack/query-async-storage-persister": "^5.101.2",
+        "@tanstack/react-query": "^5.101.2",
+        "@tanstack/react-query-persist-client": "^5.101.2",
+        "expo": "~58.0.19",
+        "expo-clipboard": "~58.0.4",
+        "expo-constants": "~58.0.13",
+        "expo-crypto": "~58.0.7",
+        "expo-file-system": "~58.0.11",
+        "expo-font": "~58.0.10",
+        "expo-image": "~58.0.17",
+        "expo-linking": "~58.0.14",
+        "expo-router": "~58.0.26",
+        "expo-secure-store": "~58.0.2",
+        "expo-status-bar": "~58.0.4",
+        "expo-system-ui": "~58.0.6",
+        "expo-web-browser": "~58.0.6",
+        "lightningcss": "1.30.1",
+        "nativewind": "5.0.0-preview.4",
+        "react": "19.3.0",
+        "react-dom": "19.3.0",
+        "react-native": "0.88.0",
+        "react-native-css": "3.1.0-rc.0",
+        "react-native-gesture-handler": "~3.3.0",
+        "react-native-keyboard-controller": "1.22.7",
+        "react-native-qrcode-svg": "^6.3.21",
+        "react-native-reanimated": "4.7.1",
+        "react-native-safe-area-context": "~5.10.1",
+        "react-native-screens": "~4.30.0",
+        "react-native-svg": "15.16.0",
+        "react-native-web": "^0.21.4",
+        "react-native-worklets": "0.13.0",
+        "tailwindcss": "4.3.2",
+        "zod": "^4.6.7",
+        "zustand": "^5.0.12",
+      },
+      "devDependencies": {
+        "@babel/core": "^7.27.0",
+        "@tailwindcss/postcss": "4.3.2",
+        "@types/bun": "^1.4.2",
+        "@types/react": "~19.3.0",
+        "@typescript-eslint/parser": "8.69.0",
+        "eslint": "9.39.4",
+        "eslint-plugin-expo": "1.1.0",
+        "typescript": "~6.0.3",
+      },
+      "optionalDependencies": {
+        "@tailwindcss/oxide-linux-x64-gnu": "4.3.2",
+        "lightningcss-linux-x64-gnu": "1.30.1",
+      },
+    },
     "packages/pay": {
       "name": "@peable.to/pay",
       "version": "0.1.3",
@@ -220,8 +286,8 @@
       "name": "@peable.to/sdk",
       "version": "0.11.1",
       "dependencies": {
-        "@peable.to/contracts": "workspace:0.2.1",
-        "@peable.to/shared-types": "workspace:0.5.1",
+        "@peable.to/contracts": "workspace:0.4.0",
+        "@peable.to/shared-types": "workspace:0.9.0",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
       },
@@ -247,7 +313,7 @@
       "name": "@peable.to/shared-types",
       "version": "0.10.0",
       "dependencies": {
-        "@peable.to/contracts": "workspace:0.2.1",
+        "@peable.to/contracts": "workspace:0.4.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -720,6 +786,8 @@
     "@peable.to/contracts": ["@peable.to/contracts@workspace:packages/contracts"],
 
     "@peable.to/frontend": ["@peable.to/frontend@workspace:packages/frontend"],
+
+    "@peable.to/orbit": ["@peable.to/orbit@workspace:packages/orbit"],
 
     "@peable.to/pay": ["@peable.to/pay@workspace:packages/pay"],
 
@@ -2120,6 +2188,10 @@
     "@peable.to/frontend/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@peable.to/frontend/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
+
+    "@peable.to/orbit/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@peable.to/orbit/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
 
     "@react-native/babel-preset/@react-native/babel-plugin-codegen": ["@react-native/babel-plugin-codegen@0.87.1", "", { "dependencies": { "@babel/traverse": "^7.29.0", "@react-native/codegen": "0.87.1" } }, "sha512-DfnyLAHG7jH4pqeID7ib6AeD6gG8T+KvM3c/w/yEa5ONkfRcHvTC8JMIRdhUqs4ruA+8xbYcNVQzewYRCPm1Xw=="],
 

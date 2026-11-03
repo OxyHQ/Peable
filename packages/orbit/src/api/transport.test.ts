@@ -1,0 +1,132 @@
+import { describe, expect, it, mock } from 'bun:test';
+import type { AuthenticatedResponseRequest } from '@oxy.so/core';
+import {
+  createOrbitTransport,
+  describeError,
+  isOrbitApiError,
+  type OrbitApiError,
+  withQuery,
+} from './transport';
+
+function fakeClient(response: Response) {
+  const calls: AuthenticatedResponseRequest[] = [];
+  const requestAuthenticatedResponse = mock(async (request: AuthenticatedResponseRequest) => {
+    calls.push(request);
+    return response;
+  });
+  return { client: { requestAuthenticatedResponse }, calls };
+}
+
+describe('withQuery', () => {
+  it('appends defined values in order and drops undefined and null', () => {
+    expect(withQuery('/v1/x', { a: 'one', b: undefined, c: 2, d: null, e: false })).toBe(
+      '/v1/x?a=one&c=2&e=false',
+    );
+  });
+
+  it('joins onto an existing query string', () => {
+    expect(withQuery('/v1/x?environment=production', { limit: 10 })).toBe(
+      '/v1/x?environment=production&limit=10',
+    );
+  });
+
+  it('leaves the path alone when nothing is left to add', () => {
+    expect(withQuery('/v1/x', { a: undefined })).toBe('/v1/x');
+    expect(withQuery('/v1/x', undefined)).toBe('/v1/x');
+  });
+});
+
+describe('createOrbitTransport', () => {
+  it('keeps a list envelope whole, has_more included', async () => {
+    // The linked client's own helpers would have unwrapped this to the bare
+    // array and lost `has_more`; the raw response must not.
+    const page = { object: 'list', data: [{ id: 'pi_1' }], has_more: true };
+    const { client, calls } = fakeClient(Response.json(page));
+    const result = await createOrbitTransport(client).request('GET', '/v1/list', {
+      query: { limit: 1 },
+    });
+    expect(result).toEqual(page);
+    expect(calls).toEqual([{ method: 'GET', url: '/v1/list?limit=1' }]);
+  });
+
+  it('sends a JSON body with its content type, and the idempotency key when given', async () => {
+    const { client, calls } = fakeClient(Response.json({ id: 'merch_1' }, { status: 201 }));
+    await createOrbitTransport(client).request('POST', '/v1/merchant', {
+      body: { webhook_url: 'https://example.com/hook' },
+      idempotencyKey: 'key-1',
+    });
+    expect(calls[0]).toEqual({
+      method: 'POST',
+      url: '/v1/merchant',
+      body: '{"webhook_url":"https://example.com/hook"}',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'key-1' },
+    });
+  });
+
+  it('answers undefined for an empty success', async () => {
+    const { client } = fakeClient(new Response(null, { status: 204 }));
+    expect(await createOrbitTransport(client).request('DELETE', '/v1/x')).toBeUndefined();
+  });
+
+  it('turns an ADR 0014 error envelope into an OrbitApiError with its request id', async () => {
+    const { client } = fakeClient(
+      Response.json(
+        {
+          error: {
+            type: 'invalid_request_error',
+            code: 'parameter_invalid',
+            param: 'webhook_url',
+            message: 'webhook_url must be a URL',
+            request_id: 'req_123',
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    const error = await createOrbitTransport(client)
+      .request('PATCH', '/v1/merchant', { body: {} })
+      .catch((e: unknown) => e);
+    expect(isOrbitApiError(error)).toBe(true);
+    const api = error as OrbitApiError;
+    expect(api.status).toBe(400);
+    expect(api.type).toBe('invalid_request_error');
+    expect(api.code).toBe('parameter_invalid');
+    expect(api.param).toBe('webhook_url');
+    expect(api.requestId).toBe('req_123');
+    expect(describeError(api, 'fallback')).toBe('webhook_url must be a URL (request req_123)');
+  });
+
+  it('falls back to the Request-Id header and the status when the body is not an envelope', async () => {
+    const { client } = fakeClient(
+      new Response('<html>bad gateway</html>', { status: 502, headers: { 'Request-Id': 'req_h' } }),
+    );
+    const error = (await createOrbitTransport(client)
+      .request('GET', '/v1/x')
+      .catch((e: unknown) => e)) as OrbitApiError;
+    expect(error.status).toBe(502);
+    expect(error.type).toBe('api_error');
+    expect(error.message).toBe('Request failed (HTTP 502)');
+    expect(error.requestId).toBe('req_h');
+  });
+
+  it('keeps the message of a legacy `{error: string}` body', async () => {
+    const { client } = fakeClient(Response.json({ error: 'forbidden' }, { status: 403 }));
+    const error = (await createOrbitTransport(client)
+      .request('GET', '/v1/x')
+      .catch((e: unknown) => e)) as OrbitApiError;
+    expect(error.status).toBe(403);
+    expect(error.message).toBe('forbidden');
+  });
+
+  it('refuses a 2xx body that is not JSON instead of rendering garbage', async () => {
+    const { client } = fakeClient(new Response('not json', { status: 200 }));
+    await expect(createOrbitTransport(client).request('GET', '/v1/x')).rejects.toThrow('not JSON');
+  });
+});
+
+describe('describeError', () => {
+  it('uses a plain error message, then the fallback', () => {
+    expect(describeError(new Error('offline'), 'fallback')).toBe('offline');
+    expect(describeError('???', 'fallback')).toBe('fallback');
+  });
+});

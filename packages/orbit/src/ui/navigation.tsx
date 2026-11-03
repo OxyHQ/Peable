@@ -1,0 +1,170 @@
+/**
+ * Orbit's destinations and the one decision about how to show them.
+ *
+ * `app/(orbit)/_layout.tsx` is a single tab navigator on every platform. Its
+ * `tabBar` slot renders Bloom's `Rail` beside the screens in a window wide
+ * enough for one, and Bloom's floating `TabBar` everywhere else — the
+ * arrangement the wallet uses (`packages/frontend/src/ui/navigation`), so the
+ * two Peable apps behave alike. Both read the list below, so they cannot drift.
+ */
+
+import { useCallback } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { BottomTabBarProps } from 'expo-router/tabs';
+import { Rail } from '@oxy.so/bloom/rail';
+import { TabBar, TabBarButton, useTabBarFootprint } from '@oxy.so/bloom/tab-bar';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
+import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
+import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
+import { RiHome5Line } from '@oxy.so/bloom/icons/RiHome5Line';
+import { RiReceiptLine } from '@oxy.so/bloom/icons/RiReceiptLine';
+import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
+import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
+import { RiTerminalBoxLine } from '@oxy.so/bloom/icons/RiTerminalBoxLine';
+import { t } from '../i18n';
+
+export type OrbitTab = 'index' | 'payments' | 'developers' | 'tax' | 'contributions' | 'settings';
+
+type Glyph = typeof RiHome5Line;
+
+const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Glyph }> = {
+  index: { labelKey: 'nav.home', icon: RiHome5Line, activeIcon: RiHome5Fill },
+  payments: { labelKey: 'nav.payments', icon: RiBankCardLine, activeIcon: RiBankCardLine },
+  developers: {
+    labelKey: 'nav.developers',
+    icon: RiTerminalBoxLine,
+    activeIcon: RiTerminalBoxLine,
+  },
+  tax: { labelKey: 'nav.tax', icon: RiReceiptLine, activeIcon: RiReceiptLine },
+  contributions: {
+    labelKey: 'nav.contributions',
+    icon: RiHandHeartLine,
+    activeIcon: RiHandHeartLine,
+  },
+  settings: { labelKey: 'nav.settings', icon: RiSettings3Line, activeIcon: RiSettings3Fill },
+};
+
+/** Rail and bar entries, in order. Every route in `app/(orbit)` is one of these. */
+export const ORBIT_TABS: readonly OrbitTab[] = [
+  'index',
+  'payments',
+  'developers',
+  'tax',
+  'contributions',
+  'settings',
+];
+
+export function orbitTabLabel(tab: OrbitTab): string {
+  return t(TAB_DEFS[tab].labelKey);
+}
+
+function TabGlyph({ tab, active, color }: { tab: OrbitTab; active: boolean; color: string }) {
+  const Icon = active ? TAB_DEFS[tab].activeIcon : TAB_DEFS[tab].icon;
+  return <Icon size="lg" fill={color} />;
+}
+
+/** Below this width the rail gives way to the bottom bar. */
+export const RAIL_MIN_WIDTH = 768;
+
+export type OrbitNavLayout = 'rail' | 'bar';
+
+/** Orbit is a desktop console first: the rail whenever the window has room for it. */
+export function useOrbitNavLayout(): OrbitNavLayout {
+  const { width } = useWindowDimensions();
+  return width >= RAIL_MIN_WIDTH ? 'rail' : 'bar';
+}
+
+/**
+ * Bottom padding a screen's scroll content needs: Bloom's `TabBar` floats over
+ * the screen, so without it the last row sits under the pill.
+ */
+export function useScreenBottomInset(): number {
+  const layout = useOrbitNavLayout();
+  const footprint = useTabBarFootprint();
+  const insets = useSafeAreaInsets();
+  return layout === 'bar' ? footprint : insets.bottom;
+}
+
+/** The focused route's TAB, so a nested payment detail still lights up Payments. */
+function focusedTab(state: BottomTabBarProps['state']): string | undefined {
+  return state.routes[state.index]?.name.split('/')[0];
+}
+
+function useSelectTab({ state, navigateToTab }: BottomTabBarProps) {
+  // The navigator switches tabs by route KEY, not by name (expo-router 58).
+  return useCallback(
+    (name: string) => {
+      const key = state.routes.find((route) => route.name.split('/')[0] === name)?.key;
+      if (key !== undefined) navigateToTab(key);
+    },
+    [navigateToTab, state.routes],
+  );
+}
+
+export function OrbitRail(props: BottomTabBarProps) {
+  const theme = useTheme();
+  const select = useSelectTab(props);
+  return (
+    <Rail
+      activeId={focusedTab(props.state)}
+      onSelect={select}
+      width={88}
+      style={{
+        backgroundColor: theme.colors.background,
+        borderRightWidth: 1,
+        borderRightColor: theme.colors.border,
+      }}
+      items={ORBIT_TABS.map((tab) => ({
+        id: tab,
+        label: orbitTabLabel(tab),
+        icon: <TabGlyph tab={tab} active={false} color={theme.colors.textSecondary} />,
+        // The rail draws the active pill in `primary-subtle`; the glyph takes its foreground.
+        activeIcon: <TabGlyph tab={tab} active color={theme.colors.primarySubtleForeground} />,
+      }))}
+    />
+  );
+}
+
+/** Ceiling on the pill: on a tablet the bar would otherwise stretch to the window. */
+const TAB_BAR_MAX_WIDTH = 520;
+
+export function OrbitTabBar(props: BottomTabBarProps) {
+  const theme = useTheme();
+  const select = useSelectTab(props);
+  const focused = focusedTab(props.state);
+  const activeIndex = ORBIT_TABS.indexOf(focused as OrbitTab);
+  return (
+    <View style={styles.host}>
+      <TabBar
+        activeIndex={activeIndex}
+        onIndexChange={(index) => {
+          const tab = ORBIT_TABS[index];
+          if (tab) select(tab);
+        }}
+        maxWidth={TAB_BAR_MAX_WIDTH}
+      >
+        {ORBIT_TABS.map((tab, index) => (
+          <TabBarButton
+            key={tab}
+            index={index}
+            item={{
+              name: tab,
+              label: orbitTabLabel(tab),
+              icon: <TabGlyph tab={tab} active={false} color={theme.colors.textSecondary} />,
+              activeIcon: <TabGlyph tab={tab} active color={theme.colors.text} />,
+            }}
+          />
+        ))}
+      </TabBar>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  // Pulled out of flow and pinned to the bottom edge: left in flow it would
+  // shrink every screen by the bar's height. `pointerEvents` in the style
+  // object, as react-native-web warns on the prop.
+  host: { position: 'absolute', left: 0, right: 0, bottom: 0, pointerEvents: 'box-none' },
+});

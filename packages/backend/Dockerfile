@@ -56,6 +56,7 @@ COPY packages/frontend/package.json packages/frontend/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/checkout/package.json packages/checkout/
 COPY packages/pay/package.json packages/pay/
+COPY packages/orbit/package.json packages/orbit/
 
 # Install the full workspace, including dev tooling (typescript, @types/*).
 # --ignore-scripts skips the root `postinstall` (build:shared-types): the source
@@ -124,6 +125,7 @@ COPY packages/frontend/package.json packages/frontend/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/checkout/package.json packages/checkout/
 COPY packages/pay/package.json packages/pay/
+COPY packages/orbit/package.json packages/orbit/
 
 RUN bun install --frozen-lockfile --production --ignore-scripts --omit=peer --filter @peable.to/backend
 # A hoisted install can still require workspace-local versions (contracts uses
