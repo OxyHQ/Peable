@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findEventForMerchant } from '../db/events/eventRepository';
@@ -15,7 +14,7 @@ import { enqueueDelivery } from '../db/webhooks/webhookOutboxRepository';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { runWebhookOutboxPass } from '../services/webhookOutbox';
 import { toWebhookDeliveryDTO } from '../lib/serialize';
-import { sendError, wrap, requireAuthenticated } from '../lib/http';
+import { sendError, wrap, requireAuthenticated, requireScope } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import {
   answerList,
@@ -154,7 +153,7 @@ export function createWebhookDeliveriesRouter(deps: {
     '/v1/webhook_deliveries',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -166,7 +165,7 @@ export function createWebhookDeliveriesRouter(deps: {
     '/v1/webhook_deliveries/:id/redeliver',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

@@ -13,7 +13,7 @@ import {
   taxReportQuery,
 } from '@peable.to/contracts';
 import { oxy } from '../oxy';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { fromUnix } from '../lib/time';
 import {
@@ -165,16 +165,8 @@ export function createTaxRouter(deps: {
   tax?: TaxService;
 }): Router {
   const router = Router();
-  const read = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-  ];
+  const read = [deps.requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [deps.requireMerchant, requireAuthenticated, requireScope('payments:write')];
   const route = (
     action: (
       tax: TaxService,

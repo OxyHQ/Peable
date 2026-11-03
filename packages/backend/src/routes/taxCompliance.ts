@@ -32,7 +32,7 @@ import { createOxyAuthMiddleware } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { oxy } from '../oxy';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { idempotent, runIdempotent } from '../lib/idempotency';
 import { parseExpand, type ExpandableType } from '../lib/expand';
 import {
@@ -411,7 +411,7 @@ export function createTaxComplianceRouter(deps: {
   const auth = (scope: 'payments:read' | 'payments:write') => [
     deps.requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope(scope),
+    requireScope(scope),
   ];
   for (const route of TAX_COMPLIANCE_ROUTES) {
     if (route.access === 'manage') continue;

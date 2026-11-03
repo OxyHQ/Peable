@@ -21,7 +21,6 @@ import {
   listConnectedAccountsQuery,
   refreshConnectedAccountParams,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
   findAccountByExternalRef,
@@ -50,6 +49,7 @@ import {
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { toUnix } from '../lib/time';
@@ -315,17 +315,8 @@ type SellerCore = (req: Request, res: Response, merchant: MerchantRow) => Promis
 export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write'), idempotent];
   const api = (core: SellerCore) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

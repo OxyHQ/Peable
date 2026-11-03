@@ -17,7 +17,6 @@ import {
   toAddress,
   updatePaymentMethodParams,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import { findCustomerForMerchant } from '../db/customers/customerRepository';
 import {
@@ -39,6 +38,7 @@ import {
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
@@ -53,7 +53,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -86,7 +86,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -119,7 +119,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -198,7 +198,7 @@ export function createPaymentMethodsRouter(deps: { requireMerchant: RequestHandl
     '/v1/payment_methods/:id/detach',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

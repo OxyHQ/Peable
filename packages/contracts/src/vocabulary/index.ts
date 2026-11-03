@@ -14,3 +14,7 @@ export * from './subscriptions';
 export * from './reporting';
 export * from './payments';
 export * from './version';
+export * from './checkout';
+export * from './files';
+export * from './merchants';
+export * from './paymentMethodConfigurations';

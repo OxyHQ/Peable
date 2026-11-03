@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -24,7 +23,7 @@ import {
   surfaceRetrieveQuery,
 } from '../lib/list';
 import { toEventDTO } from '../lib/serialize';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 
 /**
@@ -207,11 +206,7 @@ export async function streamEvents(
 export function createEventsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const { requireMerchant } = deps;
   const router = Router();
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
   ) =>

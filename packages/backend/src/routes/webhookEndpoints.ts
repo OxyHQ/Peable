@@ -6,7 +6,6 @@ import {
   WEBHOOK_SECRET_ROLL_MAX_EXPIRES_IN_SECONDS,
   type WebhookEnabledEvent,
 } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -40,7 +39,13 @@ import {
   metadataUpdateSchema,
 } from '../lib/metadata';
 import { toWebhookDeliveryDTO, toWebhookEndpointDTO } from '../lib/serialize';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 
 /**
@@ -345,16 +350,8 @@ export function createWebhookEndpointsRouter(deps: {
 }): Router {
   const { requireMerchant, safeFetch } = deps;
   const router = Router();
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write')];
 
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,

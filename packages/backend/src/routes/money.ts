@@ -37,7 +37,6 @@ import {
   routes,
   updateAccountParams,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
   findAccountByPublicId,
@@ -83,7 +82,13 @@ import {
   toPayoutDTO,
   toReconciliationMismatchDTO,
 } from '../lib/serializeMoney';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { toUnix } from '../lib/time';
@@ -689,17 +694,8 @@ type Core = (
 export function createMoneyRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write'), idempotent];
   const api = (core: Core) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

@@ -209,7 +209,7 @@ function refusalMessage(body: unknown): string {
  * library's status and message are kept; its code is not an `ErrorCode` and is
  * dropped (the status and `type` are what a caller branches on).
  */
-export function oxyGuard(middleware: RequestHandler): RequestHandler {
+export function oxyGuard(middleware: RequestHandler, code?: ErrorCode): RequestHandler {
   return (req, res, next) => {
     const json = res.json;
     const restore = () => {
@@ -218,7 +218,9 @@ export function oxyGuard(middleware: RequestHandler): RequestHandler {
     res.json = function guardedJson(body?: unknown) {
       restore();
       if (res.statusCode >= 400 && !isErrorEnvelope(body)) {
-        return res.json(errorBody(res, errorTypeForStatus(res.statusCode), refusalMessage(body)));
+        return res.json(
+          errorBody(res, errorTypeForStatus(res.statusCode), refusalMessage(body), code),
+        );
       }
       return res.json(body);
     } as Response['json'];
@@ -229,9 +231,15 @@ export function oxyGuard(middleware: RequestHandler): RequestHandler {
   };
 }
 
-/** `oxy.middleware.requireScope(scope)`, refusing in the ONE error envelope. */
+/**
+ * `oxy.middleware.requireScope(scope)`, refusing in the ONE error envelope:
+ * 403 `permission_error` / `insufficient_scope`. Oxy decides (the token's
+ * scopes, a delegation narrowing them, first-party authority); only the
+ * refusal's spelling is Peable's. Every scope-checked route uses this — never
+ * the bare Oxy middleware, whose body no contract describes.
+ */
 export function requireScope(scope: string): RequestHandler {
-  return oxyGuard(oxy.middleware.requireScope(scope));
+  return oxyGuard(oxy.middleware.requireScope(scope), 'insufficient_scope');
 }
 
 /**

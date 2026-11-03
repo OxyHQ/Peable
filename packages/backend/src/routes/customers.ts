@@ -19,7 +19,6 @@ import {
   toShipping,
   updateCustomerParams,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
   findCustomerForMerchant,
@@ -33,7 +32,13 @@ import {
   updateCustomerFields,
 } from '../services/customers/customerService';
 import { toCustomerDTO, toDeletedCustomerDTO } from '../lib/serialize';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { answerList, parseQuery } from '../lib/list';
@@ -52,7 +57,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     '/v1/customers',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -122,7 +127,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     '/v1/customers',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -148,7 +153,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     '/v1/customers/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -180,7 +185,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     '/v1/customers/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -252,7 +257,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     '/v1/customers/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

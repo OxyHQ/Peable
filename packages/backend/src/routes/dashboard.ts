@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
+import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
 import {
   createOxyAuthMiddleware,
   getRequiredOxyUserId,
@@ -15,13 +16,7 @@ import {
   type AppMembershipResult,
 } from '../services/appMembership';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
-import {
-  createMerchantBodySchema,
-  patchMerchantBodySchema,
-  registerMerchant,
-  applyMerchantPatch,
-  sendMerchantWriteError,
-} from './merchants';
+import { registerMerchant, applyMerchantPatch, sendMerchantWriteError } from './merchants';
 import type { FileActor } from '../services/oxyFiles/fileOwnership';
 import {
   answerDisputeList,
@@ -277,7 +272,7 @@ export function createDashboardRouter(deps?: {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
       if (!access) return;
 
-      const parsed = createMerchantBodySchema.safeParse(req.body);
+      const parsed = registerMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -305,7 +300,7 @@ export function createDashboardRouter(deps?: {
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
       if (!merchant) return;
 
-      const parsed = patchMerchantBodySchema.safeParse(req.body);
+      const parsed = updateMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

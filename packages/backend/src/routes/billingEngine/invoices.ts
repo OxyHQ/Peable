@@ -49,7 +49,6 @@ import {
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
 import { answerList, parseQuery, type QuerySurface, resolveListReference } from '../../lib/list';
-import { sendValidationError } from '../../lib/http';
 import {
   renderInvoice,
   renderInvoiceItems,

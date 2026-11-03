@@ -5,7 +5,6 @@ import {
   listRequestLogsQuery,
   streamRequestLogsQuery,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -16,7 +15,7 @@ import {
 } from '../db/requestLogs/requestLogRepository';
 import { serveLiveStream } from '../lib/liveStream';
 import { answerList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { toRequestLogDTO } from '../lib/serialize';
 import { LIVE_TAIL_CHANNELS } from '../services/liveTail';
 import { resolveMerchant } from './paymentIntents';
@@ -117,11 +116,7 @@ export async function streamRequestLogs(
 /** The service-authed `/v1/request_logs` router. */
 export function createRequestLogsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
-  const read = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const read = [deps.requireMerchant, requireAuthenticated, requireScope('payments:read')];
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
   ) =>

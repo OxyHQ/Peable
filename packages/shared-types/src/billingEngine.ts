@@ -1,8 +1,3 @@
-// The rest of Orbit's native billing engine (ADR 0018): test clocks, the
-// merchant's billing settings (numbering and dunning), usage meters,
-// entitlements and the customer portal.
-import type { ListParams } from './list';
-
 // ---- Test clocks, billing settings, meters, entitlements --------------------------
 // The contract's (`@peable.to/contracts`): types re-exported, the closed value
 // sets from its zod-free vocabulary.

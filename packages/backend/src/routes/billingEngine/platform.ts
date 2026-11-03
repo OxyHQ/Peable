@@ -3,8 +3,6 @@
  * The customer portal's merchant side is `portal.ts`.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
-import { PORTAL_CUSTOMER_UPDATES } from '@peable.to/shared-types';
 import {
   advanceTestClockParams,
   attachProductFeatureParams,
@@ -20,7 +18,6 @@ import {
   listEntitlementFeaturesQuery,
   listProductFeaturesQuery,
   listTestClocksQuery,
-  queryFlag as booleanQuery,
   updateBillingMeterParams,
   updateBillingSettingsParams,
   updateEntitlementFeatureParams,
@@ -38,14 +35,7 @@ import {
 import { findMeterForMerchant, listMeters } from '../../db/billingEngine/meterRepository';
 import { findLiveTestClockForMerchant } from '../../db/billingEngine/testClockRepository';
 import { getDb } from '../../db/postgres';
-import {
-  answerList,
-  parseQuery,
-  surfaceListQuery,
-  surfaceQuery,
-  surfaceRetrieveQuery,
-} from '../../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../../lib/metadata';
+import { answerList, parseQuery, surfaceQuery, surfaceRetrieveQuery } from '../../lib/list';
 import { toTestClockDTO } from '../../lib/serializeBilling';
 import {
   activeEntitlements,
@@ -76,9 +66,9 @@ import {
   retrieveTestClock,
 } from '../../services/billingEngine/testClocks';
 import type { CatalogRoute } from '../catalogRoutes';
-import { answerObject, cleared, idParam, idString, parseBody, shortText } from './helpers';
+import { idParam, parseBody } from './helpers';
 
-const retrieveQuery = surfaceRetrieveQuery();
+const _retrieveQuery = surfaceRetrieveQuery();
 
 // Test clocks, billing settings, meters and entitlements validate with the
 // contract's schemas (`@peable.to/contracts`); the dashboard surface adds its

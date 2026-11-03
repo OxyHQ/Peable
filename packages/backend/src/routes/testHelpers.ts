@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import { simulateFaircoinPaymentParams } from '@peable.to/contracts';
+import { expireCheckoutSessionTestHelperParams } from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
@@ -32,8 +32,6 @@ import { resolveMerchant } from './paymentIntents';
  * retried simulation answers what the first one did instead of failing on a
  * payment that already moved.
  */
-
-const expireBodySchema = z.object({}).strict();
 
 function idOf(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -78,7 +76,7 @@ async function expireCheckoutSessionRoute(
 ): Promise<void> {
   const id = idOf(req, res);
   if (!id) return;
-  const parsed = expireBodySchema.safeParse(req.body ?? {});
+  const parsed = expireCheckoutSessionTestHelperParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;

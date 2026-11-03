@@ -213,6 +213,7 @@ export {
   type CreatePaymentMethodConfigurationParams,
   type CreatePaymentMethodDomainParams,
   type ListPaymentMethodDomainsParams,
+  PAYMENT_METHOD_UNAVAILABLE_REASONS,
   type PaymentMethodConfiguration,
   type PaymentMethodConfigurationEntry,
   type PaymentMethodConfigurationEntryParams,
@@ -347,6 +348,7 @@ export {
   type CreatePaymentLinkParams,
   type UpdatePaymentLinkParams,
   type CreatePaymentLinkSessionParams,
+  type ListPaymentLinksParams,
   type PaymentLinkSessionStart,
 } from './paymentLink';
 export {
@@ -395,6 +397,8 @@ export {
   type CheckoutLineItemParams,
   type CheckoutCustomFieldParams,
   type CreateCheckoutSessionParams,
+  type ExpireCheckoutSessionParams,
+  type ListCheckoutSessionsParams,
   type UpdateCheckoutSessionParams,
 } from './checkoutSession';
 export {

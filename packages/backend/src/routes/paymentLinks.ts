@@ -10,11 +10,15 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import {
-  contributionAmountSchema,
   contributionOperationKeySchema,
-} from '@peable.to/contracts/contributions';
+  createPaymentLinkParams,
+  createPaymentLinkSessionParams,
+  expandOnlyQuery,
+  listPaymentLinkLineItemsQuery,
+  listPaymentLinksQuery,
+  updatePaymentLinkParams,
+} from '@peable.to/contracts';
 import { findBranding } from '../db/merchants/brandingRepository';
 import { findMerchantById, type MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -26,36 +30,34 @@ import {
 import { getDb } from '../db/postgres';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-import {
-  answerList,
-  completeList,
-  parseQuery,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
+import { answerList, completeList, dashboardQuery, parseQuery } from '../lib/list';
 import {
   hostedCheckoutUrl,
   toCheckoutBranding,
   toPublicPaymentLinkDTO,
 } from '../lib/serializeCheckout';
-import { queryFlag as booleanQuery } from '@peable.to/contracts';
 import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
 import {
-  createLinkBodySchema,
   createPaymentLink,
   linkLines,
   toLinkDTO,
   toLinkDTOs,
-  updateLinkBodySchema,
   updatePaymentLinkOptions,
 } from '../services/checkout/linkService';
 import { type CheckoutDeps, createSessionFromLink } from '../services/checkout/sessionService';
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { type CatalogRoute, createCatalogApiRouter } from './catalogRoutes';
 
-const listLinksQuery = surfaceListQuery({ active: booleanQuery.optional() });
-const retrieveLinkQuery = surfaceRetrieveQuery();
-const lineItemsQuery = surfaceListQuery({});
+// The contract's queries on the API; the dashboard's twin adds its environment.
+const listLinksQuery = {
+  api: listPaymentLinksQuery,
+  dashboard: dashboardQuery(listPaymentLinksQuery),
+} as const;
+const retrieveLinkQuery = { api: expandOnlyQuery, dashboard: dashboardQuery(expandOnlyQuery) };
+const lineItemsQuery = {
+  api: listPaymentLinkLineItemsQuery,
+  dashboard: dashboardQuery(listPaymentLinkLineItemsQuery),
+} as const;
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -90,7 +92,7 @@ export function paymentLinkRoutes(deps: CheckoutDeps): CatalogRoute[] {
       method: 'post',
       path: '/payment_links',
       core: async (req, res, merchant) => {
-        const parsed = createLinkBodySchema.safeParse(req.body ?? {});
+        const parsed = createPaymentLinkParams.safeParse(req.body ?? {});
         if (!parsed.success) {
           sendValidationError(res, parsed.error);
           return;
@@ -144,7 +146,7 @@ export function paymentLinkRoutes(deps: CheckoutDeps): CatalogRoute[] {
       core: async (req, res, merchant) => {
         const id = idParam(req, res);
         if (!id) return;
-        const parsed = updateLinkBodySchema.safeParse(req.body ?? {});
+        const parsed = updatePaymentLinkParams.safeParse(req.body ?? {});
         if (!parsed.success) {
           sendValidationError(res, parsed.error);
           return;
@@ -175,19 +177,6 @@ export function paymentLinkRoutes(deps: CheckoutDeps): CatalogRoute[] {
     },
   ];
 }
-
-// `@peable.to/contracts` is Zod 4, this router Zod 3: the contract's own rule, applied by value.
-const startBodySchema = z
-  .object({
-    amount: z
-      .string()
-      .refine(
-        (value) => contributionAmountSchema.safeParse(value).success,
-        'Enter a positive FairCoin base-unit amount within the supported range',
-      )
-      .optional(),
-  })
-  .strict();
 
 /** Build the payment-link router: merchant API + payer routes. */
 export function createPaymentLinksRouter(deps: {
@@ -256,7 +245,7 @@ export function createPaymentLinksRouter(deps: {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
-      const body = startBodySchema.safeParse(req.body ?? {});
+      const body = createPaymentLinkSessionParams.safeParse(req.body ?? {});
       if (!body.success) {
         sendValidationError(res, body.error);
         return;

@@ -35,7 +35,6 @@ import {
   type ReportTypeId,
 } from '@peable.to/contracts';
 import { REPORT_TYPE_LAYOUTS } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findFilesByIds } from '../db/files/fileRepository';
@@ -46,7 +45,13 @@ import {
   listReportRunsForMerchant,
   type ReportRunRow,
 } from '../db/reporting/reportRunRepository';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { idempotent, runIdempotent } from '../lib/idempotency';
 import { newId } from '../lib/ids';
 import { expandObjects, parseExpand } from '../lib/expand';
@@ -344,11 +349,7 @@ type Core = (
 export function createReportingRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   // A report reads what `payments:read` reads; running one writes nothing else.
-  const read = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const read = [deps.requireMerchant, requireAuthenticated, requireScope('payments:read')];
   const api = (core: Core) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

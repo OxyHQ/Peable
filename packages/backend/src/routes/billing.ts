@@ -15,8 +15,13 @@ import {
 } from '@peable.to/contracts';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
-import { requireScope } from '../lib/scope';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 import {
   BILLING_ERROR_MESSAGES,
