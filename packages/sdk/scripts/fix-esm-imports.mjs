@@ -19,7 +19,7 @@ const ESM_DIR = new URL('../dist/esm', import.meta.url).pathname;
 
 async function fixSpecifier(specifier, fromFile) {
   // UI assets are resolved by the host bundler, never JavaScript modules.
-  if (/\.(?:png|jpe?g|webp|gif|svg)$/i.test(specifier)) return specifier;
+  if (/\.(?:png|jpe?g|webp|gif|svg|m4a|ogg)$/i.test(specifier)) return specifier;
   const dir = dirname(fromFile);
   const abs = resolve(dir, specifier);
 

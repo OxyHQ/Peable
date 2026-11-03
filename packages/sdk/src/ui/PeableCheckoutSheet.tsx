@@ -1,3 +1,4 @@
+import { PeableMethodContent, type PeableMethodDetails } from './PeableMethodContent';
 import { StatusRing, type StatusRingProps } from '@oxy.so/bloom/loading';
 import { Image, View } from 'react-native';
 import { CheckoutSheet, type CheckoutSheetProps } from '@oxy.so/bloom/checkout-sheet';
@@ -11,6 +12,8 @@ export type PeableCheckoutSheetProps = Omit<
 > & {
   /** Host-resolved language, e.g. the Oxy Services language preference. */
   locale?: string;
+  /** Optional rail-specific presentation. The host supplies quote data and action capabilities. */
+  methodDetails?: PeableMethodDetails;
   /** Controlled completion presentation; never changes payment state. */
   brandState?: StatusRingProps['state'];
   /** Optional product copy overrides. Preview disclosures remain the local host's responsibility. */
@@ -23,11 +26,22 @@ export function PeableCheckoutSheet({
   locale = 'en',
   messages,
   brandState,
+  methodDetails,
   ...props
 }: PeableCheckoutSheetProps) {
   return (
     <CheckoutSheet
       {...props}
+      methodContent={
+        methodDetails ? (
+          <PeableMethodContent
+            details={methodDetails}
+            label={(key) => checkoutMessage(locale, key, undefined, messages)}
+          />
+        ) : (
+          props.methodContent
+        )
+      }
       label={(key, values) => checkoutMessage(locale, key, values, messages)}
       formatAmount={(amount, currency) => formatCheckoutAmount(amount, currency, locale)}
       footer={

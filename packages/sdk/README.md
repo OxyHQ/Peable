@@ -87,3 +87,29 @@ This UI currently requires the coordinated **local** Bloom checkout/status-ring
 build and local SDK build. Registry version 0.5.0 does not acquire these APIs
 until a separately authorized package release. Local Mention development uses
 an explicit source resolver/artifact override; no publication is implied.
+
+The controlled UI also accepts `methodDetails` for a provider handoff or
+FairCoin wallet/external-wallet presentation. Available choices come from host
+capabilities and the request's allowed method IDs. Wallet availability is an
+explicit callback/data capability, never inferred from a signed-in account or
+platform. The host supplies quoted amounts, balance and remaining balance;
+the UI performs no FX conversion, wallet reads, signing or automatic debits.
+A wallet top-up uses the wallet owner's receive details, separately from the
+merchant payment destination. Neither flow buys or sells cryptocurrency.
+The external QR merely renders the host-provided payload; payment confirmation
+and any incoming-funds recognition must remain authoritative host operations.
+
+`checkoutFeedbackSounds` exposes the supplied success/failure AAC assets for
+host-controlled playback. Original OGG files are retained byte-for-byte in the
+artifact. The host owns terminal-transition deduplication, mute preferences,
+playback cancellation and platform audio capabilities; the SDK imports no Expo
+audio runtime. `resultIllustration` can carry a host-owned catalogue sticker,
+without adding sticker services or account data to the SDK.
+
+The optional installment detail variant displays a host-supplied schedule,
+amount due today, full total and fees. It neither calculates a financing quote
+nor approves credit. The host restricts this method to eligible requests and
+supplies the corresponding review totals; it is not modeled as an automatically
+renewing subscription. The generic checkout shell blocks interactive dismissal
+while processing, while the host retains ownership of terminal outcomes and
+session teardown.
