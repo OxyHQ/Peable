@@ -837,7 +837,7 @@ export const billingRoutes = [
     sdk: 'billing.retrieveEmbeddedCheckoutAction',
   }),
   defineRoute({
-    operationId: 'createBillingPortalSession',
+    operationId: 'createRecurringBillingPortalSession',
     method: 'post',
     path: '/v1/billing/portal_sessions',
     tag: 'Recurring billing',
