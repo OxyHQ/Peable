@@ -30,7 +30,7 @@ afterEach(async () => {
   await resetGatewayTables();
 });
 
-test('advances a paid intent broadcast → confirming → settled as confirmations climb', async () => {
+test('a paid intent stays processing as confirmations climb, then succeeds', async () => {
   const merchant = await seedMerchant({
     publicId: 'merch_test0000000000000001',
     oxyAppId: 'app_settle',
@@ -50,14 +50,12 @@ test('advances a paid intent broadcast → confirming → settled as confirmatio
     idempotencyKey: 'idem_settle',
     expiresAt: new Date(now.getTime() + 60_000),
   });
-  // `status` and `txid` are not seed parameters: an intent is MINTED `created`,
-  // and `broadcast` is reached only by recording the payer's txid.
-  // `updateIntentState` is the writer production uses for exactly that, and it
-  // sets both in ONE statement — which is what
-  // `payment_intents_broadcast_requires_txid_check` requires.
+  // A FairCoin intent is MINTED `requires_action`, and `processing` is reached
+  // only by recording the payer's txid — status and txid in ONE statement, which
+  // is what `payment_intents_processing_requires_txid_check` requires.
   await updateIntentState(gatewayDb(), intent.id, {
-    from: 'created',
-    status: 'broadcast',
+    from: 'requires_action',
+    status: 'processing',
     txid: 'tx_settle',
   });
 
@@ -84,23 +82,29 @@ test('advances a paid intent broadcast → confirming → settled as confirmatio
 
   const watcher = new SettlementWatcher({ getTransaction, onChange });
 
+  // 0 confirmations: proven in the mempool, nothing new to write.
   await watcher.check();
-  expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('confirming');
+  expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('processing');
+
+  // 1 confirmation: still `processing`, and the count is written so the wire's
+  // `faircoin.confirmations` is live.
+  await watcher.check();
+  const confirming = await findIntentById(gatewayDb(), intent.id);
+  expect(confirming?.status).toBe('processing');
+  expect(confirming?.confirmations).toBe(1);
 
   await watcher.check();
-  expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('confirming');
+  const succeeded = await findIntentById(gatewayDb(), intent.id);
+  expect(succeeded?.status).toBe('succeeded');
+  expect(succeeded?.confirmations).toBe(REQUIRED_CONFIRMATIONS);
+  expect(succeeded?.amountReceived).toBe(AMOUNT);
 
-  await watcher.check();
-  const settled = await findIntentById(gatewayDb(), intent.id);
-  expect(settled?.status).toBe('settled');
-  expect(settled?.confirmations).toBe(REQUIRED_CONFIRMATIONS);
-
-  // onChange fires ONCE per actual status change: broadcast→confirming, then
-  // confirming→settled. The middle poll (confirming→confirming) does not fire.
-  expect(changes).toEqual(['confirming', 'settled']);
+  // onChange fires once per WRITE: the new confirmation count, then success.
+  // The first poll (0 = 0) writes nothing and does not fire.
+  expect(changes).toEqual(['processing', 'succeeded']);
 });
 
-test('marks an under-value payment as failed', async () => {
+test('cancels an under-value payment as underpaid', async () => {
   const merchant = await seedMerchant({
     publicId: 'merch_test0000000000000002',
     oxyAppId: 'app_under',
@@ -121,8 +125,8 @@ test('marks an under-value payment as failed', async () => {
     expiresAt: new Date(now.getTime() + 60_000),
   });
   await updateIntentState(gatewayDb(), intent.id, {
-    from: 'created',
-    status: 'broadcast',
+    from: 'requires_action',
+    status: 'processing',
     txid: 'tx_under',
   });
 
@@ -144,6 +148,9 @@ test('marks an under-value payment as failed', async () => {
   const watcher = new SettlementWatcher({ getTransaction, onChange });
   await watcher.check();
 
-  expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('failed');
-  expect(changes).toEqual(['failed']);
+  const underpaid = await findIntentById(gatewayDb(), intent.id);
+  expect(underpaid?.status).toBe('canceled');
+  expect(underpaid?.cancellationReason).toBe('underpaid');
+  expect(underpaid?.lastPaymentError?.code).toBe('payment_underpaid');
+  expect(changes).toEqual(['canceled']);
 });

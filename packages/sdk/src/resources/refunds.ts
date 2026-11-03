@@ -51,9 +51,8 @@ export class RefundsResource {
    * `failed`. Treating the creation as completion is how a merchant's books
    * come to say money went back that is still with them.
    *
-   * `payment_status` on the response is where the PAYMENT stands after it, so a
-   * caller does not need a second read whose answer can move on before it
-   * arrives.
+   * The PAYMENT does not change status with a refund (ADR 0019): it stays
+   * `succeeded`, and its `amount_refunded` is the sum of succeeded refunds.
    */
   create(params: CreateRefundParams, options: { idempotencyKey?: string } = {}): Promise<Refund> {
     return this.client.request<Refund>('POST', '/v1/refunds', {

@@ -209,8 +209,13 @@ and no RPC node dependency anywhere in this repo. `@fairco.in/core` is the only
 `@fairco.in/*` package any workspace depends on.
 
 `services/settlementWatcher.ts` polls the Explorer for in-flight intents.
-Only `broadcast` and `confirming` intents carrying a payer-reported txid are
-watchable; terminal and pre-broadcast intents are never polled. Its timer is
+Only FairCoin `processing` intents carrying a payer-reported txid are watchable
+(`submit_tx` moves `requires_action → processing` with the txid in one write);
+`requires_action` and the terminal statuses are never polled. While a paid
+transaction confirms it writes the live `confirmations` count (same status, no
+event) and accepts the payment's billing invoice (`recordVerifiedChainPayment`);
+at the merchant's threshold it is `succeeded`, and a transaction that pays LESS
+is `canceled` with `cancellation_reason: 'underpaid'`. Its timer is
 `.unref()`-ed so it cannot hold a test run or the event loop open.
 
 **The gateway is not a chain proxy for wallets.** It reads the chain to settle
@@ -272,10 +277,52 @@ a wire object stores the wire shape (migration `0036` converted them).
 
 ## Backend surface
 
-Routes (`src/routes/`): `checkoutSessions`, `connect`, `connectedAccounts`,
-`dashboard`, `disputes`, `enrich`, `merchants`, `oxyFileEvents`,
-`events`, `paymentIntents`, `paymentLinks`, `providerWebhooks`, `refunds`,
-`social`, `tax`, `transfers`, `webhookDeliveries`, `webhookEndpoints`.
+Routes (`src/routes/`): `charges`, `checkoutSessions`, `connect`,
+`connectedAccounts`, `customers`, `dashboard`, `disputes`, `enrich`, `merchants`,
+`oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`, `paymentMethods`,
+`providerWebhooks`, `refunds`, `setupIntents`, `social`, `tax`, `transfers`,
+`webhookDeliveries`, `webhookEndpoints`.
+
+### The PaymentIntent is Stripe's (ADR 0019)
+
+Seven statuses on both rails — `requires_payment_method`,
+`requires_confirmation`, `requires_action`, `processing`, `requires_capture`,
+`canceled`, `succeeded` — one transition table in
+`shared-types/src/paymentIntent.ts`, `succeeded`/`canceled` terminal (a chain
+reorg's `succeeded → processing` is the one exception, in `applyEvent`).
+
+- **The rail decides the path, and `applyEvent(status, event, rail)` takes it.**
+  FairCoin: `requires_action` (`next_action.faircoin_payment`) → `processing` →
+  `succeeded`/`canceled`. Card: all seven. `requires_action` and `processing`
+  are SHARED, so a card event must never move a chain payment because the
+  statuses match — the rail argument refuses it, `LEGAL_SOURCES` bounds each
+  event's sources, and `CARD_ONLY_STATUSES` is a CHECK.
+- **A declined card attempt is `requires_payment_method` + `last_payment_error`**
+  (Peable's own message, chosen from the code — never the provider's prose), and
+  stays payable; `payment_intent.payment_failed` is recorded even when the
+  status does not move. A FairCoin underpayment is terminal (`canceled`,
+  `underpaid`): Peable never holds those coins.
+- **Cancellation is one status with a reason** (`cancellation_reason`,
+  `canceled_at`, CHECKed together): expiry is `abandoned`, the merchant's
+  `POST …/cancel` names one, the provider's is `automatic`. There is no
+  `/reject`.
+- **Refunds are not statuses.** `amount_refunded` is the sum of SUCCEEDED refund
+  rows, read in the same statement and never stored; `amount_received` is
+  written with the transition to `succeeded` (a partial capture receives less;
+  leaving `succeeded` resets it) and is what refunds draw on. Refund events are
+  `refund.*` and `charge.refunded`.
+- **A card authorization that succeeded is ONE `ch_…`**, written by
+  `transitionIntent` in the transaction that reaches `requires_capture` or
+  `succeeded` (`ensureChargeForIntent`); its outcome/card snapshot is read from
+  the provider after the commit. Failed attempts are not charges. The provider
+  charge id stays the `provider_charge_id` binding.
+- **Customers, payment methods and SetupIntents are Orbit's rows**
+  (`cus_`/`pm_`/`seti_`, ADR 0016); the provider customer is a lazy per-mode
+  binding (`customer_provider_bindings`), never serialized. Card numbers never
+  reach Peable — the provider's Elements collect them.
+- **Every id on the wire is public** — `merchant_id` is the `merch_…`; the chain
+  side lives in `faircoin`; the card's confirmation credential is never on the
+  intent (`next_action: use_peable_sdk` → `POST …/client_action`).
 
 **Every merchant `POST` mounts `idempotent` (`lib/idempotency.ts`, ADR 0014 D3)
 after its auth and scope middleware**, or is named with its reason in
@@ -326,8 +373,9 @@ Merchant/file ownership and reference visibility checks still apply. See
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
-`payments/` (`paymentIntentRepository`, `paymentLinkRepository`,
-`checkoutSessionRepository`), `social/` (`receiveCursor`, `sendAttribution`),
+`payments/` (`paymentIntentRepository`, `chargeRepository`,
+`paymentLinkRepository`, `checkoutSessionRepository`), `customers/`
+(`customerRepository`, `paymentMethodRepository`, `setupIntentRepository`), `social/` (`receiveCursor`, `sendAttribution`),
 `events/` (`eventRepository`), `webhooks/` (`webhookEndpointRepository`,
 `webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
@@ -353,7 +401,7 @@ so a new event type cannot ship the wrong payload.
 Five, and each one exists because its absence was a defect:
 
 - **A card payment is TWO things** — a row here, and a PaymentIntent at the
-  acquirer that stays confirmable. Ending it locally (`POST /reject`, the expiry
+  acquirer that stays confirmable. Ending it locally (`POST …/cancel`, the expiry
   sweeper) without cancelling there leaves a payment the payer can still
   complete against a terminal status. `services/cardCancellation.ts` cancels and
   then reports what is TRUE, because the cancellation can lose; the sweeper
@@ -368,11 +416,13 @@ Five, and each one exists because its absence was a defect:
   on `transfers.amount_reversed` is still the PROVIDER's figure and is never a
   sum of those rows.
 - **A refund's `state` is read, always.** `pending` and `failed` are ordinary
-  answers, a bank can reject a refund days later (`refund.failed`), and
-  `refunded → settled` is a legal transition for exactly that.
-- **`failed` is not terminal on the card rail.** One declined attempt returns
-  the provider's payment to a confirmable state; `underpaid` on the chain rail
-  still is terminal, and `LEGAL_SOURCES` is what keeps the two apart.
+  answers, and a bank can reject a refund days later (`refund.failed`): the row
+  moves `succeeded → failed` and `amount_refunded`, being their sum, drops with
+  it — no payment transition is needed, because a refund was never one.
+- **A declined attempt is not terminal on the card rail.** It returns the
+  payment to `requires_payment_method` with `last_payment_error`, confirmable
+  again; an `underpaid` chain payment is `canceled`, and the rail argument of
+  `applyEvent` plus `LEGAL_SOURCES` keep the two apart.
 
 **A dispute response is one shot, and none of it is stored.** Submitting is
 one-way at the network, so `submitDisputeEvidence` sends once and a second call
@@ -399,7 +449,9 @@ it inserts the snapshot — `data.object` as the API renders it now, the
 — and, in the SAME transaction, one `webhook_deliveries` row per ENABLED
 `webhook_endpoints` row of the merchant whose `enabled_events` holds the type
 or `*`. Every producer goes through it: `recordIntentEvent` /
-`recordDisputeEvent` / `recordConnectedAccountEvent` in `intentTransition.ts`,
+`recordIntentCreated` / `recordRefundEvent` / `recordChargeEvent` /
+`recordDisputeEvent` / `recordConnectedAccountEvent` /
+`recordCustomerObjectEvent` in `intentTransition.ts`,
 the billing-observation relay, the test event. A producer that wrote a delivery
 directly would be an event `/v1/events` never shows. An event exists whether or
 not any endpoint wants it.
@@ -423,7 +475,14 @@ not any endpoint wants it.
   claimed delivery whose endpoint is disabled ends `failed` without an attempt.
 - **Retention is 30 days** (`services/eventSweeper.ts`); every read filters on
   the same horizon. Deleting an event or an endpoint cascades to its deliveries.
-- **The catalog is `WEBHOOK_EVENT_SCOPES`** (`schema/valueSets.ts`): a new type
+- **The catalog is `WEBHOOK_EVENT_SCOPES`** (`schema/valueSets.ts`) — Stripe's
+  names since ADR 0019: `payment_intent.created|requires_action|processing|
+  amount_capturable_updated|succeeded|payment_failed|canceled`,
+  `charge.refunded`, `charge.dispute.created|updated|closed`,
+  `refund.created|updated|failed`, `customer.*`, `payment_method.*`,
+  `setup_intent.*`. The intent events derive from where the row landed
+  (`intentEventsFor`); a same-status write records nothing but a failed
+  attempt. A new type
   is one entry there plus `WebhookEventPayload`, and a migration for the
   `events_type_check` / `webhook_endpoints_enabled_events_check` it widens.
   `webhook_endpoint.test` is TARGETED (`TARGETED_WEBHOOK_EVENT_TYPES`): sent to
@@ -477,8 +536,11 @@ that then rolled back.
 compare half.** Every caller reads the intent, decides a target with
 `applyEvent` — a pure function over that earlier read — and only then writes, so
 without `status = from` in the WHERE the state machine is advisory: `ALLOWED`
-has `expired: []`, and an event racing `expireDueIntents` still wrote `settled`
-over `expired` and enqueued a second, contradicting outcome for one payment.
+has `canceled: []`, and an event racing `expireDueIntents` still wrote
+`succeeded` over an expired intent and enqueued a second, contradicting outcome
+for one payment. The same statement writes what the transition decides with it
+— `last_payment_error` (cleared by any other transition),
+`cancellation_reason`/`canceled_at`, `amount_received`, the txid.
 `from` is required so a caller that cannot name where it started does not
 compile, and the result is three-way — `updated` / `stale` / `missing` — because
 a route answers 409 for a row that moved and 404 for one that is not there.

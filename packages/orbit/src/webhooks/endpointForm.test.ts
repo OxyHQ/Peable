@@ -12,14 +12,14 @@ describe('buildEndpointBody', () => {
     expect(
       buildEndpointBody({
         url: 'https://shop.example/hook',
-        events: 'payment_intent.settled, payment_intent.failed payment_intent.settled',
+        events: 'payment_intent.succeeded, payment_intent.payment_failed payment_intent.succeeded',
         description: ' orders ',
       }),
     ).toEqual({
       ok: true,
       body: {
         url: 'https://shop.example/hook',
-        enabled_events: ['payment_intent.settled', 'payment_intent.failed'],
+        enabled_events: ['payment_intent.succeeded', 'payment_intent.payment_failed'],
         description: 'orders',
       },
     });
@@ -41,9 +41,9 @@ describe('describeEnabledEvents', () => {
     expect(describeEnabledEvents({ enabled_events: ['*'] }, 'All events')).toBe('All events');
     expect(
       describeEnabledEvents(
-        { enabled_events: ['payment_intent.settled', 'payment_intent.failed'] },
+        { enabled_events: ['payment_intent.succeeded', 'payment_intent.payment_failed'] },
         'All events',
       ),
-    ).toBe('payment_intent.settled, payment_intent.failed');
+    ).toBe('payment_intent.succeeded, payment_intent.payment_failed');
   });
 });

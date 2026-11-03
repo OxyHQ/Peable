@@ -1,4 +1,7 @@
 import type {
+  CancelPaymentIntentParams,
+  CapturePaymentIntentParams,
+  ConfirmPaymentIntentParams,
   CreatePaymentIntentParams,
   ExpandParams,
   List,
@@ -14,6 +17,8 @@ export interface PaymentIntentListParams extends ListParams {
   status?: PaymentIntentStatus;
   /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
   connected_account?: string;
+  /** Only this customer's payments (`cus_…`). */
+  customer?: string;
 }
 
 export type PaymentIntentList = List<PaymentIntent>;
@@ -93,6 +98,7 @@ export class PaymentIntentsResource {
           query: listQuery(page, {
             status: page.status,
             connected_account: page.connected_account,
+            customer: page.customer,
           }),
         }),
       params,
@@ -100,9 +106,11 @@ export class PaymentIntentsResource {
   }
 
   /**
-   * Update a payment's `metadata` — the only mutable field. A patch: named
-   * keys are set, a key sent as `''` is removed, others are kept. At most 50
-   * keys, 40-character keys and 500-character values.
+   * Update your own fields on a payment: `metadata` (a patch — named keys are
+   * set, a key sent as `''` is removed, others are kept; at most 50 keys,
+   * 40-character keys and 500-character values), `description`,
+   * `receipt_email` and `shipping` (`''` clears each). The amount and status
+   * move only through the payment's own operations.
    */
   update(
     id: string,
@@ -117,19 +125,61 @@ export class PaymentIntentsResource {
   }
 
   /**
-   * Reject a payment the payer has not completed.
-   *
-   * The gateway CANCELS it at the provider before it announces anything, so
-   * this can lose a race and say so: a 409 means the payer confirmed first and
-   * the payment is settled, and a 502 means the provider could not be reached
-   * and nothing was decided. Neither is a failure of the request — both are
-   * facts about a payment that is still live.
+   * Confirm a CARD payment server-side with a saved payment method (`pm_…`,
+   * attached to the payment's customer). A decline throws
+   * `PeableCardError` (402) whose `paymentIntent` is the payment, back at
+   * `requires_payment_method` with `last_payment_error`; a challenge resolves
+   * with `status: 'requires_action'` for the payer's client to complete.
+   * FairCoin payments are confirmed by the payer's wallet and refuse this (400).
    */
-  reject(id: string, options: { idempotencyKey?: string } = {}): Promise<PaymentIntent> {
+  confirm(
+    id: string,
+    params: ConfirmPaymentIntentParams & ExpandParams = {},
+    options: { idempotencyKey?: string } = {},
+  ): Promise<PaymentIntent> {
     return this.client.request<PaymentIntent>(
       'POST',
-      `/v1/payment_intents/${encodeURIComponent(id)}/reject`,
-      options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey },
+      `/v1/payment_intents/${encodeURIComponent(id)}/confirm`,
+      { body: params, idempotencyKey: options.idempotencyKey },
+    );
+  }
+
+  /**
+   * Capture a held authorization (`capture_method: 'manual'`, status
+   * `requires_capture`) — all of it, or `amount_to_capture` of it; the rest is
+   * released. Card only.
+   */
+  capture(
+    id: string,
+    params: CapturePaymentIntentParams & ExpandParams = {},
+    options: { idempotencyKey?: string } = {},
+  ): Promise<PaymentIntent> {
+    return this.client.request<PaymentIntent>(
+      'POST',
+      `/v1/payment_intents/${encodeURIComponent(id)}/capture`,
+      { body: params, idempotencyKey: options.idempotencyKey },
+    );
+  }
+
+  /**
+   * Cancel a payment that is not moving money yet (`requires_payment_method`,
+   * `requires_confirmation`, `requires_action`, or a held `requires_capture`,
+   * which this releases).
+   *
+   * The gateway cancels it at the provider before it announces anything, so
+   * this can lose a race and say so: a 400 `payment_intent_unexpected_state`
+   * means the payer confirmed first, and a 502 means the provider could not be
+   * reached and nothing was decided.
+   */
+  cancel(
+    id: string,
+    params: CancelPaymentIntentParams & ExpandParams = {},
+    options: { idempotencyKey?: string } = {},
+  ): Promise<PaymentIntent> {
+    return this.client.request<PaymentIntent>(
+      'POST',
+      `/v1/payment_intents/${encodeURIComponent(id)}/cancel`,
+      { body: params, idempotencyKey: options.idempotencyKey },
     );
   }
 
@@ -147,7 +197,7 @@ export class PaymentIntentsResource {
    *
    * @throws {PeableInvalidRequestError} (409) when the payment can no longer be
    *   paid, so a surface handed this can never render a card form over a
-   *   settled payment.
+   *   payment that already succeeded or was cancelled.
    */
   clientAction(id: string): Promise<PaymentIntentClientAction> {
     return this.client.request<PaymentIntentClientAction>(

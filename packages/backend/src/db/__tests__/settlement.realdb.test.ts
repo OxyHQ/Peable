@@ -106,6 +106,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
       network: null,
       address: null,
       provider: 'stripe',
+      status: 'requires_payment_method' as const,
       clientSecret: 'cs_x',
       idempotencyKey: uuidv7(),
       metadata: {},

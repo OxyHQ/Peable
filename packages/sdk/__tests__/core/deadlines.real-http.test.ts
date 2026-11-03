@@ -115,7 +115,7 @@ describe('HTTP deadline and existing intent propagation', () => {
     expect(keys).toEqual(['stable-intent', 'stable-intent']);
     expect(effects.size).toBe(1);
   });
-  test('preserves supplied keys on reject/refund/transfer without changing durable body identity', async () => {
+  test('preserves supplied keys on cancel/refund/transfer without changing durable body identity', async () => {
     const seen: Array<{ path: string; key: string | undefined; body: unknown }> = [];
     const url = await listen(async (request, response) => {
       let body = '';
@@ -133,7 +133,7 @@ describe('HTTP deadline and existing intent propagation', () => {
       );
     });
     const client = sdk(url);
-    await client.paymentIntents.reject('pi_owned', { idempotencyKey: 'reject-intent' });
+    await client.paymentIntents.cancel('pi_owned', {}, { idempotencyKey: 'cancel-intent' });
     await client.refunds.create(
       { payment_intent: 'pi_owned', external_ref: 'refund-owned', amount: '10' },
       { idempotencyKey: 'refund-intent' },
@@ -147,7 +147,7 @@ describe('HTTP deadline and existing intent propagation', () => {
       },
       { idempotencyKey: 'transfer-intent' },
     );
-    expect(seen.map((x) => x.key)).toEqual(['reject-intent', 'refund-intent', 'transfer-intent']);
+    expect(seen.map((x) => x.key)).toEqual(['cancel-intent', 'refund-intent', 'transfer-intent']);
     expect(seen[1]?.body).toMatchObject({ external_ref: 'refund-owned', amount: '10' });
     expect(seen[2]?.body).toMatchObject({ external_ref: 'order-owned', amount: '90' });
   });

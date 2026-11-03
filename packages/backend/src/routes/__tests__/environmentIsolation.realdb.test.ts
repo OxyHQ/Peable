@@ -202,7 +202,10 @@ async function settledCardPayment(environment: OxyServiceEnvironment, publicId: 
   const merchant = await seedMerchant({ oxyAppId: APP_ID, environment });
   const intent = await seedIntent(merchant, { publicId, rail: 'card', amount: '5000' });
   await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_${publicId}`);
-  await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+  await updateIntentState(gatewayDb(), intent.id, {
+    from: 'requires_payment_method',
+    status: 'succeeded',
+  });
   return intent;
 }
 

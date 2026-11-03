@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { NetworkType } from '@fairco.in/core';
-import type { CurrencyCode, MerchantEnvironment, PaymentIntentRail } from '@peable.to/shared-types';
+import type {
+  CurrencyCode,
+  MerchantEnvironment,
+  PaymentIntentCaptureMethod,
+  PaymentIntentRail,
+  PaymentIntentSetupFutureUsage,
+  PaymentMethodType,
+  Shipping,
+} from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -9,13 +17,22 @@ import {
   type ConnectedAccountRow,
 } from '../db/accounts/connectedAccountRepository';
 import {
+  findIntentById,
   findIntentByIdempotencyKey,
   insertPaymentIntent,
   linkProviderObject,
 } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { Database } from '../db/postgres';
+import { findLiveCustomerForMerchant, type CustomerRow } from '../db/customers/customerRepository';
+import {
+  findPaymentMethodForMerchant,
+  type PaymentMethodRow,
+} from '../db/customers/paymentMethodRepository';
 import type { PaymentProvider, ProviderClientAction } from './providers/provider';
+import { ensureProviderCustomer } from './customers/providerCustomer';
+import { applyProviderPaymentResult } from './intentReconciliation';
+import { recordIntentCreated } from './intentTransition';
 import { selectCardProvider, selectStoredProvider } from './providers/environmentGuard';
 import { reserveNextAccountAddress, reserveNextAddress } from './reserveAddress';
 import { newId, clientSecretFor } from '../lib/ids';
@@ -155,6 +172,166 @@ export interface CreateIntentInput {
    * but no replay lookup is ever done against a key nobody can present again.
    */
   idempotencyKey?: string;
+  /** Must be the rail's own type (`['card']` / `['faircoin']`) when given. */
+  paymentMethodTypes?: readonly PaymentMethodType[];
+  /** `cus_…` (ADR 0016). */
+  customer?: string;
+  /** `pm_…`, card only — a saved method of `customer`. */
+  paymentMethod?: string;
+  /** Card only: confirm in the same call (needs `paymentMethod`). */
+  confirm?: boolean;
+  /** Card only, with `confirm`: the customer is not present (needs `customer`). */
+  offSession?: boolean;
+  setupFutureUsage?: PaymentIntentSetupFutureUsage;
+  captureMethod?: PaymentIntentCaptureMethod;
+  receiptEmail?: string;
+  description?: string;
+  statementDescriptorSuffix?: string;
+  shipping?: Shipping;
+  returnUrl?: string;
+}
+
+/**
+ * A parameter this rail or this request cannot take — a 400 naming it.
+ *
+ * Its own error because the answer is about ONE field, and `param` is what tells
+ * the integrator which: `payment_method` on a FairCoin payment, `customer` that
+ * does not exist, `off_session` without `confirm`.
+ */
+export class IntentParameterError extends Error {
+  constructor(
+    message: string,
+    readonly param: string,
+    readonly code: 'parameter_invalid' | 'resource_missing' = 'parameter_invalid',
+  ) {
+    super(message);
+    this.name = 'IntentParameterError';
+  }
+}
+
+/** The fields a FairCoin payment refuses, and why: signing stays on the payer's device. */
+const CARD_ONLY_PARAMS = [
+  ['paymentMethod', 'payment_method'],
+  ['confirm', 'confirm'],
+  ['offSession', 'off_session'],
+  ['setupFutureUsage', 'setup_future_usage'],
+  ['statementDescriptorSuffix', 'statement_descriptor_suffix'],
+  ['returnUrl', 'return_url'],
+] as const;
+
+/**
+ * Check the payment-method side of a create, and resolve the customer and
+ * method it names — before anything is reserved or written.
+ *
+ * @throws {IntentParameterError}
+ */
+export async function resolvePaymentParties(
+  merchant: MerchantRow,
+  rail: PaymentIntentRail,
+  input: Pick<
+    CreateIntentInput,
+    | 'customer'
+    | 'paymentMethod'
+    | 'confirm'
+    | 'offSession'
+    | 'setupFutureUsage'
+    | 'captureMethod'
+    | 'statementDescriptorSuffix'
+    | 'returnUrl'
+    | 'paymentMethodTypes'
+  >,
+): Promise<{ customer: CustomerRow | null; paymentMethod: PaymentMethodRow | null }> {
+  if (input.paymentMethodTypes !== undefined) {
+    const types = [...new Set(input.paymentMethodTypes)];
+    if (types.length !== 1 || types[0] !== rail) {
+      throw new IntentParameterError(
+        `the ${rail} rail takes payment_method_types ['${rail}']`,
+        'payment_method_types',
+      );
+    }
+  }
+  if (rail === 'faircoin') {
+    for (const [field, param] of CARD_ONLY_PARAMS) {
+      const value = input[field];
+      if (value !== undefined && value !== false) {
+        throw new IntentParameterError(
+          `${param} is card only: a FairCoin payment is confirmed by the payer's own wallet broadcasting a transaction`,
+          param,
+        );
+      }
+    }
+    if (input.captureMethod === 'manual') {
+      throw new IntentParameterError(
+        'capture_method manual is card only: a FairCoin payment cannot be held and captured',
+        'capture_method',
+      );
+    }
+  }
+  if (input.offSession === true && input.confirm !== true) {
+    throw new IntentParameterError('off_session needs confirm: true', 'off_session');
+  }
+  if (input.confirm === true && input.paymentMethod === undefined) {
+    throw new IntentParameterError('confirm needs a payment_method', 'payment_method');
+  }
+
+  const db = getDb();
+  const customer =
+    input.customer === undefined
+      ? null
+      : await findLiveCustomerForMerchant(db, input.customer, merchant.id);
+  if (input.customer !== undefined && customer === null) {
+    throw new IntentParameterError(
+      `no such customer: '${input.customer}'`,
+      'customer',
+      'resource_missing',
+    );
+  }
+  if ((input.offSession === true || input.setupFutureUsage !== undefined) && customer === null) {
+    throw new IntentParameterError(
+      `${input.offSession === true ? 'off_session' : 'setup_future_usage'} needs a customer to save the card to`,
+      'customer',
+    );
+  }
+
+  const paymentMethod =
+    input.paymentMethod === undefined
+      ? null
+      : await findPaymentMethodForMerchant(db, input.paymentMethod, merchant.id);
+  if (input.paymentMethod !== undefined) {
+    if (paymentMethod === null) {
+      throw new IntentParameterError(
+        `no such payment method: '${input.paymentMethod}'`,
+        'payment_method',
+        'resource_missing',
+      );
+    }
+    assertUsablePaymentMethod(paymentMethod, customer);
+  }
+  return { customer, paymentMethod };
+}
+
+/**
+ * A saved method is usable only while attached, and only for the customer it is
+ * attached to — the provider charges it through that customer.
+ *
+ * @throws {IntentParameterError}
+ */
+export function assertUsablePaymentMethod(
+  paymentMethod: PaymentMethodRow,
+  customer: { readonly id: string } | null,
+): void {
+  if (paymentMethod.customerId === null) {
+    throw new IntentParameterError(
+      'this payment method is detached and can no longer be used',
+      'payment_method',
+    );
+  }
+  if (customer === null || customer.id !== paymentMethod.customerId) {
+    throw new IntentParameterError(
+      'this payment method belongs to a customer; pass that customer',
+      'customer',
+    );
+  }
 }
 
 export interface CreateIntentResult {
@@ -302,6 +479,13 @@ async function attachProviderPayment(
   db: Database,
   intent: PaymentIntentRow,
   provider: PaymentProvider,
+  extras: {
+    readonly customerObjectId?: string;
+    readonly paymentMethodObjectId?: string;
+    readonly confirm?: boolean;
+    readonly offSession?: boolean;
+    readonly returnUrl?: string;
+  } = {},
 ): Promise<ProviderClientAction | undefined> {
   const result = await provider.createPayment({
     intentId: intent.publicId,
@@ -310,11 +494,27 @@ async function attachProviderPayment(
     // The merchant's own metadata is deliberately NOT forwarded: it is the
     // merchant's, it can contain anything, and a provider's metadata is
     // readable by everyone with dashboard access. The adapter adds the one
-    // correlation key that has to survive — `peable_intent_id`.
+    // correlation key that has to survive — `peable_intent_id`. The same goes
+    // for `description`, `receipt_email` and `shipping`: Orbit's, not the
+    // provider's (a provider receipt would be the provider's brand).
     metadata: {},
+    captureMethod: intent.captureMethod,
+    ...(intent.setupFutureUsage !== null ? { setupFutureUsage: intent.setupFutureUsage } : {}),
+    ...(intent.statementDescriptorSuffix !== null
+      ? { statementDescriptorSuffix: intent.statementDescriptorSuffix }
+      : {}),
+    ...extras,
   });
 
   await linkProviderObject(db, intent.id, provider.id, result.providerObjectId);
+  if (extras.confirm === true) {
+    // Confirmed in the same call: the provider's answer is a transition, and it
+    // goes through the one path every provider answer takes.
+    await applyProviderPaymentResult(
+      { ...intent, providerObjectId: result.providerObjectId },
+      result,
+    );
+  }
   return result.clientAction;
 }
 
@@ -455,6 +655,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       : undefined;
   const { rail, currency, network } = resolveRail(merchant, input, account);
   const connectedAccountId = account?.id ?? null;
+  const { customer, paymentMethod } = await resolvePaymentParties(merchant, rail, input);
 
   // Which provider will move this money, SELECTED by the credential's
   // environment (ADR 0017: production ⟺ live) and decided ONCE. Resolved
@@ -500,25 +701,54 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   );
   const key = idempotencyKey ?? randomUUID();
 
+  // Where it starts (ADR 0019): the chain waits on the payer's broadcast; a
+  // card waits on a payment method, or on confirmation once it has one.
+  const status =
+    rail === 'faircoin'
+      ? ('requires_action' as const)
+      : paymentMethod !== null
+        ? ('requires_confirmation' as const)
+        : ('requires_payment_method' as const);
+
+  // The provider customer, before the row: a card saved for later, or charged
+  // off-session, is charged through it, and creating it is idempotent per
+  // customer — a failure here leaves nothing behind.
+  const customerObjectId =
+    cardProvider && customer !== null && (paymentMethod !== null || input.setupFutureUsage)
+      ? await ensureProviderCustomer(customer, cardProvider)
+      : undefined;
+
   // Explicit field whitelist — never spread a caller body (mass-assignment
-  // would be an IDOR). `status`, `currency` and `confirmations` take their
-  // column defaults inside the repository: a caller does not get to mint an
-  // intent that is already settled.
-  const intent = await insertPaymentIntent(db, {
-    publicId,
-    paymentLinkId: input.paymentLinkId,
-    merchantId: merchant.id,
-    connectedAccountId,
-    rail,
-    amount,
-    currency,
-    network,
-    address,
-    provider: cardProvider?.id ?? null,
-    clientSecret,
-    idempotencyKey: key,
-    metadata: metadata ?? {},
-    expiresAt,
+  // would be an IDOR). The row and its `payment_intent.created` commit
+  // together (ADR 0001 D7).
+  const intent = await db.transaction(async (tx) => {
+    const inserted = await insertPaymentIntent(tx, {
+      publicId,
+      paymentLinkId: input.paymentLinkId,
+      merchantId: merchant.id,
+      connectedAccountId,
+      rail,
+      amount,
+      currency,
+      network,
+      address,
+      provider: cardProvider?.id ?? null,
+      status,
+      customerId: customer?.id ?? null,
+      paymentMethodId: paymentMethod?.id ?? null,
+      captureMethod: input.captureMethod ?? 'automatic',
+      setupFutureUsage: input.setupFutureUsage ?? null,
+      description: input.description ?? null,
+      receiptEmail: input.receiptEmail ?? null,
+      statementDescriptorSuffix: input.statementDescriptorSuffix ?? null,
+      shipping: input.shipping ?? null,
+      clientSecret,
+      idempotencyKey: key,
+      metadata: metadata ?? {},
+      expiresAt,
+    });
+    if (inserted) await recordIntentCreated(tx, inserted);
+    return inserted;
   });
 
   if (intent) {
@@ -528,8 +758,19 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
     // re-calling with the same idempotency key. The reverse leaves a real
     // charge with no row, which nothing can find.
     if (cardProvider) {
-      const clientAction = await attachProviderPayment(db, intent, cardProvider);
-      return { intent, reused: false, clientAction };
+      const clientAction = await attachProviderPayment(db, intent, cardProvider, {
+        ...(customerObjectId !== undefined ? { customerObjectId } : {}),
+        ...(paymentMethod !== null
+          ? { paymentMethodObjectId: paymentMethod.providerObjectId }
+          : {}),
+        ...(input.confirm === true ? { confirm: true } : {}),
+        ...(input.offSession === true ? { offSession: true } : {}),
+        ...(input.returnUrl !== undefined ? { returnUrl: input.returnUrl } : {}),
+      });
+      // A confirmation moved the row; answer with where it stands now.
+      const current =
+        input.confirm === true ? ((await findIntentById(db, intent.id)) ?? intent) : intent;
+      return { intent: current, reused: false, clientAction };
     }
     return { intent, reused: false };
   }

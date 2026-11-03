@@ -1,181 +1,197 @@
-import { type PaymentIntentStatus, isValidStatusTransition } from '@peable.to/shared-types';
+import {
+  type PaymentIntentRail,
+  type PaymentIntentStatus,
+  EXPIRABLE_STATUSES,
+  isValidStatusTransition,
+} from '@peable.to/shared-types';
 
 /**
- * Events that drive a PaymentIntent through its lifecycle. Each event maps to a
- * single target status; the target is validated against the shared transition
- * table (the one exception is documented below).
+ * Events that drive a PaymentIntent through its lifecycle (ADR 0019). Each
+ * event maps to a single target status; the target is validated against the
+ * shared transition table, against the rail the event belongs to, and against
+ * the statuses it may act FROM.
+ *
+ * Refunds are not here: money coming back is `amount_refunded` and the refund
+ * rows, never a status (ADR 0019). A dispute never was.
  */
 export type IntentEvent =
-  | 'deliver'
-  | 'approve'
-  | 'reject'
+  // ── FairCoin (the chain) ─────────────────────────────────────────────────
+  /** The payer reported a broadcast txid (`submit_tx`). */
   | 'broadcast'
-  | 'mempool_seen'
+  /** The watcher saw enough confirmations of a transaction that paid in full. */
   | 'confirmed'
+  /** The watcher saw a transaction at the address that paid LESS than the amount. */
   | 'underpaid'
-  | 'expire'
+  /** A reorg dropped a succeeded payment back below its threshold. */
   | 'reorg_below_threshold'
-  // ── Card rail (ADR 0001 D5) ──────────────────────────────────────────────
-  // Named `card_*` rather than reusing the chain events, because the two rails
-  // reach some of the same statuses by different routes and a shared event name
-  // would make `LEGAL_SOURCES` unable to say which route it meant. `confirmed`
-  // in particular is a CHAIN event with `['confirming']` as its only legal
-  // source; a card charge that settles in one call comes from `created`.
+  // ── Either rail ──────────────────────────────────────────────────────────
+  /** The expiry clock ran out on a payer who never paid (`abandoned`). */
+  | 'expire'
+  /** The merchant cancelled it (`POST …/cancel`). */
+  | 'cancel'
+  // ── Card (ADR 0001 D5) — the provider's own status, one event each ───────
+  // Named `card_*` so `RAIL_OF` and `LEGAL_SOURCES` can say which route they
+  // mean: since ADR 0019 `requires_action` and `processing` are SHARED with the
+  // chain, and only the event can tell a card's `processing` from a payer's
+  // broadcast.
+  | 'card_requires_payment_method'
+  | 'card_requires_confirmation'
   | 'card_requires_action'
   | 'card_processing'
-  | 'card_settled'
+  | 'card_requires_capture'
+  | 'card_succeeded'
+  /** An attempt failed: the payment returns to `requires_payment_method`. */
   | 'card_failed'
-  | 'card_canceled'
-  // Money going back. Named for the OUTCOME rather than for the refund, because
-  // the target depends on the total that has come back and not on this leg: a
-  // second partial refund that exhausts the payment is `refund_full`.
-  | 'refund_partial'
-  | 'refund_full'
-  // ...and money that came back can go away again. A bank can reject a refund
-  // days after the provider accepted it (`refund.failed`), and the succeeded
-  // total drops — to zero, here. Without this the payment claims `refunded`
-  // forever while the money is still with the merchant.
-  | 'refund_voided';
+  | 'card_canceled';
 
 function targetStatusFor(event: IntentEvent): PaymentIntentStatus {
   switch (event) {
-    case 'deliver':
-      return 'awaiting_approval';
-    case 'approve':
-      return 'approved';
-    case 'reject':
-      return 'rejected';
     case 'broadcast':
-      return 'broadcast';
-    case 'mempool_seen':
-      return 'confirming';
+      return 'processing';
     case 'confirmed':
-      return 'settled';
-    // Both broadcast and confirming can fail on an under-value tx; target is failed.
+      return 'succeeded';
+    // Coins arrived and were not enough. Peable never holds them, so it cannot
+    // ask for the difference on the same intent: the intent ends, `underpaid`.
     case 'underpaid':
-      return 'failed';
-    // Both created and awaiting_approval can expire; target is expired.
-    case 'expire':
-      return 'expired';
-    // Rewind of a settled intent — see the exception branch in applyEvent.
+      return 'canceled';
+    // Rewind of a succeeded intent — see the exception branch in applyEvent.
     case 'reorg_below_threshold':
-      return 'confirming';
+      return 'processing';
+    case 'expire':
+    case 'cancel':
+      return 'canceled';
+    case 'card_requires_payment_method':
+    case 'card_failed':
+      return 'requires_payment_method';
+    case 'card_requires_confirmation':
+      return 'requires_confirmation';
     case 'card_requires_action':
       return 'requires_action';
     case 'card_processing':
       return 'processing';
-    case 'card_settled':
-      return 'settled';
-    case 'card_failed':
-      return 'failed';
-    // A provider-side cancellation is a REJECTION, not an expiry: expiry is
-    // this gateway's own clock running out, and conflating them would make the
-    // expiry sweeper's numbers include payments it never expired.
+    case 'card_requires_capture':
+      return 'requires_capture';
+    case 'card_succeeded':
+      return 'succeeded';
     case 'card_canceled':
-      return 'rejected';
-    case 'refund_partial':
-      return 'partially_refunded';
-    case 'refund_full':
-      return 'refunded';
-    // Every succeeded refund on this payment has since failed, so the money is
-    // where it was: with the merchant.
-    case 'refund_voided':
-      return 'settled';
+      return 'canceled';
   }
 }
 
+/** Which rail an event belongs to; `null` for the two that apply to both. */
+const RAIL_OF: Record<IntentEvent, PaymentIntentRail | null> = {
+  broadcast: 'faircoin',
+  confirmed: 'faircoin',
+  underpaid: 'faircoin',
+  reorg_below_threshold: 'faircoin',
+  expire: null,
+  cancel: null,
+  card_requires_payment_method: 'card',
+  card_requires_confirmation: 'card',
+  card_requires_action: 'card',
+  card_processing: 'card',
+  card_requires_capture: 'card',
+  card_succeeded: 'card',
+  card_failed: 'card',
+  card_canceled: 'card',
+};
+
 /**
- * Where an event may act FROM, when the shared table alone is too permissive.
+ * Where an event may act FROM, narrower than the shared table.
  *
- * The transition table is ONE table for both rails (ADR 0001 D5): it answers
- * "is this a legal lifecycle edge at all", and the card rail legitimately needs
- * `created → settled` for a charge that confirms in a single call with no SCA
- * challenge. That edge is not legal on the chain — a FairCoin payment cannot be
- * confirmed before it was broadcast — and `confirmed` is a CHAIN event, emitted
- * only by the settlement watcher.
+ * The table is ONE table for both rails: it answers "is this a legal edge at
+ * all", and it must contain `requires_action → succeeded` for a card whose
+ * challenge completed. That edge is not legal on the chain — a FairCoin payment
+ * cannot succeed before it was broadcast — so `confirmed` acts only from
+ * `processing`, and `broadcast` only from `requires_action`.
  *
- * Without this map, opening that edge for the card rail would have silently
- * legalized `applyEvent('created', 'confirmed')`. The database still refuses the
- * result (`payment_intents_broadcast_requires_txid_check` demands a txid for a
- * settled FairCoin row), so the damage would have been a 500 from a constraint
- * instead of the loud, located error this module exists to raise. An event
- * absent from this map is governed by the shared table alone.
+ * The cancellable set is Stripe's: anything not yet moving money, plus a held
+ * authorization (which a cancellation releases). `processing` is absent — coins
+ * on the chain or a charge at the acquirer cannot be called off.
  */
-const LEGAL_SOURCES: Partial<Record<IntentEvent, readonly PaymentIntentStatus[]>> = {
-  confirmed: ['confirming'],
-  mempool_seen: ['broadcast', 'confirming'],
-  underpaid: ['broadcast', 'confirming', 'approved'],
-  // The card events, bounded to the statuses a card payment can actually be in.
-  // The shared table alone would let `card_settled` act from `confirming`,
-  // which is a CHAIN status — and the lookup that finds an intent for a
-  // provider event cannot reach a faircoin row (it has no provider), so this is
-  // defence in depth rather than the only guard. It is here so that if that
-  // lookup ever does go wrong, it is a located error naming the event and the
-  // status, instead of a settled chain payment with no transaction behind it.
-  // `failed` is a legal SOURCE for the first three, and that is the card rail's
-  // retry: one declined attempt returns the provider's payment to
-  // `requires_payment_method`, and the payer confirms it again with another
-  // card. Without those sources a later `payment_intent.succeeded` was an
-  // illegal transition, so the drain recorded a processing failure and retried
-  // it forever while a merchant who had been paid was told otherwise.
-  card_requires_action: ['created', 'failed'],
-  card_processing: ['created', 'requires_action', 'failed'],
-  card_settled: ['created', 'requires_action', 'processing', 'failed'],
-  card_failed: ['created', 'requires_action', 'processing'],
-  card_canceled: ['created', 'requires_action'],
-  // Money can only come back if it arrived. `partially_refunded` is a legal
-  // source for `refund_full` — a second refund exhausting the payment — and is
-  // NOT one for `refund_partial` when nothing else changed, which `applyEvent`
-  // absorbs as a self-transition while the amounts change.
-  //
-  // `refunded` IS a source for `refund_partial`: a fully-refunded payment whose
-  // second refund was rejected by the bank drops back to partial, and the
-  // target is recomputed from the sum rather than stepped.
-  refund_partial: ['settled', 'refunded'],
-  refund_full: ['settled', 'partially_refunded'],
-  // Only from a status that claims money came back. A `settled` payment with no
-  // refunds is absorbed by the self-transition; anything else reaching here
-  // would be this event inventing a settlement.
-  refund_voided: ['refunded', 'partially_refunded'],
+const CANCELLABLE: readonly PaymentIntentStatus[] = [
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+  'requires_capture',
+];
+
+const LEGAL_SOURCES: Record<IntentEvent, readonly PaymentIntentStatus[]> = {
+  broadcast: ['requires_action'],
+  confirmed: ['processing'],
+  underpaid: ['processing'],
+  reorg_below_threshold: ['succeeded'],
+  expire: EXPIRABLE_STATUSES,
+  cancel: CANCELLABLE,
+  card_requires_payment_method: ['requires_confirmation', 'requires_action', 'processing'],
+  card_requires_confirmation: ['requires_payment_method'],
+  card_requires_action: ['requires_payment_method', 'requires_confirmation'],
+  card_processing: [
+    'requires_payment_method',
+    'requires_confirmation',
+    'requires_action',
+    'requires_capture',
+  ],
+  card_requires_capture: [
+    'requires_payment_method',
+    'requires_confirmation',
+    'requires_action',
+    'processing',
+  ],
+  card_succeeded: [
+    'requires_payment_method',
+    'requires_confirmation',
+    'requires_action',
+    'processing',
+    'requires_capture',
+  ],
+  card_failed: ['requires_confirmation', 'requires_action', 'processing'],
+  card_canceled: [...CANCELLABLE, 'processing'],
 };
 
 /**
  * Advance an intent's status by applying an event. Fails loud (throws) on any
  * illegal transition — never a silent no-op — so a mis-sequenced caller is
  * caught rather than silently corrupting state.
+ *
+ * `rail` is required: two rails share `requires_action` and `processing`, and a
+ * card event must never move a chain payment (or the reverse) because the
+ * statuses happen to match.
  */
-export function applyEvent(current: PaymentIntentStatus, event: IntentEvent): PaymentIntentStatus {
+export function applyEvent(
+  current: PaymentIntentStatus,
+  event: IntentEvent,
+  rail: PaymentIntentRail,
+): PaymentIntentStatus {
+  const eventRail = RAIL_OF[event];
+  if (eventRail !== null && eventRail !== rail) {
+    throw new Error(
+      `illegal transition: '${event}' is a ${eventRail} event and this is a ${rail} payment`,
+    );
+  }
   const target = targetStatusFor(event);
 
-  // Documented exception: a chain reorg can drop an already-settled intent
-  // below the confirmation threshold, rewinding settled -> confirming. This is
-  // the ONE transition that bypasses the happy-path table (settled is
-  // otherwise terminal), so it is NOT validated via isValidStatusTransition.
-  // It is only ever legal from settled.
+  // Documented exception: a chain reorg can drop an already-succeeded intent
+  // below the confirmation threshold, rewinding succeeded -> processing. The
+  // ONE transition that bypasses the table (succeeded is otherwise terminal).
   if (event === 'reorg_below_threshold') {
-    if (current !== 'settled') {
+    if (current !== 'succeeded') {
       throw new Error(
-        `invalid event 'reorg_below_threshold' from '${current}': only a settled intent can reorg below threshold`,
+        `invalid event 'reorg_below_threshold' from '${current}': only a succeeded intent can reorg below threshold`,
       );
     }
     return target;
   }
 
-  // Idempotent re-poll: the settlement watcher may re-observe the same mempool
-  // state (e.g. mempool_seen while already confirming). Returning the current
-  // status unchanged lets the watcher re-check safely without tripping the
-  // fail-loud guard below.
-  //
-  // Checked BEFORE `LEGAL_SOURCES`, and the order is load-bearing: `confirming`
-  // is a legal source for `mempool_seen` precisely so this branch can absorb the
-  // re-poll, and a source check placed first would have to list every status an
-  // event may idempotently re-observe from as well as act from.
+  // Idempotent re-poll: the settlement watcher re-observes the same state, and
+  // a provider redelivers. Checked BEFORE the source check, so a redelivery is
+  // absorbed rather than refused.
   if (current === target) {
     return current;
   }
 
   const legalSources = LEGAL_SOURCES[event];
-  if (legalSources && !legalSources.includes(current)) {
+  if (!legalSources.includes(current)) {
     throw new Error(
       `illegal transition: cannot apply '${event}' from '${current}' (${legalSources.join(', ')} only)`,
     );

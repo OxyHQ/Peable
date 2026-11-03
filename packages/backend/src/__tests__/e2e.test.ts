@@ -165,12 +165,12 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   expect(createRes.headers.get('Peable-Version')).toBe('2026-11-03');
   const created = (await createRes.json()) as {
     id: string;
-    address: string;
+    faircoin: { address: string } | null;
     status: string;
     client_secret: string;
   };
-  expect(created.status).toBe('created');
-  expect(created.address).toBe(FIRST_ADDRESS);
+  expect(created.status).toBe('requires_action');
+  expect(created.faircoin?.address).toBe(FIRST_ADDRESS);
 
   // 2. Payer's wallet opens a realtime channel for this intent — with NO Oxy
   // identity (anonymous checkout/embed payer, the whole point of the
@@ -228,7 +228,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   const settled = withTimeout(
     new Promise<{ status: string; id: string }>((resolve) => {
       client.on('intent.updated', (payload: { status: string; id: string }) => {
-        if (payload.status === 'settled') resolve(payload);
+        if (payload.status === 'succeeded') resolve(payload);
       });
     }),
     5000,
@@ -237,7 +237,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   const authedSettled = withTimeout(
     new Promise<{ status: string; id: string }>((resolve) => {
       authedClient.on('intent.updated', (payload: { status: string; id: string }) => {
-        if (payload.status === 'settled') resolve(payload);
+        if (payload.status === 'succeeded') resolve(payload);
       });
     }),
     5000,
@@ -251,7 +251,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
     body: JSON.stringify({ client_secret: created.client_secret, txid: TXID }),
   });
   expect(submitRes.status).toBe(200);
-  expect(((await submitRes.json()) as { status: string }).status).toBe('broadcast');
+  expect(((await submitRes.json()) as { status: string }).status).toBe('processing');
 
   // 4. The chain now shows the tx paid + confirmed; the watcher reconciles.
   txResponse = {
@@ -266,14 +266,14 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   // capability, so both get it.
   const event = await settled;
   expect(event.id).toBe(created.id);
-  expect(event.status).toBe('settled');
+  expect(event.status).toBe('succeeded');
   const authedEvent = await authedSettled;
   expect(authedEvent.id).toBe(created.id);
-  expect(authedEvent.status).toBe('settled');
+  expect(authedEvent.status).toBe('succeeded');
 
   // 6. The intent is settled in the DB.
   const doc = await findIntentByPublicId(gatewayDb(), created.id);
-  expect(doc?.status).toBe('settled');
+  expect(doc?.status).toBe('succeeded');
 
   // 7. The merchant's event was ENQUEUED by the transition, and the dispatcher
   // delivers it. Two steps rather than one since ADR 0001 D7: the watcher's
@@ -291,10 +291,17 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   expect(webhookCalls).toHaveLength(0);
 
   const pass = await runWebhookOutboxPass({ safeFetch: fakeSafeFetch as SafeFetchFn });
-  expect(pass).toMatchObject({ claimed: 1, delivered: 1 });
+  // ADR 0019: Stripe's catalogue — `created` at the mint, `processing` at the
+  // payer's broadcast, `succeeded` at the watcher's proof.
+  expect(pass).toMatchObject({ claimed: 3, delivered: 3 });
+  expect(
+    webhookCalls.map((call) => (JSON.parse(call.body) as { type: string }).type).sort(),
+  ).toEqual(['payment_intent.created', 'payment_intent.processing', 'payment_intent.succeeded']);
 
-  // A correctly-signed settled webhook reached the merchant.
-  const hook = webhookCalls.at(-1);
+  // A correctly-signed succeeded webhook reached the merchant.
+  const hook = webhookCalls.find(
+    (call) => (JSON.parse(call.body) as { type: string }).type === 'payment_intent.succeeded',
+  );
   if (!hook) throw new Error('no webhook captured');
   const signature = hook.headers['Peable-Signature'];
   if (signature === undefined) throw new Error('webhook missing signature');
@@ -305,8 +312,8 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
     type: string;
     data: { object: { status: string } };
   };
-  expect(payload.type).toBe('payment_intent.settled');
-  expect(payload.data.object.status).toBe('settled');
+  expect(payload.type).toBe('payment_intent.succeeded');
+  expect(payload.data.object.status).toBe('succeeded');
 
   // 7b. And the promise is now recorded as kept.
   const deliveryLog = (
@@ -320,7 +327,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   // by primary key descending, so `at(0)` is the most recent delivery.
   const lastDelivery = deliveryLog.at(0);
   expect(lastDelivery?.delivered).toBe(true);
-  expect(lastDelivery?.eventType).toBe('payment_intent.settled');
+  expect(lastDelivery?.eventType).toBe('payment_intent.succeeded');
   expect((JSON.parse(hook.body) as { id: string }).id).toBe(must(lastDelivery).eventPublicId);
 
   // 8. Non-custody invariant: no private-key/seed field was ever persisted.

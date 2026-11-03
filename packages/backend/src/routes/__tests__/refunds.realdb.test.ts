@@ -23,7 +23,6 @@ const fakeProvider = {
     refundCounter += 1;
     return {
       providerObjectId: `re_stripe_${String(refundCounter)}`,
-      status: 'partially_refunded',
       state: 'succeeded',
     };
   },
@@ -110,6 +109,7 @@ async function settledIntent(amount: string): Promise<string> {
     network: null,
     address: null,
     provider: 'stripe',
+    status: 'requires_payment_method',
     clientSecret: 'cs_x',
     idempotencyKey: uuidv7(),
     metadata: {},
@@ -117,7 +117,10 @@ async function settledIntent(amount: string): Promise<string> {
   });
   if (!intent) throw new Error('could not seed the intent');
   await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_route_${String(counter)}`);
-  await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+  await updateIntentState(gatewayDb(), intent.id, {
+    from: 'requires_payment_method',
+    status: 'succeeded',
+  });
   return publicId;
 }
 

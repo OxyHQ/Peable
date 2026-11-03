@@ -10,8 +10,8 @@
  * pre-payment statuses those callers are transitioning out of.
  *
  * The write used to be `WHERE id = ?` alone, so the second writer won whatever
- * it had decided from. `ALLOWED` in the shared contract has `expired: []` —
- * terminal — and the database happily took `settled` over `expired` anyway,
+ * it had decided from. `ALLOWED` in the shared contract has `canceled: []` —
+ * terminal — and the database happily took `succeeded` over an expired intent anyway,
  * because the state machine only ever ran in a pure function over a stale read.
  * The merchant was then told twice about one payment, with two outcomes that
  * contradict each other.
@@ -80,12 +80,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a transition from a status the intent 
     const expired = await expireDueIntents(gatewayDb(), new Date(), BATCH);
     expect(expired.map((row) => row.id)).toContain(intent.id);
 
-    const late = await transitionIntent(intent.id, { from: observed, status: 'settled' });
+    const late = await transitionIntent(intent.id, { from: observed, status: 'succeeded' });
 
     expect(late.kind).toBe('stale');
-    expect(late.kind === 'stale' ? late.current : undefined).toBe('expired');
-    // The row is untouched — `expired` is terminal and stays so.
-    expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('expired');
+    expect(late.kind === 'stale' ? late.current : undefined).toBe('canceled');
+    // The row is untouched — `canceled` is terminal and stays so.
+    expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('canceled');
   });
 
   /**
@@ -102,14 +102,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a transition from a status the intent 
     const observed = intent.status;
 
     await expireDueIntents(gatewayDb(), new Date(), BATCH);
-    // The sweeper enqueues on its own `tx` via `enqueueIntentWebhook`; this is
+    // The sweeper enqueues on its own `tx` via `recordIntentEvent`; this is
     // the state the late writer arrives into.
     const afterSweep = await deliveryTypesFor(intent.id);
 
-    await transitionIntent(intent.id, { from: observed, status: 'settled' });
+    await transitionIntent(intent.id, { from: observed, status: 'succeeded' });
 
     expect(await deliveryTypesFor(intent.id)).toEqual(afterSweep);
-    expect(await deliveryTypesFor(intent.id)).not.toContain('payment_intent.settled');
+    expect(await deliveryTypesFor(intent.id)).not.toContain('payment_intent.succeeded');
   });
 
   /**
@@ -121,15 +121,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a transition from a status the intent 
     const intent = await seedIntent(merchant, { expiresAt: PAST });
     await expireDueIntents(gatewayDb(), new Date(), BATCH);
 
-    expect(await transitionIntent(intent.id, { from: 'created', status: 'settled' })).toMatchObject(
-      {
-        kind: 'stale',
-      },
-    );
+    expect(
+      await transitionIntent(intent.id, { from: 'requires_action', status: 'succeeded' }),
+    ).toMatchObject({
+      kind: 'stale',
+    });
     expect(
       await transitionIntent('00000000-0000-7000-8000-000000000000', {
-        from: 'created',
-        status: 'settled',
+        from: 'requires_action',
+        status: 'succeeded',
       }),
     ).toEqual({ kind: 'missing' });
   });
@@ -145,11 +145,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a transition from a status the intent 
 
     const moved = await updateIntentState(gatewayDb(), intent.id, {
       from: intent.status,
-      status: 'broadcast',
+      status: 'processing',
       txid: 'f'.repeat(64),
     });
 
     expect(moved.kind).toBe('updated');
-    expect(moved.kind === 'updated' ? moved.row.status : undefined).toBe('broadcast');
+    expect(moved.kind === 'updated' ? moved.row.status : undefined).toBe('processing');
   });
 });

@@ -1,69 +1,199 @@
+import { buildFairCoinURI } from '@fairco.in/core';
 import type {
+  Charge,
   CheckoutSession,
+  Customer,
+  DeletedCustomer,
+  PaymentMethod,
+  SetupIntent,
   CheckoutSessionPublic,
   Dispute,
   Merchant,
   MerchantDisplay,
   PaymentIntent,
+  PaymentIntentNextAction,
   PaymentLink,
   PublicPaymentLink,
+  Refund,
   SocialPaymentSource,
   WebhookDelivery,
   WebhookEndpoint,
   WebhookEvent,
 } from '@peable.to/shared-types';
-import { canExpire } from '@peable.to/shared-types';
+import { UNITS_PER_COIN, canExpire } from '@peable.to/shared-types';
 import type { ContributionDetails } from '@peable.to/contracts';
 import { config } from '../config';
 import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import type { ChargeRow } from '../db/payments/chargeRepository';
+import type { CustomerRow } from '../db/customers/customerRepository';
+import type { PaymentMethodRow } from '../db/customers/paymentMethodRepository';
+import type { SetupIntentRow } from '../db/customers/setupIntentRepository';
 import type { PaymentLinkRow } from '../db/payments/paymentLinkRepository';
 import type { CheckoutSessionRow } from '../db/payments/checkoutSessionRepository';
 import type { DisputeRow } from '../db/disputes/disputeRepository';
+import type { RefundRow } from '../db/refunds/refundRepository';
 import type { StoredContribution } from '../db/schema/payments';
 import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
 import type { WebhookEndpointRow } from '../db/webhooks/webhookEndpointRepository';
 import type { EventRow } from '../db/events/eventRepository';
 
 /**
+ * A FAIR base-unit amount as the decimal a `faircoin:` URI carries — exact,
+ * never through a float: `150000000` → `"1.5"`.
+ */
+export function fairDecimal(baseUnits: string): string {
+  const units = BigInt(baseUnits);
+  const per = BigInt(UNITS_PER_COIN);
+  const whole = units / per;
+  const fraction = (units % per).toString().padStart(8, '0').replace(/0+$/, '');
+  return fraction.length === 0 ? whole.toString() : `${whole.toString()}.${fraction}`;
+}
+
+/**
+ * What the payer must do next — derived from the row, never stored (ADR 0019).
+ *
+ * The card's confirmation credential is deliberately NOT here: the intent is
+ * listed, polled and delivered in webhooks, and a credential on it would be a
+ * credential in every one of those. `use_peable_sdk` tells the payer's client to
+ * fetch it through `POST …/client_action`.
+ */
+function nextActionFor(row: PaymentIntentRow): PaymentIntentNextAction | null {
+  if (row.status !== 'requires_action') return null;
+  if (row.rail === 'faircoin' && row.address !== null && row.network !== null) {
+    return {
+      type: 'faircoin_payment',
+      faircoin_payment: {
+        address: row.address,
+        network: row.network,
+        amount: row.amount,
+        currency: 'FAIR',
+        uri: buildFairCoinURI(row.address, fairDecimal(row.amount)),
+      },
+    };
+  }
+  return { type: 'use_peable_sdk' };
+}
+
+/**
  * Serialize a persisted PaymentIntent row to its public `PaymentIntent` DTO
  * (the wire/contract shape shared with the SDK, webhooks, and the wallet).
- * The internal-only `idempotencyKey` is deliberately omitted — the repository
- * never selects it — and instants become Unix seconds (ADR 0014 D1).
+ * Instants become Unix seconds (ADR 0014 D1).
  *
- * `id` is the PUBLIC `pi_…`, which is what the wire contract has always
- * carried; the value lives in `public_id` beside the internal primary key. Emitting
- * `row.id` would put a uuid on a shipped contract.
+ * Every id is the PUBLIC one, read in the same statement as the row: `pi_…`,
+ * `merch_…`, `ca_…`, `cus_…`, `pm_…`, `ch_…`. Emitting an internal column would
+ * put a uuid on a shipped contract (AGENTS.md "every id is two ids").
  */
 export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
+  const card = row.rail === 'card';
   return {
     id: row.publicId,
     object: 'payment_intent',
     livemode: row.livemode,
     status: row.status,
     rail: row.rail,
+    payment_method_types: [row.rail],
     amount: row.amount,
-    // Read off the column, never written as a literal. The literal "FAIR" that
-    // stood here was the reason widening the CHECK alone would have produced
-    // rows the API described incorrectly, with every test green (ADR 0001 D4).
+    amount_capturable: row.status === 'requires_capture' ? row.amount : '0',
+    amount_received: row.amountReceived,
+    amount_refunded: row.amountRefunded,
+    // Read off the column, never written as a literal (ADR 0001 D4).
     currency: row.currency,
-    network: row.network,
-    address: row.address,
-    merchant_id: row.merchantId,
-    // The PUBLIC `ca_…`, read in the same statement as the row. Never the
-    // internal `connectedAccountId` — that is a uuid this contract never names.
+    capture_method: row.captureMethod,
+    setup_future_usage: row.setupFutureUsage,
+    customer: row.customerPublicId,
+    payment_method: row.paymentMethodPublicId,
+    latest_charge: card ? row.latestChargePublicId : null,
+    next_action: nextActionFor(row),
+    last_payment_error: row.lastPaymentError,
+    cancellation_reason: row.cancellationReason,
+    canceled_at: row.canceledAt === null ? null : toUnix(row.canceledAt),
+    description: row.description,
+    receipt_email: row.receiptEmail,
+    statement_descriptor_suffix: row.statementDescriptorSuffix,
+    shipping: row.shipping,
+    faircoin:
+      row.rail === 'faircoin' && row.network !== null && row.address !== null
+        ? {
+            network: row.network,
+            address: row.address,
+            txid: row.txid,
+            confirmations: row.confirmations,
+            required_confirmations: row.requiredConfirmations,
+          }
+        : null,
+    merchant_id: row.merchantPublicId,
+    // The PUBLIC `ca_…`. Never the internal `connectedAccountId`.
     connected_account: row.connectedAccountPublicId ?? null,
-    txid: row.txid,
-    confirmations: row.confirmations,
     client_secret: row.clientSecret,
     metadata: row.metadata,
     expires_at: toUnix(row.expiresAt),
-    // ADR 0012 D9: a broadcast or confirming payment never expires, whatever
-    // `expiresAt` says — said per intent so a platform never has to know the set.
+    // ADR 0012 D9: a processing payment never expires, whatever `expiresAt` says.
     can_expire: canExpire(row.status),
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
+  };
+}
+
+/** Peable's own one-line explanation of an outcome — never the provider's prose. */
+function sellerMessageFor(type: string | null): string | null {
+  switch (type) {
+    case 'authorized':
+      return 'Payment complete.';
+    case 'manual_review':
+      return 'The payment is held for review.';
+    case 'issuer_declined':
+      return 'The bank declined this payment.';
+    case 'blocked':
+      return 'This payment was blocked as too risky.';
+    case 'invalid':
+      return 'The payment details were invalid.';
+    default:
+      return null;
+  }
+}
+
+/**
+ * A charge on the wire (ADR 0019). `captured` / `refunded` read the INTENT's
+ * status with the row: a held authorization is not captured, and one released
+ * by a cancellation is refunded in full.
+ */
+export function toChargeDTO(row: ChargeRow): Charge {
+  const captured = row.amountCaptured !== '0';
+  const released = !captured && row.intentStatus === 'canceled';
+  return {
+    id: row.publicId,
+    object: 'charge',
+    livemode: row.livemode,
+    payment_intent: row.paymentIntentPublicId,
+    customer: row.customerPublicId,
+    payment_method: row.paymentMethodPublicId,
+    amount: row.amount,
+    amount_captured: row.amountCaptured,
+    amount_refunded: released ? row.amount : row.amountRefunded,
+    currency: row.currency,
+    status: 'succeeded',
+    paid: true,
+    captured,
+    refunded: released || (captured && BigInt(row.amountRefunded) >= BigInt(row.amountCaptured)),
+    disputed: row.disputed,
+    outcome:
+      row.outcome === null
+        ? null
+        : {
+            network_status: row.outcome.networkStatus,
+            risk_level: row.outcome.riskLevel,
+            type: row.outcome.type,
+            seller_message: sellerMessageFor(row.outcome.type),
+          },
+    payment_method_details: row.paymentMethodDetails,
+    receipt_url: null,
+    balance_transaction: null,
+    description: row.description,
+    receipt_email: row.receiptEmail,
+    metadata: row.metadata,
+    created: toUnix(row.createdAt),
   };
 }
 
@@ -289,6 +419,27 @@ export function toCheckoutSessionPublicDTO(
 }
 
 /**
+ * A refund on the wire — the provider's own refund id never appears in it. The
+ * intent's PUBLIC id is a parameter, for `toDisputeDTO`'s reason.
+ */
+export function toRefundDTO(row: RefundRow, paymentIntentPublicId: string): Refund {
+  return {
+    id: row.publicId,
+    object: 'refund',
+    livemode: row.livemode,
+    external_ref: row.externalRef,
+    origin: row.origin,
+    payment_intent: paymentIntentPublicId,
+    amount: row.amount,
+    currency: row.currency,
+    status: row.status,
+    failure_code: row.failureCode,
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
+  };
+}
+
+/**
  * A dispute row on the wire.
  *
  * Takes the intent's PUBLIC id as an argument rather than reading it, for the
@@ -347,4 +498,67 @@ export function toSocialPaymentSource(row: {
   return row.sourceRef === null
     ? { app: row.sourceApp }
     : { app: row.sourceApp, ref: row.sourceRef };
+}
+
+/** A customer on the wire (ADR 0016) — the provider binding never appears. */
+export function toCustomerDTO(row: CustomerRow): Customer {
+  return {
+    id: row.publicId,
+    object: 'customer',
+    livemode: row.livemode,
+    email: row.email,
+    name: row.name,
+    phone: row.phone,
+    description: row.description,
+    address: row.address,
+    shipping: row.shipping,
+    invoice_settings: { default_payment_method: row.defaultPaymentMethodPublicId },
+    metadata: row.metadata,
+    created: toUnix(row.createdAt),
+  };
+}
+
+/** What `DELETE /v1/customers/:id` and an expanded tombstone answer. */
+export function toDeletedCustomerDTO(row: CustomerRow): DeletedCustomer {
+  return { id: row.publicId, object: 'customer', deleted: true };
+}
+
+/** A payment method on the wire (ADR 0016) — the provider's id never appears. */
+export function toPaymentMethodDTO(row: PaymentMethodRow): PaymentMethod {
+  return {
+    id: row.publicId,
+    object: 'payment_method',
+    livemode: row.livemode,
+    type: row.type,
+    card: row.card,
+    billing_details: row.billingDetails,
+    customer: row.customerPublicId,
+    metadata: row.metadata,
+    created: toUnix(row.createdAt),
+  };
+}
+
+/**
+ * A SetupIntent on the wire (ADR 0016). `client_secret` is PEABLE's capability
+ * over the SetupIntent; the provider's confirmation credential is never here —
+ * the payer's client fetches it through `POST …/client_action`.
+ */
+export function toSetupIntentDTO(row: SetupIntentRow): SetupIntent {
+  return {
+    id: row.publicId,
+    object: 'setup_intent',
+    livemode: row.livemode,
+    status: row.status,
+    usage: row.usage,
+    payment_method_types: ['card'],
+    customer: row.customerPublicId,
+    payment_method: row.paymentMethodPublicId,
+    client_secret: row.clientSecret,
+    next_action: row.status === 'requires_action' ? { type: 'use_peable_sdk' } : null,
+    last_setup_error: row.lastSetupError,
+    cancellation_reason: row.cancellationReason,
+    description: row.description,
+    metadata: row.metadata,
+    created: toUnix(row.createdAt),
+  };
 }

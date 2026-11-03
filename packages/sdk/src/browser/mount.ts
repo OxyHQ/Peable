@@ -2,7 +2,9 @@
 // (Fase 2 SDK plan, Task 6). Plain DOM, no framework, so it embeds on any
 // site. Renders a button into the host element, fetches + subscribes to the
 // payment intent via the Task 5 payer client, drives a typed
-// `settled`/`confirming`/`failed`/`error` event emitter, and on click either
+// `processing`/`succeeded`/`payment_failed`/`canceled`/`error` event emitter
+// (ADR 0019's vocabulary — the webhook event names, without the prefix), and
+// on click either
 // opens the `peable://pay` deep link (mobile) or shows a QR of it (desktop).
 //
 // Same `./core/*` boundary as `payerClient.ts`: the only import from `./core`
@@ -71,15 +73,15 @@ export interface PayDeepLinkParams {
   address: string;
   /** Base-unit integer string (m⊜) — `PaymentIntent['amount']`'s own shape. */
   amount: string;
-  network: NonNullable<PaymentIntent['network']>;
+  network: NonNullable<PaymentIntent['faircoin']>['network'];
 }
 
 /**
  * Thrown when a deep link is asked for on an intent that has no chain payment
  * behind it.
  *
- * `address` and `network` became nullable when the card rail landed (gateway
- * ADR 0001 D6), and the tempting fix was a `?? ''` at the call site. That would
+ * A card intent's `faircoin` is `null` (gateway ADR 0001 D6, ADR 0019), and
+ * the tempting fix would be a `?? ''` at the call site. That would
  * mint `peable://pay?...&address=&network=` — a link the wallet's parser
  * accepts structurally and which sends a payer to an empty address. Failing
  * here is the only safe direction.
@@ -107,15 +109,15 @@ export class PeableRailUnsupportedError extends PeableError {
  * payment. The narrowing is what lets `buildPayDeepLink` keep non-null fields.
  */
 export function payDeepLinkFor(intent: PaymentIntent): string {
-  if (intent.rail !== 'faircoin' || intent.address === null || intent.network === null) {
+  if (intent.rail !== 'faircoin' || intent.faircoin === null) {
     throw new PeableRailUnsupportedError(intent.rail);
   }
   return buildPayDeepLink({
     intentId: intent.id,
     clientSecret: intent.client_secret,
-    address: intent.address,
+    address: intent.faircoin.address,
     amount: intent.amount,
-    network: intent.network,
+    network: intent.faircoin.network,
   });
 }
 
@@ -155,10 +157,22 @@ export function isMobileUserAgent(userAgent: string): boolean {
 // Typed event emitter (pure, unit-tested independently of the DOM).
 // ---------------------------------------------------------------------------
 
+/**
+ * What a host page hears — the webhook event names without their
+ * `payment_intent.` prefix (ADR 0019):
+ *
+ *  - `processing` — the payer reported a transaction; it is confirming.
+ *  - `succeeded`  — the payment is complete.
+ *  - `payment_failed` — an attempt failed (a FairCoin underpayment).
+ *  - `canceled`   — the payment ended unpaid: expired (`abandoned`), cancelled
+ *                   by the merchant, or underpaid (after `payment_failed`).
+ *  - `error`      — the widget itself could not proceed.
+ */
 export interface PeableCheckoutEventMap {
-  settled: PaymentIntent;
-  confirming: PaymentIntent;
-  failed: PaymentIntent;
+  processing: PaymentIntent;
+  succeeded: PaymentIntent;
+  payment_failed: PaymentIntent;
+  canceled: PaymentIntent;
   error: PeableError;
 }
 
@@ -210,12 +224,11 @@ export function createEmitter(): CheckoutEmitter {
 const BUTTON_CLASS = 'peable-checkout-button';
 const OVERLAY_CLASS = 'peable-checkout-qr-overlay';
 
-/** Statuses that still accept a payment — everything else disables the button. */
-const PAYABLE_STATUSES: ReadonlySet<PaymentIntentStatus> = new Set([
-  'created',
-  'awaiting_approval',
-  'approved',
-]);
+/**
+ * Statuses that still accept a payment from THIS button — a FairCoin intent
+ * waiting for the payer's broadcast. Everything else disables it.
+ */
+const PAYABLE_STATUSES: ReadonlySet<PaymentIntentStatus> = new Set(['requires_action']);
 
 function resolveTarget(target: string | Element): Element {
   const element = typeof target === 'string' ? document.querySelector(target) : target;
@@ -245,18 +258,16 @@ function renderButton(container: Element): HTMLButtonElement {
 function updateButton(button: HTMLButtonElement, intent: PaymentIntent): void {
   button.disabled = !PAYABLE_STATUSES.has(intent.status);
   switch (intent.status) {
-    case 'settled':
+    case 'succeeded':
       button.textContent = 'Paid';
       break;
-    case 'confirming':
-      button.textContent = 'Confirming…';
+    case 'processing':
+      button.textContent =
+        intent.faircoin !== null && intent.faircoin.confirmations > 0
+          ? 'Confirming…'
+          : 'Payment received';
       break;
-    case 'broadcast':
-      button.textContent = 'Payment received';
-      break;
-    case 'failed':
-    case 'expired':
-    case 'rejected':
+    case 'canceled':
       button.textContent = 'Payment unavailable';
       break;
     default:
@@ -337,7 +348,7 @@ function toPeableError(error: unknown): PeableError {
  * payment intent. Returns synchronously — before any network call resolves —
  * so a caller's `.on(...)` registrations (called immediately after `mount()`
  * returns, in the same synchronous tick) are always in place before the
- * first `settled`/`confirming`/`failed`/`error` event can fire on the
+ * first `processing`/`succeeded`/`payment_failed`/`canceled`/`error` event can fire on the
  * following microtask.
  */
 function mount(target: string | Element, opts: PeableCheckoutMountOptions): PeableCheckoutInstance {
@@ -356,16 +367,17 @@ function mount(target: string | Element, opts: PeableCheckoutMountOptions): Peab
   function handleIntentUpdate(intent: PaymentIntent): void {
     latestIntent = intent;
     updateButton(button, intent);
-    if (intent.status === 'settled') {
-      emitter.emit('settled', intent);
-    } else if (intent.status === 'confirming') {
-      emitter.emit('confirming', intent);
-    } else if (
-      intent.status === 'failed' ||
-      intent.status === 'expired' ||
-      intent.status === 'rejected'
-    ) {
-      emitter.emit('failed', intent);
+    if (intent.status === 'succeeded') {
+      emitter.emit('succeeded', intent);
+    } else if (intent.status === 'processing') {
+      emitter.emit('processing', intent);
+    } else if (intent.status === 'canceled') {
+      // An underpayment is a failed payment AND the end of it, in that order —
+      // the same two events its webhook delivery carries.
+      if (intent.cancellation_reason === 'underpaid') emitter.emit('payment_failed', intent);
+      emitter.emit('canceled', intent);
+    } else if (intent.status === 'requires_payment_method' && intent.last_payment_error !== null) {
+      emitter.emit('payment_failed', intent);
     }
   }
 

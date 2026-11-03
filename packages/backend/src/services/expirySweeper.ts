@@ -181,7 +181,8 @@ async function sweepDueCardIntents(
     // Now the local transition can be announced truthfully.
     const result = await transitionIntent(intent.id, {
       from: intent.status,
-      status: 'expired',
+      status: 'canceled',
+      cancellationReason: 'abandoned',
     });
     if (result.kind !== 'updated') continue;
     announceIntentChange(result.row);

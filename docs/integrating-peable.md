@@ -93,7 +93,7 @@ every page:
 
 ```ts
 const page = await peable.refunds.list({ payment_intent: 'pi_…', limit: 20 });
-for await (const intent of peable.paymentIntents.list({ status: 'settled' })) { … }
+for await (const intent of peable.paymentIntents.list({ status: 'succeeded' })) { … }
 const recent = await peable.transfers.list({ created: { gte: since } }).autoPagingToArray({ limit: 500 });
 ```
 
@@ -237,13 +237,51 @@ const intent = await peable.paymentIntents.create(
   { amount: '250000000', network: 'testnet', metadata: { order_id: '123' } },
   { idempotencyKey: 'order-123' },   // optional; one per order makes ANY retry converge
 );
-// intent.id, intent.client_secret, intent.address, intent.status, intent.expires_at
+// intent.status === 'requires_action'; intent.next_action.faircoin_payment.{address, amount, uri}
+// intent.faircoin.{network, address, txid, confirmations, required_confirmations}
 new Date(intent.expires_at * 1000);              // instants are Unix seconds
 await peable.paymentIntents.retrieve(intent.id);
-await peable.paymentIntents.list({ status: 'settled', limit: 20 });   // one page; or `for await`
-await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes' } });
-await peable.paymentIntents.reject(intent.id);   // cancel an unpaid intent
+await peable.paymentIntents.list({ status: 'succeeded', limit: 20 });   // one page; or `for await`
+await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes' }, description: 'Order 123' });
+await peable.paymentIntents.cancel(intent.id, { cancellation_reason: 'requested_by_customer' });
 ```
+
+### Card payments: customers, saved cards, confirm and capture (ADR 0019)
+
+Card data is collected by the provider's Elements in the buyer's browser and
+never reaches Peable. To save a card, create a customer and a SetupIntent; its
+`client_secret` goes to the browser (`POST /v1/setup_intents/:id/client_action`
+with that secret hands the provider credential to the payer's client), and when it succeeds Peable
+creates the `pm_…`, attached to the customer.
+
+```ts
+const customer = await peable.customers.create({ email: 'ada@example.test' });
+const setup = await peable.setupIntents.create({ customer: customer.id, usage: 'off_session' });
+// …the browser completes it; `setup_intent.succeeded` + `payment_method.attached` arrive…
+const [card] = (await peable.paymentMethods.list({ customer: customer.id })).data;
+
+// Charge it later, server-side. A decline throws PeableCardError (402):
+// err.paymentIntent.status === 'requires_payment_method', err.declineCode.
+const paid = await peable.paymentIntents.create({
+  amount: '2500', rail: 'card', currency: 'EUR',
+  customer: customer.id, payment_method: card.id, confirm: true, off_session: true,
+});
+
+// Or hold the authorization and capture later (all or part):
+const held = await peable.paymentIntents.create({
+  amount: '5000', rail: 'card', currency: 'EUR', capture_method: 'manual',
+  customer: customer.id, payment_method: card.id, confirm: true,
+}); // held.status === 'requires_capture'
+await peable.paymentIntents.capture(held.id, { amount_to_capture: '3000' });
+
+// The read-only record of what was authorized and captured:
+await peable.charges.retrieve(paid.latest_charge as string);
+```
+
+A confirmation that needs 3-D Secure answers `status: 'requires_action'` with
+`next_action: { type: 'use_peable_sdk' }`: the buyer's client finishes it with
+`@peable.to/sdk/checkout`. Card-only parameters on a FairCoin payment are a 400
+naming the field.
 
 ### Payment Links (shareable, reusable price)
 
@@ -273,9 +311,10 @@ service secret):
   const checkout = PeableCheckout.mount('#peable-button', {
     clientSecret: 'pi_…_secret_…',   // session.client_secret / intent.client_secret
   });
-  checkout.on('confirming', () => showSpinner());
-  checkout.on('settled',    () => (window.location.href = '/thank-you'));
-  checkout.on('failed',     () => showError());
+  checkout.on('processing',     () => showSpinner());
+  checkout.on('succeeded',      () => (window.location.href = '/thank-you'));
+  checkout.on('payment_failed', () => showError());
+  checkout.on('canceled',       () => showExpired());
   checkout.on('error',      (e) => console.warn('realtime error', e));
 </script>
 ```
@@ -296,7 +335,7 @@ it ONCE, in the create response:
 ```ts
 const endpoint = await peable.webhookEndpoints.create({
   url: 'https://shop.example/webhooks/peable',
-  enabled_events: ['payment_intent.settled', 'payment_intent.failed'], // or ['*']
+  enabled_events: ['payment_intent.succeeded', 'payment_intent.payment_failed', 'payment_intent.canceled'], // or ['*']
 });
 // store endpoint.secret (whsec_…) as PEABLE_WEBHOOK_SECRET — it is never shown again
 ```
@@ -330,19 +369,18 @@ app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, re
   }
 
   switch (event.type) {
-    case 'payment_intent.settled':    fulfillOrder(event.data.object.metadata.order_id); break;
-    case 'payment_intent.confirming': markPending(event.data.object); break;
-    case 'payment_intent.failed':
-    case 'payment_intent.expired':
-    case 'payment_intent.rejected':   releaseHold(event.data.object); break;
+    case 'payment_intent.succeeded':  fulfillOrder(event.data.object.metadata.order_id); break;
+    case 'payment_intent.processing': markPending(event.data.object); break;
+    case 'payment_intent.canceled':   releaseHold(event.data.object); break;  // see cancellation_reason
   }
   res.json({ received: true });
 });
 ```
 
-`event.data.object` is the full `PaymentIntent` — except for
-`payment_intent.disputed` and `payment_intent.dispute_closed`, which carry a
-`Dispute`. `event.created` is Unix seconds. The envelope also carries
+`event.data.object` is the full `PaymentIntent` for every `payment_intent.*`
+event; `charge.refunded` carries the `Charge`, `refund.*` the `Refund`,
+`charge.dispute.*` the `Dispute`, and `customer.*` / `payment_method.*` /
+`setup_intent.*` their objects. `event.created` is Unix seconds. The envelope also carries
 `api_version` (the wire it was stored under), `data.previous_attributes` (the
 moved fields' prior values, on a change) and `request` (`{ id,
 idempotency_key }` of the API call that caused it, both `null` otherwise).
@@ -355,20 +393,23 @@ delivery carries one `v1=` signature per secret, so deploy the new one and
 of event type to resource, so a handler written against it cannot read the
 wrong shape.
 
-Status lifecycle:
-`created → (awaiting_approval → approved →) broadcast → confirming → settled`
-on the chain rail, and
-`created → (requires_action → processing →) settled` on the card rail, with
-`refunded | partially_refunded` after settlement and terminal
-`expired | rejected`.
+Status lifecycle — Stripe's seven (ADR 0019):
+`requires_action → processing → succeeded` on the chain rail (the payer sends
+coins to `next_action.faircoin_payment`; `faircoin.confirmations` counts toward
+`required_confirmations`), and
+`requires_payment_method → (requires_confirmation → requires_action → processing →
+requires_capture →) succeeded` on the card rail. `canceled` is the other end,
+with `cancellation_reason`: `abandoned` (it expired), the reason you gave
+`cancel`, `automatic` (the provider), or `underpaid` (a FairCoin transaction
+that paid less). Refunds are not statuses: a refunded payment stays `succeeded`
+and its `amount_refunded` grows (`charge.refunded`, `refund.*`).
 
-**`failed` is not terminal on the card rail.** One declined authorization
-attempt does not end a card payment: the provider returns it to a confirmable
-state and the payer can try another card on the SAME payment, so
-`failed → settled` is legal and you will receive `payment_intent.settled`
-afterwards. Do not cancel an order on `payment_intent.failed` alone. On the
-chain rail `failed` means `underpaid` and IS terminal — the rail is on the
-intent, so a handler can tell them apart.
+**`payment_intent.payment_failed` is not the end of a card payment.** One
+declined attempt returns it to `requires_payment_method` with
+`last_payment_error`, and the payer can try another card on the SAME payment —
+you will receive `payment_intent.succeeded` afterwards. Do not cancel an order
+on `payment_failed` alone; act on `canceled`. A FairCoin underpayment records
+`payment_failed` and then `canceled` (`underpaid`).
 
 ### `connected_account.updated` — the one event that is not about a payment
 
@@ -417,8 +458,10 @@ expires — two prices they can be shown and two payments they can make.
   merchant's registered network (the Gateway rejects a mismatch) — or, for a
   payment on behalf of a seller, the SELLER's network.
 - **`expires_at` applies only while the payer has not paid.** A FairCoin intent
-  that is `broadcast` or `confirming` never expires; `can_expire` on the intent
-  says which. Release stock on `payment_intent.expired`, never on the clock.
+  that is `processing` never expires, nor does an authorization held for
+  capture; `can_expire` on the intent says which. Release stock on
+  `payment_intent.canceled` (`cancellation_reason: 'abandoned'`), never on the
+  clock.
 
 ## Test vs live
 
@@ -636,7 +679,7 @@ SDK: `peable.accounts` (= `connectedAccounts`), `peable.accountLinks.create({ ac
 - [ ] Mercaria server: create a Checkout Session at checkout, redirect to `session.url`
       (or embed `@peable.to/sdk/checkout`).
 - [ ] Mercaria server: register a webhook endpoint (`peable.webhookEndpoints.create`), store its
-      `secret`, verify `Peable-Signature` on every delivery, fulfill on `settled`.
+      `secret`, verify `Peable-Signature` on every delivery, fulfill on `payment_intent.succeeded`.
 - [ ] Test the full flow on **testnet** end-to-end.
 - [ ] Go live: swap to a production-environment credential + `network: 'mainnet'`
       (gated on the mainnet items — see the roadmap).
@@ -687,7 +730,7 @@ freshness. The served `/openapi.json` currently documents this new contribution
 surface, not the whole legacy gateway API.
 
 Validation on 2026-10-15 used real PostgreSQL and HTTP, with deterministic
-Explorer transaction fixtures for broadcast → confirming → settled and repeated
+Explorer transaction fixtures for the then `broadcast → confirming → settled` (now `processing → succeeded`) and repeated
 polls. No local FairCoin daemon/regtest binary was available. Read-only requests
 to both Explorer network stats endpoints returned HTTP 403 from this environment;
 no transaction was signed or broadcast, and no live chain confirmation is claimed.

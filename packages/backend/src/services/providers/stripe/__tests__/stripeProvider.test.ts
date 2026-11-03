@@ -170,7 +170,7 @@ describe('StripePaymentProvider', () => {
     expect(idempotencyKey).toBe('pay:pi_public_1');
 
     expect(result.providerObjectId).toBe('pi_1');
-    expect(result.status).toBe('created');
+    expect(result.status).toBe('requires_payment_method');
     expect(result.clientAction).toEqual({ kind: 'client_secret', value: 'pi_1_secret_x' });
   });
 
@@ -272,7 +272,26 @@ describe('StripePaymentProvider', () => {
       idempotencyKey: 'cap:pi_public_1',
     });
 
-    expect(argsOf('captureStripePaymentIntent')).toEqual(['pi_1', 'cap:pi_public_1']);
+    expect(argsOf('captureStripePaymentIntent')).toEqual(['pi_1', {}, 'cap:pi_public_1']);
+  });
+
+  /** A partial capture (ADR 0019) sends Stripe's `amount_to_capture` as a number. */
+  test('capture sends amount_to_capture for a partial capture', async () => {
+    paymentIntentResponse = { id: 'pi_1', status: 'requires_capture', client_secret: 's' };
+    const provider = new StripePaymentProvider({ mode: 'test' });
+
+    await provider.capture({
+      intentId: 'pi_public_1',
+      providerObjectId: 'pi_1',
+      idempotencyKey: 'cap:pi_public_1',
+      amountToCapture: '1500',
+    });
+
+    expect(argsOf('captureStripePaymentIntent')).toEqual([
+      'pi_1',
+      { amount_to_capture: 1500 },
+      'cap:pi_public_1',
+    ]);
   });
 
   /**

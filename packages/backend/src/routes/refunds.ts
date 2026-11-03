@@ -10,14 +10,13 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
-import { isBaseUnitString, type Refund, type Settlement } from '@peable.to/shared-types';
+import { isBaseUnitString, type Settlement } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import {
   findRefundByExternalRef,
   findRefundByPublicId,
   listRefundsForMerchant,
-  type RefundRow,
 } from '../db/refunds/refundRepository';
 import {
   createRefund,
@@ -36,8 +35,9 @@ import {
   wrap,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
-import { toUnix, toUnixOrNull } from '../lib/time';
+import { toUnixOrNull } from '../lib/time';
 import { expandObjects, parseExpand } from '../lib/expand';
+import { toRefundDTO } from '../lib/serialize';
 import {
   answerList,
   listQuerySchema,
@@ -83,24 +83,6 @@ const createRefundBodySchema = z
  * repositories is how a renamed field becomes a runtime failure somebody else
  * discovers.
  */
-function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatus: string): Refund {
-  return {
-    id: row.publicId,
-    object: 'refund',
-    livemode: row.livemode,
-    external_ref: row.externalRef,
-    origin: row.origin,
-    payment_intent: paymentIntentPublicId,
-    amount: row.amount,
-    currency: row.currency,
-    status: row.status,
-    payment_status: paymentStatus,
-    failure_code: row.failureCode,
-    created: toUnix(row.createdAt),
-    updated_at: toUnix(row.updatedAt),
-  };
-}
-
 export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
@@ -151,18 +133,18 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
        * payer's money had not moved and no path would ever retry it.
        */
       if (existing && (existing.providerObjectId !== null || existing.status === 'failed')) {
-        res.status(200).json(toRefundDTO(existing, intent.publicId, intent.status));
+        res.status(200).json(toRefundDTO(existing, intent.publicId));
         return;
       }
 
       try {
-        const { refund, created, paymentStatus } = await createRefund({
+        const { refund, created } = await createRefund({
           merchantId: merchant.id,
           intent,
           externalRef: body.external_ref,
           amount: body.amount,
         });
-        res.status(created ? 201 : 200).json(toRefundDTO(refund, intent.publicId, paymentStatus));
+        res.status(created ? 201 : 200).json(toRefundDTO(refund, intent.publicId));
       } catch (error) {
         if (
           error instanceof PaymentNotRefundableError ||
@@ -221,7 +203,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
             paymentIntentId: intent.id,
             page,
           }),
-        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId, row.paymentStatus),
+        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId),
       });
     }),
   );
@@ -257,7 +239,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         // than asserted away, so loosening it fails loudly.
         throw new Error(`refund ${refund.publicId} names an intent that cannot be read`);
       }
-      const dto = toRefundDTO(refund, intent.publicId, intent.status);
+      const dto = toRefundDTO(refund, intent.publicId);
       await expandObjects([dto], 'refund', expand, merchant.id);
       res.status(200).json(dto);
     }),
@@ -308,7 +290,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
             paymentIntentId: intent.id,
             page,
           }),
-        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId, row.paymentStatus),
+        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId),
         extra: { remaining_refundable: await remainingRefundable(intent) },
       });
     }),

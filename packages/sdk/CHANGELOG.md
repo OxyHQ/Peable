@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.13.0 — Orbit payments core: Stripe's PaymentIntent, events, Customers, PaymentMethods, SetupIntents (breaking, ADR 0019)
+
+- `PaymentIntent.status` is Stripe's vocabulary: `requires_payment_method`,
+  `requires_confirmation`, `requires_action`, `processing`, `requires_capture`,
+  `succeeded`, `canceled`. The old `created`, `awaiting_approval`, `approved`,
+  `broadcast`, `confirming`, `settled`, `refunded`, `partially_refunded`,
+  `expired`, `failed` and `rejected` are gone. Refunds are not statuses any more
+  (`amount_refunded`, and `Refund.payment_status` is removed).
+- The chain side of a FairCoin payment moved under `faircoin`
+  (`network`, `address`, `txid`, `confirmations`, `required_confirmations`) and
+  `next_action.faircoin_payment` (address, amount, `faircoin:` URI); the
+  top-level `network`, `address`, `txid` and `confirmations` are removed.
+  `merchant_id` is the public `merch_…`.
+- New fields: `amount_capturable`, `amount_received`, `capture_method`,
+  `setup_future_usage`, `customer`, `payment_method`, `latest_charge`,
+  `next_action`, `last_payment_error`, `cancellation_reason`, `canceled_at`,
+  `description`, `receipt_email`, `statement_descriptor_suffix`, `shipping`,
+  `payment_method_types`.
+- `paymentIntents.reject` is removed; `paymentIntents.cancel(id, { cancellation_reason })`,
+  `confirm(id, { payment_method, off_session, … })` and
+  `capture(id, { amount_to_capture })` are new. A declined confirmation throws
+  `PeableCardError` (402) carrying `paymentIntent` and `declineCode`.
+- New read-only `charges.retrieve` / `charges.list({ payment_intent })`.
+- `list({ customer })` on payment intents.
+- Event types are Stripe's (`payment_intent.succeeded`, `payment_intent.payment_failed`,
+  `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, …);
+  `webhooks.constructEvent` accepts exactly the new catalog.
+- `@peable.to/sdk/checkout`: the mount's events are `processing`, `succeeded`,
+  `payment_failed`, `canceled` and `error` (were `confirming`, `settled`,
+  `failed`, `error`). The UI kit's FairCoin transfer states `confirming` /
+  `settled` are `processing` / `succeeded`.
+- New `peable.customers` (`create` / `retrieve` / `update` / `del` / `list({ email })`),
+  `peable.paymentMethods` (`retrieve` / `update` / `list({ customer })` / `detach`) and
+  `peable.setupIntents` (`create` / `retrieve` / `list({ customer })` / `cancel`) —
+  Orbit's own `cus_` / `pm_` / `seti_` objects (ADR 0016). A `pm_…` is created
+  by a SetupIntent that succeeds (or a payment with `setup_future_usage`);
+  card details are collected by the provider's Elements, never sent to Peable.
+- Requires `@peable.to/shared-types` 0.11.0.
+
 ## 0.12.0 — events and webhook endpoints (breaking)
 
 Events are a resource and webhooks render them (ADR 0014 D4). An event is

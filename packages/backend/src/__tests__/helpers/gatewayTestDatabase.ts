@@ -267,6 +267,8 @@ export interface SeedIntentValues {
   readonly idempotencyKey?: string;
   readonly metadata?: Record<string, string>;
   readonly expiresAt?: Date;
+  /** Where it starts (ADR 0019); defaults to the rail's own starting status. */
+  readonly status?: 'requires_action' | 'requires_payment_method' | 'requires_confirmation';
 }
 
 /** Default intent lifetime, matching `createIntent`'s own 15 minutes. */
@@ -301,6 +303,7 @@ export async function seedIntent(
     // no provider, and `..._faircoin_has_no_provider_check` refuses a chain one
     // that has one.
     provider: values.provider !== undefined ? values.provider : rail === 'card' ? 'stripe' : null,
+    status: values.status ?? (rail === 'faircoin' ? 'requires_action' : 'requires_payment_method'),
     clientSecret: values.clientSecret ?? `pi_${unique}_secret_${unique.slice(0, 8)}`,
     idempotencyKey: values.idempotencyKey ?? unique,
     metadata: values.metadata ?? {},
@@ -388,7 +391,7 @@ export async function seedSession(
  *
  * `seedDelivery` takes an intent, so it can only seed an event that carries
  * one. Before `WebhookEventPayload` existed this parameter was the whole
- * `WebhookEventType`, and seeding `payment_intent.disputed` here would have
+ * `WebhookEventType`, and seeding `charge.dispute.created` here would have
  * built an envelope whose `data.object` was a settlement — a fixture that
  * disagrees with production while looking exactly like it.
  */
@@ -461,7 +464,7 @@ export async function seedDelivery(
   const event = await insertEvent(gatewayDb(), {
     publicId: newId('evt'),
     merchantId: merchant.id,
-    type: values.eventType ?? 'payment_intent.settled',
+    type: values.eventType ?? 'payment_intent.succeeded',
     apiVersion: PEABLE_API_VERSION,
     dataObject: toPaymentIntentDTO(intent) as unknown as Record<string, unknown>,
     paymentIntentId: intent.id,

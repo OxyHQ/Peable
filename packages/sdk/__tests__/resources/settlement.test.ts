@@ -71,7 +71,6 @@ const REFUND: Refund = {
   amount: '2500',
   currency: 'EUR',
   status: 'succeeded',
-  payment_status: 'partially_refunded',
   failure_code: null,
   created: 1789776000,
   updated_at: 1789776000,
@@ -214,11 +213,10 @@ describe('RefundsResource', () => {
       amount: '2500',
     });
 
-    // `status` is the REFUND's lifecycle and `payment_status` is the payment's.
-    // Two different questions on one response, so a caller needs no second read
-    // whose answer can move on before it arrives.
+    // `status` is the REFUND's lifecycle; the payment does not change status
+    // with a refund (ADR 0019), so the response carries no payment status.
     expect(refund.status).toBe('succeeded');
-    expect(refund.payment_status).toBe('partially_refunded');
+    expect('payment_status' in refund).toBe(false);
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/refunds`);
   });
 

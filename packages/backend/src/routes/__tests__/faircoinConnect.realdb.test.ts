@@ -497,9 +497,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     expect(first.status).toBe(201);
-    expect(first.json.address).toBe(deriveIntentAddress(key, 0, 0, network));
+    expect((first.json.faircoin as Json).address).toBe(deriveIntentAddress(key, 0, 0, network));
     expect(first.json.connected_account).toBe(seller.id);
-    expect(first.json.network).toBe('testnet');
+    expect((first.json.faircoin as Json).network).toBe('testnet');
     expect(first.json.can_expire).toBe(true);
 
     // `rail` omitted: still FairCoin, and the next index on the SAME key.
@@ -511,7 +511,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     expect(second.status).toBe(201);
     expect(second.json.rail).toBe('faircoin');
-    expect(second.json.address).toBe(deriveIntentAddress(key, 0, 1, network));
+    expect((second.json.faircoin as Json).address).toBe(deriveIntentAddress(key, 0, 1, network));
 
     // Only this seller's payments, when the platform asks for them.
     const listed = await call('GET', `/v1/payment_intents?connected_account=${String(seller.id)}`);
@@ -621,10 +621,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     const intent = must(await findIntentByPublicId(gatewayDb(), String(created.json.id)));
-    const result = await transitionIntent(intent.id, { from: 'created', status: 'expired' });
+    const result = await transitionIntent(intent.id, {
+      from: 'requires_action',
+      status: 'canceled',
+      cancellationReason: 'abandoned',
+    });
     expect(result.kind).toBe('updated');
 
-    const events = await deliveriesFor(platform.id, 'payment_intent.expired');
+    const events = await deliveriesFor(platform.id, 'payment_intent.canceled');
     const event = must(events.find((row) => row.intentId === intent.id));
     expect(event.payload.account).toBe(seller.id);
     const object = (event.payload.data as Json).object as Json;
@@ -642,12 +646,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     const intent = must(await findIntentByPublicId(gatewayDb(), String(created.json.id)));
     await transitionIntent(intent.id, {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'a'.repeat(64),
     });
     const read = await call('GET', `/v1/payment_intents/${String(created.json.id)}`);
-    expect(read.json.status).toBe('broadcast');
+    expect(read.json.status).toBe('processing');
     expect(read.json.can_expire).toBe(false);
   });
 

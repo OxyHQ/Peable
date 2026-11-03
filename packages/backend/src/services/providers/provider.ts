@@ -30,7 +30,17 @@
  * stranger's opinion.
  */
 
-import type { CurrencyCode, DisputeEvidence } from '@peable.to/shared-types';
+import type {
+  BillingDetails,
+  CardDetails,
+  CurrencyCode,
+  DisputeEvidence,
+  PaymentIntentCaptureMethod,
+  PaymentIntentSetupFutureUsage,
+  SetupIntentCancellationReason,
+  SetupIntentStatus,
+  SetupIntentUsage,
+} from '@peable.to/shared-types';
 
 /** The providers this gateway can route a fiat payment through. */
 export type ProviderId = 'stripe';
@@ -55,6 +65,7 @@ export function providerModeOf(livemode: boolean): ProviderMode {
  */
 export type ProviderStage =
   | 'createPayment'
+  | 'confirm'
   | 'capture'
   | 'cancel'
   | 'refund'
@@ -70,7 +81,11 @@ export type ProviderStage =
   // the operator question it raises is different: a failure here means a
   // merchant's response did not reach the network before a deadline, which is
   // the one failure on this surface that cannot be retried later.
-  | 'dispute';
+  | 'dispute'
+  // Customers, saved payment methods and SetupIntents (ADR 0016).
+  | 'customer'
+  | 'paymentMethod'
+  | 'setup';
 
 /**
  * A failure from a payment provider.
@@ -142,22 +157,29 @@ export interface ProviderClientAction {
 }
 
 /**
- * Where a payment stands, in the GATEWAY's vocabulary.
- *
- * A deliberately smaller set than `PaymentIntentStatus`: an adapter reports
- * what the provider says about the money, and the gateway's state machine
- * decides what that means for the intent. Mapping straight onto
- * `PaymentIntentStatus` would put `applyEvent`'s job inside every adapter.
+ * Where a payment stands at the provider — Stripe's seven, which since ADR 0019
+ * are also the gateway's. The adapter still only REPORTS: which transition that
+ * means for the intent is `applyEvent`'s decision (`intentReconciliation.ts`).
  */
 export type ProviderPaymentStatus =
-  | 'created'
+  | 'requires_payment_method'
+  | 'requires_confirmation'
   | 'requires_action'
   | 'processing'
+  | 'requires_capture'
   | 'succeeded'
-  | 'failed'
-  | 'canceled'
-  | 'refunded'
-  | 'partially_refunded';
+  | 'canceled';
+
+/**
+ * Why the last attempt failed, as machine-readable codes only. The provider's
+ * prose never crosses: the gateway writes its own message (ADR 0019), so a
+ * provider's wording — or its name — never reaches the wire.
+ */
+export interface ProviderPaymentError {
+  readonly type: 'card_error' | 'api_error';
+  readonly code?: string;
+  readonly declineCode?: string;
+}
 
 export interface CreatePaymentRequest {
   /** The intent's PUBLIC id — the basis of the provider idempotency key. */
@@ -180,6 +202,21 @@ export interface CreatePaymentRequest {
    * cannot fund two destinations.
    */
   readonly onBehalfOf?: string;
+  /** Card: hold the authorization for `capture` (ADR 0019). Defaults to automatic. */
+  readonly captureMethod?: PaymentIntentCaptureMethod;
+  /** The provider customer a saved method belongs to — a binding, never a Peable id. */
+  readonly customerObjectId?: string;
+  /** The provider payment method to charge — a binding of a Peable `pm_…`. */
+  readonly paymentMethodObjectId?: string;
+  /** Confirm in the same call (needs `paymentMethodObjectId`). */
+  readonly confirm?: boolean;
+  /** With `confirm`: the customer is not present. */
+  readonly offSession?: boolean;
+  readonly setupFutureUsage?: PaymentIntentSetupFutureUsage;
+  /** Shown on the cardholder's statement after the account's prefix. */
+  readonly statementDescriptorSuffix?: string;
+  /** With `confirm`: where a redirect-based challenge returns the payer. */
+  readonly returnUrl?: string;
 }
 
 export interface ProviderPaymentResult {
@@ -201,6 +238,14 @@ export interface ProviderPaymentResult {
    * payment has no charge yet, and inventing one would be a claim about money.
    */
   readonly chargeObjectId?: string;
+  /** Present when the last attempt failed (`requires_payment_method` after a decline). */
+  readonly lastPaymentError?: ProviderPaymentError;
+  /**
+   * The provider payment method the payment was made with, when it has one —
+   * what a payment that saves its card (`setup_future_usage`) registers as a
+   * Peable `pm_…` once it succeeds (ADR 0016).
+   */
+  readonly paymentMethodObjectId?: string;
 }
 
 /** Act on a payment the provider already knows about. */
@@ -208,6 +253,26 @@ export interface PaymentOperationRequest {
   readonly intentId: string;
   readonly providerObjectId: string;
   readonly idempotencyKey: string;
+}
+
+/** Confirm a payment server-side with a saved method (ADR 0019). */
+export interface ConfirmPaymentRequest extends PaymentOperationRequest {
+  readonly paymentMethodObjectId: string;
+  readonly customerObjectId?: string;
+  readonly offSession?: boolean;
+  readonly setupFutureUsage?: PaymentIntentSetupFutureUsage;
+  readonly returnUrl?: string;
+}
+
+/** Capture a held authorization, in full or in part. */
+export interface CapturePaymentRequest extends PaymentOperationRequest {
+  /** Base units; defaults to all of it. */
+  readonly amountToCapture?: string;
+}
+
+/** Cancel a payment, optionally saying why (Stripe's own reasons). */
+export interface CancelPaymentRequest extends PaymentOperationRequest {
+  readonly cancellationReason?: 'duplicate' | 'fraudulent' | 'requested_by_customer' | 'abandoned';
 }
 
 export interface RefundRequest {
@@ -223,9 +288,11 @@ export interface RefundRequest {
 export interface ProviderRefundResult {
   /** The provider's id for the REFUND, not for the payment. */
   readonly providerObjectId: string;
-  /** Where the PAYMENT stands after it. */
-  readonly status: ProviderPaymentStatus;
-  /** Where the REFUND itself stands — the money's own lifecycle. */
+  /**
+   * Where the REFUND stands — the money's own lifecycle. The payment's status
+   * does not move with a refund (ADR 0019); `amount_refunded` is the sum of the
+   * succeeded rows.
+   */
   readonly state: 'pending' | 'succeeded' | 'failed';
   readonly failureCode?: string;
 }
@@ -254,7 +321,7 @@ export interface ProviderEventEnvelope {
    * still stored, because an event the gateway cannot act on is evidence rather
    * than noise.
    */
-  readonly paymentStatus?: ProviderPaymentStatus;
+  readonly paymentStatus?: ProviderPaymentStatus | 'failed';
   readonly payload: unknown;
 }
 
@@ -263,15 +330,18 @@ export interface PaymentProvider {
   readonly id: ProviderId;
   createPayment(request: CreatePaymentRequest): Promise<ProviderPaymentResult>;
   /**
-   * Move a created payment toward capture.
-   *
-   * For a card rail that captures immediately this collapses into re-reading
-   * the payment. It stays a method because a rail that genuinely holds funds
-   * needs it, and discovering that after the interface froze would be
-   * expensive.
+   * Confirm a payment server-side with a saved method. A DECLINE is an answer,
+   * not an error: it resolves with `requires_payment_method` and
+   * `lastPaymentError`, the way the provider leaves the payment.
    */
-  capture(request: PaymentOperationRequest): Promise<ProviderPaymentResult>;
-  cancel(request: PaymentOperationRequest): Promise<ProviderPaymentResult>;
+  confirm(request: ConfirmPaymentRequest): Promise<ProviderPaymentResult>;
+  /**
+   * Capture a held authorization (`requires_capture`). On a payment that was
+   * captured automatically this READS the payment back rather than pretending
+   * to act.
+   */
+  capture(request: CapturePaymentRequest): Promise<ProviderPaymentResult>;
+  cancel(request: CancelPaymentRequest): Promise<ProviderPaymentResult>;
   refund(request: RefundRequest): Promise<ProviderRefundResult>;
   /** Read the provider's current view. The only method with no idempotency key. */
   getStatus(providerObjectId: string): Promise<ProviderPaymentResult>;
@@ -568,6 +638,51 @@ export function isSettlementReportingProvider(
   return typeof candidate.getSettlement === 'function';
 }
 
+/** What the provider says about one charge: the outcome and the card, never prose. */
+export interface ProviderChargeSnapshot {
+  readonly outcome: {
+    readonly networkStatus: string | null;
+    readonly riskLevel: string | null;
+    readonly type: string | null;
+  } | null;
+  readonly paymentMethodDetails: { readonly type: 'card'; readonly card: CardDetails } | null;
+}
+
+/** A provider whose charges can be read for a `ch_…` snapshot (ADR 0019). */
+export interface ChargeReadingProvider extends PaymentProvider {
+  /** @param chargeObjectId the CHARGE, not the payment. */
+  getChargeSnapshot(chargeObjectId: string): Promise<ProviderChargeSnapshot>;
+}
+
+export function isChargeReadingProvider(
+  provider: PaymentProvider,
+): provider is ChargeReadingProvider {
+  const candidate = provider as Partial<ChargeReadingProvider>;
+  return typeof candidate.getChargeSnapshot === 'function';
+}
+
+export interface CreateProviderCustomerRequest {
+  /** The Peable customer's `cus_…` — the basis of the idempotency key and the correlation. */
+  readonly customerId: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * A provider that holds customers — the binding a saved card belongs to
+ * (ADR 0016). Nothing about the customer is sent beyond the correlation id: the
+ * customer's name, email and address are Orbit's, not the provider's.
+ */
+export interface CustomerHoldingProvider extends PaymentProvider {
+  createCustomer(request: CreateProviderCustomerRequest): Promise<{ providerObjectId: string }>;
+}
+
+export function isCustomerHoldingProvider(
+  provider: PaymentProvider,
+): provider is CustomerHoldingProvider {
+  const candidate = provider as Partial<CustomerHoldingProvider>;
+  return typeof candidate.createCustomer === 'function';
+}
+
 /** Whether this rail can settle sub-merchants. Both halves, never one. */
 export function isSettlingProvider(provider: PaymentProvider): provider is SettlingPaymentProvider {
   const candidate = provider as Partial<SettlingPaymentProvider>;
@@ -586,5 +701,76 @@ export function isAccountHoldingProvider(
     typeof candidate.createAccount === 'function' &&
     typeof candidate.accountLink === 'function' &&
     typeof candidate.getAccount === 'function'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Saved payment methods and SetupIntents (ADR 0016)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a provider says about one of its payment methods — the safe card fields
+ * and the billing details, never the number. The source of a Peable `pm_…`.
+ */
+export interface ProviderPaymentMethodSnapshot {
+  readonly providerObjectId: string;
+  readonly card: CardDetails;
+  readonly billingDetails: BillingDetails;
+  /** The provider customer it is attached to, if any. */
+  readonly customerObjectId?: string;
+}
+
+/** A provider SetupIntent, in Stripe's six statuses (which are also Orbit's). */
+export interface ProviderSetupResult {
+  readonly providerObjectId: string;
+  readonly status: SetupIntentStatus;
+  /** The payer's confirmation credential (Stripe.js `confirmSetup`). Never stored. */
+  readonly clientAction?: ProviderClientAction;
+  /** The provider payment method it saved, once `succeeded`. */
+  readonly paymentMethodObjectId?: string;
+  /** Present after a failed attempt (`requires_payment_method` again). */
+  readonly lastSetupError?: ProviderPaymentError;
+}
+
+export interface CreateSetupRequest {
+  /** The SetupIntent's public `seti_…` — correlation and idempotency basis. */
+  readonly setupIntentId: string;
+  readonly customerObjectId: string;
+  readonly usage: SetupIntentUsage;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * A provider that can save a card for later: SetupIntents, and the payment
+ * methods they produce. Optional, like every capability here — the FairCoin
+ * rail has no stored payment method (ADR 0016 D4).
+ */
+export interface SetupHoldingProvider extends PaymentProvider {
+  createSetup(request: CreateSetupRequest): Promise<ProviderSetupResult>;
+  /** Read the provider's view. No idempotency key. */
+  getSetup(providerObjectId: string): Promise<ProviderSetupResult>;
+  cancelSetup(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+    readonly cancellationReason?: SetupIntentCancellationReason;
+  }): Promise<ProviderSetupResult>;
+  getPaymentMethod(providerObjectId: string): Promise<ProviderPaymentMethodSnapshot>;
+  /** Detach at the provider: the method can never be charged again. */
+  detachPaymentMethod(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<void>;
+}
+
+export function isSetupHoldingProvider(
+  provider: PaymentProvider,
+): provider is SetupHoldingProvider {
+  const candidate = provider as Partial<SetupHoldingProvider>;
+  return (
+    typeof candidate.createSetup === 'function' &&
+    typeof candidate.getSetup === 'function' &&
+    typeof candidate.cancelSetup === 'function' &&
+    typeof candidate.getPaymentMethod === 'function' &&
+    typeof candidate.detachPaymentMethod === 'function'
   );
 }

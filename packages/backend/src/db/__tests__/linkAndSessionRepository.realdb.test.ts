@@ -69,6 +69,7 @@ async function makeIntent(merchant: MerchantRow) {
       network: merchant.network,
       address: `T${unique}`,
       provider: null,
+      status: 'requires_action' as const,
       clientSecret: `pi_${unique}_secret_x`,
       idempotencyKey: unique,
       metadata: {},

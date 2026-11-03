@@ -17,7 +17,14 @@ import { config } from '../../../config';
 import {
   cancelStripePaymentIntent,
   captureStripePaymentIntent,
+  cancelStripeSetupIntent,
+  confirmStripePaymentIntent,
   constructStripeEvent,
+  createStripeSetupIntent,
+  detachStripePaymentMethod,
+  retrieveStripePaymentMethod,
+  retrieveStripeSetupIntent,
+  createStripeCustomer,
   createStripeAccountLink,
   createStripeConnectedAccountV2,
   createStripePaymentIntent,
@@ -25,6 +32,7 @@ import {
   createStripeTransfer,
   createStripeTransferReversal,
   retrieveStripeAccount,
+  retrieveStripeCharge,
   retrieveStripeChargeWithBalance,
   retrieveStripePaymentIntent,
   retrieveStripeTransfer,
@@ -33,6 +41,16 @@ import {
 import {
   ProviderError,
   type AccountHoldingProvider,
+  type CancelPaymentRequest,
+  type CapturePaymentRequest,
+  type ChargeReadingProvider,
+  type ConfirmPaymentRequest,
+  type CreateProviderCustomerRequest,
+  type CreateSetupRequest,
+  type ProviderPaymentMethodSnapshot,
+  type ProviderSetupResult,
+  type SetupHoldingProvider,
+  type CustomerHoldingProvider,
   type DisputeEvidence,
   type DisputeHandlingProvider,
   type ProviderSettlement,
@@ -43,14 +61,13 @@ import {
   type CreateAccountRequest,
   type CreatePaymentRequest,
   type CreateTransferRequest,
-  type PaymentOperationRequest,
+  type ProviderChargeSnapshot,
   type ProviderMode,
   type ProviderAccountSnapshot,
   type ProviderCapabilityStatus,
   type ProviderEventEnvelope,
   type ProviderEventInput,
   type ProviderPaymentResult,
-  type ProviderPaymentStatus,
   type ProviderRefundResult,
   type ProviderTransferResult,
   type ProviderTransferReversalResult,
@@ -74,7 +91,10 @@ export type StripeWebhookScope = 'platform' | 'connect';
  * silently stops counting, and a payment amount that crossed it would be sent
  * to Stripe rounded — a real charge for an amount nobody authorised.
  */
-function toStripeAmount(amount: string, stage: 'createPayment' | 'refund' | 'transfer'): number {
+function toStripeAmount(
+  amount: string,
+  stage: 'createPayment' | 'capture' | 'refund' | 'transfer',
+): number {
   const value = Number(amount);
   if (!Number.isSafeInteger(value)) {
     throw new ProviderError({
@@ -189,7 +209,10 @@ export class StripePaymentProvider
     SettlingPaymentProvider,
     AccountHoldingProvider,
     DisputeHandlingProvider,
-    SettlementReportingProvider
+    SettlementReportingProvider,
+    ChargeReadingProvider,
+    CustomerHoldingProvider,
+    SetupHoldingProvider
 {
   readonly id = 'stripe' as const;
   readonly mode: ProviderMode;
@@ -218,11 +241,14 @@ export class StripePaymentProvider
       currency: toStripeCurrency(request.amount.currency),
       // `automatic_payment_methods` rather than a hand-listed set: the methods a
       // payment can offer are a dashboard decision an operator changes without a
-      // deploy, and hard-coding them here would make that dashboard lie.
-      ...(this.allowedPaymentMethodTypes
-        ? { allowed_payment_method_types: [...this.allowedPaymentMethodTypes] }
-        : { automatic_payment_methods: { enabled: true } }),
-      ...(this.paymentMethodConfiguration
+      // deploy, and hard-coding them here would make that dashboard lie. A
+      // saved card being charged names its own type.
+      ...(request.paymentMethodObjectId !== undefined
+        ? { payment_method_types: ['card'] }
+        : this.allowedPaymentMethodTypes
+          ? { allowed_payment_method_types: [...this.allowedPaymentMethodTypes] }
+          : { automatic_payment_methods: { enabled: true } }),
+      ...(this.paymentMethodConfiguration && request.paymentMethodObjectId === undefined
         ? { payment_method_configuration: this.paymentMethodConfiguration }
         : {}),
       metadata: { ...request.metadata, peable_intent_id: request.intentId },
@@ -230,35 +256,75 @@ export class StripePaymentProvider
       // conversation can find the charge and its transfers from one id.
       transfer_group: request.intentId,
       ...(request.onBehalfOf !== undefined ? { on_behalf_of: request.onBehalfOf } : {}),
+      ...(request.captureMethod === 'manual' ? { capture_method: 'manual' as const } : {}),
+      ...(request.customerObjectId !== undefined ? { customer: request.customerObjectId } : {}),
+      ...(request.paymentMethodObjectId !== undefined
+        ? { payment_method: request.paymentMethodObjectId }
+        : {}),
+      ...(request.setupFutureUsage !== undefined
+        ? { setup_future_usage: request.setupFutureUsage }
+        : {}),
+      ...(request.statementDescriptorSuffix !== undefined
+        ? { statement_descriptor_suffix: request.statementDescriptorSuffix }
+        : {}),
+      ...(request.confirm
+        ? {
+            confirm: true,
+            ...(request.offSession ? { off_session: true } : {}),
+            ...(request.returnUrl !== undefined ? { return_url: request.returnUrl } : {}),
+          }
+        : {}),
     };
     const intent = await createStripePaymentIntent(this.mode, params, request.idempotencyKey);
     return this.toResult(intent);
   }
 
+  async confirm(request: ConfirmPaymentRequest): Promise<ProviderPaymentResult> {
+    const intent = await confirmStripePaymentIntent(
+      this.mode,
+      request.providerObjectId,
+      {
+        payment_method: request.paymentMethodObjectId,
+        ...(request.offSession ? { off_session: true } : {}),
+        ...(request.setupFutureUsage !== undefined
+          ? { setup_future_usage: request.setupFutureUsage }
+          : {}),
+        ...(request.returnUrl !== undefined ? { return_url: request.returnUrl } : {}),
+      },
+      request.idempotencyKey,
+    );
+    return this.toResult(intent);
+  }
+
   /**
-   * Capture.
+   * Capture a held authorization.
    *
-   * With `automatic_payment_methods` and no `capture_method: 'manual'`, Stripe
-   * captures as part of confirmation — so there is nothing to capture and this
-   * READS the payment back rather than pretending to act. Calling
-   * `paymentIntents.capture` on an already-captured intent is an error, not a
-   * no-op, so "just call it anyway" would turn a settled payment into a failure.
+   * On a payment that was not held (`requires_capture`) there is nothing to
+   * capture, so this READS the payment back rather than pretending to act:
+   * calling `paymentIntents.capture` on an already-captured intent is an error,
+   * not a no-op.
    */
-  async capture(request: PaymentOperationRequest): Promise<ProviderPaymentResult> {
+  async capture(request: CapturePaymentRequest): Promise<ProviderPaymentResult> {
     const current = await retrieveStripePaymentIntent(this.mode, request.providerObjectId);
     if (current.status !== 'requires_capture') return this.toResult(current);
     const captured = await captureStripePaymentIntent(
       this.mode,
       request.providerObjectId,
+      request.amountToCapture !== undefined
+        ? { amount_to_capture: toStripeAmount(request.amountToCapture, 'capture') }
+        : {},
       request.idempotencyKey,
     );
     return this.toResult(captured);
   }
 
-  async cancel(request: PaymentOperationRequest): Promise<ProviderPaymentResult> {
+  async cancel(request: CancelPaymentRequest): Promise<ProviderPaymentResult> {
     const canceled = await cancelStripePaymentIntent(
       this.mode,
       request.providerObjectId,
+      request.cancellationReason !== undefined
+        ? { cancellation_reason: request.cancellationReason }
+        : {},
       request.idempotencyKey,
     );
     return this.toResult(canceled);
@@ -275,15 +341,8 @@ export class StripePaymentProvider
       request.idempotencyKey,
     );
 
-    // Re-read the PAYMENT rather than inferring its state from the refund: only
-    // Stripe knows whether this refund exhausted the charge, and computing that
-    // here would need the charge's total and every earlier refund — a sum this
-    // adapter has no business keeping.
-    const payment = await retrieveStripePaymentIntent(this.mode, request.providerObjectId);
-
     return {
       providerObjectId: refund.id,
-      status: this.refundedPaymentStatus(payment),
       state:
         refund.status === 'succeeded'
           ? 'succeeded'
@@ -489,6 +548,144 @@ export class StripePaymentProvider
   }
 
   // -------------------------------------------------------------------------
+  // Customers
+  // -------------------------------------------------------------------------
+
+  /** A provider customer carrying only Peable's correlation id (ADR 0016). */
+  async createCustomer(
+    request: CreateProviderCustomerRequest,
+  ): Promise<{ providerObjectId: string }> {
+    const customer = await createStripeCustomer(
+      this.mode,
+      { metadata: { peable_customer_id: request.customerId } },
+      request.idempotencyKey,
+    );
+    return { providerObjectId: customer.id };
+  }
+
+  // -------------------------------------------------------------------------
+  // SetupIntents and payment methods (ADR 0016)
+  // -------------------------------------------------------------------------
+
+  async createSetup(request: CreateSetupRequest): Promise<ProviderSetupResult> {
+    const setup = await createStripeSetupIntent(
+      this.mode,
+      {
+        customer: request.customerObjectId,
+        usage: request.usage,
+        payment_method_types: ['card'],
+        metadata: { peable_setup_intent_id: request.setupIntentId },
+      },
+      request.idempotencyKey,
+    );
+    return toSetupResult(setup);
+  }
+
+  async getSetup(providerObjectId: string): Promise<ProviderSetupResult> {
+    return toSetupResult(await retrieveStripeSetupIntent(this.mode, providerObjectId));
+  }
+
+  async cancelSetup(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+    readonly cancellationReason?: 'abandoned' | 'duplicate' | 'requested_by_customer';
+  }): Promise<ProviderSetupResult> {
+    const setup = await cancelStripeSetupIntent(
+      this.mode,
+      request.providerObjectId,
+      request.cancellationReason !== undefined
+        ? { cancellation_reason: request.cancellationReason }
+        : {},
+      request.idempotencyKey,
+    );
+    return toSetupResult(setup);
+  }
+
+  /** The card's safe fields and the billing details — never the number. */
+  async getPaymentMethod(providerObjectId: string): Promise<ProviderPaymentMethodSnapshot> {
+    const method = await retrieveStripePaymentMethod(this.mode, providerObjectId);
+    const card = method.card;
+    const billing = method.billing_details;
+    const customer =
+      typeof method.customer === 'string'
+        ? method.customer
+        : method.customer && typeof method.customer === 'object'
+          ? method.customer.id
+          : undefined;
+    return {
+      providerObjectId: method.id,
+      card: {
+        brand: card?.brand ?? null,
+        last4: card?.last4 ?? null,
+        exp_month: card?.exp_month ?? null,
+        exp_year: card?.exp_year ?? null,
+        country: card?.country ?? null,
+        funding: card?.funding ?? null,
+      },
+      billingDetails: {
+        address: billing?.address
+          ? {
+              line1: billing.address.line1 ?? null,
+              line2: billing.address.line2 ?? null,
+              city: billing.address.city ?? null,
+              state: billing.address.state ?? null,
+              postal_code: billing.address.postal_code ?? null,
+              country: billing.address.country ?? null,
+            }
+          : null,
+        email: billing?.email ?? null,
+        name: billing?.name ?? null,
+        phone: billing?.phone ?? null,
+      },
+      ...(customer !== undefined ? { customerObjectId: customer } : {}),
+    };
+  }
+
+  async detachPaymentMethod(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<void> {
+    await detachStripePaymentMethod(this.mode, request.providerObjectId, request.idempotencyKey);
+  }
+
+  // -------------------------------------------------------------------------
+  // Charges
+  // -------------------------------------------------------------------------
+
+  /**
+   * The outcome and card of one charge — codes and safe card fields only. The
+   * provider's `seller_message` and `receipt_url` are NOT read: both carry the
+   * provider's prose or brand, which never reach Orbit's wire (ADR 0001 D3).
+   */
+  async getChargeSnapshot(chargeObjectId: string): Promise<ProviderChargeSnapshot> {
+    const charge = await retrieveStripeCharge(this.mode, chargeObjectId);
+    const outcome = charge.outcome;
+    const card = charge.payment_method_details?.card;
+    return {
+      outcome: outcome
+        ? {
+            networkStatus: outcome.network_status ?? null,
+            riskLevel: outcome.risk_level ?? null,
+            type: outcome.type ?? null,
+          }
+        : null,
+      paymentMethodDetails: card
+        ? {
+            type: 'card',
+            card: {
+              brand: card.brand ?? null,
+              last4: card.last4 ?? null,
+              exp_month: card.exp_month ?? null,
+              exp_year: card.exp_year ?? null,
+              country: card.country ?? null,
+              funding: card.funding ?? null,
+            },
+          }
+        : null,
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Connected accounts
   // -------------------------------------------------------------------------
 
@@ -598,6 +795,7 @@ export class StripePaymentProvider
   protected toResult(intent: Stripe.PaymentIntent): ProviderPaymentResult {
     const status = mapPaymentIntentStatus(intent.status);
     const chargeObjectId = readChargeId(intent.latest_charge);
+    const error = intent.last_payment_error;
     return {
       providerObjectId: intent.id,
       status,
@@ -610,20 +808,49 @@ export class StripePaymentProvider
       // transfer's `source_transaction` names. Absent while the payment has not
       // produced one.
       ...(chargeObjectId !== undefined ? { chargeObjectId } : {}),
+      ...(readObjectId(intent.payment_method) !== undefined
+        ? { paymentMethodObjectId: readObjectId(intent.payment_method) }
+        : {}),
+      // Codes only — the provider's `message` stays behind (ADR 0019).
+      ...(status === 'requires_payment_method' && error
+        ? {
+            lastPaymentError: {
+              type: error.type === 'card_error' ? ('card_error' as const) : ('api_error' as const),
+              ...(error.code ? { code: error.code } : {}),
+              ...(error.decline_code ? { declineCode: error.decline_code } : {}),
+            },
+          }
+        : {}),
     };
   }
+}
 
-  /** Whether a refund left the payment fully or partially refunded. */
-  private refundedPaymentStatus(intent: Stripe.PaymentIntent): ProviderPaymentStatus {
-    const charge = intent.latest_charge;
-    if (typeof charge === 'object' && charge !== null) {
-      if (charge.refunded) return 'refunded';
-      if ((charge.amount_refunded ?? 0) > 0) return 'partially_refunded';
-    }
-    // Stripe did not expand the charge. `partially_refunded` is the
-    // conservative answer: a refund was created, so SOMETHING came back, and
-    // claiming the payment is fully refunded when it is not would stop a later
-    // legitimate refund.
-    return 'partially_refunded';
-  }
+/** An expandable Stripe reference's id, whichever shape it arrived in. */
+function readObjectId(value: string | { id: string } | null | undefined): string | undefined {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null) return value.id;
+  return undefined;
+}
+
+/** A Stripe SetupIntent in the gateway's vocabulary — codes only, never prose. */
+function toSetupResult(setup: Stripe.SetupIntent): ProviderSetupResult {
+  const error = setup.last_setup_error;
+  const paymentMethodObjectId = readObjectId(setup.payment_method);
+  return {
+    providerObjectId: setup.id,
+    status: setup.status,
+    ...(setup.client_secret
+      ? { clientAction: { kind: 'client_secret' as const, value: setup.client_secret } }
+      : {}),
+    ...(paymentMethodObjectId !== undefined ? { paymentMethodObjectId } : {}),
+    ...(setup.status === 'requires_payment_method' && error
+      ? {
+          lastSetupError: {
+            type: error.type === 'card_error' ? ('card_error' as const) : ('api_error' as const),
+            ...(error.code ? { code: error.code } : {}),
+            ...(error.decline_code ? { declineCode: error.decline_code } : {}),
+          },
+        }
+      : {}),
+  };
 }

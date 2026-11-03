@@ -295,6 +295,34 @@
       "when": 1793722669643,
       "tag": "0041_drop_merchant_webhook_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793723954896,
+      "tag": "0042_orbit_payments_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793723955545,
+      "tag": "0043_orbit_payments_core_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793723956223,
+      "tag": "0044_payment_intents_customer_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793723956870,
+      "tag": "0045_orbit_payments_core_validate",
+      "breakpoints": true
     }
   ]
 }

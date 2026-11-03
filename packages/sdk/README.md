@@ -32,7 +32,7 @@ for three days is disabled with `disabled_reason: 'delivery_failures'`.
 ```ts
 const endpoint = await peable.webhookEndpoints.create({
   url: 'https://shop.example/webhooks/peable',
-  enabled_events: ['payment_intent.settled'], // or ['*']
+  enabled_events: ['payment_intent.succeeded'], // or ['*']
 });
 endpoint.secret; // whsec_… — returned only here and by rollSecret; store it
 
@@ -88,14 +88,14 @@ resource's own filters, and returns a promise of one page
 iterable over every page:
 
 ```ts
-const page = await peable.paymentIntents.list({ status: 'settled', limit: 20 });
+const page = await peable.paymentIntents.list({ status: 'succeeded', limit: 20 });
 for await (const refund of peable.refunds.list({ payment_intent: intent.id })) {
   reconcile(refund);
 }
 const sellers = await peable.connectedAccounts.list().autoPagingToArray({ limit: 1000 });
 ```
 
-Listable: `paymentIntents`, `paymentLinks`, `checkout.sessions`, `refunds`,
+Listable: `paymentIntents`, `charges`, `paymentLinks`, `checkout.sessions`, `refunds`,
 `transfers`, `disputes`, `connectedAccounts`, `tax.transactions`, the
 per-payment `listForPaymentIntent` sub-lists and contributions. Iterating from
 `ending_before` walks backwards, away from the cursor.
@@ -117,6 +117,39 @@ update is a patch — a key sent as `''` is removed — and every update is a `P
 await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes', draft: '' } });
 await peable.paymentLinks.update(link.id, { active: false });
 ```
+
+### Payment statuses, confirm, capture and cancel (ADR 0019)
+
+A PaymentIntent walks Stripe's seven statuses — `requires_payment_method`,
+`requires_confirmation`, `requires_action`, `processing`, `requires_capture`,
+`succeeded`, `canceled` — on both rails. A FairCoin payment starts in
+`requires_action` (`next_action.faircoin_payment` has the address, amount and
+`faircoin:` URI), is `processing` once the payer broadcasts (`faircoin.txid`,
+`faircoin.confirmations`) and ends `succeeded` or `canceled`
+(`cancellation_reason: 'abandoned' | 'underpaid' | …`). A declined card returns
+to `requires_payment_method` with `last_payment_error` and can be retried.
+Refunds never change the status: read `amount_refunded`, or the refunds.
+
+```ts
+const intent = await peable.paymentIntents.create({
+  amount: '1999', rail: 'card', currency: 'EUR',
+  customer: 'cus_…', payment_method: 'pm_…', confirm: true, off_session: true,
+  capture_method: 'manual',
+});
+await peable.paymentIntents.capture(intent.id, { amount_to_capture: '1500' });
+await peable.paymentIntents.cancel(other.id, { cancellation_reason: 'requested_by_customer' });
+try {
+  await peable.paymentIntents.confirm(id, { payment_method: 'pm_…' });
+} catch (error) {
+  if (error instanceof PeableCardError) offerAnotherCard(error.paymentIntent);
+}
+const charge = await peable.charges.retrieve(intent.latest_charge as string);
+```
+
+Events are Stripe's names: `payment_intent.created|requires_action|processing|
+amount_capturable_updated|succeeded|payment_failed|canceled`, `charge.refunded`,
+`charge.dispute.created|updated|closed`, `refund.created|updated|failed`,
+`customer.*`, `payment_method.*` and `setup_intent.*`.
 
 ### Own Oxy applications: shared workload transport
 
@@ -154,7 +187,7 @@ pass `requestTimeoutMs: 20_000`. A401 may still trigger the existing single toke
 refresh/retry; timeouts and interrupted responses never retry a payment POST.
 The remote outcome may be unknown: recover explicitly with the same durable key.
 
-`paymentIntents.reject`, `refunds.create`, and `transfers.create` accept an
+`paymentIntents.cancel` / `confirm` / `capture`, `refunds.create`, and `transfers.create` accept an
 optional second `{ idempotencyKey }` argument; without it the client mints one
 (above). Refund/transfer/reversal `external_ref` remains their durable business
 identity; the key neither replaces it nor changes gateway financial semantics.

@@ -77,7 +77,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the drain routes an event by its own m
     const stored = await findProviderEventById(gatewayDb(), event.id);
     expect(stored?.processedAt).toBeNull();
     expect(stored?.processingError).toContain('no live stripe key');
-    expect((await findIntentByPublicId(gatewayDb(), testIntentPublicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), testIntentPublicId))?.status).toBe(
+      'requires_payment_method',
+    );
   });
 
   it('refuses a live event that names a TEST payment', async () => {
@@ -92,7 +94,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the drain routes an event by its own m
       kind: 'failed',
       error: 'a live event names a test object',
     });
-    expect((await findIntentByPublicId(gatewayDb(), testIntentPublicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), testIntentPublicId))?.status).toBe(
+      'requires_payment_method',
+    );
   });
 
   it('applies an event of the payment’s own mode', async () => {
@@ -101,6 +105,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the drain routes an event by its own m
 
     const outcome = await processProviderEvent(event);
     expect(outcome.kind).toBe('applied');
-    expect((await findIntentByPublicId(gatewayDb(), testIntentPublicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), testIntentPublicId))?.status).toBe('succeeded');
   });
 });

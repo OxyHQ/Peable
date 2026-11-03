@@ -1,5 +1,6 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { intentFixture } from '../../__tests__/intentFixture';
 import type { PaymentIntent } from '@peable.to/shared-types';
 
 // Stubbed `@peable.to/sdk/checkout` client (via this app's one touchpoint,
@@ -38,28 +39,22 @@ mock.module('../../lib/intentClient', () => ({
 
 const { CheckoutView } = await import('../CheckoutView');
 
-function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_live123',
-    object: 'payment_intent',
-    livemode: false,
-    status: 'broadcast',
-    rail: 'faircoin',
-    amount: '150000000',
-    currency: 'FAIR',
-    network: 'testnet',
-    address: 'TAddressExample1111111111111111111',
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: 'deadbeef',
-    confirmations: 0,
-    client_secret: 'pi_live123_secret',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 60_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function makeIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = { txid: 'deadbeef' },
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_live123',
+      rail: 'faircoin',
+      status: 'processing',
+      amount: '150000000',
+      client_secret: 'pi_live123_secret',
+      expires_at: Math.floor((Date.now() + 60_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 afterEach(() => {
@@ -69,8 +64,8 @@ afterEach(() => {
   unsubscribeMock.mockClear();
 });
 
-test('renders the initial snapshot, advances on a socket update, and shows the success CTA once settled', async () => {
-  const initialIntent = makeIntent({ status: 'broadcast' });
+test('renders the initial snapshot, advances on a socket update, and shows the success CTA once succeeded', async () => {
+  const initialIntent = makeIntent({ status: 'processing' });
   const { unmount } = render(
     <CheckoutView intent={initialIntent} successUrl="https://merchant.example/thanks" />,
   );
@@ -91,20 +86,23 @@ test('renders the initial snapshot, advances on a socket update, and shows the s
   );
   expect(capturedOnUpdate).not.toBeNull();
 
-  // Simulate a `confirming` push from the socket.
-  const confirmingIntent = makeIntent({ status: 'confirming', confirmations: 2 });
+  // Simulate a confirmation-count push from the socket.
+  const confirmingIntent = makeIntent(
+    { status: 'processing' },
+    { txid: 'deadbeef', confirmations: 2 },
+  );
   act(() => {
     capturedOnUpdate?.(confirmingIntent);
   });
   expect(await screen.findByText(/confirming/i)).toBeDefined();
-  expect(screen.getByText(/2 confirmation\(s\) so far/i)).toBeDefined();
+  expect(screen.getByText(/2 of 6 confirmation\(s\) so far/i)).toBeDefined();
 
-  // Simulate the terminal `settled` push.
-  const settledIntent = makeIntent({ status: 'settled', confirmations: 6 });
+  // Simulate the terminal `succeeded` push.
+  const settledIntent = makeIntent({ status: 'succeeded' }, { txid: 'deadbeef', confirmations: 6 });
   act(() => {
     capturedOnUpdate?.(settledIntent);
   });
-  expect(await screen.findByText(/payment settled/i)).toBeDefined();
+  expect(await screen.findByText(/payment complete/i)).toBeDefined();
   const cta = screen.getByRole('link', { name: /continue/i });
   expect(cta.getAttribute('href')).toBe('https://merchant.example/thanks');
 
@@ -113,10 +111,10 @@ test('renders the initial snapshot, advances on a socket update, and shows the s
 });
 
 test('does not show a success CTA without a successUrl', async () => {
-  const settledIntent = makeIntent({ status: 'settled' });
+  const settledIntent = makeIntent({ status: 'succeeded' });
   render(<CheckoutView intent={settledIntent} />);
 
-  expect(await screen.findByText(/payment settled/i)).toBeDefined();
+  expect(await screen.findByText(/payment complete/i)).toBeDefined();
   expect(screen.queryByRole('link', { name: /continue/i })).toBeNull();
 });
 
@@ -135,7 +133,7 @@ test('an expired frozen subscription quote shows canonical amounts and no paymen
   };
   render(
     <CheckoutView
-      intent={makeIntent({ status: 'created', amount: '333333334' })}
+      intent={makeIntent({ status: 'requires_action', amount: '333333334' }, {})}
       billingQuote={quote}
     />,
   );

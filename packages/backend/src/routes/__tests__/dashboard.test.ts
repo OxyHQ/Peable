@@ -439,7 +439,7 @@ describe('GET /v1/dashboard/applications/:applicationId/webhook_deliveries + red
 
     const delivery = await seedDelivery(devMerchant, intent, {
       endpoint,
-      eventType: 'payment_intent.settled',
+      eventType: 'payment_intent.succeeded',
       pending: true,
     });
 
@@ -494,7 +494,7 @@ describe('Orbit webhooks through the dashboard (ADR 0014 D4)', () => {
       method: 'POST',
       body: JSON.stringify({
         url: 'https://merchant.example/orbit-hook',
-        enabled_events: ['payment_intent.settled'],
+        enabled_events: ['payment_intent.succeeded'],
         description: 'orders',
         metadata: { team: 'payments' },
       }),
@@ -559,7 +559,7 @@ describe('Orbit webhooks through the dashboard (ADR 0014 D4)', () => {
       method: 'POST',
       body: JSON.stringify({
         url: 'https://merchant.example/test-hook',
-        enabled_events: ['payment_intent.failed'],
+        enabled_events: ['payment_intent.payment_failed'],
       }),
     });
     const endpoint = (await created.json()) as { id: string };

@@ -14,6 +14,7 @@
  */
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { intentFixture } from '../../__tests__/intentFixture';
 import type { PaymentIntent } from '@peable.to/shared-types';
 
 interface ClientActionResponse {
@@ -79,28 +80,22 @@ mock.module('../../lib/providerJs', () => ({
 
 const { CardPayment, isPayableCardIntent } = await import('../CardPayment');
 
-function cardIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_card_1',
-    object: 'payment_intent',
-    livemode: false,
-    status: 'created',
-    rail: 'card',
-    amount: '4200',
-    currency: 'EUR',
-    network: null,
-    address: null,
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: null,
-    confirmations: 0,
-    client_secret: 'pi_card_1_secret',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 900_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function cardIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = {},
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_card_1',
+      rail: 'card',
+      status: 'requires_payment_method',
+      amount: '4200',
+      client_secret: 'pi_card_1_secret',
+      expires_at: Math.floor((Date.now() + 900_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 beforeEach(() => {
@@ -193,11 +188,11 @@ test('shows a decline and leaves the form usable', async () => {
  * broken.
  */
 test('says so when the credential cannot be obtained', async () => {
-  clientAction = new Error("this payment is 'settled' and can no longer be paid");
+  clientAction = new Error("this payment is 'succeeded' and can no longer be paid");
   render(<CardPayment intent={cardIntent()} />);
 
   const alert = await screen.findByRole('alert');
-  expect(alert.textContent).toContain('settled');
+  expect(alert.textContent).toContain('succeeded');
   expect(screen.queryByRole('button', { name: 'Pay' })).toBeNull();
 });
 
@@ -216,19 +211,53 @@ test('tears down the provider element when it unmounts', async () => {
 /**
  * Which intents get a card form.
  *
- * `failed` is INCLUDED, and that is the retry: a declined attempt returns the
- * provider's payment to a confirmable state, and dropping the payer onto a dead
- * status panel because their first card was declined loses a sale they were
- * still trying to make.
+ * A declined attempt is INCLUDED, and that is the retry: it returns the payment
+ * to `requires_payment_method` with `last_payment_error` (ADR 0019), and
+ * dropping the payer onto a dead status panel because their first card was
+ * declined loses a sale they were still trying to make.
  */
 test('offers the form for every status a card payment can still be paid from', () => {
-  expect(isPayableCardIntent(cardIntent({ status: 'created' }))).toBe(true);
+  expect(isPayableCardIntent(cardIntent({ status: 'requires_payment_method' }))).toBe(true);
+  expect(isPayableCardIntent(cardIntent({ status: 'requires_confirmation' }))).toBe(true);
   expect(isPayableCardIntent(cardIntent({ status: 'requires_action' }))).toBe(true);
-  expect(isPayableCardIntent(cardIntent({ status: 'failed' }))).toBe(true);
+  expect(
+    isPayableCardIntent(
+      cardIntent({
+        status: 'requires_payment_method',
+        last_payment_error: {
+          type: 'card_error',
+          code: 'card_declined',
+          decline_code: null,
+          message: 'The card was declined.',
+        },
+      }),
+    ),
+  ).toBe(true);
 
   expect(isPayableCardIntent(cardIntent({ status: 'processing' }))).toBe(false);
-  expect(isPayableCardIntent(cardIntent({ status: 'settled' }))).toBe(false);
-  expect(isPayableCardIntent(cardIntent({ status: 'expired' }))).toBe(false);
+  expect(isPayableCardIntent(cardIntent({ status: 'requires_capture' }))).toBe(false);
+  expect(isPayableCardIntent(cardIntent({ status: 'succeeded' }))).toBe(false);
+  expect(isPayableCardIntent(cardIntent({ status: 'canceled' }))).toBe(false);
   // ...and never the other rail, whose payer is told an address instead.
-  expect(isPayableCardIntent(cardIntent({ rail: 'faircoin', status: 'created' }))).toBe(false);
+  expect(isPayableCardIntent(cardIntent({ rail: 'faircoin', status: 'requires_action' }))).toBe(
+    false,
+  );
+});
+
+/** A payer returning to a declined payment is told why before trying another card. */
+test("shows the gateway's last_payment_error on a declined payment", async () => {
+  render(
+    <CardPayment
+      intent={cardIntent({
+        last_payment_error: {
+          type: 'card_error',
+          code: 'card_declined',
+          decline_code: 'insufficient_funds',
+          message: 'The card has insufficient funds.',
+        },
+      })}
+    />,
+  );
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('insufficient funds');
 });

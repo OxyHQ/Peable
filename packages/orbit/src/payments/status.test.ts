@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { PAYMENT_INTENT_STATUSES } from '@peable.to/shared-types';
 import {
+  cancellationReasonLabel,
   deliveryStatusLabel,
   deliveryStatusTone,
   ORBIT_PAYMENT_STATUSES,
@@ -23,9 +24,16 @@ describe('ORBIT_PAYMENT_STATUSES', () => {
 
 describe('payment tones', () => {
   it('reads success, failure and waiting apart', () => {
-    expect(paymentStatusTone('settled')).toBe('success');
-    expect(paymentStatusTone('failed')).toBe('danger');
+    expect(paymentStatusTone('succeeded')).toBe('success');
+    expect(paymentStatusTone('canceled')).toBe('danger');
     expect(paymentStatusTone('requires_action')).toBe('warning');
+    expect(paymentStatusTone('requires_capture')).toBe('warning');
+  });
+
+  it('words a cancellation by its reason, and says so when there is none', () => {
+    expect(cancellationReasonLabel('abandoned')).toBe('Expired unpaid');
+    expect(cancellationReasonLabel('underpaid')).toBe('Underpaid');
+    expect(cancellationReasonLabel(null)).toBe('No reason given');
   });
 });
 

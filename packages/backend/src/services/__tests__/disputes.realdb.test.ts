@@ -122,8 +122,7 @@ async function disputePayloadsFor(intentId: string): Promise<Dispute[]> {
   return (await storedEvents({ paymentIntentId: intentId }))
     .map(({ event }) => event)
     .filter(
-      (event) =>
-        event.type === 'payment_intent.disputed' || event.type === 'payment_intent.dispute_closed',
+      (event) => event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed',
     )
     .map((event) => event.data.object as Dispute);
 }
@@ -167,7 +166,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     // acquirer, and a gateway paraphrase would not match what the acquirer holds.
     expect(rows[0]?.reason).toBe('fraudulent');
     expect(rows[0]?.evidenceDueAt).not.toBeNull();
-    expect(await deliveriesFor(intent.id)).toContain('payment_intent.disputed');
+    expect(await deliveriesFor(intent.id)).toContain('charge.dispute.created');
 
     // The payload is the DISPUTE, and it carries the three things a merchant
     // needs to act: how much, why, and by when.
@@ -199,7 +198,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
 
     expect(await listDisputesForIntent(gatewayDb(), intent.id)).toHaveLength(1);
     const delivered = await deliveriesFor(intent.id);
-    expect(delivered.filter((type) => type === 'payment_intent.disputed')).toHaveLength(1);
+    expect(delivered.filter((type) => type === 'charge.dispute.created')).toHaveLength(1);
   });
 
   /**
@@ -232,7 +231,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     // is also what stops an operator queue showing a response that can no
     // longer be given.
     expect(rows[0]?.evidenceDueAt).toBeNull();
-    expect(await deliveriesFor(intent.id)).toContain('payment_intent.dispute_closed');
+    expect(await deliveriesFor(intent.id)).toContain('charge.dispute.closed');
 
     // The closing payload says WHICH way it went and carries no deadline — a
     // merchant told only that a dispute "closed" has a notification and no
@@ -293,7 +292,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     // The dispute keeps the status it had; nothing claims an outcome.
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
     expect(rows[0]?.status).toBe('needs_response');
-    expect(await deliveriesFor(intent.id)).not.toContain('payment_intent.dispute_closed');
+    expect(await deliveriesFor(intent.id)).not.toContain('charge.dispute.closed');
     // ...and the event stays VISIBLE for an operator rather than being marked
     // handled with a guess.
     const stored = await findProviderEventById(gatewayDb(), eventId);

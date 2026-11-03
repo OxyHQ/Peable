@@ -9,6 +9,7 @@ import {
   PAYMENT_INTENT_STATUS_VALUES,
   PROVIDER_IDS,
   WEBHOOK_ENABLED_EVENTS,
+  INTENT_WEBHOOK_EVENT_TYPES,
   WEBHOOK_EVENT_TYPES,
 } from '../valueSets';
 
@@ -59,12 +60,21 @@ describe('closed value sets', () => {
    * anyone noticing that merchants now receive an event they never subscribed
    * to.
    */
-  it('lists the twelve event types', () => {
-    // 11th: `billing.observation.updated`, a wake-up delivered only to the
-    // merchant that owns the recurring mirror, and only when the recurring
-    // relay is explicitly enabled — never to a merchant that did not opt in.
-    // 12th: `webhook_endpoint.test`, sent to one endpoint on request.
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(12);
+  it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(28);
+    for (const retired of [
+      'payment_intent.settled',
+      'payment_intent.confirming',
+      'payment_intent.failed',
+      'payment_intent.rejected',
+      'payment_intent.expired',
+      'payment_intent.refunded',
+      'payment_intent.partially_refunded',
+      'payment_intent.disputed',
+      'payment_intent.dispute_closed',
+    ]) {
+      expect(WEBHOOK_EVENT_TYPES as readonly string[]).not.toContain(retired);
+    }
   });
 
   /** The test event names its endpoint; it is never subscribed to. */
@@ -75,22 +85,30 @@ describe('closed value sets', () => {
   });
 
   /**
-   * ...and exactly one of them is not about a payment.
-   *
-   * This used to assert that EVERY type began `payment_intent.`, which was true
-   * and became a constraint nobody had chosen: `connected_account.updated` is
-   * about a seller, and its event names no payment intent at all.
-   * `events_intent_event_has_intent_check` keys on the declared scope to decide
-   * whether an event must carry an intent, so what is asserted is the split.
+   * The split the delivery CHECK depends on — by DECLARED scope, not by name:
+   * `charge.refunded`, `refund.*` and `charge.dispute.*` are named for another
+   * object and are still about a payment, while `customer.*`,
+   * `payment_method.*` and `setup_intent.*` name none.
    */
-  it('splits into payment events and the ones that are not about a payment', () => {
-    const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) => type.startsWith('payment_intent.'));
-    expect(aboutPayments).toHaveLength(9);
-    expect(WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))).toEqual([
-      'billing.observation.updated',
-      'connected_account.updated',
-      'webhook_endpoint.test',
-    ]);
+  it('splits into events about a payment and the ones that are not', () => {
+    expect([...INTENT_WEBHOOK_EVENT_TYPES].sort() as string[]).toEqual(
+      [
+        'payment_intent.created',
+        'payment_intent.requires_action',
+        'payment_intent.processing',
+        'payment_intent.amount_capturable_updated',
+        'payment_intent.succeeded',
+        'payment_intent.payment_failed',
+        'payment_intent.canceled',
+        'charge.refunded',
+        'charge.dispute.created',
+        'charge.dispute.updated',
+        'charge.dispute.closed',
+        'refund.created',
+        'refund.updated',
+        'refund.failed',
+      ].sort(),
+    );
   });
 });
 
@@ -156,7 +174,8 @@ describe('the base-unit amount pattern', () => {
     // One per money-carrying COLUMN, which is not one per table:
     // payment_intents, checkout_sessions, payment_links, refunds, disputes and
     // transfer_reversals carry one `amount` each; `transfers` carries `amount`
-    // AND the cumulative `amount_reversed`.
-    expect(occurrences).toBe(8);
+    // AND the cumulative `amount_reversed`; `payment_intents.amount_received`,
+    // and `charges` its `amount` and `amount_captured` (ADR 0019).
+    expect(occurrences).toBe(11);
   });
 });

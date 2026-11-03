@@ -1,9 +1,11 @@
 // The `PeableError` hierarchy — every non-2xx Gateway/oxy-api response is
 // mapped into one of these, never a bare `Error` or a raw `Response`.
+import type { PaymentIntent } from '@peable.to/shared-types';
 
 export type PeableErrorType =
   | 'authentication_error'
   | 'invalid_request_error'
+  | 'card_error'
   | 'permission_error'
   | 'api_error'
   | 'signature_verification_error';
@@ -78,6 +80,27 @@ export class PeableApiError extends PeableError {
   }
 }
 
+/**
+ * A card was declined (402, ADR 0019). `paymentIntent` is the payment as the
+ * decline left it — `requires_payment_method` with `last_payment_error` — so a
+ * caller can offer another card on the SAME payment without a re-read.
+ */
+export class PeableCardError extends PeableError {
+  readonly declineCode?: string;
+  readonly paymentIntent?: PaymentIntent;
+
+  constructor(
+    message: string,
+    details: PeableErrorDetails & { declineCode?: string; paymentIntent?: PaymentIntent } = {},
+  ) {
+    super('card_error', message, details);
+    this.name = 'PeableCardError';
+    if (details.declineCode !== undefined) this.declineCode = details.declineCode;
+    if (details.paymentIntent !== undefined) this.paymentIntent = details.paymentIntent;
+    Object.setPrototypeOf(this, PeableCardError.prototype);
+  }
+}
+
 /** Thrown by `webhooks.constructEvent` on a bad/stale/tampered signature. */
 export class PeableSignatureVerificationError extends PeableError {
   constructor(message: string) {
@@ -93,8 +116,10 @@ interface NestedGatewayErrorBody {
     type: string;
     message: string;
     code?: string;
+    decline_code?: string;
     param?: string;
     request_id?: string | null;
+    payment_intent?: PaymentIntent;
   };
 }
 
@@ -170,6 +195,17 @@ export function errorFromResponse(
     ...(param === undefined ? {} : { param }),
     ...(requestId === undefined ? {} : { requestId }),
   };
+  if (status === 402 && isNestedGatewayErrorBody(body) && body.error.type === 'card_error') {
+    return new PeableCardError(message, {
+      ...details,
+      ...(typeof body.error.decline_code === 'string'
+        ? { declineCode: body.error.decline_code }
+        : {}),
+      ...(body.error.payment_intent !== undefined
+        ? { paymentIntent: body.error.payment_intent }
+        : {}),
+    });
+  }
   if (status === 401) return new PeableAuthenticationError(message, details);
   if (status === 403) return new PeablePermissionError(message, details);
   if (status >= 400 && status < 500) return new PeableInvalidRequestError(message, details);

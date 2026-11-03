@@ -16,9 +16,13 @@
 import type { NetworkType } from '@fairco.in/core';
 import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import type {
+  PaymentIntentCancellationReason,
+  PaymentIntentCaptureMethod,
   PaymentIntentRail,
+  PaymentIntentSetupFutureUsage,
   PaymentIntentStatus,
   WebhookEnabledEvent,
+  SetupIntentStatus,
   WebhookEventType,
 } from '@peable.to/shared-types';
 // TYPE-ONLY, and it must stay that way: the module it names imports the Stripe
@@ -50,19 +54,13 @@ export const SERVICE_ENVIRONMENTS = OXY_SERVICE_ENVIRONMENTS;
  * the same members, so the runtime source of truth still governs.
  */
 export const PAYMENT_INTENT_STATUS_VALUES = [
-  'created',
-  'awaiting_approval',
-  'approved',
-  'broadcast',
-  'confirming',
+  'requires_payment_method',
+  'requires_confirmation',
   'requires_action',
   'processing',
-  'settled',
-  'refunded',
-  'partially_refunded',
-  'expired',
-  'failed',
-  'rejected',
+  'requires_capture',
+  'canceled',
+  'succeeded',
 ] as const satisfies readonly PaymentIntentStatus[];
 export type PaymentIntentStatusesAreComplete = AssertAllListed<
   PaymentIntentStatus,
@@ -95,15 +93,60 @@ export const RAIL_VALUES = ['faircoin', 'card'] as const satisfies readonly Paym
 export type RailsAreComplete = AssertAllListed<PaymentIntentRail, (typeof RAIL_VALUES)[number]>;
 
 /**
- * The statuses only the FairCoin rail can reach, and the statuses only the card
- * rail can reach (ADR 0001 D5).
- *
- * Re-exported from the contract rather than re-listed, because a second list
- * here would be a second thing to keep in step with the transition table — and
- * the failure mode of a drift is a CHECK refusing a status the application
- * considers legal, in production, on the first payment that reaches it.
+ * The statuses only the card rail can reach (ADR 0019): a FairCoin payment
+ * requires no payment method, has nothing to confirm server-side and nothing to
+ * capture. Re-exported from the contract rather than re-listed, so the CHECK
+ * cannot drift from the transition table.
  */
-export { CHAIN_ONLY_STATUSES, CARD_ONLY_STATUSES } from '@peable.to/shared-types';
+export { CARD_ONLY_STATUSES } from '@peable.to/shared-types';
+
+/** Why an intent was cancelled (ADR 0019). NULL when nobody said. */
+export const CANCELLATION_REASON_VALUES = [
+  'abandoned',
+  'automatic',
+  'duplicate',
+  'fraudulent',
+  'requested_by_customer',
+  'underpaid',
+] as const satisfies readonly PaymentIntentCancellationReason[];
+export type CancellationReasonsAreComplete = AssertAllListed<
+  PaymentIntentCancellationReason,
+  (typeof CANCELLATION_REASON_VALUES)[number]
+>;
+
+/** When a card is captured. FairCoin is always `automatic`. */
+export const CAPTURE_METHOD_VALUES = [
+  'automatic',
+  'manual',
+] as const satisfies readonly PaymentIntentCaptureMethod[];
+export type CaptureMethodsAreComplete = AssertAllListed<
+  PaymentIntentCaptureMethod,
+  (typeof CAPTURE_METHOD_VALUES)[number]
+>;
+
+/** Card only: keep the payment method for later. */
+export const SETUP_FUTURE_USAGE_VALUES = [
+  'on_session',
+  'off_session',
+] as const satisfies readonly PaymentIntentSetupFutureUsage[];
+export type SetupFutureUsagesAreComplete = AssertAllListed<
+  PaymentIntentSetupFutureUsage,
+  (typeof SETUP_FUTURE_USAGE_VALUES)[number]
+>;
+
+/** Where a SetupIntent stands — Stripe's six. */
+export const SETUP_INTENT_STATUS_VALUES = [
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+  'processing',
+  'canceled',
+  'succeeded',
+] as const satisfies readonly SetupIntentStatus[];
+export type SetupIntentStatusesAreComplete = AssertAllListed<
+  SetupIntentStatus,
+  (typeof SETUP_INTENT_STATUS_VALUES)[number]
+>;
 
 /**
  * How a provider reports one capability on a connected account.
@@ -226,17 +269,34 @@ export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
  * the constraint enforces.
  */
 export const WEBHOOK_EVENT_SCOPES = {
-  'payment_intent.confirming': 'intent',
-  'payment_intent.settled': 'intent',
-  'payment_intent.failed': 'intent',
-  'payment_intent.rejected': 'intent',
-  'payment_intent.expired': 'intent',
-  'payment_intent.refunded': 'intent',
-  'payment_intent.partially_refunded': 'intent',
-  'payment_intent.disputed': 'intent',
-  'payment_intent.dispute_closed': 'intent',
-  // The first event that is not about a payment. It is about a SELLER, so its
-  // delivery names no intent — which is why the column is nullable at all.
+  'payment_intent.created': 'intent',
+  'payment_intent.requires_action': 'intent',
+  'payment_intent.processing': 'intent',
+  'payment_intent.amount_capturable_updated': 'intent',
+  'payment_intent.succeeded': 'intent',
+  'payment_intent.payment_failed': 'intent',
+  'payment_intent.canceled': 'intent',
+  // Named for the charge, the refund or the dispute and still ABOUT a payment —
+  // the case the declared scope exists for.
+  'charge.refunded': 'intent',
+  'charge.dispute.created': 'intent',
+  'charge.dispute.updated': 'intent',
+  'charge.dispute.closed': 'intent',
+  'refund.created': 'intent',
+  'refund.updated': 'intent',
+  'refund.failed': 'intent',
+  // About a customer, a saved card or a seller: no payment named.
+  'customer.created': 'merchant',
+  'customer.updated': 'merchant',
+  'customer.deleted': 'merchant',
+  'payment_method.attached': 'merchant',
+  'payment_method.detached': 'merchant',
+  'payment_method.updated': 'merchant',
+  'setup_intent.created': 'merchant',
+  'setup_intent.requires_action': 'merchant',
+  'setup_intent.succeeded': 'merchant',
+  'setup_intent.setup_failed': 'merchant',
+  'setup_intent.canceled': 'merchant',
   'billing.observation.updated': 'merchant',
   'connected_account.updated': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.

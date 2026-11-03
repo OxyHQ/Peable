@@ -38,20 +38,23 @@ async function merchant(publicId: string, oxyAppId: string): Promise<MerchantRow
 
 describe('EXPIRABLE_STATUSES agrees with the transition table', () => {
   // The constant is a hand-written list used by a set-based UPDATE, so it
-  // cannot call `applyEvent` per row. This re-derives it from `applyEvent`
-  // instead: if shared-types' ALLOWED table ever gains or loses an `expired`
-  // edge, the constant goes red here rather than silently sweeping the wrong
-  // rows — or, worse, expiring an intent with money in flight.
+  // cannot call `applyEvent` per row. This re-derives it from `applyEvent` on
+  // both rails: if the table ever gains or loses an `expire` edge, the
+  // constant goes red here rather than silently sweeping the wrong rows — or,
+  // worse, expiring an intent with money in flight.
   //
-  // `expired` itself is excluded, and that exclusion is load-bearing:
-  // `applyEvent` is idempotent when current === target, so it returns
-  // `"expired"` rather than throwing for an already-expired intent. A set-based
+  // `canceled` itself is excluded, and that exclusion is load-bearing:
+  // `applyEvent` is idempotent when current === target, so it answers
+  // `"canceled"` rather than throwing for an already-cancelled intent. A
   // sweeper that trusted `applyEvent` alone would re-claim those rows on every
-  // tick and re-fire `payment_intent.expired` forever.
+  // tick and re-fire `payment_intent.canceled` forever.
   const derived = (PAYMENT_INTENT_STATUSES as PaymentIntentStatus[]).filter((status) => {
-    if (status === 'expired') return false;
+    if (status === 'canceled') return false;
     try {
-      return applyEvent(status, 'expire') === 'expired';
+      return (
+        applyEvent(status, 'expire', 'card') === 'canceled' &&
+        applyEvent(status, 'expire', 'faircoin') === 'canceled'
+      );
     } catch {
       return false;
     }
@@ -62,8 +65,8 @@ describe('EXPIRABLE_STATUSES agrees with the transition table', () => {
   });
 
   test('in-flight statuses are never expirable', () => {
-    expect(EXPIRABLE_STATUSES).not.toContain('broadcast');
-    expect(EXPIRABLE_STATUSES).not.toContain('confirming');
+    expect(EXPIRABLE_STATUSES).not.toContain('processing');
+    expect(EXPIRABLE_STATUSES).not.toContain('requires_capture');
   });
 });
 
@@ -76,24 +79,30 @@ describe('expireDueIntents', () => {
     const claimed = await expireDueIntents(gatewayDb(), new Date(), BATCH);
 
     expect(claimed.map((row) => row.publicId)).toEqual([due.publicId]);
-    expect((await findIntentByPublicId(gatewayDb(), due.publicId))?.status).toBe('expired');
-    expect((await findIntentByPublicId(gatewayDb(), notDue.publicId))?.status).toBe('created');
+    const expired = await findIntentByPublicId(gatewayDb(), due.publicId);
+    // Expiry is a cancellation, `abandoned`, stamped (ADR 0019).
+    expect(expired?.status).toBe('canceled');
+    expect(expired?.cancellationReason).toBe('abandoned');
+    expect(expired?.canceledAt).toBeInstanceOf(Date);
+    expect((await findIntentByPublicId(gatewayDb(), notDue.publicId))?.status).toBe(
+      'requires_action',
+    );
   });
 
   test('never expires an intent with money in flight, however overdue', async () => {
     const m = await merchant('merch_expiry00000000000002', 'app_expiry_2');
     const inFlight = await seedIntent(m, { expiresAt: PAST });
-    // `payment_intents_broadcast_requires_txid_check` needs both in one write.
+    // `payment_intents_processing_requires_txid_check` needs both in one write.
     await updateIntentState(gatewayDb(), inFlight.id, {
       from: inFlight.status,
-      status: 'broadcast',
+      status: 'processing',
       txid: 'd'.repeat(64),
     });
 
     const claimed = await expireDueIntents(gatewayDb(), new Date(), BATCH);
 
     expect(claimed).toHaveLength(0);
-    expect((await findIntentByPublicId(gatewayDb(), inFlight.publicId))?.status).toBe('broadcast');
+    expect((await findIntentByPublicId(gatewayDb(), inFlight.publicId))?.status).toBe('processing');
   });
 
   test('two concurrent sweepers never claim the same intent twice', async () => {
@@ -105,7 +114,7 @@ describe('expireDueIntents', () => {
 
     // The real failure this guards: two ECS tasks sweep on their own timers. A
     // SELECT-then-UPDATE would hand both the same rows and fire the merchant's
-    // `payment_intent.expired` webhook twice for one intent.
+    // `payment_intent.canceled` webhook twice for one intent.
     const [a, b] = await Promise.all([
       expireDueIntents(gatewayDb(), now, BATCH),
       expireDueIntents(gatewayDb(), now, BATCH),
@@ -130,8 +139,10 @@ describe('runExpirySweep', () => {
     // outbox row written in the claiming transaction, and the socket frame goes
     // out after the commit. `expirySweeper.realdb.test.ts` covers the outbox
     // half; this covers which rows moved.
-    expect((await findIntentByPublicId(gatewayDb(), due.publicId))?.status).toBe('expired');
-    expect((await findIntentByPublicId(gatewayDb(), notDue.publicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), due.publicId))?.status).toBe('canceled');
+    expect((await findIntentByPublicId(gatewayDb(), notDue.publicId))?.status).toBe(
+      'requires_action',
+    );
   });
 
   test('a second sweep claims nothing, since the rows are already terminal', async () => {
@@ -141,10 +152,10 @@ describe('runExpirySweep', () => {
     await runExpirySweep({ now: new Date() });
     const second = await runExpirySweep({ now: new Date() });
 
-    // The property that stops `payment_intent.expired` firing on every tick
-    // forever: `expired` is not in `EXPIRABLE_STATUSES`, so a swept row is not
+    // The property that stops `payment_intent.canceled` firing on every tick
+    // forever: `canceled` is not in `EXPIRABLE_STATUSES`, so a swept row is not
     // re-claimed. `applyEvent` alone would not give this — it is idempotent
-    // when current === target and answers `"expired"` rather than throwing.
+    // when current === target and answers `"canceled"` rather than throwing.
     expect(second).toEqual({ examined: 0, expired: 0 });
   });
 
@@ -153,10 +164,12 @@ describe('runExpirySweep', () => {
     const later = await seedIntent(m, { expiresAt: FUTURE });
 
     await runExpirySweep({ now: new Date() });
-    expect((await findIntentByPublicId(gatewayDb(), later.publicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), later.publicId))?.status).toBe(
+      'requires_action',
+    );
 
     await runExpirySweep({ now: new Date(FUTURE.getTime() + 1_000) });
-    expect((await findIntentByPublicId(gatewayDb(), later.publicId))?.status).toBe('expired');
+    expect((await findIntentByPublicId(gatewayDb(), later.publicId))?.status).toBe('canceled');
   });
 
   test('honours its batch size, so a backlog drains rather than landing at once', async () => {

@@ -53,6 +53,7 @@ function intentParams(merchantId: string, overrides: Record<string, unknown> = {
     network: 'testnet' as const,
     address: `T${unique}`,
     provider: null,
+    status: 'requires_action' as const,
     clientSecret: `pi_${unique}_secret_x`,
     idempotencyKey: unique,
     metadata: {},
@@ -75,7 +76,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant();
     const created = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
 
-    expect(created?.status).toBe('created');
+    expect(created?.status).toBe('requires_action');
+    // ADR 0019: nothing received, nothing refunded, nothing cancelled — and the
+    // merchant's PUBLIC id read in the same statement.
+    expect(created?.amountReceived).toBe('0');
+    expect(created?.amountRefunded).toBe('0');
+    expect(created?.cancellationReason).toBeNull();
+    expect(created?.canceledAt).toBeNull();
+    expect(created?.merchantPublicId).toBe(merchant.publicId);
+    expect(created?.requiredConfirmations).toBe(merchant.requiredConfirmations);
     expect(created?.currency).toBe('FAIR');
     expect(created?.confirmations).toBe(0);
     expect(created?.txid).toBeNull();
@@ -183,33 +192,33 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   });
 
   /**
-   * `broadcast` without a txid is refused by the database. That is why the state
-   * change writes both in one statement — a two-step "set status, then set txid"
-   * could not commit the first half at all.
+   * A FairCoin `processing` without a txid is refused by the database. That is
+   * why the state change writes both in one statement — a two-step "set status,
+   * then set txid" could not commit the first half at all.
    */
-  it('refuses a broadcast state with no transaction id', async () => {
+  it('refuses a processing FairCoin intent with no transaction id', async () => {
     const merchant = await makeMerchant();
     const created = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
 
     let raised: unknown;
     try {
       await updateIntentState(must(suite).db, must(created).id, {
-        from: 'created',
-        status: 'broadcast',
+        from: 'requires_action',
+        status: 'processing',
       });
     } catch (error) {
       raised = error;
     }
-    expect(isCheckViolation(raised, 'payment_intents_broadcast_requires_txid_check')).toBe(true);
+    expect(isCheckViolation(raised, 'payment_intents_processing_requires_txid_check')).toBe(true);
 
     const withTxid = await updateIntentState(must(suite).db, must(created).id, {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'a'.repeat(64),
     });
     expect(withTxid.kind).toBe('updated');
     const row = withTxid.kind === 'updated' ? withTxid.row : undefined;
-    expect(row?.status).toBe('broadcast');
+    expect(row?.status).toBe('processing');
     expect(row?.txid).toBe('a'.repeat(64));
   });
 
@@ -282,8 +291,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const stranger = await makeMerchant();
     const settled = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
     await updateIntentState(must(suite).db, must(settled).id, {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'b'.repeat(64),
     });
     await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
@@ -291,7 +300,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
 
     const page = await listIntentsForMerchant(must(suite).db, {
       merchantId: merchant.id,
-      status: 'broadcast',
+      status: 'processing',
       page: { limit: 10 },
     });
     expect(page.data.map((row) => row.publicId)).toEqual([must(settled).publicId]);
@@ -332,73 +341,147 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant();
     const watchable = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
     await updateIntentState(must(suite).db, must(watchable).id, {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'c'.repeat(64),
     });
-    // A `failed` intent with NO txid. This is the fixture that discriminates,
-    // and finding it took a surviving mutation to notice: a `created` intent is
-    // excluded by the STATUS predicate, so seeding one proves nothing about the
-    // txid predicate — removing `isNotNull` left the suite green.
+    // A `canceled` intent with NO txid (it expired). This is the fixture that
+    // discriminates, and finding it took a surviving mutation to notice: a
+    // `requires_action` intent is excluded by the STATUS predicate, so seeding
+    // one proves nothing about the txid predicate.
     //
-    // It has to be `failed` specifically, because
-    // `payment_intents_broadcast_requires_txid_check` makes a txid-less
-    // broadcast/confirming/settled row UNREPRESENTABLE. `approved → failed` is
-    // the one legal transition into a queryable status that no writer pairs
-    // with a txid — which is exactly why `failed` is outside that CHECK.
+    // It has to be `canceled` specifically, because
+    // `payment_intents_processing_requires_txid_check` makes a txid-less
+    // processing/succeeded FairCoin row UNREPRESENTABLE; `canceled` is the one
+    // queryable status that holds rows both with a txid (underpaid) and without.
     const noTxid = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
     await updateIntentState(must(suite).db, must(noTxid).id, {
-      from: 'created',
-      status: 'awaiting_approval',
+      from: 'requires_action',
+      status: 'canceled',
+      cancellationReason: 'abandoned',
     });
-    await updateIntentState(must(suite).db, must(noTxid).id, {
-      from: 'awaiting_approval',
-      status: 'approved',
-    });
-    await updateIntentState(must(suite).db, must(noTxid).id, {
-      from: 'approved',
-      status: 'failed',
-    });
-    // Carrying a txid is not enough either: settled is terminal.
+    // Carrying a txid is not enough either: succeeded is terminal.
     const terminal = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
     await updateIntentState(must(suite).db, must(terminal).id, {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'd'.repeat(64),
     });
     await updateIntentState(must(suite).db, must(terminal).id, {
-      from: 'broadcast',
-      status: 'confirming',
-    });
-    await updateIntentState(must(suite).db, must(terminal).id, {
-      from: 'confirming',
-      status: 'settled',
+      from: 'processing',
+      status: 'succeeded',
       confirmations: 6,
     });
 
-    const found = await findWatchableIntents(must(suite).db, ['broadcast', 'confirming']);
+    const found = await findWatchableIntents(must(suite).db, ['processing']);
     const ids = found.map((row) => row.publicId);
     expect(ids).toContain(must(watchable).publicId);
     expect(ids).not.toContain(must(terminal).publicId);
 
     // The txid predicate, exercised on the only status where it can matter.
-    // Querying `failed` returns the txid-less row if `isNotNull` is dropped.
-    const failedWithTxid = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
-    await updateIntentState(must(suite).db, must(failedWithTxid).id, {
-      from: 'created',
-      status: 'broadcast',
+    // Querying `canceled` returns the txid-less row if `isNotNull` is dropped.
+    const underpaid = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await updateIntentState(must(suite).db, must(underpaid).id, {
+      from: 'requires_action',
+      status: 'processing',
       txid: 'e'.repeat(64),
     });
-    await updateIntentState(must(suite).db, must(failedWithTxid).id, {
-      from: 'broadcast',
-      status: 'failed',
+    await updateIntentState(must(suite).db, must(underpaid).id, {
+      from: 'processing',
+      status: 'canceled',
+      cancellationReason: 'underpaid',
     });
 
-    const failedOnes = (await findWatchableIntents(must(suite).db, ['failed'])).map(
+    const canceledOnes = (await findWatchableIntents(must(suite).db, ['canceled'])).map(
       (row) => row.publicId,
     );
-    expect(failedOnes).toContain(must(failedWithTxid).publicId);
-    expect(failedOnes).not.toContain(must(noTxid).publicId);
+    expect(canceledOnes).toContain(must(underpaid).publicId);
+    expect(canceledOnes).not.toContain(must(noTxid).publicId);
+  });
+
+  /**
+   * What a transition writes with the status (ADR 0019): a cancellation stamps
+   * its reason and instant; success receives the amount; ANY other transition
+   * clears a stale `last_payment_error`, and leaving `succeeded` (a reorg)
+   * un-receives the money. And the CHECKs hold those agreements even for a
+   * writer that skipped the repository.
+   */
+  it('writes the fields a transition decides, in the same statement', async () => {
+    const merchant = await makeMerchant();
+    const intent = must(await insertPaymentIntent(must(suite).db, intentParams(merchant.id)));
+    const processing = await updateIntentState(must(suite).db, intent.id, {
+      from: 'requires_action',
+      status: 'processing',
+      txid: 'f'.repeat(64),
+    });
+    expect(processing.kind === 'updated' ? processing.row.amountReceived : null).toBe('0');
+    const succeeded = await updateIntentState(must(suite).db, intent.id, {
+      from: 'processing',
+      status: 'succeeded',
+    });
+    expect(succeeded.kind === 'updated' ? succeeded.row.amountReceived : null).toBe('100000000');
+    const rewound = await updateIntentState(must(suite).db, intent.id, {
+      from: 'succeeded',
+      status: 'processing',
+    });
+    expect(rewound.kind === 'updated' ? rewound.row.amountReceived : null).toBe('0');
+
+    const canceled = must(await insertPaymentIntent(must(suite).db, intentParams(merchant.id)));
+    const result = await updateIntentState(must(suite).db, canceled.id, {
+      from: 'requires_action',
+      status: 'canceled',
+      cancellationReason: 'requested_by_customer',
+    });
+    const row = result.kind === 'updated' ? result.row : undefined;
+    expect(row?.cancellationReason).toBe('requested_by_customer');
+    expect(row?.canceledAt).toBeInstanceOf(Date);
+
+    let raised: unknown;
+    try {
+      await must(suite)
+        .client`update payment_intents set cancellation_reason = 'duplicate', canceled_at = null where id = ${intent.id}`;
+    } catch (error) {
+      raised = error;
+    }
+    expect(isCheckViolation(raised, 'payment_intents_canceled_agrees_check')).toBe(true);
+    raised = undefined;
+    try {
+      await must(suite)
+        .client`update payment_intents set amount_received = amount where id = ${intent.id}`;
+    } catch (error) {
+      raised = error;
+    }
+    expect(isCheckViolation(raised, 'payment_intents_amount_received_agrees_check')).toBe(true);
+  });
+
+  /** A chain payment refuses the card-only statuses and fields (ADR 0019). */
+  it('keeps the card-only statuses and fields off the FairCoin rail', async () => {
+    const merchant = await makeMerchant();
+    const intent = must(await insertPaymentIntent(must(suite).db, intentParams(merchant.id)));
+    for (const [statement, constraint] of [
+      [
+        must(suite)
+          .client`update payment_intents set status = 'requires_capture' where id = ${intent.id}`,
+        'payment_intents_card_statuses_are_card_check',
+      ],
+      [
+        must(suite)
+          .client`update payment_intents set capture_method = 'manual' where id = ${intent.id}`,
+        'payment_intents_card_only_fields_check',
+      ],
+      [
+        must(suite).client`update payment_intents set status = 'created' where id = ${intent.id}`,
+        'payment_intents_status_check',
+      ],
+    ] as const) {
+      let raised: unknown;
+      try {
+        await statement;
+      } catch (error) {
+        raised = error;
+      }
+      expect([constraint, isCheckViolation(raised, constraint)]).toEqual([constraint, true]);
+    }
   });
 
   /**
@@ -451,7 +534,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     // `missing`, not `stale`: the compare-and-swap tells "no such row" apart
     // from "the row moved", and only the first is a 404 to a caller.
     expect(
-      await updateIntentState(must(suite).db, uuidv7(), { from: 'created', status: 'expired' }),
+      await updateIntentState(must(suite).db, uuidv7(), {
+        from: 'requires_action',
+        status: 'canceled',
+      }),
     ).toEqual({ kind: 'missing' });
   });
 });
