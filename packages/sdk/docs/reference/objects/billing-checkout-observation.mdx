@@ -1,0 +1,25 @@
+---
+title: "BillingCheckoutObservation"
+description: "The BillingCheckoutObservation shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingCheckoutObservation
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `initial_invoice_id` | string \| null | The immutable `subscription_create` invoice proven for this exact checkout. Discovery only, never paid authority. |
+| `id` | string |  |
+| `status` | string | One of `open`, `complete`, `expired`. |
+| `store_id` | string |  |
+| `plan_id` | string |  |
+| `provider_customer_id` | string |  |
+| `provider_price_id` | string |  |
+| `subscription` | [BillingSubscription](/reference/objects/billing-subscription) \| null |  |
+
+## Returned by
+
+- [`GET /v1/billing/checkout_sessions/{id}`](/reference/recurring-billing#retrieve-a-subscription-checkout) — Retrieve a subscription checkout

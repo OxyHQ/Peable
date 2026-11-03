@@ -1,0 +1,49 @@
+---
+title: "EntitlementFeature"
+description: "The entitlements.feature object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# EntitlementFeature
+
+Object type: `entitlements.feature`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"entitlements.feature"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `lookup_key` | string | What an app checks access by; unique per merchant. |
+| `name` | string |  |
+| `active` | boolean | `false`: archived, and withdrawn from every customer that held it. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "feat_0193b8f2c1a87d3e9f4f",
+  "object": "entitlements.feature",
+  "livemode": false,
+  "lookup_key": "mention_plus",
+  "name": "Mention Plus",
+  "active": true,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/entitlements/features`](/reference/entitlements#create-a-feature) — Create a feature
+- [`GET /v1/entitlements/features`](/reference/entitlements#list-features) — List features
+- [`GET /v1/entitlements/features/{id}`](/reference/entitlements#retrieve-a-feature) — Retrieve a feature
+- [`POST /v1/entitlements/features/{id}`](/reference/entitlements#update-a-feature) — Update a feature
+
+## Used in
+
+[ProductFeature](/reference/objects/product-feature)

@@ -1,0 +1,73 @@
+---
+title: "CheckoutSessionPublic"
+description: "The checkout_session object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CheckoutSessionPublic
+
+Object type: `checkout_session`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"checkout_session"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `mode` | string | One of `payment`, `setup`, `subscription`. |
+| `status` | string | One of `open`, `complete`, `expired`. |
+| `payment_status` | string | One of `paid`, `unpaid`, `no_payment_required`. |
+| `ui_mode` | string | One of `hosted`, `embedded`. |
+| `locale` | string \| null | The language checkout renders in; `null` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
+| `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `rail` | string | One of `faircoin`, `card`. |
+| `network` | string \| null | FairCoin rail only; `null` on a card session. One of `mainnet`, `testnet`. |
+| `amount_subtotal` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_total` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `total_details` | [CheckoutTotalDetails](/reference/objects/checkout-total-details) |  |
+| `allow_promotion_codes` | boolean |  |
+| `automatic_tax` | [CheckoutAutomaticTax](/reference/objects/checkout-automatic-tax) |  |
+| `billing_address_collection` | string | One of `auto`, `required`. |
+| `shipping_address_collection` | object \| null |  |
+| `shipping_address_collection.allowed_countries` | array of string |  |
+| `phone_number_collection` | object |  |
+| `phone_number_collection.enabled` | boolean |  |
+| `tax_id_collection` | object |  |
+| `tax_id_collection.enabled` | boolean |  |
+| `custom_fields` | array of [CheckoutCustomField](/reference/objects/checkout-custom-field) |  |
+| `consent_collection` | object \| null |  |
+| `consent_collection.terms_of_service` | string | One of `none`, `required`. |
+| `shipping_details` | [CheckoutShippingDetails](/reference/objects/checkout-shipping-details) \| null |  |
+| `consent` | object \| null |  |
+| `consent.terms_of_service` | `"accepted"` \| null |  |
+| `expires_at` | integer | Unix seconds. |
+| `line_items` | array of [CheckoutLineItem](/reference/objects/checkout-line-item) |  |
+| `discount` | object \| null | The discount applied, as the payer sees it. |
+| `discount.promotion_code` | string \| null | The code the payer typed. |
+| `discount.coupon_name` | string \| null |  |
+| `discount.amount_off` | string \| null | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `discount.percent_off` | number \| null |  |
+| `customer_details` | [CheckoutCustomerDetails](/reference/objects/checkout-customer-details) | Prefilled from `customer_email` / the customer; then what the payer entered. |
+| `customer_email_locked` | boolean | Whether the email is fixed by the merchant (a `customer` or `customer_email`). |
+| `terms_of_service_url` | string \| null | The merchant's terms URL when `consent_collection.terms_of_service` is required. |
+| `payment_intent` | [PaymentIntent](/reference/objects/payment-intent) \| null | The payment the payer confirmed — with its `client_secret`, the payer's capability. |
+| `setup_intent` | object \| null | `setup` mode: the SetupIntent id and client secret, once confirmed. |
+| `setup_intent.id` | string |  |
+| `setup_intent.client_secret` | string |  |
+| `setup_intent.status` | string | One of `requires_payment_method`, `requires_confirmation`, `requires_action`, `processing`, `canceled`, `succeeded`. |
+| `success_url` | string \| null | `success_url` with `{CHECKOUT_SESSION_ID}` substituted; only once `complete`. |
+| `cancel_url` | string \| null | Shown as "Back to &lt;merchant&gt;" before payment. |
+| `confirmation_message` | string \| null | A payment link's hosted confirmation, shown once `complete`. |
+| `merchant` | [MerchantDisplay](/reference/objects/merchant-display) |  |
+| `branding` | [CheckoutBranding](/reference/objects/checkout-branding) |  |
+| `publishable_key` | string \| null | The card provider's PUBLIC key for this session's mode, so the payment fields can mount before the payment exists. `null` on FairCoin. |
+| `billing_quote` | [BillingFaircoinFxQuote](/reference/objects/billing-faircoin-fx-quote) | FairCoin billing invoices: the frozen USD price and FAIR settlement quote. |
+
+## Returned by
+
+- [`GET /v1/checkout_sessions/{id}/public`](/reference/checkout-sessions#retrieve-a-checkout-session-as-its-payer) — Retrieve a Checkout Session as its payer
+- [`POST /v1/checkout_sessions/{id}/public`](/reference/checkout-sessions#update-a-checkout-session-as-its-payer) — Update a Checkout Session as its payer
+- [`POST /v1/checkout_sessions/{id}/public/confirm`](/reference/checkout-sessions#confirm-a-checkout-session-as-its-payer) — Confirm a Checkout Session as its payer

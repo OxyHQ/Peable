@@ -1,0 +1,30 @@
+---
+title: "ContributionLink"
+description: "The payment_link object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ContributionLink
+
+Object type: `payment_link`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_link"` |  |
+| `amount` | string | FAIR base units; `"0"` when the payer chooses. |
+| `currency` | `"FAIR"` |  |
+| `network` | string | One of `mainnet`, `testnet`. |
+| `active` | boolean |  |
+| `url` | string (uri) | The hosted link to share. |
+| `contribution` | [ContributionDetails](/reference/objects/contribution-details) |  |
+| `created` | integer |  |
+
+## Returned by
+
+- [`POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions`](/reference/contributions#create-a-contribution-link) — Create a contribution link
+- [`GET /v1/organizations/{organizationId}/applications/{applicationId}/contributions`](/reference/contributions#list-an-organizations-contribution-links) — List an organization's contribution links
+- [`POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}`](/reference/contributions#enable-or-disable-a-contribution-link) — Enable or disable a contribution link

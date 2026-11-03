@@ -1,0 +1,443 @@
+---
+title: "Refunds"
+description: "The Refunds endpoints of the Peable API."
+order: 937
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Refunds
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/payment_intents/{intentId}/refunds`](#list-a-payments-refunds) | List a payment's refunds |
+| [`GET /v1/payment_intents/{intentId}/settlement`](#retrieve-a-payments-settlement) | Retrieve a payment's settlement |
+| [`POST /v1/refunds`](#create-a-refund) | Create a refund |
+| [`GET /v1/refunds`](#list-refunds) | List refunds |
+| [`GET /v1/refunds/{id}`](#retrieve-a-refund) | Retrieve a refund |
+| [`POST /v1/refunds/{id}`](#update-a-refund) | Update a refund |
+| [`POST /v1/refunds/{id}/cancel`](#cancel-a-refund) | Cancel a refund |
+| [`GET /v1/refunds/search`](#search-refunds) | Search refunds |
+
+## List a payment's refunds
+
+`GET /v1/payment_intents/{intentId}/refunds`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.refunds.listForPaymentIntent()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `intentId` **required** | path | string | The payment intent (`pi_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Refund](/reference/objects/refund) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Refund](/reference/objects/refund) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+| `remaining_refundable` | string | What can still be refunded on this payment, in base units. The same on every page. Matches `^(0\|[1-9][0-9]*)$`. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "re_0193b8f2c1a87d3e9f4a",
+      "object": "refund",
+      "livemode": false,
+      "external_ref": "order_6735_refund_1",
+      "origin": "merchant",
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "amount": "1000",
+      "currency": "EUR",
+      "status": "succeeded",
+      "reason": "requested_by_customer",
+      "failure_code": null,
+      "metadata": {},
+      "created": 1793750400,
+      "updated_at": 1793750460
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_intents/{intentId}/refunds"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a payment's settlement
+
+`GET /v1/payment_intents/{intentId}/settlement`
+
+Gross, fee and net, read live from the provider. A missing figure is `null` with a `status`, never `0`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.refunds.settlement()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `intentId` **required** | path | string | The payment intent (`pi_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Settlement](/reference/objects/settlement).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a refund
+
+`POST /v1/refunds`
+
+`external_ref` decides whether money moves twice: a retry with the same ref answers the refund it made (200) whatever is still refundable.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.refunds.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `payment_intent` **required** | string | The `pi_…` being refunded. |
+| `external_ref` **required** | string | YOUR id for this refund. The idempotency: the same ref answers the same refund. 1–255 characters. |
+| `amount` **required** | string | Base units, as a canonical integer string. Zero is refused. |
+| `reason` | string | One of `duplicate`, `fraudulent`, `requested_by_customer`. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `refund_application_fee` | boolean | Also refund Orbit's application fee, in proportion (a destination charge). |
+| `reverse_transfer` | boolean | Also reverse the transfer to the destination account, in proportion. |
+
+**Response `201`**
+
+Returns [Refund](/reference/objects/refund).
+
+```json
+{
+  "id": "re_0193b8f2c1a87d3e9f4a",
+  "object": "refund",
+  "livemode": false,
+  "external_ref": "order_6735_refund_1",
+  "origin": "merchant",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "amount": "1000",
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "failure_code": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750460
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List refunds
+
+`GET /v1/refunds`
+
+Every refund of the merchant, or of one payment — including those made outside Peable (`origin: 'provider'`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.refunds.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Only this payment's refunds (`pi_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Refund](/reference/objects/refund) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Refund](/reference/objects/refund) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "re_0193b8f2c1a87d3e9f4a",
+      "object": "refund",
+      "livemode": false,
+      "external_ref": "order_6735_refund_1",
+      "origin": "merchant",
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "amount": "1000",
+      "currency": "EUR",
+      "status": "succeeded",
+      "reason": "requested_by_customer",
+      "failure_code": null,
+      "metadata": {},
+      "created": 1793750400,
+      "updated_at": 1793750460
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/refunds"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a refund
+
+`GET /v1/refunds/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.refunds.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The refund (`re_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Refund](/reference/objects/refund).
+
+```json
+{
+  "id": "re_0193b8f2c1a87d3e9f4a",
+  "object": "refund",
+  "livemode": false,
+  "external_ref": "order_6735_refund_1",
+  "origin": "merchant",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "amount": "1000",
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "failure_code": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750460
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a refund
+
+`POST /v1/refunds/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.refunds.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The refund (`re_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [Refund](/reference/objects/refund).
+
+```json
+{
+  "id": "re_0193b8f2c1a87d3e9f4a",
+  "object": "refund",
+  "livemode": false,
+  "external_ref": "order_6735_refund_1",
+  "origin": "merchant",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "amount": "1000",
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "failure_code": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750460
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a refund
+
+`POST /v1/refunds/{id}/cancel`
+
+Only while the provider still holds it; otherwise 400 `refund_not_cancelable`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.refunds.cancel()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The refund (`re_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [Refund](/reference/objects/refund).
+
+```json
+{
+  "id": "re_0193b8f2c1a87d3e9f4a",
+  "object": "refund",
+  "livemode": false,
+  "external_ref": "order_6735_refund_1",
+  "origin": "merchant",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "amount": "1000",
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "failure_code": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750460
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search refunds
+
+`GET /v1/refunds/search`
+
+Stripe's query language over `amount`, `currency`, `status`, `reason`, `payment_intent`, `created` and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.refunds.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Refund](/reference/objects/refund) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Refund](/reference/objects/refund) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "re_0193b8f2c1a87d3e9f4a",
+      "object": "refund",
+      "livemode": false,
+      "external_ref": "order_6735_refund_1",
+      "origin": "merchant",
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "amount": "1000",
+      "currency": "EUR",
+      "status": "succeeded",
+      "reason": "requested_by_customer",
+      "failure_code": null,
+      "metadata": {},
+      "created": 1793750400,
+      "updated_at": 1793750460
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/refunds/search"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

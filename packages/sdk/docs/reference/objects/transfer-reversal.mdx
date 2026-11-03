@@ -1,0 +1,32 @@
+---
+title: "TransferReversal"
+description: "The transfer_reversal object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TransferReversal
+
+Object type: `transfer_reversal`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"transfer_reversal"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `external_ref` | string | The merchant's own id for this reversal. |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string |  |
+| `status` | string | One of `pending`, `succeeded`, `failed`. |
+| `failure_message` | string \| null |  |
+| `created` | integer | Unix seconds. |
+
+## Returned by
+
+- [`GET /v1/transfers/{transferId}/reversals`](/reference/transfers#list-a-transfers-reversals) — List a transfer's reversals
+
+## Used in
+
+[TransferWithReversal](/reference/objects/transfer-with-reversal)

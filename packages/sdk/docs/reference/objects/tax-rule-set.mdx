@@ -1,0 +1,24 @@
+---
+title: "TaxRuleSet"
+description: "The tax.rule_set object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxRuleSet
+
+Object type: `tax.rule_set`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.rule_set"` |  |
+| `version` | string |  |
+| `published` | integer | Unix seconds. |
+| `rules` | array of [TaxJurisdictionRule](/reference/objects/tax-jurisdiction-rule) |  |
+| `unsupported` | string | Everything not listed is `unsupported`, stated rather than implied. |
+
+## Returned by
+
+- [`GET /v1/tax/rule_set`](/reference/tax-compliance#retrieve-the-current-rule-set) — Retrieve the current rule set

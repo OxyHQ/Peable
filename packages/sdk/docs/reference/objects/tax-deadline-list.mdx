@@ -1,0 +1,24 @@
+---
+title: "TaxDeadlineList"
+description: "The list object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxDeadlineList
+
+Object type: `list`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxDeadline](/reference/objects/tax-deadline) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+| `unavailable` | array of [TaxDeadlineUnavailable](/reference/objects/tax-deadline-unavailable) | Where a deadline exists but the rule set cannot compute it, and why. |
+
+## Returned by
+
+- [`GET /v1/tax/deadlines`](/reference/tax-compliance#list-tax-deadlines) — List tax deadlines

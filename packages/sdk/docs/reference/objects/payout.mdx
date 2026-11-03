@@ -1,0 +1,75 @@
+---
+title: "Payout"
+description: "The payout object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Payout
+
+Object type: `payout`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payout"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `account` | string | The account (`ca_…`) paid out. |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string | Upper-case ISO 4217 code. |
+| `status` | string | One of `pending`, `in_transit`, `paid`, `failed`, `canceled`. |
+| `arrival_date` | integer \| null | When the funds are expected in the bank, as the provider estimates. |
+| `automatic` | boolean | `true` when the provider's schedule created it, `false` for `POST /v1/payouts`. |
+| `method` | string | One of `standard`, `instant`. |
+| `type` | string | One of `bank_account`, `card`. |
+| `description` | string \| null |  |
+| `statement_descriptor` | string \| null |  |
+| `failure_code` | string \| null | The provider's failure code when `failed`; never its prose. |
+| `balance_transaction` | string \| null | The payout's own `txn_…` once ingested. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "po_0193b8f31e2d4c5a9b60",
+  "object": "payout",
+  "livemode": false,
+  "account": "ca_0193b8f2c1a87d3e9f4a",
+  "amount": "150000",
+  "currency": "EUR",
+  "status": "in_transit",
+  "arrival_date": 1793923200,
+  "automatic": false,
+  "method": "standard",
+  "type": "bank_account",
+  "description": "November payout",
+  "statement_descriptor": "ROSEN PAYOUT",
+  "failure_code": null,
+  "balance_transaction": "txn_0193b8f31f0a7e3d2c41",
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/payouts`](/reference/payouts#list-payouts) — List payouts
+- [`POST /v1/payouts`](/reference/payouts#create-a-payout) — Create a payout
+- [`GET /v1/payouts/{id}`](/reference/payouts#retrieve-a-payout) — Retrieve a payout
+- [`POST /v1/payouts/{id}/cancel`](/reference/payouts#cancel-a-payout) — Cancel a payout
+
+## Events
+
+- [`payout.canceled`](/reference/webhook-events#payoutcanceled)
+- [`payout.created`](/reference/webhook-events#payoutcreated)
+- [`payout.failed`](/reference/webhook-events#payoutfailed)
+- [`payout.paid`](/reference/webhook-events#payoutpaid)
+- [`payout.updated`](/reference/webhook-events#payoutupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

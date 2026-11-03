@@ -1,0 +1,61 @@
+---
+title: "Idempotency"
+description: "Retrying a POST safely with Idempotency-Key, and the identities beneath it."
+order: 19
+---
+
+# Idempotency
+
+Every `POST` accepts an optional **`Idempotency-Key`** header (1–255 printable
+ASCII characters). For **24 hours**, scoped to your merchant — your
+application and its environment, so a test credential never sees a live key:
+
+| You send | You get |
+|---|---|
+| The same key, method, path and body again | The **stored** status and body, with `Idempotent-Replayed: true`; nothing runs twice |
+| The same key with a different body or path | `400`, `code: 'idempotency_error'` |
+| The same key while the first request is still running | `409`, `code: 'idempotency_error'` — retry shortly |
+
+A `2xx` or `4xx` answer is stored and replayed as it was. A `5xx` is **not**
+stored: the key is released, so retrying with it runs the request again.
+Bodies are compared canonically, so key order does not matter.
+
+## In the SDK
+
+The SDK sends a key on every `POST` for you — a fresh one per call, reused by
+that call's own retries. Pass your own when a retry may come from a
+**different** call: after a crash, or from a job queue. One stable key per
+order makes any retry converge:
+
+```ts
+await peable.paymentIntents.create(
+  { amount: '250000000', network: 'testnet' },
+  { idempotencyKey: `order:${order.id}` },
+);
+```
+
+## The key is a retry layer, not an identity
+
+Beneath the header, the objects that move money carry their own durable
+identity:
+
+- **A payment intent** — and so a Checkout Session — is unique per merchant
+  and key for as long as it exists. A retry after the 24 hours still answers
+  the payment that key created (`200`); different terms under the same key are
+  a `400 idempotency_error`.
+- **Refunds, transfers and transfer reversals** take **`external_ref`** in the
+  body: your own id, which decides whether money moves twice. A reversal must
+  carry one — the header is never accepted in its place — because two
+  reversals of one settlement for the same amount are two operations.
+  ([Refunds](/refunds-and-disputes#refunds), [transfers](/connect#card-sellers).)
+
+## Where the header does not apply
+
+- `POST /v1/merchants` — registration creates the scope a key would live in.
+  A repeat answers `409`; read your merchant with `GET /v1/merchants/me`.
+- `POST /v1/payment_intents/{id}/client_action` — a read; nothing happens
+  twice.
+- The `/v1/billing/*` routes of the [Stripe Billing rail](/billing#the-stripe-billing-rail),
+  which carry their own durable operation keys and recover a lost reply with
+  the same key.
+- The anonymous payer routes of the hosted checkout.

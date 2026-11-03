@@ -1,0 +1,30 @@
+---
+title: "TaxTransaction"
+description: "The tax.transaction object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxTransaction
+
+Object type: `tax.transaction`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.transaction"` |  |
+| `id` | string | `taxtxn_…`. |
+| `type` | string | One of `transaction`, `reversal`. |
+| `calculation_id` | string | The calculation (`taxcalc_…`) that was paid. |
+| `reference` | string | The rail's own object, e.g. the invoice id. |
+| `rail` | string |  |
+| `committed_at` | integer | The tax date a filing period is judged by. |
+| `reversal_of` | string \| null | The original transaction's id, for a reversal. |
+| `reversal` | [TaxTransactionReversal](/reference/objects/tax-transaction-reversal) \| null |  |
+| `calculation` | [TaxCalculation](/reference/objects/tax-calculation) |  |
+
+## Returned by
+
+- [`GET /v1/tax/transactions`](/reference/tax#list-tax-transactions) — List tax transactions
+- [`POST /v1/tax/transactions/{id}/reversals`](/reference/tax#reverse-a-tax-transaction) — Reverse a tax transaction

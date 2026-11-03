@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ERROR_CODES, ERROR_TYPES } from '../vocabulary/errors';
+import { ERROR_CODES, ERROR_DOCS_BASE_URL, ERROR_TYPES } from '../vocabulary/errors';
 import { contractRegistry, resolveObject } from './objects';
 
 /**
@@ -67,7 +67,7 @@ export const apiErrorSchema = z
       .string()
       .optional()
       .describe(
-        `The machine-readable reason (one of ${String(ERROR_CODES.length)} documented at https://docs.peable.to/errors, or a card network's decline code on a \`card_error\`).`,
+        `The machine-readable reason (one of ${String(ERROR_CODES.length)} documented at ${ERROR_DOCS_BASE_URL}, or a card network's decline code on a \`card_error\`).`,
       ),
     decline_code: z
       .string()

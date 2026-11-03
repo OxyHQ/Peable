@@ -1,0 +1,31 @@
+---
+title: "PayoutReconciliationReport"
+description: "The list object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PayoutReconciliationReport
+
+Object type: `list`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [BalanceTransaction](/reference/objects/balance-transaction) |  |
+| `has_more` | boolean |  |
+| `url` | string |  |
+| `payout` | string | The payout (`po_…`) reconciled. |
+| `status` | string | `complete` once the payout is `paid` and its transactions were read from the provider; `pending` before — the set is not final and the totals may grow. |
+| `currency` | string |  |
+| `summary` | object | Over EVERY transaction of the payout, not just this page. |
+| `summary.count` | integer |  |
+| `summary.amount` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `summary.fee` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `summary.net` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+
+## Returned by
+
+- [`GET /v1/reports/payout_reconciliation`](/reference/payouts#reconcile-a-payout) — Reconcile a payout

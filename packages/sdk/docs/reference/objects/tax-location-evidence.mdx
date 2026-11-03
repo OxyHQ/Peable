@@ -1,0 +1,60 @@
+---
+title: "TaxLocationEvidence"
+description: "The tax.location_evidence object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxLocationEvidence
+
+Object type: `tax.location_evidence`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.location_evidence"` |  |
+| `id` | string | `taxloc_…`. |
+| `customer_ref` | string | The customer this evidence is about. |
+| `status` | string | Only `sufficient` evidence can be calculated against. One of `sufficient`, `insufficient`, `conflicting`. |
+| `rule` | string | The jurisdiction rule applied: `eu_digital_two_items`, `gb_digital_two_items`, `us_billing_address`, `ca_billing_address`, `default_one_item`, or `none` when no item names a country. |
+| `country` | string \| null | Where the evidence places the customer, when it does. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `items` | array of [TaxLocationEvidenceResultItem](/reference/objects/tax-location-evidence-result-item) |  |
+| `observed_at` | integer | Unix seconds. |
+| `expires_at` | integer | Evidence stays usable for a day. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+
+## Example
+
+```json
+{
+  "object": "tax.location_evidence",
+  "id": "taxloc_0193b8f2c1a87d3e9f4a",
+  "customer_ref": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "sufficient",
+  "rule": "eu_digital_two_items",
+  "country": "DE",
+  "state": null,
+  "items": [
+    {
+      "type": "billing_address",
+      "country": "DE",
+      "state": null
+    },
+    {
+      "type": "ip_address",
+      "country": "DE",
+      "state": null
+    }
+  ],
+  "observed_at": 1793750400,
+  "expires_at": 1793836800,
+  "livemode": false
+}
+```
+
+## Returned by
+
+- [`POST /v1/tax/location_evidence`](/reference/tax#record-customer-location-evidence) — Record customer location evidence
+- [`GET /v1/tax/location_evidence/{id}`](/reference/tax#retrieve-customer-location-evidence) — Retrieve customer location evidence

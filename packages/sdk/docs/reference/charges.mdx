@@ -1,0 +1,279 @@
+---
+title: "Charges"
+description: "The Charges endpoints of the Peable API."
+order: 907
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Charges
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/charges`](#list-charges) | List charges |
+| [`GET /v1/charges/{id}`](#retrieve-a-charge) | Retrieve a charge |
+| [`GET /v1/charges/search`](#search-charges) | Search charges |
+
+## List charges
+
+`GET /v1/charges`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.charges.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Only this payment's charges (`pi_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Charge](/reference/objects/charge) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Charge](/reference/objects/charge) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "ch_0193b8f2c1a87d3e9f4a",
+      "object": "charge",
+      "livemode": false,
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "payment_method": "pm_0193b8f2c1a87d3e9f4a",
+      "amount": "2500",
+      "amount_captured": "2500",
+      "amount_refunded": "0",
+      "currency": "EUR",
+      "status": "succeeded",
+      "paid": true,
+      "captured": true,
+      "refunded": false,
+      "disputed": false,
+      "outcome": {
+        "network_status": "approved_by_network",
+        "risk_level": "normal",
+        "type": "authorized",
+        "seller_message": "Payment complete."
+      },
+      "billing_details": null,
+      "payment_method_details": {
+        "type": "card",
+        "card": {
+          "brand": "visa",
+          "last4": "4242",
+          "exp_month": 12,
+          "exp_year": 2030,
+          "country": "US",
+          "funding": "credit"
+        }
+      },
+      "receipt_url": null,
+      "balance_transaction": null,
+      "application_fee": null,
+      "application_fee_amount": null,
+      "description": null,
+      "receipt_email": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/charges"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a charge
+
+`GET /v1/charges/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.charges.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The charge (`ch_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Charge](/reference/objects/charge).
+
+```json
+{
+  "id": "ch_0193b8f2c1a87d3e9f4a",
+  "object": "charge",
+  "livemode": false,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "amount": "2500",
+  "amount_captured": "2500",
+  "amount_refunded": "0",
+  "currency": "EUR",
+  "status": "succeeded",
+  "paid": true,
+  "captured": true,
+  "refunded": false,
+  "disputed": false,
+  "outcome": {
+    "network_status": "approved_by_network",
+    "risk_level": "normal",
+    "type": "authorized",
+    "seller_message": "Payment complete."
+  },
+  "billing_details": null,
+  "payment_method_details": {
+    "type": "card",
+    "card": {
+      "brand": "visa",
+      "last4": "4242",
+      "exp_month": 12,
+      "exp_year": 2030,
+      "country": "US",
+      "funding": "credit"
+    }
+  },
+  "receipt_url": null,
+  "balance_transaction": null,
+  "application_fee": null,
+  "application_fee_amount": null,
+  "description": null,
+  "receipt_email": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search charges
+
+`GET /v1/charges/search`
+
+Stripe's query language over `amount`, `currency`, `customer`, `payment_intent`, `status`, `captured`, `refunded`, `disputed`, `created` and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.charges.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Charge](/reference/objects/charge) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Charge](/reference/objects/charge) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "ch_0193b8f2c1a87d3e9f4a",
+      "object": "charge",
+      "livemode": false,
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "payment_method": "pm_0193b8f2c1a87d3e9f4a",
+      "amount": "2500",
+      "amount_captured": "2500",
+      "amount_refunded": "0",
+      "currency": "EUR",
+      "status": "succeeded",
+      "paid": true,
+      "captured": true,
+      "refunded": false,
+      "disputed": false,
+      "outcome": {
+        "network_status": "approved_by_network",
+        "risk_level": "normal",
+        "type": "authorized",
+        "seller_message": "Payment complete."
+      },
+      "billing_details": null,
+      "payment_method_details": {
+        "type": "card",
+        "card": {
+          "brand": "visa",
+          "last4": "4242",
+          "exp_month": 12,
+          "exp_year": 2030,
+          "country": "US",
+          "funding": "credit"
+        }
+      },
+      "receipt_url": null,
+      "balance_transaction": null,
+      "application_fee": null,
+      "application_fee_amount": null,
+      "description": null,
+      "receipt_email": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/charges/search"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

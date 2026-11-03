@@ -1,0 +1,21 @@
+---
+title: "PaymentError"
+description: "The PaymentError shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentError
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | `card_error` for a declined card; `payment_error` for a FairCoin underpayment. One of `card_error`, `payment_error`, `api_error`. |
+| `code` | string \| null |  |
+| `decline_code` | string \| null |  |
+| `message` | string |  |
+
+## Used in
+
+[PaymentIntent](/reference/objects/payment-intent) · [SetupIntent](/reference/objects/setup-intent)

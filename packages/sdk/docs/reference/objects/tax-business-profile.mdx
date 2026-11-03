@@ -1,0 +1,54 @@
+---
+title: "TaxBusinessProfile"
+description: "The tax.business_profile object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxBusinessProfile
+
+Object type: `tax.business_profile`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.business_profile"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `legal_name` | string \| null | Read from the tax settings, where editing it returns collection to draft. |
+| `entity_type` | string | `unknown` is an answer: the owner does not know yet. One of `corporation`, `limited_liability_company`, `partnership`, `sole_proprietorship`, `nonprofit`, `public_body`, `other`, `unknown`. |
+| `incorporation_country` | string \| null | ISO 3166-1 alpha-2, or `null` while not given. Never evidence of registration. |
+| `incorporation_state` | string \| null |  |
+| `fiscal_year_end_month` | integer \| null | 1–12, the month the fiscal year ends in. Between 1 and 12. |
+| `customer_types` | string | One of `consumers`, `businesses`, `both`, `unknown`. |
+| `supply_types` | array of string |  |
+| `missing` | array of string | What onboarding still lacks before an assessment can be complete: `legal_name`, `entity_type`, `customer_types`, `establishment`, `sales_destinations`. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `updated_by` | string \| null |  |
+| `updated` | integer \| null | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.business_profile",
+  "livemode": false,
+  "legal_name": "Example Software SL",
+  "entity_type": "limited_liability_company",
+  "incorporation_country": "ES",
+  "incorporation_state": null,
+  "fiscal_year_end_month": 12,
+  "customer_types": "both",
+  "supply_types": [
+    "software_as_a_service"
+  ],
+  "missing": [],
+  "metadata": {},
+  "updated_by": "user_42",
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/business_profile`](/reference/tax-compliance#retrieve-the-business-profile) — Retrieve the business profile

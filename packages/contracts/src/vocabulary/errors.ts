@@ -30,8 +30,13 @@ export const ERROR_TYPE_DESCRIPTIONS: Readonly<Record<ErrorType, string>> = {
   rate_limit_error: 'Too many requests (429). Back off and retry.',
 };
 
-/** Where every code is documented. */
-export const ERROR_DOCS_BASE_URL = 'https://docs.peable.to/errors';
+/**
+ * Where every code is documented: the error-code page of Peable's docs on the
+ * Oxy developer site, generated from this file (`bun run generate:api-docs`,
+ * `packages/sdk/docs/errors.mdx`). The trailing slash is the page's canonical
+ * form; each code is its own fragment.
+ */
+export const ERROR_DOCS_BASE_URL = 'https://oxy.so/developers/docs/peable/errors/';
 
 /** The `doc_url` of a code. */
 export function errorDocUrl(code: string): string {

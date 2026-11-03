@@ -1,0 +1,35 @@
+---
+title: "Settlement"
+description: "The settlement object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Settlement
+
+Object type: `settlement`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"settlement"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | The `pi_…` this describes, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `status` | string | `available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**. |
+| `gross` | string \| null | Base units of `currency`. Matches `^(0\|[1-9][0-9]*)$`. |
+| `fee` | string \| null | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `net` | string \| null | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string \| null | The SETTLEMENT currency (uppercase ISO 4217), which may differ from the payment's. |
+| `available_on` | integer \| null | When the funds become available. |
+| `exchange_rate` | number \| null | Present only when a conversion happened. `null` is not a rate of 1. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+## Returned by
+
+- [`GET /v1/payment_intents/{intentId}/settlement`](/reference/refunds#retrieve-a-payments-settlement) — Retrieve a payment's settlement

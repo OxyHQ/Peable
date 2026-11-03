@@ -1,0 +1,52 @@
+---
+title: "PaymentMethodDomain"
+description: "The payment_method_domain object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentMethodDomain
+
+Object type: `payment_method_domain`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_method_domain"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `domain_name` | string | Lowercase hostname, no scheme, port or path. |
+| `enabled` | boolean | Whether wallets may run on it at all. |
+| `apple_pay` | [PaymentMethodDomainWalletStatus](/reference/objects/payment-method-domain-wallet-status) |  |
+| `google_pay` | [PaymentMethodDomainWalletStatus](/reference/objects/payment-method-domain-wallet-status) |  |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "pmd_0193b8f2c1a87d3e9f4a",
+  "object": "payment_method_domain",
+  "livemode": false,
+  "domain_name": "shop.example.com",
+  "enabled": true,
+  "apple_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "google_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/payment_method_domains`](/reference/payment-method-domains#list-payment-method-domains) — List payment method domains
+- [`POST /v1/payment_method_domains`](/reference/payment-method-domains#register-a-payment-method-domain) — Register a payment method domain
+- [`GET /v1/payment_method_domains/{id}`](/reference/payment-method-domains#retrieve-a-payment-method-domain) — Retrieve a payment method domain
+- [`POST /v1/payment_method_domains/{id}`](/reference/payment-method-domains#update-a-payment-method-domain) — Update a payment method domain
+- [`POST /v1/payment_method_domains/{id}/validate`](/reference/payment-method-domains#validate-a-payment-method-domain) — Validate a payment method domain

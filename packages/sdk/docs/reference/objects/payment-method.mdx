@@ -1,0 +1,47 @@
+---
+title: "PaymentMethod"
+description: "The payment_method object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentMethod
+
+Object type: `payment_method`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_method"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `type` | `"card"` |  |
+| `card` | [CardDetails](/reference/objects/card-details) |  |
+| `billing_details` | [BillingDetails](/reference/objects/billing-details) |  |
+| `customer` | string \| [Customer](/reference/objects/customer) \| null | `cus_…`, or the Customer with `expand[]=customer`; `null` once detached. Expandable. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+
+## Returned by
+
+- [`GET /v1/payment_methods`](/reference/payment-methods#list-a-customers-payment-methods) — List a customer's payment methods
+- [`GET /v1/payment_methods/{id}`](/reference/payment-methods#retrieve-a-payment-method) — Retrieve a payment method
+- [`POST /v1/payment_methods/{id}`](/reference/payment-methods#update-a-payment-method) — Update a payment method
+- [`POST /v1/payment_methods/{id}/detach`](/reference/payment-methods#detach-a-payment-method) — Detach a payment method
+
+## Events
+
+- [`payment_method.attached`](/reference/webhook-events#payment_methodattached)
+- [`payment_method.detached`](/reference/webhook-events#payment_methoddetached)
+- [`payment_method.updated`](/reference/webhook-events#payment_methodupdated)
+
+## Used in
+
+[Charge](/reference/objects/charge) · [Customer](/reference/objects/customer) · [Event](/reference/objects/event) · [Invoice](/reference/objects/invoice) · [PaymentIntent](/reference/objects/payment-intent) · [SetupIntent](/reference/objects/setup-intent) · [Subscription](/reference/objects/subscription)

@@ -1,0 +1,86 @@
+---
+title: "ConnectedAccount"
+description: "The connected_account object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ConnectedAccount
+
+Object type: `connected_account`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"connected_account"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `external_ref` | string | The merchant's OWN id for this seller — how they address it. |
+| `rails` | array of string | Which halves this account has. Never empty. |
+| `faircoin` | [ConnectedAccountFaircoin](/reference/objects/connected-account-faircoin) \| null | The FairCoin half, or `null` when the platform never opened one. Readiness for FairCoin is `faircoin.status === 'active'`; `payable` is about the CARD half. |
+| `country` | string \| null | ISO 3166-1 alpha-2, upper-case. `null` on a FairCoin-only seller, which has no card half. |
+| `default_currency` | string \| null |  |
+| `payable` | boolean | Whether this seller can receive a CARD settlement (a transfer) right now. A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller. |
+| `payouts_enabled` | boolean |  |
+| `charges_enabled` | boolean |  |
+| `transfers_capability` | string \| null | `null`: never requested — a different fact from the provider declining it. One of `active`, `pending`, `inactive`. |
+| `card_payments_capability` | string \| null | One of `active`, `pending`, `inactive`. |
+| `requirements` | [AccountRequirements](/reference/objects/account-requirements) |  |
+| `last_synced_at` | integer \| null | Unix seconds. |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "ca_0193b8f2d4e1aa07c3b2",
+  "object": "connected_account",
+  "livemode": false,
+  "external_ref": "seller_4821",
+  "rails": [
+    "card",
+    "faircoin"
+  ],
+  "faircoin": {
+    "network": "mainnet",
+    "status": "active",
+    "oxy_user_id": "665f1c0e9a1b2c3d4e5f6a7b",
+    "registered_at": 1793751000
+  },
+  "country": "DE",
+  "default_currency": "EUR",
+  "payable": true,
+  "payouts_enabled": true,
+  "charges_enabled": true,
+  "transfers_capability": "active",
+  "card_payments_capability": "active",
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "last_synced_at": 1793751060,
+  "created": 1793750400,
+  "updated_at": 1793751060
+}
+```
+
+## Returned by
+
+- [`POST /v1/connected_accounts`](/reference/connected-accounts#open-a-connected-account) — Open a connected account
+- [`GET /v1/connected_accounts`](/reference/connected-accounts#list-connected-accounts) — List connected accounts
+- [`GET /v1/connected_accounts/{accountId}`](/reference/connected-accounts#retrieve-a-connected-account) — Retrieve a connected account
+- [`POST /v1/connected_accounts/{accountId}/refresh`](/reference/connected-accounts#refresh-a-connected-account) — Refresh a connected account
+- [`GET /v1/connected_accounts/by_ref/{externalRef}`](/reference/connected-accounts#retrieve-a-connected-account-by-your-id) — Retrieve a connected account by your id
+
+## Events
+
+- [`connected_account.updated`](/reference/webhook-events#connected_accountupdated)
+
+## Used in
+
+[CheckoutSession](/reference/objects/checkout-session) · [Event](/reference/objects/event) · [PaymentIntent](/reference/objects/payment-intent) · [Transfer](/reference/objects/transfer) · [TransferWithReversal](/reference/objects/transfer-with-reversal)

@@ -1,0 +1,623 @@
+---
+title: "Tax"
+description: "The Tax endpoints of the Peable API."
+order: 944
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Tax
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/tax/calculations`](#calculate-tax) | Calculate tax |
+| [`GET /v1/tax/calculations/{id}`](#retrieve-a-tax-calculation) | Retrieve a tax calculation |
+| [`GET /v1/tax/codes`](#list-tax-codes) | List tax codes |
+| [`POST /v1/tax/location_evidence`](#record-customer-location-evidence) | Record customer location evidence |
+| [`GET /v1/tax/location_evidence/{id}`](#retrieve-customer-location-evidence) | Retrieve customer location evidence |
+| [`GET /v1/tax/products`](#list-product-tax-codes) | List product tax codes |
+| [`PUT /v1/tax/products/{productRef}`](#set-a-products-tax-code) | Set a product's tax code |
+| [`GET /v1/tax/registrations`](#list-tax-registrations) | List tax registrations |
+| [`GET /v1/tax/reports/summary`](#summarize-collected-tax) | Summarize collected tax |
+| [`GET /v1/tax/settings`](#retrieve-tax-settings) | Retrieve tax settings |
+| [`GET /v1/tax/transactions`](#list-tax-transactions) | List tax transactions |
+| [`POST /v1/tax/transactions/{id}/reversals`](#reverse-a-tax-transaction) | Reverse a tax transaction |
+
+## Calculate tax
+
+`POST /v1/tax/calculations`
+
+Calculate and freeze. Refused with `tax_settings_not_active` until the owner approves; a covered sale the provider cannot price fails closed (`tax_calculation_unavailable`), never zero.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.tax.calculations.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `currency` **required** | string | Matches `^[A-Za-z]{3}$`. |
+| `customer_location_evidence_id` **required** | string | Sufficient, unexpired evidence (`taxloc_…`). 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `line_items` **required** | array of object | At most 100 items. At least 1 item. |
+| `line_items[][reference]` **required** | string | 1–200 characters. |
+| `line_items[][amount]` **required** | integer | Unit amount × quantity, minor units. Includes tax when inclusive. |
+| `line_items[][quantity]` | integer | At most 1000000. |
+| `line_items[][tax_code]` | string | Defaults to the product's tax code, then the merchant's default. |
+| `line_items[][tax_behavior]` | string | Defaults to the merchant's default tax behavior. One of `inclusive`, `exclusive`. |
+
+**Response `201`**
+
+Returns [TaxCalculation](/reference/objects/tax-calculation).
+
+```json
+{
+  "object": "tax.calculation",
+  "id": "taxcalc_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection": "collect",
+  "registration_id": "taxreg_0193b8f2c1a87d3e9f4a",
+  "provider": "stripe_tax",
+  "provider_calculation_ref": "taxcalc_1QxYz2AbCdEf",
+  "customer_location_evidence_id": "taxloc_0193b8f2c1a87d3e9f4a",
+  "country": "DE",
+  "state": null,
+  "amount_total": 1190,
+  "amount_net": 1000,
+  "tax_amount_exclusive": 190,
+  "tax_amount_inclusive": 0,
+  "line_items": [
+    {
+      "reference": "plan_pro_monthly",
+      "quantity": 1,
+      "tax_code": "txcd_10103001",
+      "tax_behavior": "exclusive",
+      "amount": 1000,
+      "amount_tax": 190,
+      "amount_net": 1000,
+      "breakdown": [
+        {
+          "country": "DE",
+          "state": null,
+          "level": "country",
+          "display_name": "VAT",
+          "tax_type": "vat",
+          "rate_percentage": "19.0",
+          "taxable_amount": 1000,
+          "amount": 190,
+          "inclusive": false,
+          "taxability_reason": "standard_rated"
+        }
+      ]
+    }
+  ],
+  "tax_date": 1793750400,
+  "created": 1793750400,
+  "expires_at": 1793836800,
+  "livemode": false
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a tax calculation
+
+`GET /v1/tax/calculations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.calculations.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The calculation (`taxcalc_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxCalculation](/reference/objects/tax-calculation).
+
+```json
+{
+  "object": "tax.calculation",
+  "id": "taxcalc_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection": "collect",
+  "registration_id": "taxreg_0193b8f2c1a87d3e9f4a",
+  "provider": "stripe_tax",
+  "provider_calculation_ref": "taxcalc_1QxYz2AbCdEf",
+  "customer_location_evidence_id": "taxloc_0193b8f2c1a87d3e9f4a",
+  "country": "DE",
+  "state": null,
+  "amount_total": 1190,
+  "amount_net": 1000,
+  "tax_amount_exclusive": 190,
+  "tax_amount_inclusive": 0,
+  "line_items": [
+    {
+      "reference": "plan_pro_monthly",
+      "quantity": 1,
+      "tax_code": "txcd_10103001",
+      "tax_behavior": "exclusive",
+      "amount": 1000,
+      "amount_tax": 190,
+      "amount_net": 1000,
+      "breakdown": [
+        {
+          "country": "DE",
+          "state": null,
+          "level": "country",
+          "display_name": "VAT",
+          "tax_type": "vat",
+          "rate_percentage": "19.0",
+          "taxable_amount": 1000,
+          "amount": 190,
+          "inclusive": false,
+          "taxability_reason": "standard_rated"
+        }
+      ]
+    }
+  ],
+  "tax_date": 1793750400,
+  "created": 1793750400,
+  "expires_at": 1793836800,
+  "livemode": false
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List tax codes
+
+`GET /v1/tax/codes`
+
+Every product tax code Peable accepts: a complete list, `has_more` is `false`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.listCodes()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxCode](/reference/objects/tax-code) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxCode](/reference/objects/tax-code) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "txcd_10103001",
+      "name": "Software as a service (SaaS) - business use",
+      "description": "Hosted software accessed online, sold to businesses for business use."
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/codes"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Record customer location evidence
+
+`POST /v1/tax/location_evidence`
+
+Judged at once against the customer's jurisdiction rule; the answer says whether it is `sufficient` to calculate against.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.tax.locationEvidence.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer_ref` **required** | string | The customer this evidence is about; for billing, the `storeId`. 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `evidence` **required** | array of object | At most 6 items. At least 1 item. |
+
+**Response `201`**
+
+Returns [TaxLocationEvidence](/reference/objects/tax-location-evidence).
+
+```json
+{
+  "object": "tax.location_evidence",
+  "id": "taxloc_0193b8f2c1a87d3e9f4a",
+  "customer_ref": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "sufficient",
+  "rule": "eu_digital_two_items",
+  "country": "DE",
+  "state": null,
+  "items": [
+    {
+      "type": "billing_address",
+      "country": "DE",
+      "state": null
+    },
+    {
+      "type": "ip_address",
+      "country": "DE",
+      "state": null
+    }
+  ],
+  "observed_at": 1793750400,
+  "expires_at": 1793836800,
+  "livemode": false
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve customer location evidence
+
+`GET /v1/tax/location_evidence/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.locationEvidence.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The evidence (`taxloc_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxLocationEvidence](/reference/objects/tax-location-evidence).
+
+```json
+{
+  "object": "tax.location_evidence",
+  "id": "taxloc_0193b8f2c1a87d3e9f4a",
+  "customer_ref": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "sufficient",
+  "rule": "eu_digital_two_items",
+  "country": "DE",
+  "state": null,
+  "items": [
+    {
+      "type": "billing_address",
+      "country": "DE",
+      "state": null
+    },
+    {
+      "type": "ip_address",
+      "country": "DE",
+      "state": null
+    }
+  ],
+  "observed_at": 1793750400,
+  "expires_at": 1793836800,
+  "livemode": false
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List product tax codes
+
+`GET /v1/tax/products`
+
+Every classified product, by `product_ref`: a complete list, `has_more` is `false`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.products.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxProductCode](/reference/objects/tax-product-code) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxProductCode](/reference/objects/tax-product-code) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.product",
+      "product_ref": "plan_pro_monthly",
+      "tax_code": "txcd_10103001",
+      "updated_at": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/products"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Set a product's tax code
+
+`PUT /v1/tax/products/{productRef}`
+
+Creates the classification or replaces it.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.tax.products.setTaxCode()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `productRef` **required** | path | string | The merchant's product or plan reference: 1–128 of `A-Z a-z 0-9 _ . : -`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `tax_code` **required** | string | A `txcd_…` from `GET /v1/tax/codes`. |
+
+**Response `200`**
+
+Returns [TaxProductCode](/reference/objects/tax-product-code).
+
+```json
+{
+  "object": "tax.product",
+  "product_ref": "plan_pro_monthly",
+  "tax_code": "txcd_10103001",
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List tax registrations
+
+`GET /v1/tax/registrations`
+
+Every registration of the merchant, oldest first: a complete list, `has_more` is `false`. Registrations are added and approved by the owner in Orbit.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.listRegistrations()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxRegistration](/reference/objects/tax-registration) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxRegistration](/reference/objects/tax-registration) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.registration",
+      "id": "taxreg_0193b8f2c1a87d3e9f4a",
+      "country": "ES",
+      "state": null,
+      "scheme": "eu_oss_union",
+      "registration_number": "ESB12345678",
+      "active_from": 1793750400,
+      "expires_at": null,
+      "status": "active",
+      "approved_at": 1793750400,
+      "provider_registration_ref": "taxreg_1QxYz2AbCdEf",
+      "created": 1793664000
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/registrations"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Summarize collected tax
+
+`GET /v1/tax/reports/summary`
+
+Totals per jurisdiction, registration, tax type and rate over `[from, to)` (Unix seconds, `from` inclusive, `to` exclusive, on `committed_at`), reversals netted in. With `format=csv`, the same rows as a `text/csv` attachment.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.reports.summary()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `from` **required** | query | integer | Between 0 and 253402300799. |
+| `to` **required** | query | integer | Between 0 and 253402300799. |
+| `format` | query | string | `csv` answers the rows as a `text/csv` attachment (a filing export) instead of JSON. One of `json`, `csv`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxReport](/reference/objects/tax-report).
+
+```json
+{
+  "object": "tax.report",
+  "from": 1790812800,
+  "to": 1798761600,
+  "rows": [
+    {
+      "country": "DE",
+      "state": null,
+      "registration_id": "taxreg_0193b8f2c1a87d3e9f4a",
+      "scheme": "eu_oss_union",
+      "collection": "collect",
+      "tax_type": "vat",
+      "rate_percentage": "19.0",
+      "currency": "EUR",
+      "transactions": 42,
+      "reversals": 1,
+      "taxable_amount": 41000,
+      "tax_amount": 7790
+    }
+  ]
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve tax settings
+
+`GET /v1/tax/settings`
+
+Settings are changed, and collection approved, by the owner in Orbit. Until approved, `POST /v1/tax/calculations` refuses with `tax_settings_not_active`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.retrieveSettings()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxSettings](/reference/objects/tax-settings).
+
+```json
+{
+  "object": "tax.settings",
+  "merchant_id": "merch_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "legal_name": "Example Software SL",
+  "head_office": {
+    "country": "ES",
+    "state": null,
+    "postal_code": "08001",
+    "city": "Barcelona"
+  },
+  "default_tax_code": "txcd_10103001",
+  "default_tax_behavior": "exclusive",
+  "calculation_account": "platform",
+  "provider": "stripe_tax",
+  "approved_at": 1793750400,
+  "approved_by": "user_42",
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List tax transactions
+
+`GET /v1/tax/transactions`
+
+Newest first. `created` filters on `committed_at` — the tax date a filing period is judged by.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.transactions.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxTransaction](/reference/objects/tax-transaction) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxTransaction](/reference/objects/tax-transaction) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Reverse a tax transaction
+
+`POST /v1/tax/transactions/{id}/reversals`
+
+For a refund the rail cannot report itself (FairCoin). Card refunds and credit notes, and Orbit invoices, are reversed from their own records and are refused here.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.tax.transactions.createReversal()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The original transaction (`taxtxn_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `reference` **required** | string | The refund's own reference; a repeated reference returns the same reversal. 1–200 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `amount` | integer | Gross minor units refunded (what the payer got back). Omitted: everything not yet reversed. |
+
+**Response `201`**
+
+Returns [TaxTransaction](/reference/objects/tax-transaction).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

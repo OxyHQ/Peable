@@ -1,0 +1,35 @@
+---
+title: "TaxProductCode"
+description: "The tax.product object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxProductCode
+
+Object type: `tax.product`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.product"` |  |
+| `product_ref` | string | The merchant's product or plan reference (a billing `planId`). |
+| `tax_code` | string | `txcd_…`. |
+| `updated_at` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.product",
+  "product_ref": "plan_pro_monthly",
+  "tax_code": "txcd_10103001",
+  "updated_at": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/products`](/reference/tax#list-product-tax-codes) — List product tax codes
+- [`PUT /v1/tax/products/{productRef}`](/reference/tax#set-a-products-tax-code) — Set a product's tax code

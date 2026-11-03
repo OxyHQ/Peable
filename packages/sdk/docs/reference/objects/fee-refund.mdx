@@ -1,0 +1,29 @@
+---
+title: "FeeRefund"
+description: "The fee_refund object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# FeeRefund
+
+Object type: `fee_refund`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"fee_refund"` |  |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string |  |
+| `fee` | string | The `fee_…` it refunds. |
+| `created` | integer | Unix seconds. |
+
+## Returned by
+
+- [`GET /v1/application_fees/{id}/refunds`](/reference/application-fees#list-an-application-fees-refunds) — List an application fee's refunds
+
+## Used in
+
+[ApplicationFee](/reference/objects/application-fee)

@@ -1,0 +1,44 @@
+---
+title: "BillingObservation"
+description: "The billing_observation object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingObservation
+
+Object type: `billing_observation`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"billing_observation"` |  |
+| `livemode` | boolean | The mode of the billing cohort observed (ADR 0017). |
+| `resource_kind` | string | One of `subscription`, `invoice`. |
+| `resource_id` | string | The provider subscription or invoice observed. |
+| `subscription_id` | string | Owner-scoped wake-up hint only; re-read the subscription before resolving a payer. |
+| `revision` | integer | The observation revision; later revisions are newer. At least -9007199254740991. |
+| `observed_at` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "billing_observation",
+  "livemode": false,
+  "resource_kind": "subscription",
+  "resource_id": "sub_1Q2w3E4r5T6y7U8i",
+  "subscription_id": "sub_1Q2w3E4r5T6y7U8i",
+  "revision": 3,
+  "observed_at": 1793750400
+}
+```
+
+## Events
+
+- [`billing.observation.updated`](/reference/webhook-events#billingobservationupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

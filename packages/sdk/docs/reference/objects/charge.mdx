@@ -1,0 +1,113 @@
+---
+title: "Charge"
+description: "The charge object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Charge
+
+Object type: `charge`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"charge"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | `pi_…`, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `customer` | string \| [Customer](/reference/objects/customer) \| null | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | `pm_…`, or the PaymentMethod with `expand[]=payment_method`. Expandable. |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_captured` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_refunded` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `status` | `"succeeded"` | Always `succeeded`: Peable records the authorization that succeeded. |
+| `paid` | boolean |  |
+| `captured` | boolean |  |
+| `refunded` | boolean | All of it came back — by refunds, or by releasing an uncaptured authorization. |
+| `disputed` | boolean |  |
+| `outcome` | [ChargeOutcome](/reference/objects/charge-outcome) \| null |  |
+| `billing_details` | [BillingDetails](/reference/objects/billing-details) \| null | Who the card's billing details name, as the provider reported them; `null` until the provider snapshot is read. |
+| `payment_method_details` | object \| null |  |
+| `payment_method_details.type` | `"card"` |  |
+| `payment_method_details.card` | [CardDetails](/reference/objects/card-details) |  |
+| `receipt_url` | string \| null | The provider's own URL never reaches the wire. |
+| `balance_transaction` | string \| null | The ledger's `txn_…` once the provider's balance transaction was ingested (ADR 0015 §4); never a guess. |
+| `application_fee` | string \| null | Orbit's `fee_…` taken on this charge, once the provider created it. |
+| `application_fee_amount` | string \| null | The fee instructed on the payment (`application_fee_amount`). Matches `^(0\|[1-9][0-9]*)$`. |
+| `description` | string \| null |  |
+| `receipt_email` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+## Example
+
+```json
+{
+  "id": "ch_0193b8f2c1a87d3e9f4a",
+  "object": "charge",
+  "livemode": false,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "amount": "2500",
+  "amount_captured": "2500",
+  "amount_refunded": "0",
+  "currency": "EUR",
+  "status": "succeeded",
+  "paid": true,
+  "captured": true,
+  "refunded": false,
+  "disputed": false,
+  "outcome": {
+    "network_status": "approved_by_network",
+    "risk_level": "normal",
+    "type": "authorized",
+    "seller_message": "Payment complete."
+  },
+  "billing_details": null,
+  "payment_method_details": {
+    "type": "card",
+    "card": {
+      "brand": "visa",
+      "last4": "4242",
+      "exp_month": 12,
+      "exp_year": 2030,
+      "country": "US",
+      "funding": "credit"
+    }
+  },
+  "receipt_url": null,
+  "balance_transaction": null,
+  "application_fee": null,
+  "application_fee_amount": null,
+  "description": null,
+  "receipt_email": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/charges`](/reference/charges#list-charges) — List charges
+- [`GET /v1/charges/{id}`](/reference/charges#retrieve-a-charge) — Retrieve a charge
+- [`GET /v1/charges/search`](/reference/charges#search-charges) — Search charges
+
+## Events
+
+- [`charge.refunded`](/reference/webhook-events#chargerefunded)
+
+## Used in
+
+[Dispute](/reference/objects/dispute) · [Event](/reference/objects/event) · [PaymentIntent](/reference/objects/payment-intent)

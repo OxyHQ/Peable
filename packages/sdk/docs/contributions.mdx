@@ -1,0 +1,73 @@
+---
+title: "Contribution links"
+description: "FairCoin contribution links for organizations."
+order: 14
+---
+
+# Contribution links
+
+An organization can collect FairCoin **contributions** through a link anyone
+can pay: a fixed amount, or whatever the contributor chooses. A contribution
+link is a [Payment Link](/payment-links) whose one line is the contribution,
+paid on the anonymous hosted checkout at `https://checkout.peable.to/l/<id>`.
+
+## Who manages them
+
+Contributions are managed by a **person**, not by your server: the
+`@peable.to/sdk/contributions` entry runs over a human Oxy linked-client
+transport (the Peable app's Settings → Organization contributions screen uses
+it), never an application credential.
+
+Its scope is `{ organizationId, applicationId, environment }`. Oxy must report
+the caller as an owner, admin or editor of that organization, and the
+application must belong to it; Peable keeps no copy of the membership. The
+application needs a registered watch-only FairCoin merchant first: the
+merchant fixes the network, and a contribution is always in FAIR.
+
+```ts
+import { ContributionsResource } from '@peable.to/sdk/contributions';
+
+const contributions = new ContributionsResource(linkedClient);
+const scope = { organizationId, applicationId, environment: 'production' };
+
+// One FAIR, fixed. Amounts are positive integers of 10⁻⁸ FAIR.
+const link = await contributions.create(
+  scope,
+  { purpose: 'Community garden', amount_mode: 'fixed', amount: '100000000', currency: 'FAIR' },
+  operationUuid, // saved BEFORE the call, reused after a lost reply
+);
+
+// Whatever the contributor chooses: omit `amount`.
+await contributions.create(scope, { purpose: 'Open fund', amount_mode: 'free', currency: 'FAIR' }, otherUuid);
+
+await contributions.setActive(scope, link.id, false); // withdraw it
+for await (const item of contributions.list(scope)) { /* every page, newest first */ }
+for await (const collection of contributions.collections(scope)) { /* payments received */ }
+```
+
+- `purpose`, the amount policy and the organization are immutable; an
+  optional `expires_at` is Unix seconds. Withdraw a link with `setActive`.
+- `list` and `collections` answer only that organization's records, as the
+  usual list envelope with the [list parameters](/lists#lists) (`limit`,
+  `starting_after` / `ending_before`, `created`).
+
+## Paying a contribution
+
+A visit starts a Checkout Session (the contributor's amount, for a free link),
+and the payment is created when the contributor confirms. The page saves an
+operation key and the exact amount **before** starting the session and reuses
+them after a lost reply or a reload — the same key returns the same session,
+and the same key with a different amount conflicts. A withdrawn or expired
+link refuses new attempts while still letting an attempt already created be
+recovered.
+
+No Oxy login is needed at the hosted checkout, and the contributor signs in
+their own wallet. Peable only reserves public receive addresses and watches
+the reported transaction; it never holds a spending key.
+
+## Refunds
+
+Collections carry `refund_capability: 'unsupported_non_custodial'`. Peable
+never held the coins, so it cannot return them, and an empty refund list does
+**not** mean the organization made no independent transfer back from its own
+wallet.

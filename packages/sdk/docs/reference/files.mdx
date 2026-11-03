@@ -1,0 +1,179 @@
+---
+title: "Files"
+description: "The Files endpoints of the Peable API."
+order: 920
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Files
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/files`](#upload-a-file) | Upload a file |
+| [`GET /v1/files`](#list-files) | List files |
+| [`GET /v1/files/{id}`](#retrieve-a-file) | Retrieve a file |
+| [`GET /v1/files/{id}/contents`](#download-a-files-contents) | Download a file's contents |
+
+## Upload a file
+
+`POST /v1/files`
+
+The bytes as `multipart/form-data` (`purpose`, `file`), or — as JSON — `{ purpose, oxy_file }` to import an Oxy file you own. The type is recognised from the bytes, never from a `Content-Type`; each purpose has its own formats and size ceiling.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.files.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`multipart/form-data`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `purpose` **required** | string | One of `dispute_evidence`, `business_logo`, `identity_document`, `additional_verification`, `tax_document`. |
+| `file` **required** | string (binary) | The bytes, with their filename. |
+
+**Response `200`**
+
+Returns [File](/reference/objects/file).
+
+```json
+{
+  "id": "file_0193b8f2c1a87d3e9f4a",
+  "object": "file",
+  "livemode": false,
+  "purpose": "business_logo",
+  "filename": "logo.png",
+  "size": 18432,
+  "type": "png",
+  "status": "available",
+  "url": "https://cloud.oxy.so/assets/0193b8f2c1a87d3e9f4b",
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List files
+
+`GET /v1/files`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.files.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `purpose` | query | string | One of `dispute_evidence`, `business_logo`, `identity_document`, `additional_verification`, `finance_report_run`, `tax_document`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [File](/reference/objects/file) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [File](/reference/objects/file) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "file_0193b8f2c1a87d3e9f4a",
+      "object": "file",
+      "livemode": false,
+      "purpose": "business_logo",
+      "filename": "logo.png",
+      "size": 18432,
+      "type": "png",
+      "status": "available",
+      "url": "https://cloud.oxy.so/assets/0193b8f2c1a87d3e9f4b",
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/files"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a file
+
+`GET /v1/files/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.files.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The file (`file_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [File](/reference/objects/file).
+
+```json
+{
+  "id": "file_0193b8f2c1a87d3e9f4a",
+  "object": "file",
+  "livemode": false,
+  "purpose": "business_logo",
+  "filename": "logo.png",
+  "size": 18432,
+  "type": "png",
+  "status": "available",
+  "url": "https://cloud.oxy.so/assets/0193b8f2c1a87d3e9f4b",
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Download a file's contents
+
+`GET /v1/files/{id}/contents`
+
+The bytes of a file you read back — a report run's CSV — as an attachment. Any other purpose answers 404: evidence and identity documents leave Peable only to their provider.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.files.contents()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The file (`file_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+The bytes, as `text/csv`.
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

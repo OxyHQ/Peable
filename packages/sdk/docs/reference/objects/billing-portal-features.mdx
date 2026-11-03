@@ -1,0 +1,35 @@
+---
+title: "BillingPortalFeatures"
+description: "The BillingPortalFeatures shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingPortalFeatures
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer_update` | object |  |
+| `customer_update.enabled` | boolean |  |
+| `customer_update.allowed_updates` | array of string |  |
+| `invoice_history` | object |  |
+| `invoice_history.enabled` | boolean |  |
+| `payment_method_update` | object |  |
+| `payment_method_update.enabled` | boolean |  |
+| `subscription_cancel` | object |  |
+| `subscription_cancel.enabled` | boolean |  |
+| `subscription_cancel.mode` | string | One of `at_period_end`, `immediately`. |
+| `subscription_cancel.proration_behavior` | string | One of `create_prorations`, `none`. |
+| `subscription_update` | object |  |
+| `subscription_update.enabled` | boolean |  |
+| `subscription_update.default_allowed_updates` | array of string |  |
+| `subscription_update.proration_behavior` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `subscription_update.products` | array of object | The plans a customer may switch between: per product, its allowed prices. |
+| `subscription_update.products[].product` | string |  |
+| `subscription_update.products[].prices` | array of string |  |
+
+## Used in
+
+[BillingPortalConfiguration](/reference/objects/billing-portal-configuration) · [PublicPortalSession](/reference/objects/public-portal-session)

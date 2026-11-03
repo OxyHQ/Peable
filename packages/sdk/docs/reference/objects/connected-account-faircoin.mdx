@@ -1,0 +1,21 @@
+---
+title: "ConnectedAccountFaircoin"
+description: "The ConnectedAccountFaircoin shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ConnectedAccountFaircoin
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `network` | string | The chain the seller is paid on. Fixed when the half was opened. One of `mainnet`, `testnet`. |
+| `status` | string | `pending`: the seller has not registered a key yet (an on-behalf payment is refused, `account_not_ready`). `active`: payments derive addresses from their key. |
+| `oxy_user_id` | string | The Oxy user who may register the key — and, once `active`, who did. |
+| `registered_at` | integer \| null | When the seller registered their key. `null` while `pending`. |
+
+## Used in
+
+[ConnectedAccount](/reference/objects/connected-account)

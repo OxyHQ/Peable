@@ -1,0 +1,21 @@
+---
+title: "TaxReviewDecision"
+description: "The TaxReviewDecision shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxReviewDecision
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `decision` | string | One of `will_register`, `registered_outside_peable`, `not_required`, `accepted_risk`, `facts_corrected`, `dismissed`. |
+| `note` | string \| null |  |
+| `decided_by` | string | The Oxy user who decided. |
+| `decided_at` | integer | Unix seconds. |
+
+## Used in
+
+[TaxReviewItem](/reference/objects/tax-review-item)

@@ -1,0 +1,262 @@
+---
+title: "Promotion codes"
+description: "The Promotion codes endpoints of the Peable API."
+order: 935
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Promotion codes
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/promotion_codes`](#create-a-promotion-code) | Create a promotion code |
+| [`GET /v1/promotion_codes`](#list-promotion-codes) | List promotion codes |
+| [`GET /v1/promotion_codes/{id}`](#retrieve-a-promotion-code) | Retrieve a promotion code |
+| [`POST /v1/promotion_codes/{id}`](#update-a-promotion-code) | Update a promotion code |
+
+## Create a promotion code
+
+`POST /v1/promotion_codes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.promotionCodes.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `coupon` **required** | string | 1–255 characters. |
+| `code` | string | Letters and digits; generated when absent. Matches `^[A-Za-z0-9]{1,64}$`. |
+| `customer` | string | Only this customer (`cus_…`) may redeem it. 1–255 characters. |
+| `active` | boolean |  |
+| `max_redemptions` | integer | Between 1 and 2147483647. |
+| `expires_at` | integer | At most 253402300799. |
+| `restrictions` | object |  |
+| `restrictions[first_time_transaction]` | boolean |  |
+| `restrictions[minimum_amount]` | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `restrictions[minimum_amount_currency]` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [PromotionCode](/reference/objects/promotion-code).
+
+```json
+{
+  "id": "promo_0193b8f2c1a87d3e9f4c",
+  "object": "promotion_code",
+  "livemode": false,
+  "code": "SUMMER25",
+  "coupon": "SUMMER25",
+  "customer": null,
+  "active": true,
+  "max_redemptions": null,
+  "expires_at": null,
+  "times_redeemed": 0,
+  "restrictions": {
+    "first_time_transaction": true,
+    "minimum_amount": null,
+    "minimum_amount_currency": null
+  },
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `coupon` → [Coupon](/reference/objects/coupon)
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List promotion codes
+
+`GET /v1/promotion_codes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.promotionCodes.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `code` | query | string | Case-insensitive. 1–255 characters. |
+| `coupon` | query | string | 1–255 characters. |
+| `customer` | query | string | 1–255 characters. |
+| `active` | query | boolean |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [PromotionCode](/reference/objects/promotion-code) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [PromotionCode](/reference/objects/promotion-code) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "promo_0193b8f2c1a87d3e9f4c",
+      "object": "promotion_code",
+      "livemode": false,
+      "code": "SUMMER25",
+      "coupon": "SUMMER25",
+      "customer": null,
+      "active": true,
+      "max_redemptions": null,
+      "expires_at": null,
+      "times_redeemed": 0,
+      "restrictions": {
+        "first_time_transaction": true,
+        "minimum_amount": null,
+        "minimum_amount_currency": null
+      },
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/promotion_codes"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.coupon` → [Coupon](/reference/objects/coupon)
+- `data.customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a promotion code
+
+`GET /v1/promotion_codes/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.promotionCodes.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The promotion code (`promo_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PromotionCode](/reference/objects/promotion-code).
+
+```json
+{
+  "id": "promo_0193b8f2c1a87d3e9f4c",
+  "object": "promotion_code",
+  "livemode": false,
+  "code": "SUMMER25",
+  "coupon": "SUMMER25",
+  "customer": null,
+  "active": true,
+  "max_redemptions": null,
+  "expires_at": null,
+  "times_redeemed": 0,
+  "restrictions": {
+    "first_time_transaction": true,
+    "minimum_amount": null,
+    "minimum_amount_currency": null
+  },
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `coupon` → [Coupon](/reference/objects/coupon)
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a promotion code
+
+`POST /v1/promotion_codes/{id}`
+
+Only `active` and `metadata` change.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.promotionCodes.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The promotion code (`promo_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `active` | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [PromotionCode](/reference/objects/promotion-code).
+
+```json
+{
+  "id": "promo_0193b8f2c1a87d3e9f4c",
+  "object": "promotion_code",
+  "livemode": false,
+  "code": "SUMMER25",
+  "coupon": "SUMMER25",
+  "customer": null,
+  "active": true,
+  "max_redemptions": null,
+  "expires_at": null,
+  "times_redeemed": 0,
+  "restrictions": {
+    "first_time_transaction": true,
+    "minimum_amount": null,
+    "minimum_amount_currency": null
+  },
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `coupon` → [Coupon](/reference/objects/coupon)
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

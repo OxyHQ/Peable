@@ -1,0 +1,24 @@
+---
+title: "TaxDocumentChecklistItem"
+description: "The TaxDocumentChecklistItem shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxDocumentChecklistItem
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `key` | string |  |
+| `kind` | string | One of `registration_certificate`, `authority_correspondence`, `incorporation_record`, `filing_confirmation`, `payment_receipt`, `other`. |
+| `country` | string \| null |  |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `status` | string | `provided`: an available document is attached; `unavailable`: only removed ones are. One of `provided`, `missing`, `unavailable`. |
+| `documents` | array of string | The attached documents (`taxdoc_…`). |
+| `reason` | string |  |
+
+## Used in
+
+[TaxDocumentChecklist](/reference/objects/tax-document-checklist)

@@ -1,0 +1,22 @@
+---
+title: "EnrichmentResult"
+description: "The EnrichmentResult shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# EnrichmentResult
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `kind` | string | One of `merchant`, `user`, `unknown`. |
+| `display_name` | string | The merchant's name, or the user's display name (else handle). |
+| `avatar_file_id` | string | A bare Oxy file id — render through the media chokepoint, never as a URL. |
+| `username` | string | `kind: 'user'` only. |
+| `description` | string | `kind: 'merchant'` only. |
+
+## Used in
+
+[Enrichment](/reference/objects/enrichment) · [SocialPayment](/reference/objects/social-payment)

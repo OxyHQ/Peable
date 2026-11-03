@@ -1,0 +1,38 @@
+---
+title: "PaymentMethodConfiguration"
+description: "The payment_method_configuration object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentMethodConfiguration
+
+Object type: `payment_method_configuration`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_method_configuration"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `name` | string |  |
+| `active` | boolean | An inactive configuration cannot be named on a new PaymentIntent. The default is always active. |
+| `is_default` | boolean | The configuration a PaymentIntent uses when it names none. One per merchant. |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+| `card` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `apple_pay` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `google_pay` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `sepa_debit` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `ideal` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `bancontact` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `eps` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+| `bizum` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+
+## Returned by
+
+- [`GET /v1/payment_method_configurations`](/reference/payment-method-configurations#list-payment-method-configurations) — List payment method configurations
+- [`POST /v1/payment_method_configurations`](/reference/payment-method-configurations#create-a-payment-method-configuration) — Create a payment method configuration
+- [`GET /v1/payment_method_configurations/{id}`](/reference/payment-method-configurations#retrieve-a-payment-method-configuration) — Retrieve a payment method configuration
+- [`POST /v1/payment_method_configurations/{id}`](/reference/payment-method-configurations#update-a-payment-method-configuration) — Update a payment method configuration

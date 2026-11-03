@@ -1,0 +1,53 @@
+---
+title: "Merchant"
+description: "The merchant object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Merchant
+
+Object type: `merchant`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"merchant"` |  |
+| `livemode` | boolean | `true` for a `production` merchant (ADR 0017). |
+| `oxy_app_id` | string | The Oxy application this merchant belongs to. |
+| `environment` | string | One of `development`, `staging`, `production`. |
+| `network` | string \| null | The FairCoin chain this merchant accepts on; `null` on a card-only merchant. Nullable together with `xpub`. One of `mainnet`, `testnet`. |
+| `xpub` | string \| null | The watch-only account key receive addresses derive from; `null` on a card-only merchant. |
+| `required_confirmations` | integer |  |
+| `display_name` | string | Payer-facing name. Absent when unset: payer surfaces substitute a fallback. |
+| `avatar_file_id` | string | The square identity image: a bare Oxy file id. Absent again once Oxy reports the file deleted or taken down. |
+| `business_logo` | string | The wide wordmark payer surfaces show: a `file_…` of purpose `business_logo`. |
+| `description` | string |  |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "merch_0193b8f2c1a87d3e9f4a",
+  "object": "merchant",
+  "livemode": false,
+  "oxy_app_id": "app_0193b8f2c1a87d3e9f4b",
+  "environment": "development",
+  "network": "testnet",
+  "xpub": "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba",
+  "required_confirmations": 6,
+  "display_name": "Jenny’s Plants",
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/merchants`](/reference/merchants#register-the-merchant) — Register the merchant
+- [`GET /v1/merchants/me`](/reference/merchants#retrieve-your-merchant) — Retrieve your merchant
+- [`POST /v1/merchants/me`](/reference/merchants#update-your-merchant) — Update your merchant

@@ -1,0 +1,84 @@
+---
+title: "Product"
+description: "The product object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Product
+
+What a merchant sells. Its prices say how much. A product with prices cannot be deleted; set `active: false` to archive it.
+
+Object type: `product`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"product"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `active` | boolean |  |
+| `name` | string |  |
+| `description` | string \| null |  |
+| `images` | array of string | Up to 8 image URLs. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `tax_code` | string \| null | A Peable Tax code (`txcd_…`), or `null` for the merchant's default. |
+| `default_price` | string \| [Price](/reference/objects/price) \| null | The product's default price: `price_…`, or the Price with `expand[]=default_price`. Expandable. |
+| `unit_label` | string \| null | The unit a quantity counts (`seat`), shown on receipts and invoices. |
+| `url` | string \| null |  |
+| `statement_descriptor` | string \| null | What appears on a card statement; at most 22 characters. |
+| `marketing_features` | array of [ProductMarketingFeature](/reference/objects/product-marketing-feature) |  |
+| `created` | integer | Unix seconds. |
+| `updated` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `default_price` → [Price](/reference/objects/price)
+
+## Example
+
+```json
+{
+  "id": "prod_0193b8f2c1a87d3e9f4a",
+  "object": "product",
+  "livemode": false,
+  "active": true,
+  "name": "Mention Plus",
+  "description": "Everything in Mention, plus the Plus features.",
+  "images": [],
+  "metadata": {},
+  "tax_code": "txcd_10103000",
+  "default_price": "price_0193b8f2c1a87d3e9f4b",
+  "unit_label": null,
+  "url": null,
+  "statement_descriptor": null,
+  "marketing_features": [
+    {
+      "name": "Longer posts"
+    }
+  ],
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/products`](/reference/products#create-a-product) — Create a product
+- [`GET /v1/products`](/reference/products#list-products) — List products
+- [`GET /v1/products/{id}`](/reference/products#retrieve-a-product) — Retrieve a product
+- [`POST /v1/products/{id}`](/reference/products#update-a-product) — Update a product
+- [`GET /v1/products/search`](/reference/products#search-products) — Search products
+
+## Events
+
+- [`product.created`](/reference/webhook-events#productcreated)
+- [`product.deleted`](/reference/webhook-events#productdeleted)
+- [`product.updated`](/reference/webhook-events#productupdated)
+
+## Used in
+
+[CheckoutLineItem](/reference/objects/checkout-line-item) · [Event](/reference/objects/event) · [Price](/reference/objects/price)

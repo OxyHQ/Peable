@@ -1,0 +1,56 @@
+---
+title: "TestClock"
+description: "The test_helpers.test_clock object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TestClock
+
+Object type: `test_helpers.test_clock`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"test_helpers.test_clock"` |  |
+| `livemode` | `false` | Always `false`: test clocks exist in test mode only. |
+| `name` | string \| null |  |
+| `frozen_time` | integer | The instant everything on the clock lives at. |
+| `status` | string | One of `ready`, `advancing`, `internal_failure`. |
+| `deletes_after` | integer | Deleted, with everything on it, after this instant. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "clock_0193b8f2c1a87d3e9f4d",
+  "object": "test_helpers.test_clock",
+  "livemode": false,
+  "name": "Annual renewal",
+  "frozen_time": 1793750400,
+  "status": "ready",
+  "deletes_after": 1796342400,
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/test_helpers/test_clocks`](/reference/test-clocks#create-a-test-clock) — Create a test clock
+- [`GET /v1/test_helpers/test_clocks`](/reference/test-clocks#list-test-clocks) — List test clocks
+- [`GET /v1/test_helpers/test_clocks/{id}`](/reference/test-clocks#retrieve-a-test-clock) — Retrieve a test clock
+- [`POST /v1/test_helpers/test_clocks/{id}/advance`](/reference/test-clocks#advance-a-test-clock) — Advance a test clock
+
+## Events
+
+- [`test_helpers.test_clock.advancing`](/reference/webhook-events#test_helperstest_clockadvancing)
+- [`test_helpers.test_clock.created`](/reference/webhook-events#test_helperstest_clockcreated)
+- [`test_helpers.test_clock.deleted`](/reference/webhook-events#test_helperstest_clockdeleted)
+- [`test_helpers.test_clock.ready`](/reference/webhook-events#test_helperstest_clockready)
+
+## Used in
+
+[Event](/reference/objects/event)

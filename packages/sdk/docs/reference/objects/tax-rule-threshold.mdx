@@ -1,0 +1,20 @@
+---
+title: "TaxRuleThreshold"
+description: "The TaxRuleThreshold shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxRuleThreshold
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `period` | string | One of `current_or_previous_calendar_year`, `preceding_twelve_calendar_months`. |
+
+## Used in
+
+[TaxJurisdictionRule](/reference/objects/tax-jurisdiction-rule)

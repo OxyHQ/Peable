@@ -1,0 +1,42 @@
+---
+title: "BillingPortalConfiguration"
+description: "The billing_portal.configuration object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingPortalConfiguration
+
+Object type: `billing_portal.configuration`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"billing_portal.configuration"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `active` | boolean |  |
+| `is_default` | boolean | The configuration a session uses when it names none (created on first use). |
+| `business_profile` | [BillingPortalBusinessProfile](/reference/objects/billing-portal-business-profile) |  |
+| `default_return_url` | string \| null |  |
+| `features` | [BillingPortalFeatures](/reference/objects/billing-portal-features) |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+| `updated` | integer | Unix seconds. |
+
+## Returned by
+
+- [`POST /v1/billing_portal/configurations`](/reference/customer-portal#create-a-portal-configuration) — Create a portal configuration
+- [`GET /v1/billing_portal/configurations`](/reference/customer-portal#list-portal-configurations) — List portal configurations
+- [`GET /v1/billing_portal/configurations/{id}`](/reference/customer-portal#retrieve-a-portal-configuration) — Retrieve a portal configuration
+- [`POST /v1/billing_portal/configurations/{id}`](/reference/customer-portal#update-a-portal-configuration) — Update a portal configuration
+
+## Events
+
+- [`billing_portal.configuration.created`](/reference/webhook-events#billing_portalconfigurationcreated)
+- [`billing_portal.configuration.updated`](/reference/webhook-events#billing_portalconfigurationupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

@@ -1,0 +1,155 @@
+---
+title: "CheckoutSession"
+description: "The checkout_session object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CheckoutSession
+
+Object type: `checkout_session`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"checkout_session"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `mode` | string | One of `payment`, `setup`, `subscription`. |
+| `status` | string | One of `open`, `complete`, `expired`. |
+| `payment_status` | string | One of `paid`, `unpaid`, `no_payment_required`. |
+| `ui_mode` | string | One of `hosted`, `embedded`. |
+| `locale` | string \| null | The language checkout renders in; `null` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
+| `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `rail` | string | One of `faircoin`, `card`. |
+| `network` | string \| null | FairCoin rail only; `null` on a card session. One of `mainnet`, `testnet`. |
+| `amount_subtotal` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_total` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `total_details` | [CheckoutTotalDetails](/reference/objects/checkout-total-details) |  |
+| `allow_promotion_codes` | boolean |  |
+| `automatic_tax` | [CheckoutAutomaticTax](/reference/objects/checkout-automatic-tax) |  |
+| `billing_address_collection` | string | One of `auto`, `required`. |
+| `shipping_address_collection` | object \| null |  |
+| `shipping_address_collection.allowed_countries` | array of string |  |
+| `phone_number_collection` | object |  |
+| `phone_number_collection.enabled` | boolean |  |
+| `tax_id_collection` | object |  |
+| `tax_id_collection.enabled` | boolean |  |
+| `custom_fields` | array of [CheckoutCustomField](/reference/objects/checkout-custom-field) |  |
+| `consent_collection` | object \| null |  |
+| `consent_collection.terms_of_service` | string | One of `none`, `required`. |
+| `shipping_details` | [CheckoutShippingDetails](/reference/objects/checkout-shipping-details) \| null |  |
+| `consent` | object \| null |  |
+| `consent.terms_of_service` | `"accepted"` \| null |  |
+| `expires_at` | integer | Unix seconds. |
+| `payment_method_types` | array of string |  |
+| `discounts` | array of [CheckoutDiscount](/reference/objects/checkout-discount) |  |
+| `customer` | string \| [Customer](/reference/objects/customer) \| null | `cus_…` (expandable) — given on create, or created at completion. Expandable. |
+| `customer_email` | string \| null |  |
+| `customer_creation` | string | One of `always`, `if_required`. |
+| `customer_details` | [CheckoutCustomerDetails](/reference/objects/checkout-customer-details) \| null |  |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) \| null | The payment this session created (`pi_…`, expandable) once the payer confirmed; `null` before, and always in `setup` mode. Expandable. |
+| `setup_intent` | string \| [SetupIntent](/reference/objects/setup-intent) \| null | `setup` mode: the SetupIntent (`seti_…`, expandable) once confirmed. Expandable. |
+| `connected_account` | string \| [ConnectedAccount](/reference/objects/connected-account) \| null | The seller an on-behalf payment pays (`ca_…`, expandable). Expandable. |
+| `payment_link` | string \| null | The payment link this session was created from (`link_…`), if any. |
+| `client_reference_id` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `success_url` | string \| null | With `{CHECKOUT_SESSION_ID}` as given; checkout substitutes it. |
+| `cancel_url` | string \| null |  |
+| `url` | string \| null | Hosted mode: the URL to send the payer to. `null` in embedded mode. |
+| `client_secret` | string \| null | Embedded mode: what `PeableCheckout.mountCheckout` takes. `null` in hosted mode. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `setup_intent` → [SetupIntent](/reference/objects/setup-intent)
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+
+## Example
+
+```json
+{
+  "id": "cs_0193b8f2c1a87d3e9f4a",
+  "object": "checkout_session",
+  "livemode": false,
+  "mode": "payment",
+  "status": "open",
+  "payment_status": "unpaid",
+  "ui_mode": "hosted",
+  "locale": null,
+  "submit_type": "auto",
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "payment_method_types": [
+    "card"
+  ],
+  "amount_subtotal": "1999",
+  "amount_total": "1999",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_tax": "0",
+    "amount_shipping": "0"
+  },
+  "discounts": [],
+  "allow_promotion_codes": false,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null
+  },
+  "customer": null,
+  "customer_email": "jenny@example.com",
+  "customer_creation": "if_required",
+  "customer_details": null,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "shipping_details": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "consent": null,
+  "payment_intent": null,
+  "setup_intent": null,
+  "connected_account": null,
+  "payment_link": null,
+  "client_reference_id": null,
+  "metadata": {},
+  "success_url": "https://example.com/thanks?session={CHECKOUT_SESSION_ID}",
+  "cancel_url": null,
+  "url": "https://checkout.peable.to/c/cs_0193b8f2c1a87d3e9f4a#cs=cs_0193b8f2c1a87d3e9f4a_secret_x",
+  "client_secret": null,
+  "expires_at": 1793836800,
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/checkout_sessions`](/reference/checkout-sessions#create-a-checkout-session) — Create a Checkout Session
+- [`GET /v1/checkout_sessions`](/reference/checkout-sessions#list-checkout-sessions) — List Checkout Sessions
+- [`GET /v1/checkout_sessions/{id}`](/reference/checkout-sessions#retrieve-a-checkout-session) — Retrieve a Checkout Session
+- [`POST /v1/checkout_sessions/{id}`](/reference/checkout-sessions#update-a-checkout-session) — Update a Checkout Session
+- [`POST /v1/checkout_sessions/{id}/expire`](/reference/checkout-sessions#expire-a-checkout-session) — Expire a Checkout Session
+- [`POST /v1/test_helpers/checkout_sessions/{id}/expire`](/reference/test-helpers#expire-a-test-mode-checkout-session-now) — Expire a test-mode Checkout Session now
+
+## Events
+
+- [`checkout.session.async_payment_failed`](/reference/webhook-events#checkoutsessionasync_payment_failed)
+- [`checkout.session.async_payment_succeeded`](/reference/webhook-events#checkoutsessionasync_payment_succeeded)
+- [`checkout.session.completed`](/reference/webhook-events#checkoutsessioncompleted)
+- [`checkout.session.expired`](/reference/webhook-events#checkoutsessionexpired)
+
+## Used in
+
+[Event](/reference/objects/event)

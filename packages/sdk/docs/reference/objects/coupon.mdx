@@ -1,0 +1,72 @@
+---
+title: "Coupon"
+description: "The coupon object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Coupon
+
+Object type: `coupon`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"coupon"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `name` | string \| null |  |
+| `percent_off` | number \| null | 0 &lt; x ≤ 100, at most two decimals. Set exactly when `amount_off` is not. |
+| `amount_off` | string \| null | Base units taken off, in `currency`. Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string \| null | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `duration` | string | One of `once`, `repeating`, `forever`. |
+| `duration_in_months` | integer \| null | Months a `repeating` coupon lasts; `null` otherwise. At least -9007199254740991. |
+| `max_redemptions` | integer \| null | At least -9007199254740991. |
+| `redeem_by` | integer \| null | The last instant it can be redeemed. |
+| `times_redeemed` | integer | At least -9007199254740991. |
+| `valid` | boolean | Whether it can still be redeemed: not past `redeem_by` and not used up. |
+| `applies_to` | object \| null | The products (`prod_…`) it is restricted to, or `null` for every product. |
+| `applies_to.products` | array of string |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "SUMMER25",
+  "object": "coupon",
+  "livemode": false,
+  "name": "Summer sale",
+  "percent_off": 25,
+  "amount_off": null,
+  "currency": null,
+  "duration": "repeating",
+  "duration_in_months": 3,
+  "max_redemptions": 100,
+  "redeem_by": null,
+  "times_redeemed": 0,
+  "valid": true,
+  "applies_to": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/coupons`](/reference/coupons#create-a-coupon) — Create a coupon
+- [`GET /v1/coupons`](/reference/coupons#list-coupons) — List coupons
+- [`GET /v1/coupons/{id}`](/reference/coupons#retrieve-a-coupon) — Retrieve a coupon
+- [`POST /v1/coupons/{id}`](/reference/coupons#update-a-coupon) — Update a coupon
+
+## Events
+
+- [`coupon.created`](/reference/webhook-events#couponcreated)
+- [`coupon.deleted`](/reference/webhook-events#coupondeleted)
+- [`coupon.updated`](/reference/webhook-events#couponupdated)
+
+## Used in
+
+[Event](/reference/objects/event) · [PromotionCode](/reference/objects/promotion-code)

@@ -1,0 +1,47 @@
+---
+title: "TaxSalesDestination"
+description: "The tax.sales_destination object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxSalesDestination
+
+Object type: `tax.sales_destination`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.sales_destination"` |  |
+| `id` | string | `taxdest_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `customer_types` | string | One of `consumers`, `businesses`, `both`, `unknown`. |
+| `started` | integer \| null | Unix seconds. |
+| `ended` | integer \| null | Unix seconds. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.sales_destination",
+  "id": "taxdest_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "country": "US",
+  "state": "TX",
+  "customer_types": "consumers",
+  "started": 1767225600,
+  "ended": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/sales_destinations`](/reference/tax-compliance#list-sales-destinations) — List sales destinations
+- [`GET /v1/tax/sales_destinations/{id}`](/reference/tax-compliance#retrieve-a-sales-destination) — Retrieve a sales destination

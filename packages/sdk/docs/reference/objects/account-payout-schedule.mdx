@@ -1,0 +1,21 @@
+---
+title: "AccountPayoutSchedule"
+description: "The AccountPayoutSchedule shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# AccountPayoutSchedule
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `interval` | string | One of `manual`, `daily`, `weekly`, `monthly`. |
+| `delay_days` | integer \| null | Days between a payment and its funds becoming payable; `null` when not reported. At least -9007199254740991. |
+| `weekly_anchor` | string \| null | `weekly` only. One of `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`. |
+| `monthly_anchor` | integer \| null | `monthly` only: the day of the month, 1–31. At least -9007199254740991. |
+
+## Used in
+
+[AccountSettings](/reference/objects/account-settings)

@@ -1,0 +1,19 @@
+---
+title: "PortalPaymentMethodUpdateResult"
+description: "The PortalPaymentMethodUpdateResult shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PortalPaymentMethodUpdateResult
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `status` | string | One of `succeeded`, `pending`. |
+| `session` | [PublicPortalSession](/reference/objects/public-portal-session) |  |
+
+## Returned by
+
+- [`POST /v1/billing_portal/public/{token}/payment_method_update/complete`](/reference/hosted-portal#finish-a-card-update-from-the-portal) — Finish a card update from the portal

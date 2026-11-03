@@ -1,0 +1,314 @@
+---
+title: "Transfers"
+description: "The Transfers endpoints of the Peable API."
+order: 948
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Transfers
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/payment_intents/{intentId}/transfers`](#list-a-payments-transfers) | List a payment's transfers |
+| [`POST /v1/transfers`](#create-a-transfer) | Create a transfer |
+| [`GET /v1/transfers`](#list-transfers) | List transfers |
+| [`GET /v1/transfers/{transferId}`](#retrieve-a-transfer) | Retrieve a transfer |
+| [`POST /v1/transfers/{transferId}/reversals`](#reverse-a-transfer) | Reverse a transfer |
+| [`GET /v1/transfers/{transferId}/reversals`](#list-a-transfers-reversals) | List a transfer's reversals |
+
+## List a payment's transfers
+
+`GET /v1/payment_intents/{intentId}/transfers`
+
+What one payment settled, newest first. The reconciliation read.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.transfers.listForPaymentIntent()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `intentId` **required** | path | string | The payment intent (`pi_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Transfer](/reference/objects/transfer) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Transfer](/reference/objects/transfer) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "tr_0193b8f33c5a4b7e9d02",
+      "object": "transfer",
+      "livemode": false,
+      "external_ref": "order_6735_seller_4821",
+      "connected_account": "ca_0193b8f2d4e1aa07c3b2",
+      "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+      "amount": "1700",
+      "currency": "EUR",
+      "amount_reversed": "0",
+      "status": "paid",
+      "failure_message": null,
+      "created": 1793750400,
+      "updated_at": 1793750402
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_intents/{intentId}/transfers"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a transfer
+
+`POST /v1/transfers`
+
+Settles one seller out of a funded payment (201). An order already settled answers the stored settlement (200): a merchant retrying after a timeout needs to know whether they just paid a seller twice.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.transfers.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `payment_intent` **required** | string | The `pi_…` this settles out of. |
+| `connected_account` | string | The seller's `ca_…`. |
+| `connected_account_ref` | string | Or your own id for the seller (its `external_ref`). 1–255 characters. |
+| `external_ref` **required** | string | Your own id for what this settles — the idempotency: the same ref answers the stored settlement (200), a different payment or amount under it is a 409. 1–255 characters. |
+| `amount` **required** | string |  |
+
+**Response `201`**
+
+Returns [Transfer](/reference/objects/transfer).
+
+```json
+{
+  "id": "tr_0193b8f33c5a4b7e9d02",
+  "object": "transfer",
+  "livemode": false,
+  "external_ref": "order_6735_seller_4821",
+  "connected_account": "ca_0193b8f2d4e1aa07c3b2",
+  "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+  "amount": "1700",
+  "currency": "EUR",
+  "amount_reversed": "0",
+  "status": "paid",
+  "failure_message": null,
+  "created": 1793750400,
+  "updated_at": 1793750402
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List transfers
+
+`GET /v1/transfers`
+
+Newest first, narrowed by `payment_intent` and/or `connected_account`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.transfers.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Only the settlements of this payment (`pi_…`). 1–255 characters. |
+| `connected_account` | query | string | Only the settlements to this seller (`ca_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Transfer](/reference/objects/transfer) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Transfer](/reference/objects/transfer) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "tr_0193b8f33c5a4b7e9d02",
+      "object": "transfer",
+      "livemode": false,
+      "external_ref": "order_6735_seller_4821",
+      "connected_account": "ca_0193b8f2d4e1aa07c3b2",
+      "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+      "amount": "1700",
+      "currency": "EUR",
+      "amount_reversed": "0",
+      "status": "paid",
+      "failure_message": null,
+      "created": 1793750400,
+      "updated_at": 1793750402
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/transfers"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a transfer
+
+`GET /v1/transfers/{transferId}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.transfers.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `transferId` **required** | path | string | The transfer (`tr_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Transfer](/reference/objects/transfer).
+
+```json
+{
+  "id": "tr_0193b8f33c5a4b7e9d02",
+  "object": "transfer",
+  "livemode": false,
+  "external_ref": "order_6735_seller_4821",
+  "connected_account": "ca_0193b8f2d4e1aa07c3b2",
+  "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+  "amount": "1700",
+  "currency": "EUR",
+  "amount_reversed": "0",
+  "status": "paid",
+  "failure_message": null,
+  "created": 1793750400,
+  "updated_at": 1793750402
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Reverse a transfer
+
+`POST /v1/transfers/{transferId}/reversals`
+
+Takes some or all of a settlement back (201), or answers the reversal this `external_ref` already made (200).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.transfers.reverse()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `transferId` **required** | path | string | The transfer (`tr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` **required** | string |  |
+| `external_ref` **required** | string | Your own id for THIS reversal — required and durable: two reversals for the same amount are two operations. 1–255 characters. |
+
+**Response `201`**
+
+Returns [TransferWithReversal](/reference/objects/transfer-with-reversal).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a transfer's reversals
+
+`GET /v1/transfers/{transferId}/reversals`
+
+Newest first. A complete set (`has_more: false`): a settlement can only be reversed down to zero.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.transfers.listReversals()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `transferId` **required** | path | string | The transfer (`tr_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TransferReversal](/reference/objects/transfer-reversal) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TransferReversal](/reference/objects/transfer-reversal) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

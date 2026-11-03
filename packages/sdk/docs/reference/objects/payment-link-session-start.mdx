@@ -1,0 +1,23 @@
+---
+title: "PaymentLinkSessionStart"
+description: "The checkout_session_start object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentLinkSessionStart
+
+Object type: `checkout_session_start`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"checkout_session_start"` |  |
+| `id` | string | The Checkout Session (`cs_…`). |
+| `client_secret` | string |  |
+| `url` | string | The hosted checkout to send the payer to. |
+
+## Returned by
+
+- [`POST /v1/payment_links/{id}/checkout_sessions`](/reference/payment-links#start-checkout-from-a-payment-link) — Start checkout from a payment link

@@ -1,0 +1,81 @@
+---
+title: "Customer"
+description: "The customer object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Customer
+
+Object type: `customer`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"customer"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `email` | string \| null |  |
+| `name` | string \| null |  |
+| `phone` | string \| null |  |
+| `description` | string \| null |  |
+| `address` | [Address](/reference/objects/address) \| null |  |
+| `shipping` | [Shipping](/reference/objects/shipping) \| null |  |
+| `invoice_settings` | object |  |
+| `invoice_settings.default_payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | `pm_…`, or the PaymentMethod with `expand[]=invoice_settings.default_payment_method`. Expandable. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `balance` | string | SIGNED base units in `currency`: negative is credit the customer holds, positive is owed. Applied to the next invoice when it finalizes. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string \| null | The customer's billing currency, set by its first balance movement, subscription or invoice. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `test_clock` | string \| null | The test clock (`clock_…`) it lives on; test mode only. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `invoice_settings.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+## Example
+
+```json
+{
+  "id": "cus_0193b8f2c1a87d3e9f4a",
+  "object": "customer",
+  "livemode": false,
+  "email": "jenny@example.com",
+  "name": "Jenny Rosen",
+  "phone": null,
+  "description": null,
+  "address": null,
+  "shipping": null,
+  "invoice_settings": {
+    "default_payment_method": null
+  },
+  "metadata": {
+    "order_id": "6735"
+  },
+  "balance": "0",
+  "currency": "EUR",
+  "test_clock": null,
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/customers`](/reference/customers#create-a-customer) — Create a customer
+- [`GET /v1/customers`](/reference/customers#list-customers) — List customers
+- [`GET /v1/customers/{id}`](/reference/customers#retrieve-a-customer) — Retrieve a customer
+- [`POST /v1/customers/{id}`](/reference/customers#update-a-customer) — Update a customer
+- [`GET /v1/customers/search`](/reference/customers#search-customers) — Search customers
+
+## Events
+
+- [`customer.created`](/reference/webhook-events#customercreated)
+- [`customer.deleted`](/reference/webhook-events#customerdeleted)
+- [`customer.updated`](/reference/webhook-events#customerupdated)
+
+## Used in
+
+[Charge](/reference/objects/charge) · [CheckoutSession](/reference/objects/checkout-session) · [CreditNote](/reference/objects/credit-note) · [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction) · [Event](/reference/objects/event) · [Invoice](/reference/objects/invoice) · [InvoiceItem](/reference/objects/invoice-item) · [PaymentIntent](/reference/objects/payment-intent) · [PaymentMethod](/reference/objects/payment-method) · [PromotionCode](/reference/objects/promotion-code) · [SetupIntent](/reference/objects/setup-intent) · [Subscription](/reference/objects/subscription)

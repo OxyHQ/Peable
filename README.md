@@ -269,9 +269,10 @@ const intent = await peable.paymentIntents.create(
 );
 ```
 
-Hand `intent.clientSecret` to the browser and mount the payer side widget from
-`@peable.to/sdk/checkout`. Full walkthrough in
-[`docs/integrating-peable.md`](docs/integrating-peable.md).
+Hand `intent.client_secret` to the browser and mount the payer side widget from
+`@peable.to/sdk/checkout`. The guides and the API reference are at
+[oxy.so/developers/docs/peable](https://oxy.so/developers/docs/peable/) (source:
+[`packages/sdk/docs`](packages/sdk/docs)).
 
 ## Authentication
 
@@ -308,7 +309,8 @@ from `processing` to `succeeded` without polling.
 
 ## Documentation
 
-- [Integrating Peable](docs/integrating-peable.md), the guide for merchants
+- [Peable docs](https://oxy.so/developers/docs/peable/): the integration guides, the API
+  reference and the error codes (source: [`packages/sdk/docs`](packages/sdk/docs))
 - [Examples](examples/README.md): runnable test-mode integrations (Checkout, Elements,
   subscriptions, Connect, a webhook receiver)
 - [Roadmap](docs/PEABLE-ROADMAP.md)

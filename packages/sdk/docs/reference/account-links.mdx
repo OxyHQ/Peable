@@ -1,0 +1,53 @@
+---
+title: "Account links"
+description: "The Account links endpoints of the Peable API."
+order: 902
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Account links
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/account_links`](#create-an-account-link) | Create an account link |
+
+## Create an account link
+
+`POST /v1/account_links`
+
+Hosted onboarding for the merchant's own account (or, with `Peable-Account`, a seller's card account), minted on demand.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.accountLinks.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Account` | header | string | A platform acting on one of its connected accounts (`ca_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `refresh_url` **required** | string (uri) | Where the person goes when the link has expired. |
+| `return_url` **required** | string (uri) | Where the person returns when they leave the flow. |
+| `type` | string | Defaults to `account_onboarding`. One of `account_onboarding`, `account_update`. |
+
+**Response `201`**
+
+Returns [AccountLink](/reference/objects/account-link).
+
+```json
+{
+  "object": "account_link",
+  "livemode": false,
+  "url": "https://connect.peable.to/onboarding/Zk3s9v…",
+  "expires_at": 1793750700
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

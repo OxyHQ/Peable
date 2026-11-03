@@ -1,0 +1,698 @@
+---
+title: "Subscriptions"
+description: "The Subscriptions endpoints of the Peable API."
+order: 943
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Subscriptions
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/subscriptions`](#create-a-subscription) | Create a subscription |
+| [`GET /v1/subscriptions`](#list-subscriptions) | List subscriptions |
+| [`GET /v1/subscriptions/{id}`](#retrieve-a-subscription) | Retrieve a subscription |
+| [`POST /v1/subscriptions/{id}`](#update-a-subscription) | Update a subscription |
+| [`DELETE /v1/subscriptions/{id}`](#cancel-a-subscription) | Cancel a subscription |
+| [`POST /v1/subscriptions/{id}/resume`](#resume-a-paused-subscription) | Resume a paused subscription |
+| [`GET /v1/subscriptions/search`](#search-subscriptions) | Search subscriptions |
+
+## Create a subscription
+
+`POST /v1/subscriptions`
+
+`payment_behavior` decides what happens when the first invoice cannot be paid at once.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptions.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer` **required** | string | 1–255 characters. |
+| `items` **required** | array of object | At most 20 items. At least 1 item. |
+| `items[][price]` **required** | string | 1–255 characters. |
+| `items[][quantity]` | integer | Between 0 and 1000000000. |
+| `items[][metadata]` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `default_payment_method` | string | 1–255 characters. |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `days_until_due` | integer | Between 0 and 365. |
+| `description` | string | 1–500 characters. |
+| `trial_period_days` | integer | Between 1 and 730. |
+| `trial_end` | integer \| `"now"` | Between 0 and 253402300799. |
+| `trial_settings` | object |  |
+| `trial_settings[end_behavior]` **required** | object |  |
+| `trial_settings[end_behavior][missing_payment_method]` **required** | string | One of `cancel`, `create_invoice`, `pause`. |
+| `billing_cycle_anchor` | integer | Between 0 and 253402300799. |
+| `proration_behavior` | string | One of `create_prorations`, `none`. |
+| `cancel_at_period_end` | boolean |  |
+| `cancel_at` | integer | Between 0 and 253402300799. |
+| `coupon` | string | 1–255 characters. |
+| `promotion_code` | string | 1–255 characters. |
+| `discounts` | array of object | At most 20 items. |
+| `discounts[][coupon]` | string | 1–255 characters. |
+| `discounts[][promotion_code]` | string | 1–255 characters. |
+| `payment_behavior` | string | One of `allow_incomplete`, `default_incomplete`, `error_if_incomplete`. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Subscription](/reference/objects/subscription).
+
+```json
+{
+  "id": "sub_0193b8f2c1a87d3e9f4a",
+  "object": "subscription",
+  "livemode": false,
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "currency": "EUR",
+  "items": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+  },
+  "collection_method": "charge_automatically",
+  "days_until_due": null,
+  "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "billing_cycle_anchor": 1793750400,
+  "current_period_start": 1793750400,
+  "current_period_end": 1796428800,
+  "start_date": 1793750400,
+  "trial_start": null,
+  "trial_end": null,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "canceled_at": null,
+  "ended_at": null,
+  "cancellation_details": {
+    "reason": null,
+    "comment": null
+  },
+  "pause_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "discount": null,
+  "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List subscriptions
+
+`GET /v1/subscriptions`
+
+Newest first. Without `status`, every subscription but the canceled ones.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.subscriptions.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` | query | string | 1–255 characters. |
+| `price` | query | string | 1–255 characters. |
+| `status` | query | string | A status, `all` (including canceled), or `ended` (canceled and incomplete_expired). One of `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `unpaid`, `canceled`, `paused`, `all`, `ended`. |
+| `test_clock` | query | string | 1–255 characters. |
+| `current_period_end` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `current_period_end[gt]` | query | integer |  |
+| `current_period_end[gte]` | query | integer |  |
+| `current_period_end[lt]` | query | integer |  |
+| `current_period_end[lte]` | query | integer |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Subscription](/reference/objects/subscription) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Subscription](/reference/objects/subscription) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "sub_0193b8f2c1a87d3e9f4a",
+      "object": "subscription",
+      "livemode": false,
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "status": "active",
+      "currency": "EUR",
+      "items": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+      },
+      "collection_method": "charge_automatically",
+      "days_until_due": null,
+      "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+      "description": null,
+      "billing_cycle_anchor": 1793750400,
+      "current_period_start": 1793750400,
+      "current_period_end": 1796428800,
+      "start_date": 1793750400,
+      "trial_start": null,
+      "trial_end": null,
+      "trial_settings": {
+        "end_behavior": {
+          "missing_payment_method": "create_invoice"
+        }
+      },
+      "cancel_at_period_end": false,
+      "cancel_at": null,
+      "canceled_at": null,
+      "ended_at": null,
+      "cancellation_details": {
+        "reason": null,
+        "comment": null
+      },
+      "pause_collection": null,
+      "automatic_tax": {
+        "enabled": false
+      },
+      "discount": null,
+      "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+      "test_clock": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/subscriptions"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `data.latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a subscription
+
+`GET /v1/subscriptions/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.subscriptions.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription (`sub_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Subscription](/reference/objects/subscription).
+
+```json
+{
+  "id": "sub_0193b8f2c1a87d3e9f4a",
+  "object": "subscription",
+  "livemode": false,
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "currency": "EUR",
+  "items": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+  },
+  "collection_method": "charge_automatically",
+  "days_until_due": null,
+  "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "billing_cycle_anchor": 1793750400,
+  "current_period_start": 1793750400,
+  "current_period_end": 1796428800,
+  "start_date": 1793750400,
+  "trial_start": null,
+  "trial_end": null,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "canceled_at": null,
+  "ended_at": null,
+  "cancellation_details": {
+    "reason": null,
+    "comment": null
+  },
+  "pause_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "discount": null,
+  "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a subscription
+
+`POST /v1/subscriptions/{id}`
+
+Items, plan changes (prorated as `proration_behavior` says), collection, trial, cancellation at period end, pausing and discounts. A field sent as `""` is cleared; `metadata` is a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptions.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription (`sub_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `items` | array of object | At most 20 items. At least 1 item. |
+| `items[][id]` | string | The `si_…` to change or remove; absent, a new item. 1–255 characters. |
+| `items[][price]` | string | 1–255 characters. |
+| `items[][quantity]` | integer | Between 0 and 1000000000. |
+| `items[][deleted]` | boolean | Remove this item. |
+| `items[][metadata]` | map of string |  |
+| `proration_behavior` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `proration_date` | integer | The instant prorations are computed at; defaults to now. Between 0 and 253402300799. |
+| `default_payment_method` | string \| `""` | 1–255 characters. |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `days_until_due` | integer | Between 0 and 365. |
+| `description` | string \| `""` | 1–500 characters. |
+| `cancel_at_period_end` | boolean |  |
+| `cancel_at` | integer \| `""` | Between 0 and 253402300799. |
+| `pause_collection` | object \| `""` | `""` resumes collection. |
+| `pause_collection[behavior]` **required** | string | One of `keep_as_draft`, `mark_uncollectible`, `void`. |
+| `pause_collection[resumes_at]` | integer | Between 0 and 253402300799. |
+| `trial_end` | integer \| `"now"` | Between 0 and 253402300799. |
+| `coupon` | string \| `""` | 1–255 characters. |
+| `promotion_code` | string | 1–255 characters. |
+| `discounts` | array of object \| `""` | At most 20 items. |
+| `discounts[][coupon]` | string | 1–255 characters. |
+| `discounts[][promotion_code]` | string | 1–255 characters. |
+| `payment_behavior` | string | One of `allow_incomplete`, `default_incomplete`, `error_if_incomplete`. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Subscription](/reference/objects/subscription).
+
+```json
+{
+  "id": "sub_0193b8f2c1a87d3e9f4a",
+  "object": "subscription",
+  "livemode": false,
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "currency": "EUR",
+  "items": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+  },
+  "collection_method": "charge_automatically",
+  "days_until_due": null,
+  "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "billing_cycle_anchor": 1793750400,
+  "current_period_start": 1793750400,
+  "current_period_end": 1796428800,
+  "start_date": 1793750400,
+  "trial_start": null,
+  "trial_end": null,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "canceled_at": null,
+  "ended_at": null,
+  "cancellation_details": {
+    "reason": null,
+    "comment": null
+  },
+  "pause_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "discount": null,
+  "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a subscription
+
+`DELETE /v1/subscriptions/{id}`
+
+Now, optionally prorating the unused time and invoicing at once. Answers the canceled subscription.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptions.cancel()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription (`sub_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `invoice_now` | boolean | Bill pending items and prorations now, in a final invoice. |
+| `prorate` | boolean | Credit the unused time of the current period. |
+| `cancellation_details` | object |  |
+| `cancellation_details[comment]` | string | 1–5000 characters. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Subscription](/reference/objects/subscription).
+
+```json
+{
+  "id": "sub_0193b8f2c1a87d3e9f4a",
+  "object": "subscription",
+  "livemode": false,
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "currency": "EUR",
+  "items": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+  },
+  "collection_method": "charge_automatically",
+  "days_until_due": null,
+  "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "billing_cycle_anchor": 1793750400,
+  "current_period_start": 1793750400,
+  "current_period_end": 1796428800,
+  "start_date": 1793750400,
+  "trial_start": null,
+  "trial_end": null,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "canceled_at": null,
+  "ended_at": null,
+  "cancellation_details": {
+    "reason": null,
+    "comment": null
+  },
+  "pause_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "discount": null,
+  "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Resume a paused subscription
+
+`POST /v1/subscriptions/{id}/resume`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.subscriptions.resume()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The subscription (`sub_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `billing_cycle_anchor` | string | `now` (default) starts a new period at once; `unchanged` keeps the anchor. |
+| `proration_behavior` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Subscription](/reference/objects/subscription).
+
+```json
+{
+  "id": "sub_0193b8f2c1a87d3e9f4a",
+  "object": "subscription",
+  "livemode": false,
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "status": "active",
+  "currency": "EUR",
+  "items": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+  },
+  "collection_method": "charge_automatically",
+  "days_until_due": null,
+  "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "billing_cycle_anchor": 1793750400,
+  "current_period_start": 1793750400,
+  "current_period_end": 1796428800,
+  "start_date": 1793750400,
+  "trial_start": null,
+  "trial_end": null,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "canceled_at": null,
+  "ended_at": null,
+  "cancellation_details": {
+    "reason": null,
+    "comment": null
+  },
+  "pause_collection": null,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "discount": null,
+  "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search subscriptions
+
+`GET /v1/subscriptions/search`
+
+Stripe's query language over the subscription's fields and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.subscriptions.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Subscription](/reference/objects/subscription) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Subscription](/reference/objects/subscription) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "sub_0193b8f2c1a87d3e9f4a",
+      "object": "subscription",
+      "livemode": false,
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "status": "active",
+      "currency": "EUR",
+      "items": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "url": "/v1/subscription_items?subscription=sub_0193b8f2c1a87d3e9f4a"
+      },
+      "collection_method": "charge_automatically",
+      "days_until_due": null,
+      "default_payment_method": "pm_0193b8f2c1a87d3e9f4a",
+      "description": null,
+      "billing_cycle_anchor": 1793750400,
+      "current_period_start": 1793750400,
+      "current_period_end": 1796428800,
+      "start_date": 1793750400,
+      "trial_start": null,
+      "trial_end": null,
+      "trial_settings": {
+        "end_behavior": {
+          "missing_payment_method": "create_invoice"
+        }
+      },
+      "cancel_at_period_end": false,
+      "cancel_at": null,
+      "canceled_at": null,
+      "ended_at": null,
+      "cancellation_details": {
+        "reason": null,
+        "comment": null
+      },
+      "pause_collection": null,
+      "automatic_tax": {
+        "enabled": false
+      },
+      "discount": null,
+      "latest_invoice": "in_0193b8f2c1a87d3e9f4a",
+      "test_clock": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/subscriptions/search"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `data.latest_invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

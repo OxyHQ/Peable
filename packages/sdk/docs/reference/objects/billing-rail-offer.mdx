@@ -1,0 +1,23 @@
+---
+title: "BillingRailOffer"
+description: "The BillingRailOffer shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingRailOffer
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `provider_price_id` | string |  |
+| `plan_id` | string |  |
+| `interval` | string | One of `month`, `year`. |
+| `currency` | string |  |
+| `gross_minor_units` | integer | At least -9007199254740991. |
+| `tax_treatment` | string | One of `inclusive`, `exclusive`. |
+
+## Used in
+
+[BillingRailOption](/reference/objects/billing-rail-option)

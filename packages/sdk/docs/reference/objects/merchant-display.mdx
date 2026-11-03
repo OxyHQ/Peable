@@ -1,0 +1,21 @@
+---
+title: "MerchantDisplay"
+description: "The MerchantDisplay shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# MerchantDisplay
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | The merchant's display name, or a neutral fallback when unset. |
+| `avatar_url` | string \| null | Resolved server-side; `null` when the merchant has no avatar. |
+| `logo_url` | string \| null | The merchant's `business_logo`, resolved; `null` when unset or not served. |
+| `description` | string \| null |  |
+
+## Used in
+
+[CheckoutSessionPublic](/reference/objects/checkout-session-public) · [ConnectOnboarding](/reference/objects/connect-onboarding) · [PublicPaymentLink](/reference/objects/public-payment-link)

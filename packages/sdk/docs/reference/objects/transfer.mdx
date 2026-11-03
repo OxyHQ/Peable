@@ -1,0 +1,62 @@
+---
+title: "Transfer"
+description: "The transfer object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Transfer
+
+Object type: `transfer`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"transfer"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `external_ref` | string | The merchant's OWN id for what this settles. Their idempotency. |
+| `connected_account` | string \| [ConnectedAccount](/reference/objects/connected-account) | The seller's `ca_…` — never their account id at the provider — or the ConnectedAccount with `expand[]=connected_account`. Expandable. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | The `pi_…` this settlement was funded by, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `currency` | string |  |
+| `amount_reversed` | string | CUMULATIVE, in the units of `amount` — the provider's own total, never a sum of the reversals. Matches `^(0\|[1-9][0-9]*)$`. |
+| `status` | string | One of `pending`, `paid`, `partially_reversed`, `reversed`, `failed`. |
+| `failure_message` | string \| null |  |
+| `created` | integer | Unix seconds. |
+| `updated_at` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+## Example
+
+```json
+{
+  "id": "tr_0193b8f33c5a4b7e9d02",
+  "object": "transfer",
+  "livemode": false,
+  "external_ref": "order_6735_seller_4821",
+  "connected_account": "ca_0193b8f2d4e1aa07c3b2",
+  "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+  "amount": "1700",
+  "currency": "EUR",
+  "amount_reversed": "0",
+  "status": "paid",
+  "failure_message": null,
+  "created": 1793750400,
+  "updated_at": 1793750402
+}
+```
+
+## Returned by
+
+- [`GET /v1/payment_intents/{intentId}/transfers`](/reference/transfers#list-a-payments-transfers) — List a payment's transfers
+- [`POST /v1/transfers`](/reference/transfers#create-a-transfer) — Create a transfer
+- [`GET /v1/transfers`](/reference/transfers#list-transfers) — List transfers
+- [`GET /v1/transfers/{transferId}`](/reference/transfers#retrieve-a-transfer) — Retrieve a transfer

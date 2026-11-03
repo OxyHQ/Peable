@@ -1,0 +1,29 @@
+---
+title: "TaxReportRow"
+description: "The TaxReportRow shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxReportRow
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `registration_id` | string \| null | The registration (`taxreg_…`) that collected. |
+| `scheme` | string \| null | One of `standard`, `simplified`, `eu_oss_union`, `eu_oss_non_union`, `us_state_sales_tax`, `ca_provincial`. |
+| `collection` | string | One of `collect`, `not_registered`, `nontaxable`. |
+| `tax_type` | string \| null |  |
+| `rate_percentage` | string \| null | Decimal string, e.g. `"20.0"`. |
+| `currency` | string | Uppercase ISO 4217. |
+| `transactions` | integer |  |
+| `reversals` | integer | Reversals netted into this row. |
+| `taxable_amount` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `tax_amount` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+
+## Used in
+
+[TaxReport](/reference/objects/tax-report)

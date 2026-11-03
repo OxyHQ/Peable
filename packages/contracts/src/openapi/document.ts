@@ -9,7 +9,7 @@ import { webhookEvents } from './webhooks';
 /**
  * The OpenAPI 3.1 document of the whole public API, generated from the route
  * contracts (ADR 0014 D5). Served at `/openapi.json`, committed as
- * `docs/openapi.json`, rendered by docs.peable.to; CI fails when the committed
+ * `docs/openapi.json`, rendered into Peable's docs on oxy.so (`bun run generate:api-docs`); CI fails when the committed
  * copy drifts from this function's output.
  *
  * Every registered object becomes `#/components/schemas/<Name>` and every
@@ -302,8 +302,8 @@ export function buildOpenApiDocument(): OpenApiDocument {
       title: 'Peable API',
       version: PEABLE_API_VERSION,
       description:
-        'The Peable payments API (Orbit): FairCoin and card payments, Checkout, Payment Links, Billing, Connect and Tax. Amounts are base-unit integer strings; instants are Unix seconds; every object carries `id`, `object` and `livemode`. Guides: https://docs.peable.to.',
-      contact: { name: 'Peable', url: 'https://docs.peable.to' },
+        'The Peable payments API (Orbit): FairCoin and card payments, Checkout, Payment Links, Billing, Connect and Tax. Amounts are base-unit integer strings; instants are Unix seconds; every object carries `id`, `object` and `livemode`. Guides: https://oxy.so/developers/docs/peable/.',
+      contact: { name: 'Peable', url: 'https://oxy.so/developers/docs/peable/' },
       license: { name: 'MIT', identifier: 'MIT' },
     },
     servers: [{ url: 'https://api.peable.to', description: 'Production (test and live modes)' }],
