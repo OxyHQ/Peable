@@ -309,6 +309,8 @@ from `processing` to `succeeded` without polling.
 ## Documentation
 
 - [Integrating Peable](docs/integrating-peable.md), the guide for merchants
+- [Examples](examples/README.md): runnable test-mode integrations (Checkout, Elements,
+  subscriptions, Connect, a webhook receiver)
 - [Roadmap](docs/PEABLE-ROADMAP.md)
 
 ## Related
