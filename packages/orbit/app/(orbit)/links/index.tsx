@@ -1,20 +1,27 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { PaymentLink } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+} from '@oxy.so/bloom/table';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { formatInstant } from '@/format/time';
+import type { DashboardScope } from '@/api/dashboard';
 import { t } from '@/i18n';
 import { linkSummary } from '@/links/linkForm';
-import { LinkShare } from '@/links/LinkShare';
 import { type LinkFilter, useLinkPages } from '@/links/useLinks';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, OrbitScreen } from '@/ui/OrbitScreen';
+import { RowLink, Timestamp } from '@/ui/data';
+import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const filterOptions = () => [
   { value: 'active', label: t('links.filter.active') },
@@ -26,70 +33,108 @@ function filterValue(filter: LinkFilter): string {
   return filter === null ? 'all' : filter ? 'active' : 'inactive';
 }
 
-function LinkRow({ link }: { link: PaymentLink }) {
+const COLUMNS = {
+  name: { flex: 4, minWidth: 220 },
+  status: { flex: 1, minWidth: 100 },
+  currency: { width: 80 },
+  sessions: { flex: 2, minWidth: 120 },
+  created: { flex: 2, minWidth: 140 },
+} as const;
+
+/** Payment links, Stripe's table: what it sells, status, currency, completed sessions, created; a row opens it. */
+function LinksTable({ links, empty }: { links: PaymentLink[]; empty: ReactNode }) {
   const router = useRouter();
   return (
-    <View className="gap-2 py-3 border-b border-border">
-      <View className="flex-row flex-wrap items-center gap-2">
-        <Badge
-          appearance="subtle"
-          tone={link.active ? 'success' : 'neutral'}
-          size="label-small"
-          content={link.active ? t('links.active') : t('links.inactive')}
-        />
-        <LinkButton
-          size="sm"
-          accessibilityLabel={`${t('link.title')} ${linkSummary(link)}`}
-          onPress={() => router.push({ pathname: '/links/[id]', params: { id: link.id } })}
-        >
-          {linkSummary(link) || link.id}
-        </LinkButton>
-      </View>
-      <View className="flex-row flex-wrap gap-x-4 gap-y-1">
-        <Text variant="caption-1-regular" selectable className="text-muted-foreground font-mono">
-          {link.id}
-        </Text>
-        <Text variant="caption-1-regular" className="text-muted-foreground">
-          {link.currency}
-        </Text>
-        {link.restrictions ? (
-          <Text variant="caption-1-regular" className="text-muted-foreground">
-            {t('links.sessionsCount', {
-              count: link.restrictions.completed_sessions.count,
-              limit: link.restrictions.completed_sessions.limit,
-            })}
-          </Text>
-        ) : null}
-        <Text variant="caption-1-regular" className="text-muted-foreground">
-          {formatInstant(link.created)}
-        </Text>
-      </View>
-      <LinkShare url={link.url} />
-    </View>
+    <Table accessibilityLabel={t('links.title')} minWidth={720} size="sm">
+      <TableHeader>
+        <TableColumn {...COLUMNS.name}>{t('list.column.product')}</TableColumn>
+        <TableColumn {...COLUMNS.status}>{t('list.column.status')}</TableColumn>
+        <TableColumn {...COLUMNS.currency}>{t('links.column.currency')}</TableColumn>
+        <TableColumn {...COLUMNS.sessions}>{t('links.column.sessions')}</TableColumn>
+        <TableColumn {...COLUMNS.created}>{t('list.column.created')}</TableColumn>
+      </TableHeader>
+      <TableBody emptyState={empty}>
+        {links.map((link) => (
+          <RowLink
+            key={link.id}
+            accessibilityLabel={`${t('link.title')} ${linkSummary(link) || link.id}`}
+            onPress={() => router.push({ pathname: '/links/[id]', params: { id: link.id } })}
+          >
+            <TableRow>
+              <TableCell {...COLUMNS.name}>
+                <View>
+                  <Text variant="body-2-medium" numberOfLines={1}>
+                    {linkSummary(link) || link.id}
+                  </Text>
+                  <Text
+                    variant="caption-1-regular"
+                    numberOfLines={1}
+                    className="text-muted-foreground"
+                  >
+                    {link.url}
+                  </Text>
+                </View>
+              </TableCell>
+              <TableCell {...COLUMNS.status}>
+                <Badge
+                  appearance="subtle"
+                  tone={link.active ? 'success' : 'neutral'}
+                  size="label-small"
+                  content={link.active ? t('links.active') : t('links.inactive')}
+                />
+              </TableCell>
+              <TableCell {...COLUMNS.currency}>{link.currency.toUpperCase()}</TableCell>
+              <TableCell {...COLUMNS.sessions}>
+                {link.restrictions
+                  ? t('links.sessionsCount', {
+                      count: link.restrictions.completed_sessions.count,
+                      limit: link.restrictions.completed_sessions.limit,
+                    })
+                  : '—'}
+              </TableCell>
+              <TableCell {...COLUMNS.created}>
+                <Timestamp seconds={link.created} muted />
+              </TableCell>
+            </TableRow>
+          </RowLink>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
 function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter }) {
+  const router = useRouter();
   const pages = useLinkPages(scope, filter);
-  if (pages.isPending) return <Loading accessibilityLabel={t('links.title')} />;
-  if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
-    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
+  if (pages.isPending) {
+    return <PageSkeleton variant="table" accessibilityLabel={t('links.title')} />;
   }
+  if (pages.isError)
+    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   const links = pages.data.pages.flatMap((page) => page.data);
   return (
-    <Section title={t('links.title')}>
-      {links.length ? (
-        links.map((link) => <LinkRow key={link.id} link={link} />)
-      ) : (
-        <EmptyState
-          variant="compact"
-          title={t('links.empty.title')}
-          description={t('links.empty.body')}
-        />
-      )}
+    <View className="gap-4">
+      <LinksTable
+        links={links}
+        empty={
+          filter === true ? (
+            <ListEmpty
+              title={t('links.empty.firstTitle')}
+              description={t('links.empty.firstBody')}
+              action={{ label: t('links.new'), onPress: () => router.push('/links/new') }}
+              docs="links"
+            />
+          ) : (
+            <EmptyState
+              variant="compact"
+              title={t('links.empty.title')}
+              description={t('links.empty.body')}
+            />
+          )
+        }
+      />
       <ListFooter pages={pages} />
-    </Section>
+    </View>
   );
 }
 

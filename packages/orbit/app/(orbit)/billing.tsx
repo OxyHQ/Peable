@@ -10,7 +10,6 @@ import type {
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
@@ -32,6 +31,7 @@ import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -224,7 +224,8 @@ function Features({ scope }: { scope: DashboardScope }) {
     if (result.ok) create.mutate(result.body);
   };
   let list: React.ReactNode;
-  if (features.isPending) list = <Loading accessibilityLabel={t('features.title')} />;
+  if (features.isPending)
+    list = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('features.title')} />;
   else if (features.isError)
     list = <ErrorNotice error={features.error} onRetry={() => void features.refetch()} />;
   else if (features.data.data.length === 0) {
@@ -275,7 +276,8 @@ function Features({ scope }: { scope: DashboardScope }) {
 
 function BillingBody({ scope }: { scope: DashboardScope }) {
   const settings = useBillingSettings(scope);
-  if (settings.isPending) return <Loading accessibilityLabel={t('billing.title')} />;
+  if (settings.isPending)
+    return <PageSkeleton variant="form" accessibilityLabel={t('billing.title')} />;
   if (settings.isError) {
     if (isMerchantMissing(settings.error))
       return <MerchantMissing environment={scope.environment} />;

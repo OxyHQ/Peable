@@ -9,7 +9,6 @@ import {
   AdmonitionText,
 } from '@oxy.so/bloom/admonition';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { isAccountMissing, isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { formatOptionalAmount, formatSignedAmount } from '@/format/money';
@@ -36,6 +35,7 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
 const typeOptions = () => [
@@ -144,7 +144,9 @@ function Transactions({ scope }: { scope: DashboardScope }) {
   const pages = useBalanceTransactionPages(scope, type);
   let body: ReactNode;
   if (pages.isPending) {
-    body = <Loading accessibilityLabel={t('balances.transactions')} />;
+    body = (
+      <PageSkeleton variant="table" rows={3} accessibilityLabel={t('balances.transactions')} />
+    );
   } else if (pages.isError) {
     body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   } else {
@@ -187,7 +189,8 @@ function Transactions({ scope }: { scope: DashboardScope }) {
 
 function Balances({ scope }: { scope: DashboardScope }) {
   const balance = useBalance(scope);
-  if (balance.isPending) return <Loading accessibilityLabel={t('balances.title')} />;
+  if (balance.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('balances.title')} />;
   if (balance.isError) {
     if (isMerchantMissing(balance.error))
       return <MerchantMissing environment={scope.environment} />;

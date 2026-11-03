@@ -149,11 +149,19 @@ export async function errorFromResponse(response: Response): Promise<OrbitApiErr
       requestId: stringField(fields.request_id) ?? headerRequestId,
     });
   }
-  // Pre-ADR-0014 routes answered `{error: "message"}`; keep the message.
+  // Pre-ADR-0014 routes answered `{error: "message"}`; the Oxy auth middleware
+  // answers `{error: "Unauthorized", message: "Authentication required"}` —
+  // its `message` is the sentence, `error` only a label.
+  const sentence =
+    body && typeof body === 'object'
+      ? stringField((body as { message?: unknown }).message)
+      : undefined;
   return new OrbitApiError({
     status: response.status,
-    type: 'api_error',
-    message: typeof envelope === 'string' ? envelope : `Request failed (HTTP ${response.status})`,
+    type: response.status === 401 ? 'authentication_error' : 'api_error',
+    message:
+      sentence ??
+      (typeof envelope === 'string' ? envelope : `Request failed (HTTP ${response.status})`),
     requestId: headerRequestId,
   });
 }

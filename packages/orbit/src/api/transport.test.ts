@@ -7,6 +7,7 @@ import {
   type OrbitApiError,
   withQuery,
 } from './transport';
+import { errorState } from '../ui/errorState';
 
 function fakeClient(response: Response) {
   const calls: AuthenticatedResponseRequest[] = [];
@@ -144,6 +145,57 @@ describe('createOrbitTransport', () => {
       .catch((e: unknown) => e)) as OrbitApiError;
     expect(error.status).toBe(403);
     expect(error.message).toBe('forbidden');
+  });
+
+  it("reads the Oxy auth middleware's 401 by its sentence, as an authentication error", async () => {
+    const { client } = fakeClient(
+      Response.json(
+        { error: 'Unauthorized', message: 'Authentication required' },
+        { status: 401, headers: { 'Request-Id': 'req_401' } },
+      ),
+    );
+    const error = (await createOrbitTransport(client)
+      .request('GET', '/v1/x')
+      .catch((e: unknown) => e)) as OrbitApiError;
+    expect(error.type).toBe('authentication_error');
+    expect(error.message).toBe('Authentication required');
+    expect(error.requestId).toBe('req_401');
+    expect(errorState(error)).toEqual({ kind: 'session', requestId: 'req_401' });
+  });
+
+  it('maps the gateway answers a screen meets to the state it shows', async () => {
+    const envelope = (status: number, error: Record<string, string>) =>
+      fakeClient(Response.json({ error: { request_id: 'req_s', ...error } }, { status })).client;
+    const stateOf = async (client: ReturnType<typeof envelope>) =>
+      errorState(
+        await createOrbitTransport(client)
+          .request('GET', '/v1/dashboard/applications/app/payment_intents')
+          .catch((e: unknown) => e),
+      );
+    expect(
+      await stateOf(
+        envelope(404, {
+          type: 'invalid_request_error',
+          code: 'merchant_missing',
+          message: 'no merchant registered for this application in this environment',
+        }),
+      ),
+    ).toEqual({ kind: 'merchant_missing' });
+    expect(
+      await stateOf(
+        envelope(403, {
+          type: 'permission_error',
+          code: 'application_membership_required',
+          message: 'you are not a member of this application',
+        }),
+      ),
+    ).toEqual({ kind: 'permission', permission: null, membership: true, requestId: 'req_s' });
+    expect(await stateOf(envelope(500, { type: 'api_error', message: 'internal error' }))).toEqual({
+      kind: 'failure',
+      reason: 'server',
+      message: 'internal error',
+      requestId: 'req_s',
+    });
   });
 
   it('refuses a 2xx body that is not JSON instead of rendering garbage', async () => {

@@ -36,7 +36,7 @@ export const TAX_COMPLIANCE_EN: Readonly<Record<string, string>> = {
 
   'compliance.boundary':
     'Peable records what you declare, measures what Peable Tax recorded, and tells you what a supported rule indicates. It does not register, file or pay anything with a tax authority, and nothing here turns tax collection on — only the owner does that, in Collection & reports.',
-  'compliance.error': 'Something went wrong. Try again.',
+  'compliance.error': 'This change could not be saved.',
   'compliance.saved': 'Saved',
   'compliance.unreviewedRules':
     'The supported rules are encoded from official sources and have not yet been reviewed by a tax professional. Treat every finding as something to check.',

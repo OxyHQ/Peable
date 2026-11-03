@@ -2,17 +2,15 @@ import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import type { RequestLog } from '@peable.to/shared-types';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
-import { describeError, isOrbitApiError } from '@/api/transport';
 import { formatDuration, requestStatusTone } from '@/developers/requestLogs';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { ToneBadge } from '@/ui/StatusBadge';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function LogDetail({ log }: { log: RequestLog }) {
   return (
@@ -52,17 +50,11 @@ function LogLoader({ scope, id }: { scope: DashboardScope; id: string }) {
     queryKey: ['orbit', scope.applicationId, scope.environment, 'request_log', id],
     queryFn: () => dashboardApi.requestLogs.retrieve(scope, id),
   });
-  if (query.isPending) return <Loading accessibilityLabel={t('developers.logs.request')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('developers.logs.request')} />;
   if (query.isError) {
-    // 404: not this merchant's request, or older than the 30 days kept.
-    if (isOrbitApiError(query.error) && query.error.status === 404) {
-      return (
-        <EmptyState
-          title={t('developers.logDetail.notFound')}
-          description={describeError(query.error, t('developers.logDetail.notFoundHelp'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('developers.logDetail.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <LogDetail log={query.data} />;

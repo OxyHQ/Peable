@@ -13,7 +13,6 @@ import {
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
@@ -23,6 +22,7 @@ import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { Section } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '../ui/states';
 
 const upper = (value: string) => value.trim().toUpperCase();
 const firstOfMonth = () => {
@@ -109,7 +109,8 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
   const codeOptions = codes.map((code) => ({ value: code.id, label: code.name }));
   const pending = registrations.filter((row) => row.status === 'pending_approval').length;
 
-  if (loading && !settings) return <Loading accessibilityLabel={t('tax.heading')} />;
+  if (loading && !settings)
+    return <PageSkeleton variant="form" accessibilityLabel={t('tax.heading')} />;
 
   return (
     <View className="gap-6">

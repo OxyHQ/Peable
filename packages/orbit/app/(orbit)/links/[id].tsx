@@ -5,12 +5,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PaymentLink, UpdatePaymentLinkParams } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeError, isOrbitApiError } from '@/api/transport';
 import { formatAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
@@ -28,6 +26,7 @@ import {
 } from '@/links/linkForm';
 import { linkKeys, useLink } from '@/links/useLinks';
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -178,16 +177,11 @@ function LinkDetail({ scope, link }: { scope: DashboardScope; link: PaymentLink 
 
 function LinkLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = useLink(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('link.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('link.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('links.notFound')}
-          description={describeError(query.error, t('links.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('links.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <LinkDetail scope={scope} link={query.data} />;

@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import type { InvoiceStatus } from '@peable.to/shared-types';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { InvoiceRow } from '@/billing/BillingParts';
+import { InvoicesTable } from '@/billing/BillingParts';
 import { invoiceStatusLabel, ORBIT_INVOICE_STATUSES } from '@/billing/status';
 import { useInvoicePages } from '@/billing/useBilling';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
 // Built at render: the language can change while Orbit is open.
@@ -20,25 +20,35 @@ const options = () => [
 
 function InvoiceList({ scope, status }: { scope: DashboardScope; status: InvoiceStatus | null }) {
   const pages = useInvoicePages(scope, status);
-  if (pages.isPending) return <Loading accessibilityLabel={t('invoices.title')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('invoices.title')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const rows = pages.data.pages.flatMap((page) => page.data);
   return (
-    <Section title={t('invoices.title')}>
-      {rows.length ? (
-        rows.map((row) => <InvoiceRow key={row.id} invoice={row} />)
-      ) : (
-        <EmptyState
-          variant="compact"
-          title={t('invoices.empty.title')}
-          description={t('invoices.empty.body')}
-        />
-      )}
+    <View className="gap-4">
+      <InvoicesTable
+        invoices={rows}
+        empty={
+          status ? (
+            <EmptyState
+              variant="compact"
+              title={t('invoices.empty.title')}
+              description={t('invoices.empty.body')}
+            />
+          ) : (
+            <ListEmpty
+              title={t('invoices.empty.firstTitle')}
+              description={t('invoices.empty.firstBody')}
+              docs="billing"
+            />
+          )
+        }
+      />
       <ListFooter pages={pages} />
-    </Section>
+    </View>
   );
 }
 

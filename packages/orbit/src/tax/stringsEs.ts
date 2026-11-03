@@ -37,7 +37,7 @@ export const TAX_COMPLIANCE_ES: Readonly<Record<string, string>> = {
 
   'compliance.boundary':
     'Peable registra lo que declaras, mide lo que registró Peable Tax y te dice lo que indica una regla admitida. No se registra, no presenta declaraciones ni paga nada ante ninguna autoridad fiscal, y nada de esto activa la recaudación de impuestos: solo lo hace el propietario, en Recaudación e informes.',
-  'compliance.error': 'Algo salió mal. Inténtalo de nuevo.',
+  'compliance.error': 'No se ha podido guardar este cambio.',
   'compliance.saved': 'Guardado',
   'compliance.unreviewedRules':
     'Las reglas admitidas se han codificado a partir de fuentes oficiales y aún no las ha revisado un profesional fiscal. Trata cada hallazgo como algo que comprobar.',

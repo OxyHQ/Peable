@@ -2,17 +2,15 @@ import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import type { Customer } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { describeError } from '@/api/transport';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeBalance, formatSignedAmount } from '@/billing/amount';
-import { InvoiceRow, RowList, SubscriptionRow } from '@/billing/BillingParts';
+import { InvoicesTable, RowList, SubscriptionsTable } from '@/billing/BillingParts';
 import { useCustomer, useInvoicePages, useSubscriptionPages } from '@/billing/useBilling';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import {
+  DetailHeader,
   DetailLayout,
   ErrorNotice,
   Field,
@@ -20,19 +18,19 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { Timestamp } from '@/ui/data';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function Subscriptions({ scope, customer }: { scope: DashboardScope; customer: Customer }) {
   const pages = useSubscriptionPages(scope, 'all', customer.id);
-  if (pages.isPending) return <Loading accessibilityLabel={t('subscriptions.title')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" rows={3} accessibilityLabel={t('subscriptions.title')} />;
   if (pages.isError)
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   const rows = pages.data.pages.flatMap((page) => page.data);
   return (
     <Section title={t('subscriptions.title')}>
-      <RowList
-        items={rows.map((row) => <SubscriptionRow key={row.id} subscription={row} />)}
-        empty={t('customer.noSubscriptions')}
-      />
+      <SubscriptionsTable subscriptions={rows} empty={t('customer.noSubscriptions')} />
       <ListFooter pages={pages} />
     </Section>
   );
@@ -40,16 +38,14 @@ function Subscriptions({ scope, customer }: { scope: DashboardScope; customer: C
 
 function Invoices({ scope, customer }: { scope: DashboardScope; customer: Customer }) {
   const pages = useInvoicePages(scope, null, customer.id);
-  if (pages.isPending) return <Loading accessibilityLabel={t('invoices.title')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" rows={3} accessibilityLabel={t('invoices.title')} />;
   if (pages.isError)
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   const rows = pages.data.pages.flatMap((page) => page.data);
   return (
     <Section title={t('invoices.title')}>
-      <RowList
-        items={rows.map((row) => <InvoiceRow key={row.id} invoice={row} />)}
-        empty={t('customer.noInvoices')}
-      />
+      <InvoicesTable invoices={rows} empty={t('customer.noInvoices')} />
       <ListFooter pages={pages} />
     </Section>
   );
@@ -57,25 +53,25 @@ function Invoices({ scope, customer }: { scope: DashboardScope; customer: Custom
 
 function CustomerDetail({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = useCustomer(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('customer.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('customer.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('customer.notFound')}
-          description={describeError(query.error, t('customer.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('customer.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   const { customer, balance, entitlements } = query.data;
   const held = describeBalance(customer.balance, customer.currency);
   return (
     <View className="gap-6">
-      <Text variant="title-1-bold" selectable>
-        {customer.name ?? customer.email ?? customer.id}
-      </Text>
+      <DetailHeader
+        headline={customer.name ?? customer.email ?? customer.id}
+        id={customer.id}
+        facts={[
+          ...(customer.email ? [{ label: t('list.column.email'), value: customer.email }] : []),
+          { label: t('list.column.created'), value: <Timestamp seconds={customer.created} /> },
+        ]}
+      />
       <DetailLayout
         aside={
           <Section title={t('customer.details')}>

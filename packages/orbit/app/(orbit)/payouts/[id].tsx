@@ -5,11 +5,10 @@ import type { Payout } from '@peable.to/shared-types';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isAccountMissing, isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import { isAccountMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { formatSignedAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
@@ -27,10 +26,14 @@ import {
   Section,
 } from '@/ui/OrbitScreen';
 import { PayoutStatusBadge } from '@/ui/StatusBadge';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function Reconciliation({ scope, payout }: { scope: DashboardScope; payout: Payout }) {
   const pages = usePayoutReconciliation(scope, payout.id);
-  if (pages.isPending) return <Loading accessibilityLabel={t('payout.reconciliation')} />;
+  if (pages.isPending)
+    return (
+      <PageSkeleton variant="table" rows={3} accessibilityLabel={t('payout.reconciliation')} />
+    );
   if (pages.isError) {
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
@@ -151,19 +154,12 @@ function PayoutDetail({ scope, payout }: { scope: DashboardScope; payout: Payout
 
 function PayoutLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = usePayout(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('payout.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('payout.title')} />;
   if (query.isError) {
     if (isAccountMissing(query.error)) return <AccountMissing environment={scope.environment} />;
-    // 404 means no payout with this id in this mode, or no merchant in this
-    // mode at all; the gateway's own message says which.
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('payout.notFound')}
-          description={describeError(query.error, t('payout.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('payout.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <PayoutDetail scope={scope} payout={query.data} />;

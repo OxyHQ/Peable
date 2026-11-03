@@ -195,11 +195,15 @@ describe('GET /v1/dashboard/applications/:applicationId/merchant', () => {
     expect(body.network).toBe('mainnet');
   });
 
-  test('staging has no merchant registered -> 404', async () => {
+  test('staging has no merchant registered -> 404 merchant_missing', async () => {
     const res = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/merchant?environment=staging`,
     );
     expect(res.status).toBe(404);
+    // Orbit's first-run state keys on the code, not the status.
+    expect(((await res.clone().json()) as { error: { code: string } }).error.code).toBe(
+      'merchant_missing',
+    );
   });
 
   test('a non-member is denied (403), regardless of the merchant existing', async () => {
@@ -448,11 +452,14 @@ describe('GET /v1/dashboard/applications/:applicationId/payment_intents/:id', ()
     expect(body.id).toBe('pi_dash_detail_1');
   });
 
-  test('unknown id -> 404', async () => {
+  test('unknown id -> 404, which is not the merchant-missing answer', async () => {
     const res = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/payment_intents/pi_does_not_exist?environment=development`,
     );
     expect(res.status).toBe(404);
+    expect(((await res.clone().json()) as { error: { code?: string } }).error.code).not.toBe(
+      'merchant_missing',
+    );
   });
 });
 

@@ -11,11 +11,10 @@ import type {
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { PriceFields } from '@/catalog/PriceFields';
 import {
@@ -42,6 +41,7 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 /** A reference as its id, whether or not the read expanded it. */
 function idOf(reference: string | { id: string } | null): string | null {
@@ -302,7 +302,8 @@ function AddPrice({ scope, product }: { scope: DashboardScope; product: Product 
 function Prices({ scope, product }: { scope: DashboardScope; product: Product }) {
   const pages = useProductPrices(scope, product.id);
   let body: React.ReactNode;
-  if (pages.isPending) body = <Loading accessibilityLabel={t('product.prices')} />;
+  if (pages.isPending)
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('product.prices')} />;
   else if (pages.isError) {
     body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   } else {
@@ -361,7 +362,7 @@ function ProductFeatures({ scope, product }: { scope: DashboardScope; product: P
     onError: fail,
   });
   if (attached.isPending || features.isPending) {
-    return <Loading accessibilityLabel={t('product.features')} />;
+    return <PageSkeleton variant="table" rows={3} accessibilityLabel={t('product.features')} />;
   }
   if (attached.isError)
     return <ErrorNotice error={attached.error} onRetry={() => void attached.refetch()} />;
@@ -455,16 +456,11 @@ function ProductDetail({ scope, product }: { scope: DashboardScope; product: Pro
 
 function ProductLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = useProduct(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('product.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('product.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('product.notFound')}
-          description={describeError(query.error, t('product.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('product.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <ProductDetail scope={scope} product={query.data} />;

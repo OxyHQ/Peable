@@ -8,7 +8,6 @@ import type {
   UpdateMerchantEmailSettingsParams,
 } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
@@ -33,6 +32,8 @@ import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { Toggle } from '@/ui/Toggle';
+import { PageSkeleton } from '@/ui/states';
+import { merchantQueryKey } from '@/merchant/useMerchant';
 
 const DEFAULT = 'default';
 
@@ -304,7 +305,7 @@ function EmailSettingsEditor({
 
 function Settings({ scope }: { scope: DashboardScope }) {
   const merchant = useQuery({
-    queryKey: ['orbit', scope.applicationId, scope.environment, 'merchant'],
+    queryKey: merchantQueryKey(scope),
     queryFn: () => dashboardApi.merchant.retrieve(scope),
   });
   const branding = useQuery({
@@ -316,7 +317,7 @@ function Settings({ scope }: { scope: DashboardScope }) {
     queryFn: () => dashboardApi.emailSettings.retrieve(scope),
   });
   if (merchant.isPending || branding.isPending || emails.isPending) {
-    return <Loading accessibilityLabel={t('branding.title')} />;
+    return <PageSkeleton variant="form" accessibilityLabel={t('branding.title')} />;
   }
   const error = merchant.error ?? branding.error ?? emails.error;
   if (error || merchant.data === null) {

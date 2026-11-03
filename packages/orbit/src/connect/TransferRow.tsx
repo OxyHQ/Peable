@@ -7,7 +7,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Transfer } from '@peable.to/shared-types';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '../api/client';
@@ -38,13 +37,15 @@ import {
   transferStatusLabel,
   transferStatusTone,
 } from './vocabulary';
+import { PageSkeleton } from '../ui/states';
 
 const idOf = (reference: string | { id: string }) =>
   typeof reference === 'string' ? reference : reference.id;
 
 function Reversals({ scope, transfer }: { scope: DashboardScope; transfer: Transfer }) {
   const query = useReversals(scope, transfer.id, true);
-  if (query.isPending) return <Loading accessibilityLabel={t('connect.reversals')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('connect.reversals')} />;
   if (query.isError)
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data.data.length) {

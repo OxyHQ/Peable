@@ -1,16 +1,23 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Product } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+} from '@oxy.so/bloom/table';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { PriceFields } from '@/catalog/PriceFields';
 import {
@@ -22,11 +29,12 @@ import {
   type ProductFormError,
 } from '@/catalog/productForm';
 import { catalogKeys, type ProductFilter, useProductPages } from '@/catalog/useCatalog';
-import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { RowLink, Timestamp } from '@/ui/data';
+import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const filterOptions = () => [
   { value: 'active', label: t('products.filter.active') },
@@ -125,83 +133,152 @@ function AddProduct({ scope }: { scope: DashboardScope }) {
   );
 }
 
-function ProductRow({ product }: { product: Product }) {
+const COLUMNS = {
+  name: { flex: 4, minWidth: 220 },
+  pricing: { flex: 2, minWidth: 140 },
+  status: { flex: 1, minWidth: 100 },
+  created: { flex: 2, minWidth: 140 },
+  updated: { flex: 2, minWidth: 140 },
+} as const;
+
+/** The catalog, Stripe's table: name and description, pricing, status, dates; a row opens the product. */
+function ProductsTable({ products, empty }: { products: Product[]; empty: ReactNode }) {
   const router = useRouter();
   return (
-    <View className="gap-1 py-3 border-b border-border">
-      <View className="flex-row flex-wrap items-center gap-2">
-        <Badge
-          appearance="subtle"
-          tone={product.active ? 'success' : 'neutral'}
-          size="label-small"
-          content={product.active ? t('products.active') : t('products.archived')}
-        />
-        <LinkButton
-          size="sm"
-          accessibilityLabel={`${t('product.title')} ${product.name}`}
-          onPress={() => router.push({ pathname: '/products/[id]', params: { id: product.id } })}
-        >
-          {product.name}
-        </LinkButton>
-      </View>
-      <View className="flex-row flex-wrap gap-x-4 gap-y-1">
-        <Text variant="caption-1-regular" selectable className="text-muted-foreground font-mono">
-          {product.id}
-        </Text>
-        <Text variant="caption-1-regular" className="text-muted-foreground">
-          {formatInstant(product.created)}
-        </Text>
-        {product.default_price === null ? (
-          <Text variant="caption-1-regular" className="text-muted-foreground">
-            {t('products.noPrice')}
-          </Text>
-        ) : null}
-      </View>
-      {product.description ? (
-        <Text variant="caption-1-regular" className="text-muted-foreground">
-          {product.description}
-        </Text>
-      ) : null}
-    </View>
+    <Table accessibilityLabel={t('products.title')} minWidth={760} size="sm">
+      <TableHeader>
+        <TableColumn {...COLUMNS.name}>{t('list.column.name')}</TableColumn>
+        <TableColumn {...COLUMNS.pricing}>{t('products.column.pricing')}</TableColumn>
+        <TableColumn {...COLUMNS.status}>{t('list.column.status')}</TableColumn>
+        <TableColumn {...COLUMNS.created}>{t('list.column.created')}</TableColumn>
+        <TableColumn {...COLUMNS.updated}>{t('products.column.updated')}</TableColumn>
+      </TableHeader>
+      <TableBody emptyState={empty}>
+        {products.map((product) => (
+          <RowLink
+            key={product.id}
+            accessibilityLabel={`${t('product.title')} ${product.name}`}
+            onPress={() => router.push({ pathname: '/products/[id]', params: { id: product.id } })}
+          >
+            <TableRow>
+              <TableCell {...COLUMNS.name}>
+                <View>
+                  <Text variant="body-2-medium" numberOfLines={1}>
+                    {product.name}
+                  </Text>
+                  <Text
+                    variant="caption-1-regular"
+                    numberOfLines={1}
+                    className="text-muted-foreground"
+                  >
+                    {product.description ?? product.id}
+                  </Text>
+                </View>
+              </TableCell>
+              <TableCell {...COLUMNS.pricing}>
+                <Text
+                  variant="body-2-regular"
+                  numberOfLines={1}
+                  className={product.default_price === null ? 'text-muted-foreground' : 'font-mono'}
+                >
+                  {product.default_price === null
+                    ? t('products.noPrice')
+                    : typeof product.default_price === 'string'
+                      ? product.default_price
+                      : product.default_price.id}
+                </Text>
+              </TableCell>
+              <TableCell {...COLUMNS.status}>
+                <Badge
+                  appearance="subtle"
+                  tone={product.active ? 'success' : 'neutral'}
+                  size="label-small"
+                  content={product.active ? t('products.active') : t('products.archived')}
+                />
+              </TableCell>
+              <TableCell {...COLUMNS.created}>
+                <Timestamp seconds={product.created} muted />
+              </TableCell>
+              <TableCell {...COLUMNS.updated}>
+                <Timestamp seconds={product.updated} muted />
+              </TableCell>
+            </TableRow>
+          </RowLink>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
-function ProductList({ scope, filter }: { scope: DashboardScope; filter: ProductFilter }) {
+function ProductList({
+  scope,
+  filter,
+  adding,
+  onAdd,
+}: {
+  scope: DashboardScope;
+  filter: ProductFilter;
+  adding: boolean;
+  onAdd: () => void;
+}) {
   const pages = useProductPages(scope, filter);
-  if (pages.isPending) return <Loading accessibilityLabel={t('products.title')} />;
-  if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
-    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
+  if (pages.isPending) {
+    return <PageSkeleton variant="table" accessibilityLabel={t('products.title')} />;
   }
+  if (pages.isError)
+    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   const products = pages.data.pages.flatMap((page) => page.data);
   return (
     <View className="gap-6">
-      <AddProduct scope={scope} />
-      <Section title={t('products.title')}>
-        {products.length ? (
-          products.map((product) => <ProductRow key={product.id} product={product} />)
-        ) : (
-          <EmptyState
-            variant="compact"
-            title={t('products.empty.title')}
-            description={t('products.empty.body')}
-          />
-        )}
+      {adding ? <AddProduct scope={scope} /> : null}
+      <View className="gap-4">
+        <ProductsTable
+          products={products}
+          empty={
+            filter === true ? (
+              <ListEmpty
+                title={t('products.empty.firstTitle')}
+                description={t('products.empty.firstBody')}
+                action={{ label: t('products.add'), onPress: onAdd }}
+                docs="catalog"
+              />
+            ) : (
+              <EmptyState
+                variant="compact"
+                title={t('products.empty.title')}
+                description={t('products.empty.body')}
+              />
+            )
+          }
+        />
         <ListFooter pages={pages} />
-      </Section>
+      </View>
     </View>
   );
 }
 
 export default function ProductsScreen() {
   const [filter, setFilter] = useState<ProductFilter>(true);
+  const [adding, setAdding] = useState(false);
   return (
     <OrbitScreen
       title={t('products.title')}
       description={t('products.description')}
+      actions={
+        <Button
+          appearance={adding ? 'outline' : 'solid'}
+          tone={adding ? undefined : 'accent'}
+          size="sm"
+          onPress={() => setAdding((open) => !open)}
+        >
+          {adding ? t('action.cancel') : t('products.add')}
+        </Button>
+      }
       filters={<ActiveFilter value={filter} onChange={setFilter} />}
     >
-      {({ scope }) => <ProductList scope={scope} filter={filter} />}
+      {({ scope }) => (
+        <ProductList scope={scope} filter={filter} adding={adding} onAdd={() => setAdding(true)} />
+      )}
     </OrbitScreen>
   );
 }

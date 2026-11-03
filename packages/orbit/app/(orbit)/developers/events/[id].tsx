@@ -3,17 +3,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import type { WebhookEvent } from '@peable.to/shared-types';
 import { LinkButton } from '@oxy.so/bloom/button';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
-import { describeError, isOrbitApiError } from '@/api/transport';
 import { requestLogPath } from '@/developers/requestLogs';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { DeliveryStatusBadge } from '@/ui/StatusBadge';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const eventKey = (scope: DashboardScope, id: string) => [
   'orbit',
@@ -40,7 +38,8 @@ function Deliveries({ scope, event }: { scope: DashboardScope; event: WebhookEve
     queryKey: [...eventKey(scope, event.id), 'deliveries'],
     queryFn: () => dashboardApi.webhookDeliveries.list(scope, { event: event.id, limit: 100 }),
   });
-  if (query.isPending) return <Loading accessibilityLabel={t('developers.webhooks')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="table" rows={3} accessibilityLabel={t('developers.webhooks')} />;
   if (query.isError)
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data.data.length) {
@@ -132,16 +131,11 @@ function EventLoader({ scope, id }: { scope: DashboardScope; id: string }) {
     queryKey: eventKey(scope, id),
     queryFn: () => dashboardApi.events.retrieve(scope, id),
   });
-  if (query.isPending) return <Loading accessibilityLabel={t('developers.event')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('developers.event')} />;
   if (query.isError) {
-    if (isOrbitApiError(query.error) && query.error.status === 404) {
-      return (
-        <EmptyState
-          title={t('developers.eventDetail.notFound')}
-          description={describeError(query.error, t('developers.eventDetail.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('developers.eventDetail.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <EventDetail scope={scope} event={query.data} />;

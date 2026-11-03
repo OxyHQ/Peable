@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { formatInstant, formatRelative, fromUnixSeconds, utcDay } from './time';
+import { formatInstant, formatRelative, formatShortInstant, fromUnixSeconds, utcDay } from './time';
 
 describe('time helpers', () => {
   it('reads wire instants as Unix seconds', () => {
@@ -21,5 +21,15 @@ describe('time helpers', () => {
     expect(formatRelative(now + 300, now)).toBe('in 5 min');
     expect(formatRelative(now - 7200, now)).toBe('2 h ago');
     expect(formatRelative(now - 3 * 86_400, now)).toBe('3 d ago');
+  });
+
+  it('shortens a table date: the time this year, the year before it', () => {
+    const now = Date.UTC(2026, 10, 4, 12) / 1000;
+    const thisYear = Date.UTC(2026, 2, 3, 9, 5) / 1000;
+    const lastYear = Date.UTC(2024, 2, 3, 9, 5) / 1000;
+    expect(formatShortInstant(thisYear, 'en-US', now)).toContain('Mar 3');
+    expect(formatShortInstant(thisYear, 'en-US', now)).not.toContain('2026');
+    expect(formatShortInstant(lastYear, 'en-US', now)).toContain('2024');
+    expect(formatShortInstant(null, 'en-US', now)).toBe('—');
   });
 });

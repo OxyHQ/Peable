@@ -83,6 +83,7 @@ import type {
   TransferReversal,
   TransferWithReversal,
 } from '@peable.to/shared-types';
+import { errorState } from '../ui/errorState';
 import { isOrbitApiError, type OrbitTransport, type Query, withQuery } from './transport';
 
 /**
@@ -343,11 +344,13 @@ export function assertList<T>(body: unknown): ListPage<T> {
 
 /**
  * The gateway's answer for an application with no merchant in this environment
- * (`resolveMerchantByApp`): 404. Every merchant-scoped dashboard route gives
- * it, so a screen can tell "register first" apart from a real failure.
+ * (`resolveMerchantByApp`): 404 `merchant_missing`. Every merchant-scoped
+ * dashboard route gives it, so a screen can tell "set up payments" apart from
+ * a real failure — and from a 404 for ONE object (a payment that does not
+ * exist), which is not a first run.
  */
 export function isMerchantMissing(error: unknown): boolean {
-  return isOrbitApiError(error) && error.status === 404 && !isAccountMissing(error);
+  return errorState(error).kind === 'merchant_missing';
 }
 
 /**
@@ -372,7 +375,8 @@ export function createDashboardApi(transport: OrbitTransport) {
         try {
           return await get<Merchant>(dashboardPath(scope, '/merchant'));
         } catch (error) {
-          if (isMerchantMissing(error)) return null;
+          // This route has no other 404: whatever its code, it means "none yet".
+          if (isOrbitApiError(error) && error.status === 404) return null;
           throw error;
         }
       },

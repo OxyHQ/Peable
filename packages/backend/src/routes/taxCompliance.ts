@@ -451,7 +451,14 @@ export function createDashboardTaxComplianceRouter(deps: {
         !permissions.includes(permission) &&
         !(permission === 'billing:read' && permissions.includes('billing:manage'))
       ) {
-        sendError(res, 403, 'permission_error', `${permission} is required for tax compliance`);
+        sendError(
+          res,
+          403,
+          'permission_error',
+          `${permission} is required for tax compliance`,
+          'permission_required',
+          permission,
+        );
         return;
       }
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);

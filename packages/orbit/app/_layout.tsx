@@ -4,7 +4,9 @@
  * sees, so no screen makes that decision a second time.
  *
  * `BloomThemeProvider` sits above everything that could call `useTheme`
- * (including the sign-in screen), as Bloom requires.
+ * (including the sign-in screen), as Bloom requires. No `ToastOutlet` here:
+ * `OxyProvider` already renders one, and a second makes every toast render
+ * twice, one over the other.
  */
 
 import '../global.css';
@@ -16,7 +18,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { OxyProvider } from '@oxy.so/services/ui/client';
 import { BloomThemeProvider } from '@oxy.so/bloom/theme';
 import { OverlayInertBoundary, PortalOutlet, PortalProvider } from '@oxy.so/bloom/portal';
-import { ToastOutlet } from '@oxy.so/bloom/toast';
 import { ImageResolverProvider } from '@oxy.so/bloom/image-resolver';
 import { oxyServices } from '@/api/client';
 import { OXY_AUTH_REDIRECT_URI, OXY_CLIENT_ID } from '@/config';
@@ -68,7 +69,6 @@ export default function RootLayout() {
                 </OverlayInertBoundary>
                 <PortalOutlet />
               </PortalProvider>
-              <ToastOutlet />
             </ImageResolverProvider>
           </OxyProvider>
         </BloomThemeProvider>

@@ -23,7 +23,6 @@ import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { taxComplianceApi } from '../api/client';
 import type { DashboardScope } from '../api/dashboard';
@@ -50,6 +49,7 @@ import {
   stateCode,
   type Tone,
 } from './vocabulary';
+import { PageSkeleton } from '../ui/states';
 
 function Tag({ tone, label }: { tone: Tone; label: string }) {
   return <Badge appearance="subtle" tone={tone} size="label-small" content={label} />;
@@ -97,7 +97,7 @@ export function OverviewSection({ scope }: { scope: DashboardScope }) {
   if (assessments.error)
     return <ErrorNotice error={assessments.error} onRetry={assessments.refetch} />;
   if (!assessments.data || !capabilities.data || !ruleSet.data)
-    return <Loading accessibilityLabel={t('compliance.section.overview')} />;
+    return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.overview')} />;
   const latest = assessments.data.data[0];
   const open = (review.data?.data ?? []).filter((item) => item.status === 'open').length;
 
@@ -301,7 +301,8 @@ export function BusinessSection({ scope }: { scope: DashboardScope }) {
   );
 
   if (profile.error) return <ErrorNotice error={profile.error} onRetry={profile.refetch} />;
-  if (!profile.data) return <Loading accessibilityLabel={t('compliance.section.business')} />;
+  if (!profile.data)
+    return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.business')} />;
   const busy =
     save.isPending || addLocation.isPending || addDestination.isPending || endLocation.isPending;
 
@@ -564,7 +565,9 @@ export function RegistrationsSection({ scope }: { scope: DashboardScope }) {
   if (declarations.error)
     return <ErrorNotice error={declarations.error} onRetry={declarations.refetch} />;
   if (!declarations.data)
-    return <Loading accessibilityLabel={t('compliance.section.registrations')} />;
+    return (
+      <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.registrations')} />
+    );
   const busy = add.isPending || change.isPending;
   const statusOptions = options(TAX_REGISTRATION_DECLARATION_STATUSES, 'compliance.status');
   const dated = form.status === 'registered' || form.status === 'ended';
@@ -745,7 +748,7 @@ export function DocumentsSection({ scope }: { scope: DashboardScope }) {
 
   if (checklist.error) return <ErrorNotice error={checklist.error} onRetry={checklist.refetch} />;
   if (!checklist.data || !documents.data)
-    return <Loading accessibilityLabel={t('compliance.section.documents')} />;
+    return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.documents')} />;
 
   return (
     <View className="gap-6">
@@ -884,7 +887,8 @@ function ReviewRow({ scope, item }: { scope: DashboardScope; item: TaxReviewItem
 export function ReviewSection({ scope }: { scope: DashboardScope }) {
   const items = useReviewItems(scope);
   if (items.error) return <ErrorNotice error={items.error} onRetry={items.refetch} />;
-  if (!items.data) return <Loading accessibilityLabel={t('compliance.section.review')} />;
+  if (!items.data)
+    return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.review')} />;
   const open = items.data.data.filter((item) => item.status === 'open');
   const decided = items.data.data.filter((item) => item.status !== 'open');
   return (
@@ -918,7 +922,7 @@ export function DeadlinesSection({ scope }: { scope: DashboardScope }) {
   const capabilities = useCompliance(scope, 'capabilities');
   if (deadlines.error) return <ErrorNotice error={deadlines.error} onRetry={deadlines.refetch} />;
   if (!deadlines.data || !capabilities.data)
-    return <Loading accessibilityLabel={t('compliance.section.deadlines')} />;
+    return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.deadlines')} />;
   const roadmap = capabilities.data.capabilities.filter((each) => each.status === 'not_available');
   return (
     <View className="gap-6">
@@ -977,7 +981,8 @@ export function DeadlinesSection({ scope }: { scope: DashboardScope }) {
 export function HistorySection({ scope }: { scope: DashboardScope }) {
   const actions = useCompliance(scope, 'actions');
   if (actions.error) return <ErrorNotice error={actions.error} onRetry={actions.refetch} />;
-  if (!actions.data) return <Loading accessibilityLabel={t('compliance.section.history')} />;
+  if (!actions.data)
+    return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.history')} />;
   return (
     <Section title={t('compliance.history.title')}>
       {actions.data.data.length === 0 ? <Muted>{t('compliance.history.empty')}</Muted> : null}
