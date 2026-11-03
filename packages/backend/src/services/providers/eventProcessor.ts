@@ -51,7 +51,15 @@ import { isSetupHoldingProvider } from './provider';
 import { selectStoredProvider } from './environmentGuard';
 import { toLastPaymentError } from '../intentReconciliation';
 import type { ProviderPaymentError } from './provider';
-import { findAccountByProviderAccountId } from '../../db/accounts/connectedAccountRepository';
+import {
+  findAccountByProviderAccountId,
+  hasCardHalf,
+} from '../../db/accounts/connectedAccountRepository';
+import { findMerchantById } from '../../db/merchants/merchantRepository';
+import { recordEvent } from '../events';
+import { handleApplicationFeeEvent } from '../money/applicationFees';
+import { readBalance, syncAccountLedger, syncLedgerAfterPayment } from '../money/ledger';
+import { handlePayoutEvent } from '../money/payouts';
 import {
   applyTransferReversal,
   findTransferByProviderObject,
@@ -166,7 +174,9 @@ const REFUND_EVENTS: ReadonlySet<string> = new Set([
  */
 function toRefundStatus(status: unknown): RefundStatus | null {
   if (status === 'succeeded') return 'succeeded';
-  if (status === 'failed' || status === 'canceled') return 'failed';
+  if (status === 'failed') return 'failed';
+  // Its own state since Orbit can cancel a refund (`POST /v1/refunds/:id/cancel`).
+  if (status === 'canceled') return 'canceled';
   if (status === 'pending' || status === 'requires_action') return 'pending';
   return null;
 }
@@ -284,6 +294,15 @@ export async function processProviderEvent(
   try {
     if (ACCOUNT_REFRESH_EVENTS.has(event.type)) {
       return await handleAccountEvent(db, event);
+    }
+    if (event.type.startsWith('payout.')) {
+      return await handlePayoutProviderEvent(db, event);
+    }
+    if (event.type.startsWith('application_fee.')) {
+      return await handleApplicationFeeProviderEvent(db, event);
+    }
+    if (event.type === 'balance.available') {
+      return await handleBalanceAvailableEvent(db, event);
     }
     if (TRANSFER_REVERSAL_EVENTS.has(event.type)) {
       return await handleTransferEvent(db, event);
@@ -420,6 +439,7 @@ export async function processProviderEvent(
       // A payment that saved its card (ADR 0016): register the `pm_…`. Best-effort.
       await saveIntentPaymentMethod(updated);
     }
+    if (updated.status === 'succeeded') await syncLedgerFor(db, updated);
     return { kind: 'applied', intentId: updated.id, status: updated.status };
   } catch (error) {
     // Redacted before it is stored: a provider's message quotes the input back,
@@ -623,9 +643,111 @@ async function handleRefundEvent(
         });
   await markProviderEventProcessed(db, event.id);
   if (moved) kickWebhookOutbox();
+  if (moved?.status === 'succeeded') await syncLedgerFor(db, intent);
   return moved
     ? { kind: 'applied', intentId: intent.id, status: moved.status }
     : { kind: 'noop', intentId: intent.id };
+}
+
+/**
+ * Bring the ledger a card payment belongs to up to date (ADR 0015 §4) after it
+ * or one of its refunds moved: the destination account's, or — for an Oxy
+ * first-party merchant — the platform-attributed one. Best-effort: never fails
+ * the event; the daily reconciliation catches up.
+ */
+async function syncLedgerFor(
+  db: ReturnType<typeof getDb>,
+  intent: PaymentIntentRow,
+): Promise<void> {
+  const merchant = await findMerchantById(db, intent.merchantId);
+  if (!merchant) return;
+  const current = (await findIntentById(db, intent.id)) ?? intent;
+  await syncLedgerAfterPayment(current, merchant.firstParty);
+}
+
+/**
+ * `payout.*` on the Connect endpoint (ADR 0015 §5): re-read the payout from the
+ * account and mirror it — the payload is redacted, the fresh read is the truth.
+ */
+async function handlePayoutProviderEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const payoutId = event.objectIds.payout;
+  const accountId = event.objectIds[ACCOUNT_OBJECT_KEY];
+  if (!payoutId || !accountId) {
+    // A payout of the PLATFORM's own balance: the operator's treasury, on no
+    // merchant's ledger (ADR 0015). Handled, not failed.
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  const outcome = await handlePayoutEvent(event.provider as ProviderId, accountId, payoutId);
+  if (outcome === 'unmatched') {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  await markProviderEventProcessed(db, event.id);
+  return { kind: 'noop', intentId: payoutId };
+}
+
+/** `application_fee.*`: re-read the fee and record it and its refunds (ADR 0015 §3). */
+async function handleApplicationFeeProviderEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const feeId = event.objectIds.application_fee ?? event.objectIds.fee;
+  if (!feeId) {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  const outcome = await handleApplicationFeeEvent(
+    event.provider as ProviderId,
+    event.livemode,
+    feeId,
+  );
+  // Unmatched stays in the drain: the charge may not be bound to its payment yet.
+  if (outcome === 'unmatched') return { kind: 'unmatched' };
+  await markProviderEventProcessed(db, event.id);
+  return { kind: 'noop', intentId: feeId };
+}
+
+/**
+ * `balance.available` for an account: ingest its new transactions and tell the
+ * merchant, with the balance read from the ledger (ADR 0015 §4).
+ */
+async function handleBalanceAvailableEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const accountId = event.objectIds[ACCOUNT_OBJECT_KEY];
+  const account = accountId
+    ? await findAccountByProviderAccountId(db, event.provider as ProviderId, accountId)
+    : null;
+  if (!account || !hasCardHalf(account)) {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  await syncAccountLedger(account);
+  const figures = await readBalance({
+    merchantId: account.merchantId,
+    connectedAccountId: account.id,
+  });
+  await db.transaction(async (tx) => {
+    await recordEvent(tx, {
+      merchantId: account.merchantId,
+      type: 'balance.available',
+      object: {
+        object: 'balance',
+        livemode: account.livemode,
+        ...figures,
+        account: account.publicId,
+      },
+      account: account.publicId,
+    });
+    await markProviderEventProcessed(tx, event.id);
+  });
+  kickWebhookOutbox();
+  return { kind: 'noop', intentId: account.publicId };
 }
 
 /** What a refund payload says, narrowed to what a row needs. */

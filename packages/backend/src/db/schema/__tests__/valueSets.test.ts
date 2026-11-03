@@ -61,8 +61,9 @@ describe('closed value sets', () => {
    * to.
    */
   it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
-    // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair.
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(40);
+    // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair
+    // + Orbit money's nine (ADR 0015).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(49);
     for (const retired of [
       'payment_intent.settled',
       'payment_intent.confirming',
@@ -184,6 +185,10 @@ describe('the base-unit amount pattern', () => {
     // live inside `prices.tiers` (jsonb) and are checked by its one writer.
     // Plus two RE-ADDED: `0049` re-adds the coupon and promotion-code CHECKs
     // (their currency set widened), and each carries the pattern again.
-    expect(occurrences).toBe(16);
+    // ADR 0015 adds `fee_schedules.fixed_amount`, `application_fees.amount`,
+    // `application_fee_refunds.amount`, `payouts.amount` and the intent's
+    // `application_fee_amount` and `transfer_amount` (the ledger's signed
+    // amounts use their own pattern).
+    expect(occurrences).toBe(22);
   });
 });

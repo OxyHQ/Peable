@@ -58,6 +58,8 @@ import {
   stopReferenceReconciliation,
 } from './services/oxyFiles/referenceReconciliation';
 import { createConnectedAccountsRouter } from './routes/connectedAccounts';
+import { createMoneyRouter, refuseMisplacedPeableAccount } from './routes/money';
+import { startMoneyReconciliation, stopMoneyReconciliation } from './services/money/reconciliation';
 import { createConnectRouter } from './routes/connect';
 import { createTransfersRouter } from './routes/transfers';
 import { createRefundsRouter } from './routes/refunds';
@@ -264,6 +266,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
     res.setHeader('Peable-Version', PEABLE_API_VERSION);
     next();
   }) as RequestHandler);
+  app.use(refuseMisplacedPeableAccount);
   const requireMerchant: RequestHandler =
     deps.requireMerchant ?? oxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE });
   const optionalServiceAuth: RequestHandler =
@@ -290,6 +293,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createMerchantsRouter({ requireMerchant, files: deps.oxyFiles }));
   app.use(createConnectedAccountsRouter({ requireMerchant }));
+  app.use(createMoneyRouter({ requireMerchant }));
   // The SELLER's half of connected accounts (ADR 0012 D3): Oxy USER auth, never
   // a service credential — a platform cannot register a seller's key.
   app.use(createConnectRouter({ requireOxyUser: deps.requireOxyUser }));
@@ -414,6 +418,7 @@ export async function start(
     stopIdempotencySweeper();
     stopEventSweeper();
     stopRequestLogSweeper();
+    stopMoneyReconciliation();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -441,6 +446,7 @@ export async function start(
   startIdempotencySweeper();
   startEventSweeper();
   startRequestLogSweeper();
+  startMoneyReconciliation();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

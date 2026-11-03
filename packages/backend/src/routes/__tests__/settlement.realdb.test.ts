@@ -303,7 +303,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     // Upper-cased on the way in, which is the form the CHECK insists on.
     expect(json.country).toBe('ES');
     expect(json.payable).toBe(false);
-    expect((json.requirements as Record<string, number>).currently_due).toBe(1);
+    expect((json.requirements as Record<string, unknown>).currently_due).toEqual([
+      'business_profile.url',
+    ]);
   });
 
   /**
@@ -450,7 +452,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     expect(refreshed.status).toBe(200);
     expect(refreshed.json.payable).toBe(true);
-    expect((refreshed.json.requirements as Record<string, number>).currently_due).toBe(0);
+    expect((refreshed.json.requirements as Record<string, unknown>).currently_due).toEqual([]);
     expect(refreshed.json.default_currency).toBe('EUR');
   });
 

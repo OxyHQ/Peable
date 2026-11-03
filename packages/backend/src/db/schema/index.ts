@@ -33,6 +33,15 @@ export {
 export { idempotencyKeys } from './idempotency';
 export { couponProducts, coupons, prices, products, promotionCodes } from './catalog';
 export { apiRequestLogs } from './requestLogs';
+export {
+  applicationFeeRefunds,
+  applicationFees,
+  balanceTransactions,
+  feeSchedules,
+  ledgerEntries,
+  payouts,
+  reconciliationMismatches,
+} from './money';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';

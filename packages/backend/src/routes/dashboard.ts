@@ -65,7 +65,29 @@ import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-import { listQuerySchema, parseQuery } from '../lib/list';
+import { listQuerySchema, parseQuery, type QuerySurface } from '../lib/list';
+import { runIdempotent } from '../lib/idempotency';
+import {
+  answerBalanceTransactionList,
+  answerMismatchList,
+  answerPayoutList,
+  answerPayoutReconciliation,
+  cancelPayoutCore,
+  createAccountOnboardingLink,
+  createPayoutCore,
+  retrieveAccount,
+  retrieveBalance,
+  retrieveBalanceTransaction,
+  retrievePayout,
+  updateAccount,
+} from './money';
+
+type MoneyCore = (
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+) => Promise<void>;
 
 /**
  * Every `/v1/dashboard/*` route is scoped to one `(applicationId, environment)`
@@ -490,6 +512,63 @@ export function createDashboardRouter(deps?: {
     requireOxyUser,
     asMember((req, res, merchant) => retrieveRequestLog(req, res, merchant, 'dashboard')),
   );
+  /**
+   * Orbit's money surface (ADR 0015) through the SAME cores as the service
+   * routes (`routes/money.ts`). The dashboard never takes `Peable-Account`: it
+   * shows the merchant's own account. Writes run under the generic
+   * idempotency layer (`runIdempotent`) once the merchant is resolved, so a
+   * retried payout instruction with the same `Idempotency-Key` is one payout.
+   */
+  const dashboard = (core: MoneyCore) =>
+    asMember((req, res, merchant) => core(req, res, merchant, 'dashboard'));
+  const dashboardWrite = (core: MoneyCore) =>
+    asMember((req, res, merchant) =>
+      runIdempotent(req, res, merchant.id, () => core(req, res, merchant, 'dashboard')),
+    );
+  router.get(`${base}/account`, requireOxyUser, dashboard(retrieveAccount));
+  router.post(
+    `${base}/account`,
+    requireOxyUser,
+    requestContextMiddleware,
+    dashboardWrite(updateAccount),
+  );
+  router.post(
+    `${base}/account_links`,
+    requireOxyUser,
+    requestContextMiddleware,
+    dashboardWrite(createAccountOnboardingLink),
+  );
+  router.get(`${base}/balance`, requireOxyUser, dashboard(retrieveBalance));
+  router.get(
+    `${base}/balance_transactions`,
+    requireOxyUser,
+    dashboard(answerBalanceTransactionList),
+  );
+  router.get(
+    `${base}/balance_transactions/:id`,
+    requireOxyUser,
+    dashboard(retrieveBalanceTransaction),
+  );
+  router.get(`${base}/payouts`, requireOxyUser, dashboard(answerPayoutList));
+  router.post(
+    `${base}/payouts`,
+    requireOxyUser,
+    requestContextMiddleware,
+    dashboardWrite(createPayoutCore),
+  );
+  router.get(`${base}/payouts/:id`, requireOxyUser, dashboard(retrievePayout));
+  router.post(
+    `${base}/payouts/:id/cancel`,
+    requireOxyUser,
+    requestContextMiddleware,
+    dashboardWrite(cancelPayoutCore),
+  );
+  router.get(
+    `${base}/reports/payout_reconciliation`,
+    requireOxyUser,
+    dashboard(answerPayoutReconciliation),
+  );
+  router.get(`${base}/reconciliation_mismatches`, requireOxyUser, dashboard(answerMismatchList));
 
   router.get(
     `${base}/webhook_deliveries`,

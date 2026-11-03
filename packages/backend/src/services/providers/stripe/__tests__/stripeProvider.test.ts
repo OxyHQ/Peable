@@ -477,6 +477,7 @@ describe('StripePaymentProvider', () => {
       businessType: 'individual',
       idempotencyKey: 'acct:acc_gateway_1',
       metadata: {},
+      role: 'seller',
     });
 
     const [body] = argsOf('createStripeConnectedAccountV2') as [Record<string, unknown>];
@@ -507,6 +508,7 @@ describe('StripePaymentProvider', () => {
       businessType: 'company',
       idempotencyKey: 'acct:acc_gateway_1',
       metadata: {},
+      role: 'seller',
     });
 
     expect(argsOf('retrieveStripeAccount')).toEqual(['acct_new']);

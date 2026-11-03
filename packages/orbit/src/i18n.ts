@@ -6,11 +6,20 @@
  *
  * The `tax.*` and `contributions.*` strings are the wallet screens' strings,
  * carried over with those screens.
+ *
+ * Spanish (`es`) so far covers the money screens (`money/strings.ts`) and the
+ * navigation only. It is NOT in `SUPPORTED_LOCALES` yet: offering it would
+ * render the rest of Orbit in English under a Spanish locale. `t` falls back
+ * to English per key, so turning it on is adding `'es'` here once the other
+ * screens are translated.
  */
+import { MONEY_EN, MONEY_ES } from './money/strings';
+
 export const SUPPORTED_LOCALES = ['en'];
 export const FALLBACK_LOCALE = 'en';
 
 const en: Record<string, string> = {
+  ...MONEY_EN,
   'app.name': 'Orbit',
   'app.byline': 'by Peable',
   'error.generic': 'Something went wrong. Try again.',
@@ -470,11 +479,38 @@ const en: Record<string, string> = {
   'settings.logo.removed': 'Logo removed.',
 };
 
+const es: Record<string, string> = {
+  ...MONEY_ES,
+  'nav.home': 'Inicio',
+  'nav.payments': 'Pagos',
+  'nav.developers': 'Desarrolladores',
+  'nav.tax': 'Impuestos',
+  'nav.contributions': 'Contribuciones',
+  'nav.settings': 'Ajustes',
+};
+
+const CATALOGS: Readonly<Record<string, Readonly<Record<string, string>>>> = { en, es };
+
+/** The catalog `t` reads first; English fills any key it lacks. */
+let activeLocale = FALLBACK_LOCALE;
+
+/** A catalog by language (`es-ES` reads `es`), for tests and the locale switch. */
+export function catalogFor(locale: string): Readonly<Record<string, string>> | undefined {
+  return CATALOGS[locale.split('-')[0]?.toLowerCase() ?? ''];
+}
+
+/** Switch the catalog `t` reads; an unknown language selects English. Returns the one chosen. */
+export function setLocale(locale: string | null | undefined): string {
+  const language = (locale ?? '').split('-')[0]?.toLowerCase() ?? '';
+  activeLocale = Object.hasOwn(CATALOGS, language) ? language : FALLBACK_LOCALE;
+  return activeLocale;
+}
+
 export type TranslationParams = Record<string, string | number>;
 
-/** The English string for `key`, with `{name}` placeholders filled. Unknown keys render as the key. */
+/** The string for `key` in the active locale (else English), with `{name}` placeholders filled. Unknown keys render as the key. */
 export function t(key: string, params?: TranslationParams): string {
-  const template = en[key] ?? key;
+  const template = CATALOGS[activeLocale]?.[key] ?? en[key] ?? key;
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
     Object.hasOwn(params, name) ? String(params[name]) : match,

@@ -118,6 +118,8 @@ export function wrap(handler: AsyncHandler): RequestHandler {
 export interface ResolvedServiceApp {
   appId: string;
   environment: OxyServiceEnvironment;
+  /** Verified live by the shared middleware for an own workload (Oxy ADR 0049). */
+  firstParty: boolean;
 }
 
 /**
@@ -132,7 +134,11 @@ export function requireServiceApp(req: Request, res: Response): ResolvedServiceA
     sendError(res, 401, 'authentication_error', 'missing service app credentials');
     return null;
   }
-  return { appId: serviceApp.appId, environment: serviceApp.environment };
+  return {
+    appId: serviceApp.appId,
+    environment: serviceApp.environment,
+    firstParty: serviceApp.authority === 'first_party',
+  };
 }
 
 /**

@@ -6,8 +6,10 @@
  * sum of succeeded refund rows. A stored total on the payment would be a second
  * home for the same fact, and the two disagree the first time a write is lost.
  */
-import type { CurrencyCode } from '@peable.to/shared-types';
+import type { CurrencyCode, RefundReason } from '@peable.to/shared-types';
 import {
+  findRefundByPublicId,
+  markRefundCanceled,
   findRefundByExternalRef,
   insertRefund,
   linkRefundObject,
@@ -24,7 +26,11 @@ import { toChargeDTO, toRefundDTO } from '../../lib/serialize';
 import { recordChargeEvent, recordRefundEvent } from '../intentTransition';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { selectStoredProvider } from '../providers/environmentGuard';
-import { ProviderError, type PaymentProvider } from '../providers/provider';
+import {
+  isMoneyMirroringProvider,
+  ProviderError,
+  type PaymentProvider,
+} from '../providers/provider';
 import { redactProviderMessage } from '../providers/redact';
 
 /** The payment cannot be refunded from where it stands. */
@@ -57,6 +63,11 @@ export interface CreateRefundInput {
   /** The MERCHANT's own id for this refund. The idempotency. */
   readonly externalRef: string;
   readonly amount: string;
+  readonly reason?: RefundReason;
+  readonly metadata?: Record<string, string>;
+  /** Destination charges (ADR 0015 §3): refund Orbit's fee and pull the funds back, in proportion. */
+  readonly refundApplicationFee?: boolean;
+  readonly reverseTransfer?: boolean;
 }
 
 export interface CreateRefundResult {
@@ -163,6 +174,10 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
         amount: input.amount,
         currency: intent.currency,
         provider: provider.id,
+        reason: input.reason ?? null,
+        metadata: input.metadata ?? {},
+        refundApplicationFee: input.refundApplicationFee ?? false,
+        reverseTransfer: input.reverseTransfer ?? false,
       });
       // `refund.created` commits with the row (ADR 0001 D7).
       if (row) await emitRefundEvents(tx, intent, row, null);
@@ -191,6 +206,11 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
       amount: { amount: inserted.amount, currency: intent.currency as CurrencyCode },
       idempotencyKey: `re:${inserted.publicId}`,
       metadata: { peable_refund_id: inserted.publicId },
+      // From the ROW too, for the reason the amount is: a resume sends what
+      // the interrupted attempt recorded.
+      ...(inserted.reason !== null ? { reason: inserted.reason } : {}),
+      ...(inserted.refundApplicationFee ? { refundApplicationFee: true } : {}),
+      ...(inserted.reverseTransfer ? { reverseTransfer: true } : {}),
     });
 
     /**
@@ -252,6 +272,53 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
 
   kickWebhookOutbox();
   return { refund: settled, created: true };
+}
+
+/** The refund is not one the provider can still cancel. 400. */
+export class RefundNotCancelableError extends Error {
+  constructor(status: RefundRow['status']) {
+    super(`a ${status} refund cannot be canceled`);
+    this.name = 'RefundNotCancelableError';
+  }
+}
+
+/**
+ * Cancel a refund the provider still holds. Only a `pending` refund the
+ * provider has (Stripe allows it while the refund `requires_action`); the
+ * provider decides, and a refusal is a 400 that changes nothing here.
+ */
+export async function cancelRefund(
+  intent: PaymentIntentRow,
+  refund: RefundRow,
+): Promise<RefundRow> {
+  if (refund.status !== 'pending' || refund.providerObjectId === null) {
+    throw new RefundNotCancelableError(refund.status);
+  }
+  const provider = requireRefundProvider(intent);
+  if (!isMoneyMirroringProvider(provider)) {
+    throw new RefundsUnavailableError(`the ${provider.id} rail cannot cancel refunds`);
+  }
+  let result: Awaited<ReturnType<typeof provider.cancelRefund>>;
+  try {
+    result = await provider.cancelRefund({
+      providerObjectId: refund.providerObjectId,
+      idempotencyKey: `re_cancel:${refund.publicId}`,
+    });
+  } catch (error) {
+    if (error instanceof ProviderError && !error.retryable) {
+      throw new RefundNotCancelableError(refund.status);
+    }
+    throw error;
+  }
+  if (result.state !== 'canceled') throw new RefundNotCancelableError(refund.status);
+  const db = getDb();
+  const canceled = await db.transaction(async (tx) => {
+    const row = await markRefundCanceled(tx, refund.id);
+    if (row) await emitRefundEvents(tx, intent, row, refund.status);
+    return row;
+  });
+  kickWebhookOutbox();
+  return canceled ?? (await findRefundByPublicId(db, refund.merchantId, refund.publicId)) ?? refund;
 }
 
 /**

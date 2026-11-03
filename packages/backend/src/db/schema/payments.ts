@@ -96,6 +96,19 @@ export const paymentIntents = pgTable(
      */
     connectedAccountId: text(),
     /**
+     * A DESTINATION charge (ADR 0015 §2), card only: the account the funds go
+     * to, the amount transferred when a platform named one (NULL = the whole
+     * amount less the fee), the account that is merchant of record
+     * (`on_behalf_of`), and Orbit's fee — the INSTRUCTION sent to the provider;
+     * the fee actually taken is the `application_fees` row. All NULL on a
+     * platform charge. Decided once, at create, and replayed from the row on a
+     * resumed provider create so a retry sends the same charge.
+     */
+    transferDestinationId: text(),
+    transferAmount: text(),
+    onBehalfOfId: text(),
+    applicationFeeAmount: text(),
+    /**
      * `network`, but only on a payment to the merchant ITSELF — NULL on an
      * on-behalf one. Computed by the server, never written.
      *
@@ -288,6 +301,34 @@ export const paymentIntents = pgTable(
     check(
       'payment_intents_connected_account_is_faircoin_check',
       sql`${table.connectedAccountId} is null or ${table.rail} = 'faircoin'`,
+    ),
+    /** The destination and the merchant of record are THIS merchant's accounts. */
+    foreignKey({
+      name: 'payment_intents_transfer_destination_merchant_fkey',
+      columns: [table.transferDestinationId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'payment_intents_on_behalf_of_merchant_fkey',
+      columns: [table.onBehalfOfId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    /**
+     * The destination-charge fields are card fields, and they agree the way the
+     * provider requires: a fee or a transfer amount needs a destination, a
+     * transfer amount and a fee are never both set, and neither exceeds the
+     * payment.
+     */
+    check(
+      'payment_intents_destination_fields_check',
+      sql.raw(
+        `(rail = 'card' or (transfer_destination_id is null and on_behalf_of_id is null and application_fee_amount is null and transfer_amount is null))
+          and (application_fee_amount is null or transfer_destination_id is not null)
+          and (transfer_amount is null or transfer_destination_id is not null)
+          and (application_fee_amount is null or transfer_amount is null)
+          and (application_fee_amount is null or (application_fee_amount ~ '${BASE_UNIT_STRING_PATTERN}' and application_fee_amount::numeric <= amount::numeric))
+          and (transfer_amount is null or (transfer_amount ~ '${BASE_UNIT_STRING_PATTERN}' and transfer_amount::numeric <= amount::numeric))`,
+      ),
     ),
     /**
      * What keeps `merchant_id` referential once `network` may be NULL.

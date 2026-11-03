@@ -36,6 +36,9 @@ export interface ChargeRow {
   readonly description: string | null;
   readonly receiptEmail: string | null;
   readonly metadata: Record<string, string>;
+  readonly applicationFeeAmount: string | null;
+  readonly applicationFeePublicId: string | null;
+  readonly balanceTransactionPublicId: string | null;
   readonly createdAt: Date;
 }
 
@@ -72,6 +75,15 @@ const CHARGE_COLUMNS = {
   description: sql<string | null>`${viaIntent('p.description')}`,
   receiptEmail: sql<string | null>`${viaIntent('p.receipt_email')}`,
   metadata: sql<Record<string, string>>`${viaIntent('p.metadata')}`,
+  applicationFeeAmount: sql<string | null>`${viaIntent('p.application_fee_amount')}`,
+  // The fee the provider actually took, and the ledger's own row for this
+  // charge (ADR 0015) — each `null` until it exists, never guessed.
+  applicationFeePublicId: sql<string | null>`${sql.raw(
+    `(select f.public_id from application_fees f where f.payment_intent_id = ${INTENT_OF})`,
+  )}`,
+  balanceTransactionPublicId: sql<string | null>`${sql.raw(
+    `(select b.public_id from balance_transactions b where b.source_type = 'charge' and b.source_id = "charges"."public_id" order by b.occurred_at limit 1)`,
+  )}`,
   createdAt: charges.createdAt,
 } as const;
 

@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, index, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, updatedAt } from '@oxy.so/db';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
@@ -8,6 +18,7 @@ import {
   CURRENCY_CODES,
   PROVIDER_IDS,
   REFUND_ORIGINS,
+  REFUND_REASONS,
   REFUND_STATUSES,
 } from './valueSets';
 
@@ -80,6 +91,18 @@ export const refunds = pgTable(
     providerObjectId: text(),
     /** The provider's machine-readable failure reason, when it failed. */
     failureCode: text(),
+    /** Stripe's reason, as the merchant gave it; forwarded to the provider. */
+    reason: text(),
+    /** The merchant's own bookkeeping (ADR 0014 D1). Never forwarded. */
+    metadata: jsonb().$type<Record<string, string>>().notNull().default({}),
+    /**
+     * The destination-charge reversal flags the merchant asked for (ADR 0015 §3):
+     * refund Orbit's application fee, and reverse the transfer to the
+     * destination, in proportion. Stored so a resumed refund sends the same
+     * request under the same idempotency key.
+     */
+    refundApplicationFee: boolean().notNull().default(false),
+    reverseTransfer: boolean().notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -118,6 +141,10 @@ export const refunds = pgTable(
     }).onDelete('restrict'),
     check('refunds_provider_check', sql.raw(`provider in (${inList(PROVIDER_IDS)})`)),
     check('refunds_status_check', sql.raw(`status in (${inList(REFUND_STATUSES)})`)),
+    check(
+      'refunds_reason_check',
+      sql.raw(`reason is null or reason in (${inList(REFUND_REASONS)})`),
+    ),
     check('refunds_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
     check(
       'refunds_external_ref_check',

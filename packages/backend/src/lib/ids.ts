@@ -46,7 +46,14 @@ export function newId(
     | 'req'
     | 'file'
     | 'pmc'
-    | 'pmd',
+    | 'pmd'
+    // Orbit money (ADR 0015): balance transactions, payouts, application fees and
+    // their refunds, and reconciliation findings.
+    | 'txn'
+    | 'po'
+    | 'fee'
+    | 'fr'
+    | 'recon',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

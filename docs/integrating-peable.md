@@ -653,7 +653,8 @@ them in production.
 await peable.connectedAccounts.create({ external_ref, country, business_type });
 await peable.transfers.create({ payment_intent, connected_account_ref, external_ref, amount });
 await peable.transfers.reverse(transferId, { amount, external_ref });   // identity required
-await peable.refunds.create({ payment_intent, external_ref, amount });
+await peable.refunds.create({ payment_intent, external_ref, amount, reason, metadata });
+await peable.refunds.update('re_…', { metadata });   // and .cancel('re_…') where the provider allows
 await peable.refunds.list({ payment_intent });           // or .retrieve('re_…')
 await peable.transfers.list({ connected_account });      // or .retrieve('tr_…')
 await peable.disputes.list({ payment_intent });          // or .retrieve('dp_…')
@@ -837,6 +838,81 @@ const quote = await peable.billing.createTaxQuote({
   exclusive, both Unix seconds; or `GET /v1/tax/reports/summary?format=csv`) is
   the filing export; report rows are net of reversals and count them in
   `reversals`.
+
+## Connect & money — your account, balance, payouts and fees (ADR 0015)
+
+Orbit never holds your money. Card funds stay at the acquirer, in **your own
+provider account**, opened and onboarded through Peable; Orbit instructs the
+provider and mirrors what happened. Identity documents are collected by the
+provider's hosted onboarding and never reach Peable.
+
+```ts
+// 1. Open your account (once), then send yourself through onboarding.
+await peable.account.update({ country: 'ES', business_type: 'company' });   // 201 the first time
+const link = await peable.accountLinks.create({                              // POST /v1/account_links
+  refresh_url: 'https://you.example/account?refresh=1',
+  return_url: 'https://you.example/account',
+});
+// redirect to link.url; readiness arrives as `account.updated`
+const account = await peable.account.retrieve();   // charges_enabled, payouts_enabled, requirements, settings
+
+// 2. Settings live at the provider and are read back.
+await peable.account.update({
+  settings: { payouts: { schedule: { interval: 'manual' } }, payments: { statement_descriptor: 'MY SHOP' } },
+});
+
+// 3. Your balance and every movement, mirrored from the provider.
+await peable.balance.retrieve();                     // { available, pending, informational }
+await peable.balanceTransactions.list({ type: 'payment', payout: 'po_…' });
+
+// 4. Payouts — scheduled by the provider, or instructed on a manual schedule.
+await peable.payouts.create({ amount: '5000', currency: 'EUR' });
+await peable.payouts.list({ status: 'paid' });
+await peable.reports.payoutReconciliation({ payout: 'po_…' });   // the transactions it paid out
+
+// 5. Orbit's fee on each charge, and its refunds.
+await peable.applicationFees.list({ payment_intent: 'pi_…' });
+```
+
+**Which charge your card payments are.** Decided once when the intent is
+created and visible on it (`transfer_data`, `on_behalf_of`,
+`application_fee_amount`):
+
+| You are | Charge | Merchant of record | Fee |
+|---|---|---|---|
+| an Oxy product (verified first-party workload) | platform charge | Oxy | none |
+| a merchant with an onboarded account | destination charge `on_behalf_of` your account | you — your descriptor, your chargebacks | your fee schedule |
+| a marketplace without an own account | platform charge + separate transfers to sellers | the platform (ADR 0009, open) | none |
+| a platform naming `transfer_data` / `on_behalf_of` for its seller | destination charge to that seller | the seller with `on_behalf_of` | the `application_fee_amount` you send |
+
+A merchant that opened an account but has not finished onboarding is refused
+card payments (409 `account_not_ready`) rather than silently charged as the
+platform. Refunds of a destination charge can also refund the fee
+(`refund_application_fee`) and pull the funds back (`reverse_transfer`).
+
+**`Peable-Account: ca_…`** lets a platform act on one of its connected
+accounts (Stripe's `Stripe-Account`), on exactly these routes:
+`/v1/account`, `/v1/account_links`, `/v1/balance`, `/v1/balance_transactions`,
+`/v1/payouts` and `/v1/reports/payout_reconciliation` (SDK: `{ peableAccount }`
+in the request options). Any other route answers 400 naming the header — a
+payment's destination is a body field (`transfer_data`), never a header.
+
+Rules that are easy to get wrong:
+
+- **No account, no balance.** Without an account `GET /v1/balance` is 404
+  `account_missing`; Orbit never shows zeros it does not have.
+- **A figure the provider did not give is `null`, not `0`.** Balance
+  transactions are the provider's own, verbatim; amounts are signed strings.
+- **FairCoin is informational.** A succeeded FairCoin payment is recorded under
+  `informational` (it is in your wallet already); it is never payable and no
+  payout draws on it.
+- **Live payments for third parties are gated.** Until ADR 0015's legal release
+  gate is signed off, a deployment answers 403 `live_payments_gated` to a
+  non-Oxy merchant opening a live account, taking a live destination charge or
+  instructing a live payout (`ORBIT_THIRD_PARTY_LIVE_PAYMENTS`). Test mode is
+  always open.
+- **Events:** `account.updated`, `application_fee.created|refunded`,
+  `payout.created|updated|paid|failed|canceled`, `balance.available`.
 
 ## Connect for FairCoin — paying sellers in their own wallets
 

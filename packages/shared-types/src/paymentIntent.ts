@@ -359,6 +359,21 @@ export interface PaymentIntent {
    * FairCoin only, and `faircoin.address` derives from that seller's own key.
    */
   connected_account: string | ConnectedAccount | null;
+  /**
+   * Orbit's fee on this card payment, taken by the provider from the
+   * destination account when the charge succeeds (ADR 0015 §3) — the
+   * INSTRUCTION; the fee actually taken is the `application_fee` object.
+   * `null` on a platform charge.
+   */
+  application_fee_amount: string | null;
+  /**
+   * A destination charge (ADR 0015 §2): the account (`ca_…`) the funds go to,
+   * and the amount transferred when the platform named one. `null` on a
+   * platform charge.
+   */
+  transfer_data: PaymentIntentTransferData | null;
+  /** The account (`ca_…`) that is the merchant of record, or `null` (the platform). */
+  on_behalf_of: string | null;
   client_secret: string;
   metadata: Record<string, string>;
   /** When an UNPAID intent expires. Meaningful only while `can_expire`. */
@@ -367,6 +382,14 @@ export interface PaymentIntent {
   can_expire: boolean;
   created: number;
   updated_at: number;
+}
+
+/** Where a destination charge's funds go (`transfer_data`). */
+export interface PaymentIntentTransferData {
+  /** `ca_…` */
+  destination: string;
+  /** Base units transferred; `null` means the whole amount less `application_fee_amount`. */
+  amount: string | null;
 }
 
 /** `POST /v1/payment_intents`. */
@@ -407,6 +430,16 @@ export interface CreatePaymentIntentParams {
   expires_in_seconds?: number;
   /** FairCoin only: pay this seller (`ca_…`, ADR 0012 D5). */
   connected_account?: string;
+  /**
+   * Card only, a platform acting for one of its connected accounts: Orbit's
+   * fee for this payment. Needs `transfer_data` (or `on_behalf_of`); refused
+   * beside `transfer_data.amount`.
+   */
+  application_fee_amount?: string;
+  /** Card only: a destination charge to one of the platform's connected accounts. */
+  transfer_data?: { destination: string; amount?: string };
+  /** Card only: make this connected account (`ca_…`) the merchant of record. */
+  on_behalf_of?: string;
   /** Card only, with `confirm`: where a redirect-based challenge returns. */
   return_url?: string;
 }

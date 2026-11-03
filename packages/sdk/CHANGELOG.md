@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.17.0 — Connect, fees, ledger, balance and payouts (breaking, ADR 0015)
+
+Requires `@peable.to/shared-types` 0.15.0.
+
+- New `peable.account` (`retrieve` / `update`): the merchant's own fiat
+  provider account — readiness, capabilities, requirements, business profile,
+  statement descriptors and the payout schedule (`settings.payouts.schedule`).
+  The first `update` opens it and needs `country` and `business_type`; a
+  merchant with none is a 404 `account_missing`.
+- `peable.accountLinks.create` without `account` mints a hosted onboarding link
+  for the merchant's own account (`POST /v1/account_links`, `type:
+  'account_onboarding' | 'account_update'`). With `account` it still onboards
+  that seller. `AccountLinksResource` takes an optional second
+  `AccountResource` constructor argument.
+- New `peable.balance.retrieve`, `peable.balanceTransactions` (`retrieve` /
+  `list({ type, payout, source, currency })`), `peable.payouts` (`create` /
+  `retrieve` / `list({ status })` / `cancel`), `peable.applicationFees`
+  (`retrieve` / `list({ payment_intent, charge })` / `listRefunds`) and
+  `peable.reports.payoutReconciliation({ payout })` (a list of the payout's
+  balance transactions with `summary`, auto-paginated like every list).
+- New per-request option `peableAccount` (`PeableRequestOptions`), sent as
+  `Peable-Account: ca_…`, on the account, balance, balance transaction, payout
+  and reconciliation methods: a platform acting on one of its connected
+  accounts.
+- `refunds.update(id, { metadata })` and `refunds.cancel(id)`. `refunds.create`
+  takes `reason`, `metadata`, `refund_application_fee` and `reverse_transfer`;
+  `CreateRefundParams` is now the wire contract's type (same public name).
+- `PaymentIntent` gains `application_fee_amount`, `transfer_data` and
+  `on_behalf_of` (also on `CreatePaymentIntentParams`); `Charge` gains
+  `application_fee` and `application_fee_amount`.
+- New events: `account.updated`, `application_fee.created`,
+  `application_fee.refunded`, `payout.created`, `payout.updated`, `payout.paid`,
+  `payout.failed`, `payout.canceled`, `balance.available`.
+- **Breaking:** `ConnectedAccount.requirements` lists requirement identifiers
+  (`currently_due`, `eventually_due`, `past_due`, `pending_verification` are
+  `string[]`, not counts) and carries `disabled_reason`;
+  `ConnectedAccount.disabled_reason_codes` is removed.
+- **Breaking:** `Refund` gains `reason` and `metadata`, and `Refund.status` adds
+  `canceled`.
+
 ## 0.16.0 — Files, complete disputes, payment method breadth (breaking)
 
 Requires `@peable.to/shared-types` 0.14.0.

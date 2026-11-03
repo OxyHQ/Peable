@@ -136,6 +136,12 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     merchant_id: row.merchantPublicId,
     // The PUBLIC `ca_…`. Never the internal `connectedAccountId`.
     connected_account: row.connectedAccountPublicId ?? null,
+    // A destination charge (ADR 0015 §2): PUBLIC `ca_…`s, read with the row.
+    application_fee_amount: row.applicationFeeAmount ?? null,
+    transfer_data: row.transferDestinationPublicId
+      ? { destination: row.transferDestinationPublicId, amount: row.transferAmount ?? null }
+      : null,
+    on_behalf_of: row.onBehalfOfPublicId ?? null,
     client_secret: row.clientSecret,
     metadata: row.metadata,
     expires_at: toUnix(row.expiresAt),
@@ -199,7 +205,9 @@ export function toChargeDTO(row: ChargeRow): Charge {
           },
     payment_method_details: row.paymentMethodDetails,
     receipt_url: null,
-    balance_transaction: null,
+    balance_transaction: row.balanceTransactionPublicId,
+    application_fee: row.applicationFeePublicId,
+    application_fee_amount: row.applicationFeeAmount,
     description: row.description,
     receipt_email: row.receiptEmail,
     metadata: row.metadata,
@@ -459,7 +467,9 @@ export function toRefundDTO(row: RefundRow, paymentIntentPublicId: string): Refu
     amount: row.amount,
     currency: row.currency,
     status: row.status,
+    reason: row.reason,
     failure_code: row.failureCode,
+    metadata: row.metadata,
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
   };

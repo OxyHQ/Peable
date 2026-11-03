@@ -49,8 +49,29 @@ export interface MerchantRow {
    */
   readonly businessLogoOxyFileId: string | null;
   readonly description: string | null;
+  /** Oxy's own product (ADR 0015 §2) — the verified authority of the last credential. */
+  readonly firstParty: boolean;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+/**
+ * Mirror the verified authority of the credential acting for this merchant
+ * (`authority: 'first_party'`, Oxy ADR 0049) onto the row, when it differs.
+ * One conditional statement: a steady state writes nothing.
+ */
+export async function syncMerchantFirstParty(
+  db: DatabaseOrTransaction,
+  merchant: MerchantRow,
+  firstParty: boolean,
+): Promise<MerchantRow> {
+  if (merchant.firstParty === firstParty) return merchant;
+  const [row] = await db
+    .update(merchants)
+    .set({ firstParty })
+    .where(eq(merchants.id, merchant.id))
+    .returning(MERCHANT_COLUMNS);
+  return row ? (row as MerchantRow) : { ...merchant, firstParty };
 }
 
 const MERCHANT_COLUMNS = {
@@ -62,6 +83,7 @@ const MERCHANT_COLUMNS = {
   xpub: merchants.xpub,
   requiredConfirmations: merchants.requiredConfirmations,
   livemode: merchants.livemode,
+  firstParty: merchants.firstParty,
   displayName: merchants.displayName,
   avatarFileId: merchants.avatarFileId,
   avatarWithheld: merchants.avatarWithheld,

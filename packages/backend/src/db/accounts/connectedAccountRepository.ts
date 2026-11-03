@@ -16,6 +16,11 @@ import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { ProviderId } from '../../services/providers/provider';
+import type { AccountBusinessProfile, AccountSettings } from '@peable.to/shared-types';
+import type { ConnectedAccountRole } from '../schema/valueSets';
+
+/** Every seller lookup is scoped to sellers: the merchant's own account is not one. */
+const IS_SELLER = eq(connectedAccounts.role, 'seller');
 
 export type CapabilityStatus = 'active' | 'pending' | 'inactive';
 
@@ -29,7 +34,9 @@ export interface ConnectedAccountRow {
   readonly id: string;
   readonly publicId: string;
   readonly merchantId: string;
-  readonly externalRef: string;
+  /** The platform's own id for a SELLER; `null` on the merchant's own account (ADR 0015 §1). */
+  readonly externalRef: string | null;
+  readonly role: ConnectedAccountRole;
   /** The CARD half. All three are `null` together on a FairCoin-only seller (ADR 0012 D1). */
   readonly provider: ProviderId | null;
   /** NEVER on a DTO — ADR 0001 D3. The `acct_…` is the gateway's business. */
@@ -40,11 +47,16 @@ export interface ConnectedAccountRow {
   readonly chargesEnabled: boolean;
   readonly transfersCapability: CapabilityStatus | null;
   readonly cardPaymentsCapability: CapabilityStatus | null;
-  readonly requirementsCurrentlyDue: number;
-  readonly requirementsEventuallyDue: number;
-  readonly requirementsPastDue: number;
-  readonly requirementsPendingVerification: number;
+  readonly currentlyDue: readonly string[];
+  readonly eventuallyDue: readonly string[];
+  readonly pastDue: readonly string[];
+  readonly pendingVerification: readonly string[];
   readonly disabledReasonCodes: readonly string[];
+  /** The provider's business profile and settings; `null` before a read carried them. */
+  readonly businessProfile: AccountBusinessProfile | null;
+  readonly settings: AccountSettings | null;
+  /** The ledger's ingestion cursor (ADR 0015 §4). */
+  readonly balanceSyncedThrough: Date | null;
   readonly lastSyncedAt: Date | null;
   /**
    * The FAIRCOIN half (ADR 0012). `network` and `faircoinOxyUserId` are set
@@ -85,6 +97,7 @@ const ACCOUNT_COLUMNS = {
   publicId: connectedAccounts.publicId,
   merchantId: connectedAccounts.merchantId,
   externalRef: connectedAccounts.externalRef,
+  role: connectedAccounts.role,
   provider: connectedAccounts.provider,
   providerAccountId: connectedAccounts.providerAccountId,
   country: connectedAccounts.country,
@@ -93,11 +106,14 @@ const ACCOUNT_COLUMNS = {
   chargesEnabled: connectedAccounts.chargesEnabled,
   transfersCapability: connectedAccounts.transfersCapability,
   cardPaymentsCapability: connectedAccounts.cardPaymentsCapability,
-  requirementsCurrentlyDue: connectedAccounts.requirementsCurrentlyDue,
-  requirementsEventuallyDue: connectedAccounts.requirementsEventuallyDue,
-  requirementsPastDue: connectedAccounts.requirementsPastDue,
-  requirementsPendingVerification: connectedAccounts.requirementsPendingVerification,
+  currentlyDue: connectedAccounts.currentlyDue,
+  eventuallyDue: connectedAccounts.eventuallyDue,
+  pastDue: connectedAccounts.pastDue,
+  pendingVerification: connectedAccounts.pendingVerification,
   disabledReasonCodes: connectedAccounts.disabledReasonCodes,
+  businessProfile: connectedAccounts.businessProfile,
+  settings: connectedAccounts.settings,
+  balanceSyncedThrough: connectedAccounts.balanceSyncedThrough,
   lastSyncedAt: connectedAccounts.lastSyncedAt,
   network: connectedAccounts.network,
   faircoinOxyUserId: connectedAccounts.faircoinOxyUserId,
@@ -353,9 +369,98 @@ export async function findAccountByPublicId(
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
     .where(
-      and(eq(connectedAccounts.merchantId, merchantId), eq(connectedAccounts.publicId, publicId)),
+      and(
+        eq(connectedAccounts.merchantId, merchantId),
+        eq(connectedAccounts.publicId, publicId),
+        IS_SELLER,
+      ),
     );
   return row ? toRow(row) : null;
+}
+
+/**
+ * The merchant's OWN fiat account (ADR 0015 §1), or `null` when it has none.
+ * At most one: `connected_accounts_merchant_role_key`.
+ */
+export async function findMerchantAccount(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+): Promise<ConnectedAccountRow | null> {
+  const [row] = await db
+    .select(ACCOUNT_COLUMNS)
+    .from(connectedAccounts)
+    .where(
+      and(eq(connectedAccounts.merchantId, merchantId), eq(connectedAccounts.role, 'merchant')),
+    );
+  return row ? toRow(row) : null;
+}
+
+/**
+ * Record the merchant's own account, just opened at the provider.
+ *
+ * @returns the row, or `null` when the merchant already has one — a concurrent
+ *   open that presented the SAME provider idempotency key, so the winner's
+ *   account is the same account. The caller re-reads it.
+ */
+export async function insertMerchantAccount(
+  db: DatabaseOrTransaction,
+  params: { publicId: string; merchantId: string } & CardHalfParams,
+): Promise<ConnectedAccountRow | null> {
+  try {
+    const [row] = await db
+      .insert(connectedAccounts)
+      .values({
+        id: uuidv7(),
+        publicId: params.publicId,
+        merchantId: params.merchantId,
+        externalRef: null,
+        role: 'merchant',
+        provider: params.provider,
+        providerAccountId: params.providerAccountId,
+        country: params.country,
+      })
+      .returning(ACCOUNT_COLUMNS);
+    return row ? toRow(row) : null;
+  } catch (error) {
+    if (isUniqueViolation(error, 'connected_accounts_merchant_role_key')) return null;
+    throw error;
+  }
+}
+
+/** Advance the ledger cursor; never backwards. */
+export async function advanceBalanceCursor(
+  db: DatabaseOrTransaction,
+  accountId: string,
+  through: Date,
+): Promise<void> {
+  await db
+    .update(connectedAccounts)
+    .set({
+      balanceSyncedThrough: sql`greatest(coalesce(${connectedAccounts.balanceSyncedThrough}, ${through.toISOString()}::timestamptz), ${through.toISOString()}::timestamptz)`,
+    })
+    .where(eq(connectedAccounts.id, accountId));
+}
+
+/**
+ * Every account with a card half in the modes given — the reconciliation
+ * job's walk. Not scoped to a merchant: it is a background loop.
+ */
+export async function findCardAccounts(
+  db: DatabaseOrTransaction,
+  livemodes: readonly boolean[],
+): Promise<readonly ConnectedAccountRow[]> {
+  if (livemodes.length === 0) return [];
+  const rows = await db
+    .select(ACCOUNT_COLUMNS)
+    .from(connectedAccounts)
+    .where(
+      and(
+        isNotNull(connectedAccounts.provider),
+        inArray(merchantLivemodeOf(connectedAccounts.merchantId), [...livemodes]),
+      ),
+    )
+    .orderBy(asc(connectedAccounts.createdAt));
+  return rows.map(toRow);
 }
 
 /**
@@ -433,6 +538,8 @@ export interface AccountSnapshot {
   readonly pendingVerification: readonly string[];
   readonly disabledReasonCodes: readonly string[];
   readonly defaultCurrency: string | null;
+  readonly businessProfile: AccountBusinessProfile;
+  readonly settings: AccountSettings;
 }
 
 /**
@@ -463,12 +570,14 @@ export type SnapshotWrittenField =
   | 'chargesEnabled'
   | 'transfersCapability'
   | 'cardPaymentsCapability'
-  | 'requirementsCurrentlyDue'
-  | 'requirementsEventuallyDue'
-  | 'requirementsPastDue'
-  | 'requirementsPendingVerification'
+  | 'currentlyDue'
+  | 'eventuallyDue'
+  | 'pastDue'
+  | 'pendingVerification'
   | 'disabledReasonCodes'
   | 'defaultCurrency'
+  | 'businessProfile'
+  | 'settings'
   | 'lastSyncedAt';
 
 export async function applyAccountSnapshot(
@@ -484,10 +593,12 @@ export async function applyAccountSnapshot(
       chargesEnabled: snapshot.chargesEnabled,
       transfersCapability: snapshot.transfersCapability,
       cardPaymentsCapability: snapshot.cardPaymentsCapability,
-      requirementsCurrentlyDue: snapshot.currentlyDue.length,
-      requirementsEventuallyDue: snapshot.eventuallyDue.length,
-      requirementsPastDue: snapshot.pastDue.length,
-      requirementsPendingVerification: snapshot.pendingVerification.length,
+      currentlyDue: [...snapshot.currentlyDue],
+      eventuallyDue: [...snapshot.eventuallyDue],
+      pastDue: [...snapshot.pastDue],
+      pendingVerification: [...snapshot.pendingVerification],
+      businessProfile: snapshot.businessProfile,
+      settings: snapshot.settings,
       // Empty codes are filtered here rather than left to the CHECK: a provider
       // sending one is not a bug worth failing a whole sync over, and the row is
       // more useful with the rest of the codes than refused for one blank.
@@ -558,7 +669,7 @@ export async function listAccountsForMerchant(
   const rows = await db
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
-    .where(and(eq(connectedAccounts.merchantId, merchantId), walk.where))
+    .where(and(eq(connectedAccounts.merchantId, merchantId), IS_SELLER, walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows.map(toRow));
@@ -581,6 +692,7 @@ export async function findAccountsByPublicIds(
       and(
         eq(connectedAccounts.merchantId, merchantId),
         inArray(connectedAccounts.publicId, [...publicIds]),
+        IS_SELLER,
       ),
     );
   return rows.map(toRow);

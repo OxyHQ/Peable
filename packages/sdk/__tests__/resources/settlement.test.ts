@@ -19,6 +19,7 @@ import { TransfersResource } from '../../src/resources/transfers';
 import { MerchantsResource } from '../../src/resources/merchants';
 import { DisputesResource } from '../../src/resources/disputes';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
+import { refundFixture, requirementsFixture } from '../support/moneyFixtures';
 import {
   buildTestClient,
   serviceTokenMintResponse,
@@ -39,8 +40,7 @@ const ACCOUNT: ConnectedAccount = {
   charges_enabled: true,
   transfers_capability: 'active',
   card_payments_capability: 'active',
-  requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
-  disabled_reason_codes: [],
+  requirements: requirementsFixture(),
   last_synced_at: 1789776000,
   created: 1789776000,
   updated_at: 1789776000,
@@ -62,20 +62,7 @@ const TRANSFER: Transfer = {
   updated_at: 1789776000,
 };
 
-const REFUND: Refund = {
-  id: 're_1',
-  object: 'refund',
-  livemode: false,
-  external_ref: 'refund_1',
-  origin: 'merchant',
-  payment_intent: 'pi_1',
-  amount: '2500',
-  currency: 'EUR',
-  status: 'succeeded',
-  failure_code: null,
-  created: 1789776000,
-  updated_at: 1789776000,
-};
+const REFUND: Refund = refundFixture({ created: 1789776000, updated_at: 1789776000 });
 
 function gateway(body: unknown, status = 200) {
   return createMockFetch((req) => {

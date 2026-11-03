@@ -291,6 +291,106 @@ export function retrieveStripeRefund(mode: ProviderMode, id: string): Promise<St
   return call(mode, 'refund', (stripe) => stripe.refunds.retrieve(id));
 }
 
+export function cancelStripeRefund(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.Refund> {
+  return call(mode, 'refund', (stripe) => stripe.refunds.cancel(id, {}, { idempotencyKey }));
+}
+
+// ---------------------------------------------------------------------------
+// Orbit money (ADR 0015): balance transactions, payouts, application fees
+// ---------------------------------------------------------------------------
+
+/**
+ * The request option that scopes a call to a connected account — Stripe's
+ * `Stripe-Account` header. `null` is the platform's own account. Built here
+ * and nowhere else, so which account a money read reaches is one decision.
+ */
+function onAccount(
+  account: string | null,
+  extra: Stripe.RequestOptions = {},
+): Stripe.RequestOptions {
+  return account === null ? extra : { ...extra, stripeAccount: account };
+}
+
+/**
+ * One page of an account's balance transactions, oldest-to-newest ordering is
+ * Stripe's (newest first). `data.source.source_transfer` is expanded so a
+ * destination charge's funds on the destination account name the platform
+ * charge they came from.
+ */
+export function listStripeBalanceTransactions(
+  mode: ProviderMode,
+  account: string | null,
+  params: Stripe.BalanceTransactionListParams,
+): Promise<Stripe.ApiList<Stripe.BalanceTransaction>> {
+  return call(mode, 'balance', (stripe) =>
+    stripe.balanceTransactions.list(
+      { ...params, expand: ['data.source.source_transfer'] },
+      onAccount(account),
+    ),
+  );
+}
+
+/** A platform charge with its own and its refunds' balance transactions expanded. */
+export function retrieveStripeChargeWithLedger(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.Charge> {
+  return call(mode, 'balance', (stripe) =>
+    stripe.charges.retrieve(id, {
+      expand: ['balance_transaction', 'refunds.data.balance_transaction'],
+    }),
+  );
+}
+
+export function retrieveStripePayout(
+  mode: ProviderMode,
+  account: string,
+  id: string,
+): Promise<Stripe.Payout> {
+  return call(mode, 'payout', (stripe) => stripe.payouts.retrieve(id, {}, onAccount(account)));
+}
+
+export function listStripePayouts(
+  mode: ProviderMode,
+  account: string,
+  params: Stripe.PayoutListParams,
+): Promise<Stripe.ApiList<Stripe.Payout>> {
+  return call(mode, 'payout', (stripe) => stripe.payouts.list(params, onAccount(account)));
+}
+
+export function createStripePayout(
+  mode: ProviderMode,
+  account: string,
+  params: Stripe.PayoutCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Payout> {
+  return call(mode, 'payout', (stripe) =>
+    stripe.payouts.create(params, onAccount(account, { idempotencyKey })),
+  );
+}
+
+export function cancelStripePayout(
+  mode: ProviderMode,
+  account: string,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.Payout> {
+  return call(mode, 'payout', (stripe) =>
+    stripe.payouts.cancel(id, {}, onAccount(account, { idempotencyKey })),
+  );
+}
+
+export function retrieveStripeApplicationFee(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.ApplicationFee> {
+  return call(mode, 'balance', (stripe) => stripe.applicationFees.retrieve(id));
+}
+
 // ---------------------------------------------------------------------------
 // Transfers
 // ---------------------------------------------------------------------------
@@ -494,6 +594,20 @@ export function createStripeConnectedAccountV2(
  */
 export function retrieveStripeAccount(mode: ProviderMode, id: string): Promise<Stripe.Account> {
   return call(mode, 'account', (stripe) => stripe.accounts.retrieve(id));
+}
+
+/**
+ * Write an account's settings through v1 (`business_profile`,
+ * `settings.payouts.schedule`, statement descriptors, branding) — the v1 read
+ * above is where they are read back, so the write is made where it is read.
+ */
+export function updateStripeAccount(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.AccountUpdateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Account> {
+  return call(mode, 'account', (stripe) => stripe.accounts.update(id, params, { idempotencyKey }));
 }
 
 export function createStripeAccountLink(

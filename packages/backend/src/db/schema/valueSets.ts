@@ -187,7 +187,7 @@ export const TRANSFER_STATUSES = [
  * and a payment can hold several of those. Sharing a vocabulary would make
  * "which refund failed" unaskable.
  */
-export const REFUND_STATUSES = ['pending', 'succeeded', 'failed'] as const;
+export const REFUND_STATUSES = ['pending', 'succeeded', 'failed', 'canceled'] as const;
 
 /**
  * Who created a refund.
@@ -312,6 +312,18 @@ export const WEBHOOK_EVENT_SCOPES = {
   'coupon.deleted': 'merchant',
   'promotion_code.created': 'merchant',
   'promotion_code.updated': 'merchant',
+  // Orbit money (ADR 0015): about the merchant's account, its fees, payouts
+  // and balance — never a payment's status, so no `payment_intent_id` is
+  // required of them, even the fee events that are caused by one.
+  'account.updated': 'merchant',
+  'application_fee.created': 'merchant',
+  'application_fee.refunded': 'merchant',
+  'payout.created': 'merchant',
+  'payout.updated': 'merchant',
+  'payout.paid': 'merchant',
+  'payout.failed': 'merchant',
+  'payout.canceled': 'merchant',
+  'balance.available': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
@@ -570,3 +582,60 @@ export type IdempotencyKeyStatus = (typeof IDEMPOTENCY_KEY_STATUSES)[number];
  * `RequestLog.method` is typed by.
  */
 export { REQUEST_LOG_METHODS } from '@peable.to/shared-types';
+// ---------------------------------------------------------------------------
+// Orbit money (ADR 0015): accounts, fees, the ledger, payouts, reconciliation
+// ---------------------------------------------------------------------------
+
+/**
+ * What a `connected_accounts` row is to its merchant.
+ *
+ *  - `seller`   — one of a marketplace's sellers, addressed by the platform's
+ *                 own `external_ref` (ADR 0012).
+ *  - `merchant` — the merchant's OWN fiat account (ADR 0015 §1): at most one per
+ *                 merchant, card half only, no `external_ref`.
+ */
+export const CONNECTED_ACCOUNT_ROLES = ['seller', 'merchant'] as const;
+export type ConnectedAccountRole = (typeof CONNECTED_ACCOUNT_ROLES)[number];
+
+export {
+  BALANCE_TRANSACTION_STATUSES,
+  BALANCE_TRANSACTION_TYPES,
+  PAYOUT_STATUSES,
+  RECONCILIATION_MISMATCH_KINDS,
+  REFUND_REASONS,
+} from '@peable.to/shared-types';
+
+/**
+ * A ledger account's balance type (ADR 0015 §4). `available` and `pending`
+ * mirror the provider's balance; `informational` holds FairCoin the merchant
+ * received in its own wallet (§5); `external` is the counter-account every
+ * journal posts against — the world outside the mirrored balance — so each
+ * journal sums to zero.
+ */
+export const LEDGER_BALANCE_TYPES = ['available', 'pending', 'informational', 'external'] as const;
+export type LedgerBalanceType = (typeof LEDGER_BALANCE_TYPES)[number];
+
+/**
+ * Why a journal was posted: `recognized` when a balance transaction is first
+ * ingested, `released` when the provider moved its funds from pending to
+ * available. ONE of each per balance transaction (a unique index).
+ */
+export const LEDGER_JOURNAL_KINDS = ['recognized', 'released'] as const;
+export type LedgerJournalKind = (typeof LEDGER_JOURNAL_KINDS)[number];
+
+export const PAYOUT_METHODS = ['standard', 'instant'] as const;
+export const PAYOUT_TYPES = ['bank_account', 'card'] as const;
+/** `provider` — the account's schedule created it; `merchant` — `POST /v1/payouts`. */
+export const PAYOUT_ORIGINS = ['provider', 'merchant'] as const;
+export type PayoutOrigin = (typeof PAYOUT_ORIGINS)[number];
+
+/** The payment-method types a fee schedule can price. */
+export const FEE_PAYMENT_METHOD_TYPES = ['card'] as const;
+export type FeePaymentMethodType = (typeof FEE_PAYMENT_METHOD_TYPES)[number];
+
+/**
+ * A SIGNED canonical base-unit integer string: a balance transaction and a
+ * ledger entry move money out as well as in. One spelling per value — no `-0`,
+ * no leading zero.
+ */
+export const SIGNED_BASE_UNIT_STRING_PATTERN = '^(0|-?[1-9][0-9]*)$';

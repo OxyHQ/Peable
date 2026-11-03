@@ -107,6 +107,61 @@ export interface AppConfig {
   ipHashSalt?: string;
   /** Oxy Files: file events and reference reconciliation (ADR 0043). */
   oxyFiles: OxyFilesConfig;
+  /** Orbit's money model (ADR 0015): the third-party live gate and the default fee. */
+  orbit: OrbitMoneyConfig;
+}
+
+/**
+ * Orbit's funds flow (ADR 0015).
+ *
+ * `thirdPartyLivePayments` is the ADR's RELEASE GATE in code: until the legal
+ * review, the merchant agreement and the negative-balance exposure are signed
+ * off, a merchant that is NOT an Oxy first-party product cannot open a live
+ * fiat account, take a live destination charge or instruct a live payout.
+ * Test mode is always allowed. `ORBIT_THIRD_PARTY_LIVE_PAYMENTS=true` and
+ * nothing else opens it.
+ *
+ * The default fee applies to a merchant with no `fee_schedules` row for the
+ * payment's method and currency. It defaults to ZERO because Orbit's fee terms
+ * are part of the same gate: no fee is charged that no agreement names.
+ */
+export interface OrbitMoneyConfig {
+  thirdPartyLivePayments: boolean;
+  /** 0–10000 basis points (`ORBIT_FEE_PERCENT_BPS`). */
+  defaultFeePercentBps: number;
+  /** Per-currency fixed fee in base units (`ORBIT_FEE_FIXED=EUR:25,USD:30`). */
+  defaultFeeFixed: Readonly<Record<string, string>>;
+}
+
+function readFeePercent(raw: string | undefined): number {
+  const value = readOptional(raw);
+  if (value === undefined) return 0;
+  const bps = Number(value);
+  if (!Number.isInteger(bps) || bps < 0 || bps > 10_000) {
+    throw new Error(`ORBIT_FEE_PERCENT_BPS must be an integer 0–10000, received "${value}"`);
+  }
+  return bps;
+}
+
+function readFeeFixed(raw: string | undefined): Record<string, string> {
+  const value = readOptional(raw);
+  if (value === undefined) return {};
+  const out: Record<string, string> = {};
+  for (const pair of value.split(',')) {
+    const [currency, amount] = pair.split(':').map((part) => part.trim());
+    if (
+      !currency ||
+      !/^[A-Z]{3,4}$/.test(currency) ||
+      !amount ||
+      !/^(0|[1-9][0-9]*)$/.test(amount)
+    ) {
+      throw new Error(
+        `ORBIT_FEE_FIXED must be CUR:amount pairs (EUR:25,USD:30), received "${value}"`,
+      );
+    }
+    out[currency] = amount;
+  }
+  return out;
 }
 
 /**
@@ -440,6 +495,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       webhookSecret: readOptional(env.OXY_FILES_WEBHOOK_SECRET),
       webhookSecretPrevious: readOptional(env.OXY_FILES_WEBHOOK_SECRET_PREVIOUS),
       reconciliationMode: readReconciliationMode(env.OXY_FILE_RECONCILIATION_MODE),
+    },
+    orbit: {
+      thirdPartyLivePayments: readOptional(env.ORBIT_THIRD_PARTY_LIVE_PAYMENTS) === 'true',
+      defaultFeePercentBps: readFeePercent(env.ORBIT_FEE_PERCENT_BPS),
+      defaultFeeFixed: readFeeFixed(env.ORBIT_FEE_FIXED),
     },
   };
 }

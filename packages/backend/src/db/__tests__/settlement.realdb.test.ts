@@ -41,6 +41,20 @@ let suite: SuiteDatabase | undefined;
 let merchant: MerchantRow;
 let intentId: string;
 
+const EMPTY_PROFILE = {
+  name: null,
+  url: null,
+  support_email: null,
+  support_url: null,
+  product_description: null,
+  mcc: null,
+};
+const EMPTY_SETTINGS = {
+  payouts: { schedule: null, statement_descriptor: null },
+  payments: { statement_descriptor: null },
+  branding: { primary_color: null, secondary_color: null },
+};
+
 const EMPTY_SNAPSHOT: AccountSnapshot = {
   payoutsEnabled: false,
   chargesEnabled: false,
@@ -52,6 +66,8 @@ const EMPTY_SNAPSHOT: AccountSnapshot = {
   pendingVerification: [],
   disabledReasonCodes: [],
   defaultCurrency: null,
+  businessProfile: EMPTY_PROFILE,
+  settings: EMPTY_SETTINGS,
 };
 
 async function seedAccount(externalRef: string) {
@@ -174,7 +190,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
       transfersCapability: 'pending',
     });
     let after = await findAccountByExternalRef(must(suite).db, merchant.id, 'store_snapshot');
-    expect(after?.requirementsCurrentlyDue).toBe(2);
+    expect(after?.currentlyDue).toEqual(['business_profile.url', 'individual.id_number']);
     expect(after?.disabledReasonCodes).toEqual(['requirements.past_due']);
 
     // The seller does the work; the provider stops reporting any of it.
@@ -185,7 +201,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
       defaultCurrency: 'EUR',
     });
     after = await findAccountByExternalRef(must(suite).db, merchant.id, 'store_snapshot');
-    expect(after?.requirementsCurrentlyDue).toBe(0);
+    expect(after?.currentlyDue).toEqual([]);
     expect(after?.disabledReasonCodes).toEqual([]);
     expect(after?.payoutsEnabled).toBe(true);
     expect(after?.lastSyncedAt).toBeInstanceOf(Date);

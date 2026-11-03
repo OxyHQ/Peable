@@ -1,3 +1,4 @@
+import { recordFaircoinLedger } from './money/ledger';
 import { and, eq, isNull } from 'drizzle-orm';
 import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 import { commitTaxTransaction } from './tax/taxService';
@@ -152,6 +153,9 @@ export async function transitionIntent(
     if (row.rail === 'faircoin' && change.chainVerified === true) {
       await acceptVerifiedChainPayment(tx, row);
     }
+    // ADR 0015 §5: a FairCoin payment that succeeded (or was rewound by a reorg)
+    // is recorded for the merchant's books in the same transaction.
+    if (row.rail === 'faircoin') await recordFaircoinLedger(tx, row, change.from);
     const moved = change.from !== change.status;
     const failedAttempt = change.lastPaymentError !== undefined;
     if (moved || failedAttempt) await recordIntentEvent(tx, row, change.from);

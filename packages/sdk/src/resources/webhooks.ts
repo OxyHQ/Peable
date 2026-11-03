@@ -55,6 +55,15 @@ const WEBHOOK_EVENT_TYPES = {
   'promotion_code.updated': true,
   'billing.observation.updated': true,
   'connected_account.updated': true,
+  'account.updated': true,
+  'application_fee.created': true,
+  'application_fee.refunded': true,
+  'payout.created': true,
+  'payout.updated': true,
+  'payout.paid': true,
+  'payout.failed': true,
+  'payout.canceled': true,
+  'balance.available': true,
   'webhook_endpoint.test': true,
 } satisfies Record<WebhookEventType, true>;
 

@@ -5,8 +5,9 @@ import type {
   ListParams,
   NetworkType,
 } from '@peable.to/shared-types';
-import type { RestClient } from '../core/client';
+import type { PeableRequestOptions, RestClient } from '../core/client';
 import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import type { AccountResource, CreateMerchantAccountLinkParams } from './account';
 
 /**
  * Sellers a marketplace onboards through Peable.
@@ -153,7 +154,7 @@ export class ConnectedAccountsResource {
   }
 }
 
-/** `accountLinks.create` — Stripe's `AccountLink.create`, naming the account in the body. */
+/** `accountLinks.create` for a SELLER — Stripe's `AccountLink.create`, naming the account in the body. */
 export interface CreateAccountLinkParams extends AccountLinkParams {
   /** The seller's `ca_…`. */
   account: string;
@@ -162,14 +163,33 @@ export interface CreateAccountLinkParams extends AccountLinkParams {
 /**
  * `peable.accountLinks` — onboarding links, Stripe-named.
  *
- * The same operation as `connectedAccounts.createAccountLink`, addressed the
- * way Stripe Connect integrators expect: `accountLinks.create({ account, … })`.
+ * With `account` it is `connectedAccounts.createAccountLink` for that seller
+ * (and takes `rail`). Without one it onboards the MERCHANT's own fiat account
+ * (`POST /v1/account_links`, ADR 0015 §1) — or, with `{ peableAccount }`, one
+ * of a platform's sellers through that same route.
  */
 export class AccountLinksResource {
-  constructor(private readonly accounts: ConnectedAccountsResource) {}
+  constructor(
+    private readonly accounts: ConnectedAccountsResource,
+    private readonly account?: AccountResource,
+  ) {}
 
-  create(params: CreateAccountLinkParams): Promise<AccountLink> {
-    const { account, ...link } = params;
-    return this.accounts.createAccountLink(account, link);
+  create(
+    params: CreateAccountLinkParams | (CreateMerchantAccountLinkParams & { account?: undefined }),
+    options: PeableRequestOptions = {},
+  ): Promise<AccountLink> {
+    if (params.account !== undefined) {
+      const { account, ...link } = params;
+      return this.accounts.createAccountLink(account, link);
+    }
+    if (!this.account) {
+      return Promise.reject(
+        new TypeError(
+          'accountLinks.create without `account` needs an AccountResource; use peable.accountLinks',
+        ),
+      );
+    }
+    const { account: _none, ...link } = params;
+    return this.account.createLink(link, options);
   }
 }
