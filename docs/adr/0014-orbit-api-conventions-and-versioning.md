@@ -122,6 +122,20 @@ the backend validates with it, `/openapi.json` is generated from it for the whol
 API, and the SDK's types are generated from that document. CI fails when the
 generated document drifts, as it already does for contributions.
 
+As built (`@peable.to/contracts` 1.0): one `defineRoute` per public route in
+`packages/contracts/src/resources/<group>/`, objects registered once
+(`defineObject`, expandable and embedded references resolved by `Expand<>`), the
+backend importing the very schema objects it validates with, a test preload
+checking every route-test answer against its contract, and a coverage test proving
+the mounted routes and the contracts are one set. `docs/openapi.json` (OpenAPI 3.1,
+with the webhook payloads) is gated by `check:openapi`; `@peable.to/sdk` 1.0's
+methods are generated from the routes' `sdk` paths (`check:sdk-resources`); the
+API reference and the errors page of the developer docs are generated from the
+document and from the error vocabulary (`check:api-docs`), and every `doc_url`
+points at that page. Dashboard routes are not contracts. One exception to D1
+remains: Peable Tax calculation, transaction and report amounts are still integer
+minor units, and their contracts say so.
+
 ## Consequences
 
 - Every published package that carries the wire takes a major version, and its
