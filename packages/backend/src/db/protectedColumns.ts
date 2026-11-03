@@ -7,8 +7,8 @@ import type { PgTable } from 'drizzle-orm/pg-core';
  * `db.select(publicColumns(merchants)).from(merchants)` omits every column
  * listed here from the result AND from the row TYPE, so a serializer that
  * reaches for one fails `tsc` instead of shipping it. A path that legitimately
- * needs one names it: `db.select({ id: merchants.id, webhookSecret:
- * merchants.webhookSecret })`, which reads differently and stays greppable.
+ * needs one names it: `db.select({ id: webhookEndpoints.id, secret:
+ * webhookEndpoints.secret })`, which reads differently and stays greppable.
  *
  * ## What is deliberately NOT here, and why
  *
@@ -26,9 +26,14 @@ import type { PgTable } from 'drizzle-orm/pg-core';
  * name it explicitly, which is the opposite of a guard.
  */
 export const PROTECTED_COLUMNS = {
+  webhookEndpoints: [
+    // The HMAC keys deliveries are signed with. Shown once by the create and
+    // the roll responses, which hold the value they just generated; read only
+    // by `findEndpointSigningTarget`, to sign.
+    'secret',
+    'previousSecret',
+  ],
   merchants: [
-    // The HMAC key webhook payloads are signed with. In no DTO, ever.
-    'webhookSecret',
     // The counter `reserveNextAddress` claims from. Deliberately absent from
     // `toMerchantDTO`; publishing it would hand out the merchant's address
     // enumeration and therefore their revenue.

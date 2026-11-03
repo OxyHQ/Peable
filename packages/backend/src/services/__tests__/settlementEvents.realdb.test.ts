@@ -9,7 +9,6 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ProviderMode } from '../providers/provider';
-import { eq } from 'drizzle-orm';
 import type { WebhookEvent } from '@peable.to/shared-types';
 
 const providerCalls: string[] = [];
@@ -101,8 +100,7 @@ const { findTransferByExternalRef, insertTransfer, markTransferPaid } = await im
 const { insertPaymentIntent, linkProviderObject, updateIntentState } = await import(
   '../../db/payments/paymentIntentRepository'
 );
-const { webhookDeliveries } = await import('../../db/schema');
-const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
+const { gatewayDb, seedMerchant, storedEvents, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
@@ -139,16 +137,10 @@ async function storeEvent(
 async function accountDeliveries(): Promise<
   { paymentIntentId: string | null; event: WebhookEvent<'connected_account.updated'> }[]
 > {
-  const rows = await gatewayDb()
-    .select({
-      paymentIntentId: webhookDeliveries.paymentIntentId,
-      payload: webhookDeliveries.payload,
-    })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.eventType, 'connected_account.updated'));
-  return rows.map((row) => ({
+  const rows = await storedEvents({ type: 'connected_account.updated' });
+  return rows.map(({ row, event }) => ({
     paymentIntentId: row.paymentIntentId,
-    event: row.payload as unknown as WebhookEvent<'connected_account.updated'>,
+    event: event as WebhookEvent<'connected_account.updated'>,
   }));
 }
 
@@ -173,10 +165,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('settlement events and the sync sweep',
 
   beforeAll(async () => {
     useFake = true;
-    // BOTH halves, deliberately: `findWebhookTarget` answers null unless the
-    // url AND the secret are present, and a null target makes every enqueue
-    // return without writing a row — which would leave the readiness-event
-    // assertions below vacuously empty.
+    // With an endpoint, so every recorded event also fans out a delivery.
     merchant = await seedMerchant({
       webhookUrl: 'https://merchant.invalid/hook',
       webhookSecret: 'whsec_settlement_events',

@@ -37,8 +37,6 @@ export interface RegisterMerchantParams {
   network?: 'mainnet' | 'testnet';
   /** A WATCH-ONLY account extended public key. An `xprv` is refused. */
   xpub?: string;
-  webhook_url?: string;
-  webhook_secret?: string;
   required_confirmations?: number;
   display_name?: string;
   /**
@@ -55,12 +53,11 @@ export interface RegisterMerchantParams {
 /**
  * `null` CLEARS a field; omitting it leaves it alone.
  *
- * The distinction is by `undefined` rather than by falsiness, so a webhook URL
- * can be removed rather than only replaced.
+ * The distinction is by `undefined` rather than by falsiness, so a description
+ * can be removed rather than only replaced. Where events are sent is not a
+ * merchant field: it is `peable.webhookEndpoints`.
  */
 export interface UpdateMerchantParams {
-  webhook_url?: string | null;
-  webhook_secret?: string | null;
   required_confirmations?: number;
   display_name?: string | null;
   /** Same rule as {@link RegisterMerchantParams.avatar_file_id}; `null` removes it. */

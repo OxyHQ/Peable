@@ -240,6 +240,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'connected_account_links',
       'connected_accounts',
       'disputes',
+      'events',
       'faircoin_billing_invoices',
       'faircoin_billing_subscriptions',
       'faircoin_renewal_authorizations',
@@ -266,6 +267,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'transfer_reversals',
       'transfers',
       'webhook_deliveries',
+      'webhook_endpoints',
     ]);
   });
 });

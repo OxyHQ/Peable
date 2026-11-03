@@ -84,6 +84,11 @@ import { PaymentIntentsResource } from './resources/paymentIntents';
 import { PaymentLinksResource } from './resources/paymentLinks';
 import { CheckoutResource } from './resources/checkoutSessions';
 import { WebhooksResource } from './resources/webhooks';
+import {
+  EventsResource,
+  WebhookDeliveriesResource,
+  WebhookEndpointsResource,
+} from './resources/webhookEndpoints';
 import { AccountLinksResource, ConnectedAccountsResource } from './resources/connectedAccounts';
 import { DisputesResource, MerchantsResource } from './resources/merchants';
 import { RefundsResource } from './resources/refunds';
@@ -114,7 +119,14 @@ export class Peable {
   readonly paymentIntents: PaymentIntentsResource;
   readonly paymentLinks: PaymentLinksResource;
   readonly checkout: CheckoutResource;
+  /** Verify a delivery: `constructEvent(rawBody, signatureHeader, secret)`. */
   readonly webhooks: WebhooksResource;
+  /** Where events are sent: `we_…` endpoints, each with its own events and secret. */
+  readonly webhookEndpoints: WebhookEndpointsResource;
+  /** Every event of the last 30 days (`evt_…`). */
+  readonly events: EventsResource;
+  /** One row per event per endpoint, and redelivery. */
+  readonly webhookDeliveries: WebhookDeliveriesResource;
   /** The merchant this credential speaks for. Resolved from the credential. */
   readonly merchants: MerchantsResource;
   /** Sellers a marketplace onboards, and their readiness. */
@@ -161,6 +173,9 @@ export class Peable {
     this.paymentLinks = new PaymentLinksResource(client);
     this.checkout = new CheckoutResource(client);
     this.webhooks = new WebhooksResource();
+    this.webhookEndpoints = new WebhookEndpointsResource(client);
+    this.events = new EventsResource(client);
+    this.webhookDeliveries = new WebhookDeliveriesResource(client);
     this.merchants = new MerchantsResource(client);
     this.connectedAccounts = new ConnectedAccountsResource(client);
     this.accounts = this.connectedAccounts;
@@ -246,6 +261,28 @@ export type {
   UpdatePaymentLinkParams,
 } from './resources/paymentLinks';
 export { WEBHOOK_SIGNATURE_HEADER, WebhooksResource } from './resources/webhooks';
+export {
+  EventsResource,
+  WebhookDeliveriesResource,
+  WebhookEndpointsResource,
+} from './resources/webhookEndpoints';
+export type {
+  EventListParams,
+  WebhookDeliveryListParams,
+} from './resources/webhookEndpoints';
+export type {
+  CreateWebhookEndpointParams,
+  DeletedWebhookEndpoint,
+  RollWebhookEndpointSecretParams,
+  UpdateWebhookEndpointParams,
+  WebhookDelivery,
+  WebhookDeliveryStatus,
+  WebhookEnabledEvent,
+  WebhookEndpoint,
+  WebhookEndpointDisabledReason,
+  WebhookEndpointStatus,
+  WebhookEventRequest,
+} from '@peable.to/shared-types';
 export type { ConstructEventOptions } from './resources/webhooks';
 export { ContributionsResource } from './resources/contributions';
 export type {

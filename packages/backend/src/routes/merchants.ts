@@ -55,8 +55,6 @@ export const createMerchantBodySchema = z
      */
     network: z.enum(['mainnet', 'testnet']).optional(),
     xpub: z.string().min(1).optional(),
-    webhook_url: z.string().url().optional(),
-    webhook_secret: z.string().min(1).optional(),
     required_confirmations: z.number().int().positive().optional(),
     ...brandingFields,
   })
@@ -70,8 +68,6 @@ export const createMerchantBodySchema = z
 /** Exported: `routes/dashboard.ts` reuses the SAME patch body for its dashboard-authed PATCH route (F2.5). */
 export const patchMerchantBodySchema = z
   .object({
-    webhook_url: z.string().url().nullable().optional(),
-    webhook_secret: z.string().min(1).nullable().optional(),
     required_confirmations: z.number().int().positive().optional(),
     // `.nullable()` on top of the create bounds: `null` clears the field.
     display_name: brandingFields.display_name.unwrap().nullable().optional(),
@@ -141,8 +137,6 @@ export async function registerMerchant(
   params: {
     network?: 'mainnet' | 'testnet';
     xpub?: string;
-    webhook_url?: string;
-    webhook_secret?: string;
     required_confirmations?: number;
     display_name?: string;
     avatar_file_id?: string;
@@ -191,8 +185,6 @@ export async function registerMerchant(
       environment,
       network: params.network,
       xpub: params.xpub,
-      webhookUrl: params.webhook_url,
-      webhookSecret: params.webhook_secret,
       requiredConfirmations: params.required_confirmations,
       displayName: params.display_name,
       avatarFileId: params.avatar_file_id,
@@ -260,8 +252,6 @@ export function sendMerchantWriteError(
 export async function applyMerchantPatch(
   merchant: MerchantRow,
   params: {
-    webhook_url?: string | null;
-    webhook_secret?: string | null;
     required_confirmations?: number;
     display_name?: string | null;
     avatar_file_id?: string | null;
@@ -288,13 +278,11 @@ export async function applyMerchantPatch(
   // The patch is applied and re-read in ONE statement, so what the response
   // serializes is what was stored. An absent key means "leave alone" and an
   // explicit `null` means "clear"; `updateMerchantSettings` distinguishes them
-  // by `undefined` rather than by falsiness, which is why a `null` webhook URL
+  // by `undefined` rather than by falsiness, which is why a `null` description
   // clears the column instead of being ignored.
   let updated: MerchantRow | null;
   try {
     updated = await updateMerchantSettings(getDb(), merchant.id, {
-      webhookUrl: params.webhook_url,
-      webhookSecret: params.webhook_secret,
       requiredConfirmations: params.required_confirmations,
       displayName: params.display_name,
       avatarFileId: params.avatar_file_id,

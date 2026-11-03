@@ -49,8 +49,6 @@ export const merchants = pgTable(
      * DIFFERENT address than the one reserved.
      */
     nextDerivationIndex: integer().notNull().default(0),
-    webhookUrl: text(),
-    webhookSecret: text(),
     requiredConfirmations: integer().notNull().default(1),
     /**
      * Whether this merchant's payments are REAL money, derived from the
@@ -196,10 +194,5 @@ export const merchants = pgTable(
     // The create and update schemas both validate `.positive()`; this is that
     // range, in the one place a write that skipped them still has to pass.
     check('merchants_required_confirmations_check', sql`${table.requiredConfirmations} > 0`),
-    // There is deliberately NO `(webhook_url is null) = (webhook_secret is
-    // null)` coherence CHECK. Both `POST /v1/merchants` and its PATCH accept
-    // either field alone, so that constraint would refuse a currently-legal
-    // write; the incoherent state is reachable and already handled, by
-    // `routes/webhookDeliveries.ts` refusing to send when either is missing.
   ],
 );

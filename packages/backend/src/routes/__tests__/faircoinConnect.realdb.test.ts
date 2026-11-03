@@ -17,26 +17,24 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
 import type { RequestHandler } from 'express';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getNetwork } from '@fairco.in/core';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { uuidv7 } from '@oxy.so/db';
+import type { WebhookEventType } from '@peable.to/shared-types';
 import { must } from '../../__tests__/helpers/must';
 import {
   gatewayDb,
   POSTGRES_TESTS_ENABLED,
   seedMerchant,
+  seedWebhookEndpoint,
+  storedEvents,
   testXprvFor,
   testXpubFor,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
-import {
-  connectedAccountLinks,
-  connectedAccounts,
-  idempotencyKeys,
-  webhookDeliveries,
-} from '../../db/schema';
+import { connectedAccountLinks, connectedAccounts, idempotencyKeys } from '../../db/schema';
 import { findAccountByPublicId } from '../../db/accounts/connectedAccountRepository';
 import { createFaircoinAccountLink } from '../../services/accounts/faircoinOnboarding';
 import { config } from '../../config';
@@ -88,15 +86,15 @@ async function seedCardOnlyPlatform(
   environment: OxyServiceEnvironment = 'development',
 ): Promise<MerchantRow> {
   const id = uuidv7();
-  return must(
+  const merchant = must(
     await insertMerchant(gatewayDb(), {
       publicId: `merch_${id}`,
       oxyAppId: `app_${id}`,
       environment,
-      webhookUrl: 'https://platform.example/peable',
-      webhookSecret: 'whsec_platform',
     }),
   );
+  await seedWebhookEndpoint(merchant, { url: 'https://platform.example/peable' });
+  return merchant;
 }
 
 /** Open a FairCoin seller, mint a link, and have the seller register `xpub`. */
@@ -126,13 +124,12 @@ async function onboardSeller(externalRef: string, account: number): Promise<Json
   return created.json;
 }
 
-async function deliveriesFor(merchantId: string, eventType: string) {
-  return gatewayDb()
-    .select({ payload: webhookDeliveries.payload, intentId: webhookDeliveries.paymentIntentId })
-    .from(webhookDeliveries)
-    .where(
-      and(eq(webhookDeliveries.merchantId, merchantId), eq(webhookDeliveries.eventType, eventType)),
-    );
+/** The merchant's stored events of one type, rendered as their deliveries carry them. */
+async function deliveriesFor(merchantId: string, eventType: WebhookEventType) {
+  return (await storedEvents({ merchantId, type: eventType })).map(({ row, event }) => ({
+    payload: event as unknown as Json,
+    intentId: row.paymentIntentId,
+  }));
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP', () => {

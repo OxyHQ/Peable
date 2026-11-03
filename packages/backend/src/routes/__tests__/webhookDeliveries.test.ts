@@ -26,7 +26,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
   (req as OxyAuthRequest).serviceApp = {
     appId: APP_ID,
     appName: 't',
-    scopes: ['payments:write'],
+    scopes: ['payments:read', 'payments:write'],
     credentialId: 'c',
     ownerAccountId: 'owner',
     environment: 'development',
@@ -38,7 +38,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
 let server: Server;
 let baseUrl: string;
 let merchantId: string;
-let intentId: string;
+let eventPublicId: string;
 let deliveryId: string;
 
 const capturedFetches: string[] = [];
@@ -84,17 +84,14 @@ beforeAll(async () => {
     idempotencyKey: 'idem_redeliver',
     expiresAt: new Date(Date.now() + 60_000),
   });
-  // The PUBLIC `pi_…`: `WebhookDelivery.intent_id` on the wire carries that, not
-  // the internal reference the delivery row stores.
-  intentId = intent.publicId;
-
   const delivery = await seedDelivery(merchant, intent, {
-    eventId: 'evt_0000000000000000000000f1',
     eventType: 'payment_intent.settled',
-    url: 'https://merchant.example/hook',
     pending: true,
   });
   deliveryId = delivery.id;
+  // The PUBLIC `evt_…`: `WebhookDelivery.event_id` on the wire carries that, not
+  // the internal reference the delivery row stores.
+  eventPublicId = delivery.eventPublicId;
 
   const app = express();
   app.use(express.json());
@@ -115,6 +112,27 @@ afterAll(async () => {
   });
 });
 
+describe('GET /v1/webhook_deliveries', () => {
+  test("lists the merchant's deliveries, filtered by event", async () => {
+    const res = await fetch(`${baseUrl}/v1/webhook_deliveries?event=${eventPublicId}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      object: string;
+      data: { event_id: string; webhook_endpoint_id: string }[];
+    };
+    expect(body.object).toBe('list');
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((row) => row.event_id === eventPublicId)).toBe(true);
+    expect(body.data.every((row) => row.webhook_endpoint_id.startsWith('we_'))).toBe(true);
+  });
+
+  test("an event filter naming another merchant's event is a 400, like an unknown one", async () => {
+    const res = await fetch(`${baseUrl}/v1/webhook_deliveries?event=evt_nobody`);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { param: string } }).error.param).toBe('event');
+  });
+});
+
 describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
   test('redelivers and persists a NEW delivery row', async () => {
     const before = await countDeliveriesForMerchant(merchantId);
@@ -122,9 +140,11 @@ describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
       method: 'POST',
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { delivered: boolean; intent_id: string };
+    const body = (await res.json()) as { delivered: boolean; event_id: string; id: string };
     expect(body.delivered).toBe(true);
-    expect(body.intent_id).toBe(intentId);
+    // The SAME stored event, as a new delivery.
+    expect(body.event_id).toBe(eventPublicId);
+    expect(body.id).not.toBe(deliveryId);
     expect(capturedFetches.at(-1)).toBe('https://merchant.example/hook');
 
     const after = await countDeliveriesForMerchant(merchantId);
@@ -165,9 +185,7 @@ describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     const otherDelivery = await seedDelivery(otherMerchant, otherIntent, {
-      eventId: 'evt_0000000000000000000000f2',
       eventType: 'payment_intent.settled',
-      url: 'https://other.example/hook',
     });
 
     const res = await fetch(`${baseUrl}/v1/webhook_deliveries/${otherDelivery.id}/redeliver`, {

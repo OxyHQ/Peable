@@ -1,6 +1,6 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import type { WebhookDeliveryStatus, WebhookEventType } from '@peable.to/shared-types';
-import { paymentIntents, webhookDeliveries } from '../schema';
+import { events, webhookDeliveries, webhookEndpoints } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import { keyset, type KeysetPage } from '../keyset';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
@@ -9,30 +9,27 @@ import { merchantLivemodeOf } from '../merchants/merchantLivemode';
  * READS for `webhook_deliveries` — what the merchant API and the dashboard ask
  * about a delivery.
  *
- * The writes moved to `webhookOutboxRepository.ts` when delivery became an
- * outbox (ADR 0001 D7), and `insertWebhookDelivery` went with them: a row is
- * now created by `enqueueWebhook` BEFORE any attempt and updated by
+ * The writes live in `webhookOutboxRepository.ts`: a row is created by the
+ * event fan-out (or a redelivery) BEFORE any attempt and updated by
  * `recordDeliveryAttempt` after each one. There is deliberately no function
- * here that writes a finished delivery in one shot — that shape is what made
- * the old inline delivery possible, and re-adding it would let a caller record
- * an outcome for an attempt the dispatcher never made.
+ * that writes a finished delivery in one shot.
+ *
+ * Every read joins the event and the endpoint, because the wire names both by
+ * their PUBLIC ids (`evt_…`, `we_…`) and the row holds their primary keys. Both
+ * joins are inner: the foreign keys cascade, so a delivery always has both.
  */
 
 export interface WebhookDeliveryRow {
-  /**
-   * The mode this row lives in — its merchant's, read in the same statement
-   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
-   * it is sent with, and is what the wire calls `livemode`.
-   */
+  /** The merchant's mode, read in the same statement (ADR 0017). */
   readonly livemode: boolean;
   readonly id: string;
   readonly merchantId: string;
-  /** `null` when the event is not about a payment — see the table comment. */
-  readonly paymentIntentId: string | null;
+  /** The event's PRIMARY key. */
   readonly eventId: string;
+  readonly eventPublicId: string;
   readonly eventType: WebhookEventType;
-  /** The event envelope as enqueued — replayed verbatim, never rebuilt. */
-  readonly payload: Record<string, unknown>;
+  readonly endpointId: string;
+  readonly endpointPublicId: string;
   readonly url: string;
   readonly attempts: number;
   readonly delivered: boolean;
@@ -49,10 +46,11 @@ const DELIVERY_COLUMNS = {
   livemode: merchantLivemodeOf(webhookDeliveries.merchantId),
   id: webhookDeliveries.id,
   merchantId: webhookDeliveries.merchantId,
-  paymentIntentId: webhookDeliveries.paymentIntentId,
   eventId: webhookDeliveries.eventId,
-  eventType: webhookDeliveries.eventType,
-  payload: webhookDeliveries.payload,
+  eventPublicId: events.publicId,
+  eventType: events.type,
+  endpointId: webhookDeliveries.endpointId,
+  endpointPublicId: webhookEndpoints.publicId,
   url: webhookDeliveries.url,
   attempts: webhookDeliveries.attempts,
   delivered: webhookDeliveries.delivered,
@@ -75,34 +73,26 @@ function toDeliveryRow(row: {
   } as unknown as WebhookDeliveryRow;
 }
 
-/** The same two narrowings, over the joined shape. */
-function toDeliveryWithIntentRow(row: {
-  eventType: string;
-  lastStatus: string;
-  intentPublicId: string | null;
-  [key: string]: unknown;
-}): WebhookDeliveryWithIntentRow {
-  return {
-    ...row,
-    eventType: row.eventType as WebhookEventType,
-    lastStatus: row.lastStatus as WebhookDeliveryStatus,
-  } as unknown as WebhookDeliveryWithIntentRow;
+function selectDeliveries(db: DatabaseOrTransaction) {
+  return db
+    .select(DELIVERY_COLUMNS)
+    .from(webhookDeliveries)
+    .innerJoin(events, eq(events.id, webhookDeliveries.eventId))
+    .innerJoin(webhookEndpoints, eq(webhookEndpoints.id, webhookDeliveries.endpointId));
 }
 
 /**
- * One delivery, scoped to the merchant that owns it — the redelivery path's
- * lookup. Ownership is in the WHERE clause, so a foreign delivery 404s exactly
- * like a missing one.
+ * One delivery, scoped to the merchant that owns it. Ownership is in the WHERE
+ * clause, so a foreign delivery 404s exactly like a missing one.
  */
 export async function findDeliveryForMerchant(
   db: DatabaseOrTransaction,
   id: string,
   merchantId: string,
 ): Promise<WebhookDeliveryRow | null> {
-  const [row] = await db
-    .select(DELIVERY_COLUMNS)
-    .from(webhookDeliveries)
-    .where(and(eq(webhookDeliveries.id, id), eq(webhookDeliveries.merchantId, merchantId)));
+  const [row] = await selectDeliveries(db).where(
+    and(eq(webhookDeliveries.id, id), eq(webhookDeliveries.merchantId, merchantId)),
+  );
   return row ? toDeliveryRow(row) : null;
 }
 
@@ -110,59 +100,33 @@ export interface ListDeliveriesParams {
   readonly merchantId: string;
   /** Cursors already resolved and ownership-checked by the caller. */
   readonly page: KeysetPage;
+  /** Only the deliveries of this event (its PRIMARY key). */
+  readonly eventId?: string | undefined;
+  /** Only the deliveries to this endpoint (its PRIMARY key). */
+  readonly endpointId?: string | undefined;
 }
 
 /**
- * A delivery plus the one field of its intent the DTO needs.
- *
- * `WebhookDelivery.intentId` on the wire is the public `pi_…`, and this row
- * carries the internal reference — so the serializer needs both, and the list
- * path has no other way to get the public one.
- */
-export interface WebhookDeliveryWithIntentRow extends WebhookDeliveryRow {
-  /** The `pi_…` of the intent `paymentIntentId` points at, or `null`. */
-  readonly intentPublicId: string | null;
-}
-
-/**
- * One page of a merchant's delivery log, newest first, each row carrying its
- * intent's PUBLIC id.
- *
- * ## Why the join is here and not in the caller
- *
- * `WebhookDelivery.intentId` is a shipped wire field and it holds the public
- * `pi_…` — the SDK and the dashboard both read it. The stored reference is the
- * intent's primary key, so somebody has to translate, and `routes/dashboard.ts`
- * maps the serializer over a PAGE: doing it in the route is one query per row,
- * an N+1 whose size the client chooses through `limit`. The two alternatives are
- * worse — a batched second query in the route puts half of one read in two
- * places, and dropping the field from the DTO is a breaking change to consumers
- * that already parse it. So the repository answers the question completely, in
- * one statement.
- *
- * LEFT join, and it has to be. It was an INNER join, correct while
- * `payment_intent_id` was `NOT NULL`: every delivery had exactly one intent, so
- * the page size was unchanged. `connected_account.updated` is about a SELLER
- * and names no intent — under the inner join those rows would silently vanish
- * from the delivery log, which is the worst possible failure for a log a
- * merchant consults to find out whether they were told something. `hasMore`
- * still comes from the `limit + 1` overflow rather than a `count(*)`.
- *
- * There is deliberately no id-format guard on the cursor: the ownership-scoped
- * lookup the caller already performs answers the question correctly for any
- * input — an unknown cursor is a 400 whatever shape it had.
+ * One page of a merchant's delivery log, newest first — optionally one event's
+ * deliveries, or one endpoint's. `hasMore` comes from the `limit + 1` overflow,
+ * never a `count(*)`.
  */
 export async function listDeliveriesForMerchant(
   db: DatabaseOrTransaction,
   params: ListDeliveriesParams,
-): Promise<{ data: WebhookDeliveryWithIntentRow[]; hasMore: boolean }> {
+): Promise<{ data: WebhookDeliveryRow[]; hasMore: boolean }> {
   const walk = keyset(webhookDeliveries.id, webhookDeliveries.createdAt, params.page);
-  const rows = await db
-    .select({ ...DELIVERY_COLUMNS, intentPublicId: paymentIntents.publicId })
-    .from(webhookDeliveries)
-    .leftJoin(paymentIntents, eq(paymentIntents.id, webhookDeliveries.paymentIntentId))
-    .where(and(eq(webhookDeliveries.merchantId, params.merchantId), walk.where))
+  const conditions: (SQL | undefined)[] = [
+    eq(webhookDeliveries.merchantId, params.merchantId),
+    walk.where,
+  ];
+  if (params.eventId !== undefined) conditions.push(eq(webhookDeliveries.eventId, params.eventId));
+  if (params.endpointId !== undefined) {
+    conditions.push(eq(webhookDeliveries.endpointId, params.endpointId));
+  }
+  const rows = await selectDeliveries(db)
+    .where(and(...conditions))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
-  return walk.finish(rows.map(toDeliveryWithIntentRow));
+  return walk.finish(rows.map(toDeliveryRow));
 }

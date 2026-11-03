@@ -73,25 +73,6 @@ function MerchantFields({
         />
       </View>
       <View className="gap-4">
-        <Text variant="body-semibold">{t('settings.webhooks')}</Text>
-        <FormField
-          label={t('settings.webhookUrl')}
-          value={form.webhookUrl}
-          onChange={set('webhookUrl')}
-          placeholder="https://example.com/peable/webhooks"
-          keyboardType="url"
-          disabled={busy}
-        />
-        <FormField
-          label={t('settings.webhookSecret')}
-          value={form.webhookSecret}
-          onChange={set('webhookSecret')}
-          hint={t('settings.webhookSecretHelp')}
-          secure
-          disabled={busy}
-        />
-      </View>
-      <View className="gap-4">
         <Text variant="body-semibold">{t('settings.faircoin')}</Text>
         {registering ? (
           <>

@@ -9,6 +9,7 @@ export async function readLocalCheckoutPreparation() {
   const { getStripeClient } = await import('../services/providers/stripe/client');
   const { getDb } = await import('../db/postgres');
   const { findMerchantByAppEnvironment } = await import('../db/merchants/merchantRepository');
+  const { countEndpointsForMerchant } = await import('../db/webhooks/webhookEndpointRepository');
   const client = getStripeClient('test');
   const [account, merchant, configuration, month, year] = await Promise.all([
     client.accounts.retrieve(null),
@@ -24,7 +25,7 @@ export async function readLocalCheckoutPreparation() {
     merchant.livemode ||
     merchant.xpub !== null ||
     merchant.network !== null ||
-    merchant.webhookUrl !== null ||
+    (await countEndpointsForMerchant(getDb(), merchant.id)) > 0 ||
     !configuration.active ||
     configuration.livemode ||
     configuration.is_default ||

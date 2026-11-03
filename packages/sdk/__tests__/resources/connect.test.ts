@@ -248,6 +248,8 @@ describe('the platform webhook for an on-behalf payment', () => {
       type: 'payment_intent.confirming',
       created: 1792109100,
       account: 'ca_seller',
+      api_version: '2026-11-03',
+      request: { id: null, idempotency_key: null },
       data: { object: { ...ON_BEHALF, status: 'confirming', can_expire: false } },
     };
     const raw = JSON.stringify(event);

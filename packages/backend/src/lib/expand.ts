@@ -46,6 +46,8 @@ export type ExpandableType =
   | 'connected_account'
   | 'payment_link'
   | 'webhook_delivery'
+  | 'webhook_endpoint'
+  | 'event'
   | 'tax.transaction';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
@@ -61,6 +63,8 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   connected_account: {},
   payment_link: {},
   webhook_delivery: {},
+  webhook_endpoint: {},
+  event: {},
   'tax.transaction': {},
 };
 

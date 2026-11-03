@@ -9,6 +9,8 @@ import type {
   PublicPaymentLink,
   SocialPaymentSource,
   WebhookDelivery,
+  WebhookEndpoint,
+  WebhookEvent,
 } from '@peable.to/shared-types';
 import { canExpire } from '@peable.to/shared-types';
 import type { ContributionDetails } from '@peable.to/contracts';
@@ -21,6 +23,8 @@ import type { CheckoutSessionRow } from '../db/payments/checkoutSessionRepositor
 import type { DisputeRow } from '../db/disputes/disputeRepository';
 import type { StoredContribution } from '../db/schema/payments';
 import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
+import type { WebhookEndpointRow } from '../db/webhooks/webhookEndpointRepository';
+import type { EventRow } from '../db/events/eventRepository';
 
 /**
  * Serialize a persisted PaymentIntent row to its public `PaymentIntent` DTO
@@ -65,9 +69,8 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
 
 /**
  * Serialize a persisted Merchant row to its public `Merchant` DTO.
- * `webhookSecret` and `nextDerivationIndex` are deliberately omitted (see
- * `@peable.to/shared-types`'s `Merchant` doc comment); the repository does not
- * select the secret at all.
+ * `nextDerivationIndex` is deliberately omitted (see
+ * `@peable.to/shared-types`'s `Merchant` doc comment).
  */
 export function toMerchantDTO(row: MerchantRow): Merchant {
   return {
@@ -78,7 +81,6 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
     environment: row.environment,
     network: row.network,
     xpub: row.xpub,
-    webhook_url: row.webhookUrl ?? undefined,
     required_confirmations: row.requiredConfirmations,
     display_name: row.displayName ?? undefined,
     avatar_file_id: row.avatarFileId ?? undefined,
@@ -89,46 +91,72 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
 }
 
 /**
- * Serialize a persisted WebhookDelivery row to its public `WebhookDelivery`
- * DTO.
- *
- * `intentPublicId` is a SEPARATE parameter rather than a field of the row,
- * because the delivery stores the intent's internal primary key while
- * `WebhookDelivery.intent_id` on the wire carries the public `pi_…`. The two
- * callers get it two different ways — the list path joins it in
- * (`listDeliveriesForMerchant` returns `intentPublicId` per row) and the
- * redelivery path already holds the intent row it loaded — so requiring it
- * explicitly is what stops a caller silently emitting a uuid on a shipped
- * contract.
+ * Serialize a delivery to its public `WebhookDelivery` DTO. The event and the
+ * endpoint are named by their PUBLIC ids, joined in by the repository — the
+ * row holds their primary keys, which no contract names.
  */
-export function toWebhookDeliveryDTO(
-  row: WebhookDeliveryRow,
-  /**
-   * `null` when the event is not about a payment — `connected_account.updated`
-   * is about a seller. Passed explicitly rather than read off the row for the
-   * reason the transfer serializer takes its ids explicitly: the row holds the
-   * internal key, and a serializer reaching for it would put a uuid on a
-   * contract that promises a `pi_…`.
-   */
-  intentPublicId: string | null,
-): WebhookDelivery {
+export function toWebhookDeliveryDTO(row: WebhookDeliveryRow): WebhookDelivery {
   return {
     id: row.id,
     object: 'webhook_delivery',
     livemode: row.livemode,
-    merchant_id: row.merchantId,
-    intent_id: intentPublicId,
-    event_id: row.eventId,
+    event_id: row.eventPublicId,
     event_type: row.eventType,
+    webhook_endpoint_id: row.endpointPublicId,
     url: row.url,
     attempts: row.attempts,
     delivered: row.delivered,
     last_status: row.lastStatus,
     // Omitted rather than emitted as `null`: the DTO's optional fields mean
-    // "there is nothing to say", and a `lastError: null` on a delivered
-    // delivery reads like an error field a consumer has to check.
+    // "there is nothing to say".
     ...(row.lastError !== null ? { last_error: row.lastError } : {}),
     ...(row.nextAttemptAt !== null ? { next_attempt_at: toUnix(row.nextAttemptAt) } : {}),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
+  };
+}
+
+/**
+ * Render a stored event (ADR 0014 D4) — the body of every webhook delivery of
+ * it and the answer of `GET /v1/events/:id`, byte for byte the same object.
+ *
+ * Rendered from the stored snapshot, never rebuilt from the resource as it is
+ * now: an event describes a moment.
+ */
+export function toEventDTO(row: EventRow): WebhookEvent {
+  return {
+    id: row.publicId,
+    object: 'event',
+    type: row.type,
+    created: toUnix(row.createdAt),
+    livemode: row.livemode,
+    api_version: row.apiVersion,
+    ...(row.account !== null ? { account: row.account } : {}),
+    data: {
+      object: row.dataObject,
+      ...(row.previousAttributes !== null ? { previous_attributes: row.previousAttributes } : {}),
+    },
+    request: { id: row.requestId, idempotency_key: row.idempotencyKey },
+  } as unknown as WebhookEvent;
+}
+
+/**
+ * Serialize an endpoint. `secret` is passed ONLY by the two responses that
+ * show it — the create and a roll; the row never carries it.
+ */
+export function toWebhookEndpointDTO(row: WebhookEndpointRow, secret?: string): WebhookEndpoint {
+  return {
+    id: row.publicId,
+    object: 'webhook_endpoint',
+    livemode: row.livemode,
+    url: row.url,
+    description: row.description,
+    enabled_events: row.enabledEvents,
+    status: row.status,
+    disabled_reason: row.disabledReason,
+    api_version: row.apiVersion,
+    metadata: row.metadata,
+    ...(secret !== undefined ? { secret } : {}),
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
   };

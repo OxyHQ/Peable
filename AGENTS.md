@@ -38,7 +38,7 @@ internal refactor.
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
 | `packages/orbit/` | `@peable.to/orbit` | **Orbit by Peable**, the merchant dashboard at orbit.peable.to. Expo + expo-router + Bloom, web first. A SEPARATE app from the wallet: it signs in with Oxy and calls `/v1/dashboard/applications/:id/*` and the contribution routes as the signed-in USER, never with a merchant credential. See `packages/orbit/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
-| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
+| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
@@ -145,10 +145,10 @@ separate product. **No extensions** (an explicit empty list in
   `merch_…` / `link_…` / `cs_…` lives in `public_id` and is what the wire
   contracts call `id`; `id` itself is the internal primary key that other tables
   reference — never the public one. Both ids
-  are on shipped contracts (`CheckoutSession.payment_intent_id` and
-  `WebhookDelivery.intent_id` carry the `pi_…`), which is why
-  `listDeliveriesForMerchant` joins the public id in rather than the DTO
-  emitting the internal one, and why `findIntentById` (by primary key) is a
+  are on shipped contracts (`CheckoutSession.payment_intent` carries the
+  `pi_…`, `WebhookDelivery.event_id` / `webhook_endpoint_id` the `evt_…` /
+  `we_…`), which is why `listDeliveriesForMerchant` joins the public ids in
+  rather than the DTO emitting the internal ones, and why `findIntentById` (by primary key) is a
   DIFFERENT function from `findIntentByPublicId`. The socket room is keyed by
   the PUBLIC id — keying `emitIntentUpdate` by the internal one would emit into
   a room nobody is in and lose every realtime update silently.
@@ -274,8 +274,8 @@ a wire object stores the wire shape (migration `0036` converted them).
 
 Routes (`src/routes/`): `checkoutSessions`, `connect`, `connectedAccounts`,
 `dashboard`, `disputes`, `enrich`, `merchants`, `oxyFileEvents`,
-`paymentIntents`, `paymentLinks`, `providerWebhooks`, `refunds`, `social`,
-`tax`, `transfers`, `webhookDeliveries`.
+`events`, `paymentIntents`, `paymentLinks`, `providerWebhooks`, `refunds`,
+`social`, `tax`, `transfers`, `webhookDeliveries`, `webhookEndpoints`.
 
 **Every merchant `POST` mounts `idempotent` (`lib/idempotency.ts`, ADR 0014 D3)
 after its auth and scope middleware**, or is named with its reason in
@@ -328,7 +328,8 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
 `payments/` (`paymentIntentRepository`, `paymentLinkRepository`,
 `checkoutSessionRepository`), `social/` (`receiveCursor`, `sendAttribution`),
-`webhooks/` (`webhookDeliveryRepository`, `webhookOutboxRepository`),
+`events/` (`eventRepository`), `webhooks/` (`webhookEndpointRepository`,
+`webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
 (`connectedAccountRepository`, `accountDerivationIndex`,
 `accountLinkRepository`), `transfers/` (`transferRepository`,
@@ -344,7 +345,7 @@ exists is the event, so "no row" is the NORMAL first state and
 `external_ref` but `unique(provider, provider_object_id)` — the only identity a
 redelivered creation carries. Its two events carry a **`Dispute`** under
 `data.object`, not the intent: `WebhookEventPayload` in `shared-types/event.ts`
-is the total map of event type to resource, and `buildEvent` is generic over it,
+is the total map of event type to resource, and `recordEvent` is generic over it,
 so a new event type cannot ship the wrong payload.
 
 ### The card rail's own invariants
@@ -387,15 +388,51 @@ answers `unknown` for every reason a figure can be missing. It reports what the
 provider took and attributes that cost to nobody — which entity bears it is a
 commercial decision that is still open, and no code here makes it.
 
-**A webhook delivery does not always name a payment.**
-`webhook_deliveries.payment_intent_id` is nullable since
-`connected_account.updated`, which is about a SELLER — and
-`webhook_deliveries_intent_event_has_intent_check` keys on the
-`payment_intent.` prefix so a payment event still cannot be enqueued without
-one. The list join is a LEFT join for the same reason; an inner join would have
-made those rows vanish from the log a merchant consults to find out whether
-they were told something. An account acts through the provider on its OWN row,
-never `resolveCardProvider()` — that is only for opening a new one.
+### Events and webhook endpoints (ADR 0014 D4)
+
+**An event is stored once and a delivery is that event sent to one endpoint.**
+`services/events.ts`'s `recordEvent` is the ONE writer of `events` (`evt_…`):
+it inserts the snapshot — `data.object` as the API renders it now, the
+`api_version` it was rendered under, `previous_attributes`, and `request`
+(`Request-Id` + `Idempotency-Key` from `lib/requestContext.ts`, opened by the
+`idempotent` layer and the dashboard's writes; `null` for a background change)
+— and, in the SAME transaction, one `webhook_deliveries` row per ENABLED
+`webhook_endpoints` row of the merchant whose `enabled_events` holds the type
+or `*`. Every producer goes through it: `recordIntentEvent` /
+`recordDisputeEvent` / `recordConnectedAccountEvent` in `intentTransition.ts`,
+the billing-observation relay, the test event. A producer that wrote a delivery
+directly would be an event `/v1/events` never shows. An event exists whether or
+not any endpoint wants it.
+
+- **The body is rendered from the stored event at attempt time**
+  (`toEventDTO`), never stored on the delivery and never rebuilt from the
+  resource as it is now. A redelivery is a new delivery of the same event.
+- **The endpoint secret is Peable's (`whsec_…`, `services/webhookEndpoints.ts`),
+  shown only by the create and `roll_secret` responses**, and a protected
+  column (`db/protectedColumns.ts`): only `findEndpointSigningTarget` reads it.
+  A roll with `expires_in_seconds` (≤ 24h) keeps the previous secret signing
+  beside the new one — two `v1=` per delivery — until then.
+- **URLs are refused at create/update by the dispatcher's own SSRF rules**
+  (`webhookUrlProblem`: https, http only in test mode, ports 80/443, no
+  credentials, no blocked host or private IP literal); `safeFetch` still
+  resolves and checks DNS on every attempt.
+- **Retries span ~3 days** (`WEBHOOK_RETRY_SCHEDULE_MS`, ±20% jitter);
+  `recordEndpointAttempt` folds every attempt into the endpoint's
+  `failing_since` run in ONE statement and disables it with
+  `disabled_reason = 'delivery_failures'` once the run is three days old. A
+  claimed delivery whose endpoint is disabled ends `failed` without an attempt.
+- **Retention is 30 days** (`services/eventSweeper.ts`); every read filters on
+  the same horizon. Deleting an event or an endpoint cascades to its deliveries.
+- **The catalog is `WEBHOOK_EVENT_SCOPES`** (`schema/valueSets.ts`): a new type
+  is one entry there plus `WebhookEventPayload`, and a migration for the
+  `events_type_check` / `webhook_endpoints_enabled_events_check` it widens.
+  `webhook_endpoint.test` is TARGETED (`TARGETED_WEBHOOK_EVENT_TYPES`): sent to
+  the one endpoint it names, never subscribable.
+- `merchants.webhook_url` / `webhook_secret` no longer exist; nothing routes an
+  event through the merchant row.
+
+An account acts through the provider on its OWN row, never
+`resolveCardProvider()` — that is only for opening a new one.
 
 **Test and live live in ONE deployment, and the credential selects the key
 (ADR 0017).** `STRIPE_SECRET_KEY_TEST` and `STRIPE_SECRET_KEY_LIVE` (each with
@@ -424,11 +461,12 @@ explicitly open.
 **Every status change fans out through ONE path**, and a route that writes a
 status with `updateIntentState` and returns changes the database and tells
 nobody. That path is `transitionIntent` in `services/intentTransition.ts`: it
-advances the row AND enqueues the merchant's webhook **in the same transaction**
-(ADR 0001 D7), then the caller calls `announceIntentChange` after the commit for
-the two transports that are not durable — the payer's socket frame and the
-outbox kick. A batch producer that cannot go one row at a time takes
-`enqueueIntentWebhook` on its own `tx` instead, as the expiry sweeper does.
+advances the row AND records the merchant's event (with its deliveries) **in the
+same transaction** (ADR 0001 D7), then the caller calls `announceIntentChange`
+after the commit for the two transports that are not durable — the payer's
+socket frame and the outbox kick. A batch producer that cannot go one row at a
+time takes `recordIntentEvent` on its own `tx` instead, as the expiry sweeper
+does.
 
 The ordering is the whole point and it is easy to undo: enqueue after the commit
 and the outbox becomes the best-effort delivery it was built to replace; emit

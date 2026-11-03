@@ -9,7 +9,7 @@ import { commitTaxTransaction } from './tax/taxService';
  * try to POST a webhook — so a crash, a deploy or a lost connection between
  * those two steps left the intent settled and the merchant never told, with
  * nothing anywhere recording that an event had been owed. ADR 0001 D7: the
- * state change and the outbox row commit together or neither happens.
+ * state change and the event (with its deliveries) commit together or neither happens.
  *
  * The realtime emit deliberately stays OUTSIDE the transaction and after it. A
  * socket frame is not durable, cannot be rolled back, and must never be sent
@@ -19,22 +19,19 @@ import type {
   ConnectedAccount,
   Dispute,
   PaymentIntentStatus,
-  WebhookEvent,
   WebhookEventType,
 } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import type { DatabaseOrTransaction } from '../db/postgres';
-import { findWebhookTarget } from '../db/merchants/merchantRepository';
 import {
   updateIntentState,
   type IntentStateChange,
   type IntentStateResult,
   type PaymentIntentRow,
 } from '../db/payments/paymentIntentRepository';
-import { enqueueWebhook } from '../db/webhooks/webhookOutboxRepository';
 import { emitIntentUpdateToActive } from '../realtime/socket';
 import { toPaymentIntentDTO } from '../lib/serialize';
-import { buildEvent } from './webhookDispatcher';
+import { recordEvent } from './events';
 import { kickWebhookOutbox } from './webhookOutbox';
 
 /**
@@ -106,132 +103,94 @@ export async function transitionIntent(
           committedAt: result.row.updatedAt,
         });
     }
-    await enqueueIntentWebhook(tx, result.row);
+    await recordIntentEvent(tx, result.row, change.from);
     return result;
   });
 }
 
 /**
- * Enqueue the merchant's event for a row that has ALREADY been advanced, on the
+ * Record the merchant's event for a row that has ALREADY been advanced, on the
  * caller's transaction.
  *
- * Exported because `transitionIntent` is no longer the only path that moves an
+ * Exported because `transitionIntent` is not the only path that moves an
  * intent: the expiry sweeper advances a whole batch in one claiming statement
  * (`expireDueIntents`) and cannot go through the one-row-at-a-time transition.
  * What it must not lose is the property that makes ADR 0001 D7 true — the state
- * change and the outbox row commit together — so it takes this helper and its
- * own `tx` rather than growing a third copy of the enqueue.
+ * change and the event commit together — so it takes this helper and its own
+ * `tx` rather than growing a second copy of the write.
  *
- * MUST be called inside the same transaction as the state change. Called after
- * a commit it becomes the best-effort delivery the outbox exists to replace.
+ * `previousStatus` is the status the row moved FROM, when the caller knows it;
+ * it becomes `data.previous_attributes.status`.
+ *
+ * MUST be called inside the same transaction as the state change.
  */
-export async function enqueueIntentWebhook(
+export async function recordIntentEvent(
   tx: DatabaseOrTransaction,
   row: PaymentIntentRow,
+  previousStatus?: PaymentIntentStatus,
 ): Promise<void> {
-  const eventType = WEBHOOK_EVENT_FOR[row.status];
-  if (eventType === undefined) return;
-  await enqueue(
-    tx,
-    toAddress(row),
-    buildEvent(eventType, toPaymentIntentDTO(row), row.connectedAccountPublicId),
-  );
+  const type = WEBHOOK_EVENT_FOR[row.status];
+  if (type === undefined) return;
+  await recordEvent(tx, {
+    merchantId: row.merchantId,
+    type,
+    object: toPaymentIntentDTO(row),
+    previousAttributes:
+      previousStatus !== undefined && previousStatus !== row.status
+        ? { status: previousStatus }
+        : undefined,
+    account: row.connectedAccountPublicId,
+    paymentIntentId: row.id,
+  });
 }
 
 /**
- * Enqueue a DISPUTE event for the merchant, on the intent it contests.
+ * Record a DISPUTE event, on the intent it contests.
  *
- * Its own function rather than an `eventType` option on the one above, and the
- * reason is the payload rather than the name. A dispute event carries a
- * `Dispute` (`WebhookEventPayload`), so a shared function would have to take
- * the resource as a parameter too — and then "which resource goes with which
- * event" would be the caller's problem at every call site instead of the
- * contract's.
+ * Its own function rather than an option on the one above because of the
+ * payload: a dispute event carries a `Dispute` (`WebhookEventPayload`). The
+ * event names the payment being contested, so a merchant can correlate it, and
+ * is written in the CALLER's transaction (ADR 0001 D7).
  *
- * Two things stay true from the intent path and are why this still takes the
- * row: the delivery is keyed to the payment being contested, so a merchant can
- * correlate it, and the enqueue is in the CALLER's transaction (ADR 0001 D7).
- *
- * The intent's own status is deliberately untouched. It stayed `settled`
- * throughout — a dispute is the network's process, not a stage of the payment's
- * lifecycle — and emitting the status-derived event here would have told the
- * merchant their payment had just succeeded, again, at the exact moment it was
- * being contested.
+ * The intent's own status is deliberately untouched: a dispute is the
+ * network's process, not a stage of the payment's lifecycle.
  */
-export async function enqueueDisputeWebhook(
+export async function recordDisputeEvent(
   tx: DatabaseOrTransaction,
   row: PaymentIntentRow,
   dispute: Dispute,
-  eventType: 'payment_intent.disputed' | 'payment_intent.dispute_closed',
+  type: 'payment_intent.disputed' | 'payment_intent.dispute_closed',
 ): Promise<void> {
-  await enqueue(tx, toAddress(row), buildEvent(eventType, dispute, row.connectedAccountPublicId));
+  await recordEvent(tx, {
+    merchantId: row.merchantId,
+    type,
+    object: dispute,
+    account: row.connectedAccountPublicId,
+    paymentIntentId: row.id,
+  });
 }
 
 /**
- * Enqueue a SELLER's readiness change for the merchant who onboarded them.
+ * Record a SELLER's readiness change for the merchant who onboarded them —
+ * an event about a seller, so it names no payment.
  *
- * The first event here that is not about a payment, so it takes a merchant id
- * rather than an intent row and the delivery names no
- * `payment_intent_id` — which is why that column became nullable, and why
- * `webhook_deliveries_intent_event_has_intent_check` keys on the event-type
- * prefix.
- *
- * It exists because readiness was unlearnable. `refreshConnectedAccount`
- * updated the local row and told nobody, so a marketplace discovered that a
- * seller had finished onboarding either by polling
- * `GET /v1/connected_accounts` or by attempting a settlement and reading the
- * refusal.
- *
- * In the CALLER's transaction, like every other enqueue here (ADR 0001 D7): the
- * snapshot and the notification commit together, or a crash between them leaves
- * an account whose readiness changed and a merchant who will never be told —
- * and the next refresh sees no change, so nothing would ever enqueue it again.
+ * In the CALLER's transaction (ADR 0001 D7): the snapshot and the event commit
+ * together, or a crash between them leaves an account whose readiness changed
+ * and a merchant who will never be told — the next refresh sees no change, so
+ * nothing would ever record it again.
  */
-export async function enqueueConnectedAccountWebhook(
+export async function recordConnectedAccountEvent(
   tx: DatabaseOrTransaction,
   merchantId: string,
   account: ConnectedAccount,
+  previousAttributes?: Record<string, unknown>,
 ): Promise<void> {
-  await enqueue(tx, { merchantId }, buildEvent('connected_account.updated', account, account.id));
-}
-
-/** Where an intent's events go: its merchant, correlated to the payment. */
-function toAddress(row: PaymentIntentRow): { merchantId: string; paymentIntentId: string } {
-  return { merchantId: row.merchantId, paymentIntentId: row.id };
-}
-
-/**
- * The shared half: find the merchant's endpoint and write the outbox row.
- *
- * Takes an ADDRESS — a merchant, and optionally the payment the event is about
- * — rather than an intent row, because not every event here is about a payment.
- * `connected_account.updated` is the first that is not, and it had grown a
- * second copy of this function to say so; the difference between them was one
- * field, and the identical halves were the endpoint lookup, the
- * merchant-with-no-endpoint rule and the ADR 0001 D7 in-transaction write.
- *
- * The one read allowed to select `webhook_secret`. Only the URL is used here —
- * the secret is re-read at attempt time, so a merchant who rotates it
- * mid-backoff has their retries signed with the new one.
- *
- * A merchant with no endpoint enqueues NOTHING, which is not a silent drop: an
- * outbox row for an endpoint that does not exist would retry to exhaustion and
- * dead-letter, filling an operator surface with deliveries nobody ever asked
- * for.
- */
-async function enqueue(
-  tx: DatabaseOrTransaction,
-  to: { readonly merchantId: string; readonly paymentIntentId?: string },
-  event: WebhookEvent,
-): Promise<void> {
-  const target = await findWebhookTarget(tx, to.merchantId);
-  if (!target) return;
-
-  await enqueueWebhook(tx, {
-    merchantId: to.merchantId,
-    paymentIntentId: to.paymentIntentId,
-    event,
-    url: target.url,
+  await recordEvent(tx, {
+    merchantId,
+    type: 'connected_account.updated',
+    object: account,
+    previousAttributes,
+    account: account.id,
   });
 }
 
@@ -243,11 +202,9 @@ async function enqueue(
  *
  * - the socket frame reaches whoever is watching right now, and nobody
  *   watching is not a failure;
- * - the outbox kick just asks the dispatcher to run its next pass early, so a
- *   merchant does not wait a poll interval for an event that is already
- *   durably enqueued. If the kick never happens, the loop picks the row up on
- *   its own — which is exactly why the enqueue had to be in the transaction and
- *   this does not.
+ * - the outbox kick just asks the dispatcher to run its next pass early. If it
+ *   never happens, the loop picks the rows up on its own — which is exactly why
+ *   the event had to be written in the transaction and this does not.
  */
 export function announceIntentChange(intent: PaymentIntentRow): void {
   emitIntentUpdateToActive(intent);

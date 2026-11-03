@@ -1,5 +1,9 @@
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
-import { LOCAL_TEST_APP, localTestBillingConfiguration } from './stripeTestBilling';
+import {
+  LOCAL_TEST_APP,
+  localTestBillingConfiguration,
+  localTestBillingOwner,
+} from './stripeTestBilling';
 
 let stage = 'local configuration';
 async function run() {
@@ -22,14 +26,13 @@ async function run() {
   if (process.env.PEABLE_TEST_ENABLE_BILLING === 'true') {
     const { connectPostgres } = await import('../db/postgres');
     const { findMerchantByAppEnvironment } = await import('../db/merchants/merchantRepository');
-    const merchant = await findMerchantByAppEnvironment(
-      await connectPostgres(),
-      LOCAL_TEST_APP,
-      'development',
-    );
+    const db = await connectPostgres();
+    const merchant = await findMerchantByAppEnvironment(db, LOCAL_TEST_APP, 'development');
     if (!merchant)
       throw new Error('Seed the local test merchant before enabling recurring observations');
-    billingConfiguration = JSON.stringify(localTestBillingConfiguration(merchant, account.id));
+    billingConfiguration = JSON.stringify(
+      localTestBillingConfiguration(await localTestBillingOwner(db, merchant), account.id),
+    );
   }
   stage = 'gateway startup and recurring configuration validation';
   const { start } = await import('../server');

@@ -18,6 +18,7 @@ import {
   checkoutSessions,
   connectedAccountLinks,
   connectedAccounts,
+  events,
   merchantAvatarAudit,
   merchants,
   oxyFileEvents,
@@ -31,6 +32,7 @@ import {
   socialSendAttributions,
   transfers,
   webhookDeliveries,
+  webhookEndpoints,
 } from '../schema';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -57,6 +59,7 @@ const ALL_TABLES = [
   checkoutSessions,
   connectedAccountLinks,
   connectedAccounts,
+  events,
   merchantAvatarAudit,
   merchants,
   oxyFileEvents,
@@ -70,6 +73,7 @@ const ALL_TABLES = [
   socialSendAttributions,
   transfers,
   webhookDeliveries,
+  webhookEndpoints,
 ] as const;
 
 let suite: SuiteDatabase | undefined;
@@ -192,8 +196,16 @@ describe('id-column classification', () => {
             "an Oxy Application's id; its agreement with the merchant's is carried by payment_links_merchant_identity_fkey",
         },
         {
-          column: 'webhook_deliveries.event_id',
-          reason: 'the evt_… envelope id that was signed and sent; events are never persisted',
+          column: 'events.public_id',
+          reason: "this row's own evt_… identifier, not a reference",
+        },
+        {
+          column: 'events.request_id',
+          reason: 'the Request-Id of the API call that caused the event — a log key, not a row',
+        },
+        {
+          column: 'webhook_endpoints.public_id',
+          reason: "this row's own we_… identifier, not a reference",
         },
         // `provider_events` holds a PROVIDER's numbering, not this database's.
         // None of these can carry a foreign key: the rows they name live at

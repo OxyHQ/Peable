@@ -15,10 +15,10 @@ iOS and Android.
 | Shell | Oxy sign-in; organization + application picker; **Test / Live** toggle (`environment=development` / `production`) | Oxy `accounts.list`, `apps.list` |
 | Home | Counts and gross volume **computed in the browser from the first page (100) of payments**, labelled as such; five most recent payments | `GET …/payment_intents` |
 | Payments | List with a status filter and `starting_after` / `has_more` paging; detail with amount by currency decimals, a timeline built only from the intent's own fields, and metadata | `GET …/payment_intents`, `GET …/payment_intents/:id` |
-| Developers | Webhook delivery log — status, attempts, last error, next attempt — and **Redeliver** | `GET …/webhook_deliveries`, `POST …/webhook_deliveries/:id/redeliver` |
+| Developers | Webhook **endpoints** (add with URL + events, enable/disable, **Roll secret** with a 24 h overlap, **Send test event**, delete; the `whsec_…` is shown once, on add and roll), the **events** of the last 30 days, and the delivery log — status, attempts, last error, next attempt, event and endpoint — with **Redeliver** | `GET/POST …/webhook_endpoints`, `POST/DELETE …/webhook_endpoints/:id`, `POST …/webhook_endpoints/:id/roll_secret`, `POST …/webhook_endpoints/:id/test`, `GET …/events`, `GET …/webhook_deliveries`, `POST …/webhook_deliveries/:id/redeliver` |
 | Tax | Peable Tax, ported from the wallet's `app/tax.tsx` | `…/tax/*` |
 | Contributions | Contribution links, ported from the wallet's `app/contributions.tsx` (same `@peable.to/sdk/contributions` resource) | `/v1/organizations/:org/applications/:app/contributions*` |
-| Settings | Register or update the merchant for the selected application and mode: branding (display name, description), webhook URL / secret, required confirmations, and — at registration — the optional FairCoin network + **watch-only** xpub | `GET/POST/PATCH …/merchant` |
+| Settings | Register or update the merchant for the selected application and mode: branding (display name, description), required confirmations, and — at registration — the optional FairCoin network + **watch-only** xpub | `GET/POST/PATCH …/merchant` |
 
 `…` is `/v1/dashboard/applications/:applicationId`, always with `?environment=`.
 Every call is made as the signed-in **Oxy user**; the gateway asks oxy-api for the

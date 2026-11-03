@@ -21,6 +21,8 @@ import {
   POSTGRES_TESTS_ENABLED,
   resetGatewayTables,
   seedMerchant,
+  seedWebhookEndpoint,
+  storedEvents,
   seedIntent,
   useGatewayDatabase,
 } from '../../../__tests__/helpers/gatewayTestDatabase';
@@ -35,7 +37,6 @@ import {
 import {
   recurringMirrors,
   recurringObservationOutbox,
-  merchants,
   webhookDeliveries,
 } from '../../../db/schema';
 import type { DeploymentIdentity, RecurringSnapshot } from '../contracts';
@@ -526,10 +527,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
       enqueued: 0,
     });
     const sub = await bind();
-    await gatewayDb()
-      .update(merchants)
-      .set({ webhookUrl: 'https://example.invalid/fixture', webhookSecret: 'synthetic-only' })
-      .where(eq(merchants.id, sub.merchantId));
+    await seedWebhookEndpoint(
+      { id: sub.merchantId },
+      { url: 'https://example.invalid/fixture', secret: 'synthetic-only' },
+    );
     await observeRecurringEvent(await event(), options);
     const cohort = {
       ...deployment,
@@ -552,10 +553,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
     ]);
     expect(results.reduce((n, v) => n + v.enqueued, 0)).toBe(1);
     const [delivery] = await gatewayDb().select().from(webhookDeliveries);
+    const [stored] = await storedEvents({ type: 'billing.observation.updated' });
     const [privateRow] = await rows();
-    expect(must(privateRow).deliveryId).toBe(must(delivery).id);
+    expect(must(privateRow).eventId).toBe(must(delivery).eventId);
+    expect(must(privateRow).relayedAt).not.toBeNull();
     const sdk = new Peable({ publicKey: 'synthetic', secret: 'synthetic' });
-    const raw = JSON.stringify(must(delivery).payload),
+    const raw = JSON.stringify(must(stored).event),
       timestamp = Math.floor(Date.now() / 1000),
       signature = signWebhook('synthetic-only', raw, timestamp);
     expect(sdk.webhooks.constructEvent(raw, signature, 'synthetic-only')).toMatchObject({
@@ -570,21 +573,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
         },
       },
     });
-    const observedAt = (must(delivery).payload as { data: { object: { observed_at: unknown } } })
-      .data.object.observed_at;
+    const observedAt = (must(stored).event as { data: { object: { observed_at: unknown } } }).data
+      .object.observed_at;
     expect(Number.isSafeInteger(observedAt)).toBe(true);
     expect(() => sdk.webhooks.constructEvent(raw, signature, 'other-secret')).toThrow();
   });
   it('relays an invoice parent only from its verified same-owner observation', async () => {
     const sub = await bind();
     await bind('invoice', 'in_1', sub.merchantId);
-    await gatewayDb()
-      .update(merchants)
-      .set({
-        webhookUrl: 'https://example.invalid/fixture',
-        webhookSecret: 'synthetic-only',
-      })
-      .where(eq(merchants.id, sub.merchantId));
+    await seedWebhookEndpoint(
+      { id: sub.merchantId },
+      { url: 'https://example.invalid/fixture', secret: 'synthetic-only' },
+    );
     readSnapshot.mockResolvedValue(invoice());
     expect(await observeRecurringEvent(await event('invoice', 'in_1'), options)).toMatchObject({
       kind: 'observed',
@@ -609,9 +609,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
         .enqueued,
     ).toBe(1);
     const [delivery] = await gatewayDb().select().from(webhookDeliveries);
-    expect(must(delivery).payload).toMatchObject({
+    const [stored] = await storedEvents({ type: 'billing.observation.updated' });
+    expect(must(stored).event).toMatchObject({
       data: { object: { resource_kind: 'invoice', resource_id: 'in_1', subscription_id: 'sub_1' } },
     });
+    expect(must(delivery).eventId).toBe(must(stored).row.id);
     expect(must(delivery).merchantId).toBe(sub.merchantId);
   });
 
@@ -713,10 +715,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
 
   it('rolls back public enqueue and pointer together after a SQL failure, then retries once', async () => {
     const sub = await bind();
-    await gatewayDb()
-      .update(merchants)
-      .set({ webhookUrl: 'https://example.invalid/fixture', webhookSecret: 'synthetic-only' })
-      .where(eq(merchants.id, sub.merchantId));
+    await seedWebhookEndpoint(
+      { id: sub.merchantId },
+      { url: 'https://example.invalid/fixture', secret: 'synthetic-only' },
+    );
     await observeRecurringEvent(await event(), options);
     const cohort = {
       ...deployment,
@@ -735,7 +737,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
         relayRecurringObservations({ db: gatewayDb(), cohorts: [cohort], enabled: true }),
       ).rejects.toThrow();
       expect(await gatewayDb().select().from(webhookDeliveries)).toHaveLength(0);
-      expect(must((await rows())[0]).deliveryId).toBeNull();
+      expect(await storedEvents({ type: 'billing.observation.updated' })).toHaveLength(0);
+      expect(must((await rows())[0]).relayedAt).toBeNull();
     } finally {
       await gatewayDb().execute(
         sql`DROP TRIGGER fixture_relay_reject ON recurring_observation_outbox`,

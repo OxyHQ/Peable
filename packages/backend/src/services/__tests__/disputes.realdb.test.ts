@@ -13,7 +13,7 @@
  */
 import { beforeAll, describe, expect, it } from 'bun:test';
 import { useStripeKeys } from '../../__tests__/helpers/stripeModes';
-import type { Dispute, WebhookEvent } from '@peable.to/shared-types';
+import type { Dispute } from '@peable.to/shared-types';
 import { eq } from 'drizzle-orm';
 import {
   insertProviderEvent,
@@ -21,13 +21,14 @@ import {
 } from '../../db/providers/providerEventRepository';
 import { linkProviderObject } from '../../db/payments/paymentIntentRepository';
 import { listDisputesForIntent } from '../../db/disputes/disputeRepository';
-import { disputes, webhookDeliveries } from '../../db/schema';
+import { disputes, events } from '../../db/schema';
 import { runProviderEventDrainPass } from '../providerEventDrain';
 import { redactProviderPayload } from '../providers/redact';
 import {
   gatewayDb,
   seedIntent,
   seedMerchant,
+  storedEvents,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { POSTGRES_TESTS_ENABLED } from '../../db/testDatabase';
@@ -102,10 +103,11 @@ async function linkedCardIntent(objectId: string) {
 
 async function deliveriesFor(intentId: string): Promise<string[]> {
   const rows = await gatewayDb()
-    .select({ eventType: webhookDeliveries.eventType })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.paymentIntentId, intentId));
-  return rows.map((row) => row.eventType);
+    .select({ type: events.type })
+    .from(events)
+    .where(eq(events.paymentIntentId, intentId))
+    .orderBy(events.id);
+  return rows.map((row) => row.type);
 }
 
 /**
@@ -117,12 +119,8 @@ async function deliveriesFor(intentId: string): Promise<string[]> {
  * no reason and, most expensively, no evidence deadline.
  */
 async function disputePayloadsFor(intentId: string): Promise<Dispute[]> {
-  const rows = await gatewayDb()
-    .select({ payload: webhookDeliveries.payload })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.paymentIntentId, intentId));
-  return rows
-    .map((row) => row.payload as unknown as WebhookEvent)
+  return (await storedEvents({ paymentIntentId: intentId }))
+    .map(({ event }) => event)
     .filter(
       (event) =>
         event.type === 'payment_intent.disputed' || event.type === 'payment_intent.dispute_closed',
@@ -135,10 +133,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
   useStripeKeys();
 
   beforeAll(async () => {
-    // BOTH halves, deliberately: `findWebhookTarget` returns null unless the
-    // url AND the secret are present, and a null target makes
-    // `enqueueIntentWebhook` return without writing a delivery row. Seeding
-    // only the url would leave every delivery assertion below vacuously empty.
+    // With an endpoint, so every recorded event also fans out a delivery.
     merchant = await seedMerchant({
       webhookUrl: 'https://merchant.invalid/hook',
       webhookSecret: 'whsec_dispute_fixture',

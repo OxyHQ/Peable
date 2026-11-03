@@ -21,6 +21,7 @@ export async function createLocalStripeTestIntent(
   );
   const { newId } = await import('../lib/ids');
   const { createIntent } = await import('../services/createIntent');
+  const { countEndpointsForMerchant } = await import('../db/webhooks/webhookEndpointRepository');
   const db = getDb();
   const merchant =
     (await findMerchantByAppEnvironment(db, LOCAL_TEST_APP, 'development')) ??
@@ -35,7 +36,7 @@ export async function createLocalStripeTestIntent(
     merchant.livemode ||
     merchant.network !== null ||
     merchant.xpub !== null ||
-    merchant.webhookUrl
+    (await countEndpointsForMerchant(db, merchant.id)) > 0
   ) {
     throw new Error('Unexpected local test merchant');
   }

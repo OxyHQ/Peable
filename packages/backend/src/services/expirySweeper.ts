@@ -30,7 +30,7 @@
  * What is here is all three. `expireDueIntents` claims a BOUNDED batch with
  * `for update skip locked` — exclusive without either sweeper waiting on the
  * other — and the enqueue runs on the SAME transaction through
- * `enqueueIntentWebhook`, so the state change and the merchant's event still
+ * `recordIntentEvent`, so the state change and the merchant's event still
  * commit together or neither does.
  *
  * ## What the claim replaces, and the guard that replaces it
@@ -62,7 +62,7 @@ import { getDb } from '../db/postgres';
 import { expireDueIntents, findDueCardIntents } from '../db/payments/paymentIntentRepository';
 import { cancelCardPaymentAtProvider } from './cardCancellation';
 import { reconcileIntentWithProvider } from './intentReconciliation';
-import { announceIntentChange, enqueueIntentWebhook, transitionIntent } from './intentTransition';
+import { announceIntentChange, recordIntentEvent, transitionIntent } from './intentTransition';
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const DEFAULT_BATCH_SIZE = 100;
@@ -107,7 +107,7 @@ export async function runExpirySweep(deps: ExpirySweepDeps = {}): Promise<Expiry
   const expired = await db.transaction(async (tx) => {
     const claimed = await expireDueIntents(tx, now, limit);
     for (const intent of claimed) {
-      await enqueueIntentWebhook(tx, intent);
+      await recordIntentEvent(tx, intent);
     }
     return claimed;
   });

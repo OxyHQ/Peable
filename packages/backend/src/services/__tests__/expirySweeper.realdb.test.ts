@@ -12,7 +12,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { paymentIntents, webhookDeliveries } from '../../db/schema';
+import { events, paymentIntents, webhookDeliveries } from '../../db/schema';
 import { runExpirySweep } from '../expirySweeper';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -117,9 +117,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the expiry sweeper', () => {
     await runExpirySweep();
 
     const queued = await gatewayDb()
-      .select({ eventType: webhookDeliveries.eventType, status: webhookDeliveries.lastStatus })
+      .select({ eventType: events.type, status: webhookDeliveries.lastStatus })
       .from(webhookDeliveries)
-      .where(eq(webhookDeliveries.paymentIntentId, intent.id));
+      .innerJoin(events, eq(events.id, webhookDeliveries.eventId))
+      .where(eq(events.paymentIntentId, intent.id));
     expect(queued).toHaveLength(1);
     expect(queued[0]?.eventType).toBe('payment_intent.expired');
     expect(queued[0]?.status).toBe('pending');

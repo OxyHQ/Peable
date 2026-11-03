@@ -11,34 +11,45 @@ function computeSignature(secret: string, rawBody: string, timestamp: number): s
 
 /**
  * Produce a Stripe-style signature header for an outbound webhook:
- * `t=${timestamp},v1=${hexHmacSha256}`.
+ * `t=${timestamp},v1=${hex}` — with one `v1=` per secret.
+ *
+ * Several secrets are what make a rotation gapless: while an endpoint's rolled
+ * secret is still inside its overlap window, every delivery is signed with
+ * BOTH, so a receiver verifying with either one accepts it.
  */
-export function signWebhook(secret: string, rawBody: string, timestamp: number): string {
-  return `t=${timestamp},v1=${computeSignature(secret, rawBody, timestamp)}`;
+export function signWebhook(
+  secret: string | readonly string[],
+  rawBody: string,
+  timestamp: number,
+): string {
+  const secrets = typeof secret === 'string' ? [secret] : secret;
+  if (secrets.length === 0) throw new Error('signWebhook needs at least one secret');
+  const signatures = secrets.map((s) => `v1=${computeSignature(s, rawBody, timestamp)}`);
+  return `t=${timestamp},${signatures.join(',')}`;
 }
 
 interface ParsedHeader {
   timestamp: number;
-  signature: string;
+  signatures: string[];
 }
 
 function parseHeader(header: string): ParsedHeader | null {
   let timestamp: number | null = null;
-  let signature: string | null = null;
+  const signatures: string[] = [];
   for (const part of header.split(',')) {
     const separator = part.indexOf('=');
     if (separator === -1) continue;
-    const key = part.slice(0, separator);
-    const value = part.slice(separator + 1);
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
     if (key === 't') {
       const parsed = Number(value);
       if (Number.isInteger(parsed)) timestamp = parsed;
     } else if (key === 'v1') {
-      signature = value;
+      signatures.push(value);
     }
   }
-  if (timestamp === null || signature === null) return null;
-  return { timestamp, signature };
+  if (timestamp === null || signatures.length === 0) return null;
+  return { timestamp, signatures };
 }
 
 /**
@@ -54,12 +65,16 @@ function constantTimeEqualHex(a: string, b: string): boolean {
 
 /**
  * Verify a webhook signature header against the raw body.
- * - Parses `t` and `v1` from the header.
+ *
+ * - Parses `t` and EVERY `v1` from the header.
  * - Rejects if the timestamp drifts more than `toleranceSec` from `nowSec`.
- * - Recomputes the expected signature and compares it in constant time.
+ * - Accepts when any `v1` matches the signature computed with any of
+ *   `secret` — so a receiver mid-rotation can pass both of its secrets, and a
+ *   delivery signed during the sender's overlap window verifies against
+ *   either.
  */
 export function verifyWebhook(
-  secret: string,
+  secret: string | readonly string[],
   rawBody: string,
   header: string,
   toleranceSec: number,
@@ -68,6 +83,15 @@ export function verifyWebhook(
   const parsed = parseHeader(header);
   if (parsed === null) return false;
   if (Math.abs(nowSec - parsed.timestamp) > toleranceSec) return false;
-  const expected = computeSignature(secret, rawBody, parsed.timestamp);
-  return constantTimeEqualHex(expected, parsed.signature);
+  const secrets = typeof secret === 'string' ? [secret] : secret;
+  let matched = false;
+  // Every comparison runs, so the time taken does not say which one matched.
+  for (const candidate of secrets) {
+    if (candidate.length === 0) continue;
+    const expected = computeSignature(candidate, rawBody, parsed.timestamp);
+    for (const signature of parsed.signatures) {
+      if (constantTimeEqualHex(expected, signature)) matched = true;
+    }
+  }
+  return matched;
 }

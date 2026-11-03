@@ -1,18 +1,21 @@
 import { afterAll, beforeAll } from 'bun:test';
-import { getTableName, is, sql } from 'drizzle-orm';
+import { and, asc, eq, getTableName, is, sql } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
 import { deriveKeyFromSeed, getNetwork, mnemonicToSeed } from '@fairco.in/core';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import { uuidv7 } from '@oxy.so/db';
 import type { ProviderId } from '../../services/providers/provider';
-import type {
-  CurrencyCode,
-  PaymentIntent,
-  PaymentIntentRail,
-  SocialPaymentSource,
-  WebhookEventPayload,
-  WebhookEventType,
+import {
+  PEABLE_API_VERSION,
+  type CurrencyCode,
+  type PaymentIntent,
+  type PaymentIntentRail,
+  type SocialPaymentSource,
+  type WebhookEnabledEvent,
+  type WebhookEventPayload,
+  type WebhookEvent,
+  type WebhookEventType,
 } from '@peable.to/shared-types';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
 import {
@@ -30,11 +33,18 @@ import {
   findDeliveryForMerchant,
   type WebhookDeliveryRow,
 } from '../../db/webhooks/webhookDeliveryRepository';
-import { enqueueWebhook, recordDeliveryAttempt } from '../../db/webhooks/webhookOutboxRepository';
-import { toPaymentIntentDTO } from '../../lib/serialize';
+import { enqueueDelivery, recordDeliveryAttempt } from '../../db/webhooks/webhookOutboxRepository';
+import {
+  insertEndpoint,
+  listEndpointsForMerchant,
+  type WebhookEndpointRow,
+} from '../../db/webhooks/webhookEndpointRepository';
+import { findEventById, insertEvent, type EventRow } from '../../db/events/eventRepository';
+import { generateWebhookSecret } from '../../services/webhookEndpoints';
+import { newId } from '../../lib/ids';
+import { toEventDTO, toPaymentIntentDTO } from '../../lib/serialize';
 import * as schema from '../../db/schema';
 import type { Database } from '../../db/postgres';
-import { toUnix } from '../../lib/time';
 import {
   createSuiteDatabase,
   dropSuiteDatabase,
@@ -201,6 +211,11 @@ export interface SeedMerchantValues {
   readonly environment?: OxyServiceEnvironment;
   readonly network?: NetworkType;
   readonly xpub?: string;
+  /**
+   * A webhook endpoint to create for the merchant (every event, `*`): its URL,
+   * and optionally its secret. The merchant row has no webhook fields; this is
+   * shorthand for {@link seedWebhookEndpoint}.
+   */
   readonly webhookUrl?: string;
   readonly webhookSecret?: string;
   readonly requiredConfirmations?: number;
@@ -226,8 +241,6 @@ export async function seedMerchant(values: SeedMerchantValues = {}): Promise<Mer
     network,
     // Follows the NETWORK, never a fixed constant — see `testXpubFor`.
     xpub: values.xpub ?? testXpubFor(network),
-    webhookUrl: values.webhookUrl,
-    webhookSecret: values.webhookSecret,
     requiredConfirmations: values.requiredConfirmations,
     avatarFileId: values.avatarFileId,
   });
@@ -235,6 +248,9 @@ export async function seedMerchant(values: SeedMerchantValues = {}): Promise<Mer
     throw new Error(
       `seedMerchant: a merchant already exists for (${values.oxyAppId ?? '<generated>'}, ${values.environment ?? 'development'})`,
     );
+  }
+  if (values.webhookUrl !== undefined) {
+    await seedWebhookEndpoint(row, { url: values.webhookUrl, secret: values.webhookSecret });
   }
   return row;
 }
@@ -381,9 +397,9 @@ type IntentWebhookEventType = {
 }[WebhookEventType];
 
 export interface SeedDeliveryValues {
-  readonly eventId?: string;
   readonly eventType?: IntentWebhookEventType;
-  readonly url?: string;
+  /** The endpoint it goes to. Default: the merchant's first, or a new one. */
+  readonly endpoint?: WebhookEndpointRow;
   /**
    * Leave a seeded delivery `pending` instead of settling it.
    *
@@ -394,44 +410,76 @@ export interface SeedDeliveryValues {
   readonly pending?: boolean;
 }
 
+export interface SeedWebhookEndpointValues {
+  readonly url?: string;
+  /** Default: a generated `whsec_…`. */
+  readonly secret?: string;
+  readonly enabledEvents?: readonly WebhookEnabledEvent[];
+}
+
 /**
- * Seed a delivery.
+ * A webhook endpoint, through the real writer. Returns the row and the secret
+ * it signs with — the one thing a suite verifying a signature needs and the row
+ * never carries.
+ */
+export async function seedWebhookEndpoint(
+  merchant: Pick<MerchantRow, 'id'>,
+  values: SeedWebhookEndpointValues = {},
+): Promise<{ endpoint: WebhookEndpointRow; secret: string }> {
+  const secret = values.secret ?? generateWebhookSecret();
+  const endpoint = await insertEndpoint(gatewayDb(), {
+    publicId: newId('we'),
+    merchantId: merchant.id,
+    url: values.url ?? 'https://merchant.example/hook',
+    enabledEvents: values.enabledEvents ?? ['*'],
+    metadata: {},
+    apiVersion: PEABLE_API_VERSION,
+    secret,
+  });
+  if (endpoint === 'limit_reached') throw new Error('seedWebhookEndpoint: endpoint limit reached');
+  return { endpoint, secret };
+}
+
+/**
+ * Seed a delivery: an event about `intent`, and its delivery to one endpoint.
  *
- * Two writes, not one, and that is the outbox's shape rather than an
- * inefficiency: `enqueueWebhook` is the only way a row is created, and
- * `recordDeliveryAttempt` is the only way one reaches a terminal status. A
- * helper that inserted a delivered row directly would be a second writer with
- * no attempt behind it — exactly the shape `insertWebhookDelivery` had, and the
- * reason it is gone.
+ * Through the real writers: `insertEvent` (not `recordEvent`, so the fixture
+ * does not fan out to every endpoint the suite seeded) and `enqueueDelivery`,
+ * then `recordDeliveryAttempt` for a settled one — the only way a row reaches a
+ * terminal status.
  */
 export async function seedDelivery(
   merchant: MerchantRow,
   intent: PaymentIntentRow,
   values: SeedDeliveryValues = {},
 ): Promise<WebhookDeliveryRow> {
-  const url = values.url ?? merchant.webhookUrl ?? 'https://merchant.example/hook';
-  const eventType = values.eventType ?? 'payment_intent.settled';
-  const eventId = values.eventId ?? `evt_${uuidv7()}`;
-
-  const id = await enqueueWebhook(gatewayDb(), {
+  const endpoint =
+    values.endpoint ??
+    (await listEndpointsForMerchant(gatewayDb(), { merchantId: merchant.id, page: { limit: 1 } }))
+      .data[0] ??
+    (await seedWebhookEndpoint(merchant)).endpoint;
+  const event = await insertEvent(gatewayDb(), {
+    publicId: newId('evt'),
     merchantId: merchant.id,
+    type: values.eventType ?? 'payment_intent.settled',
+    apiVersion: PEABLE_API_VERSION,
+    dataObject: toPaymentIntentDTO(intent) as unknown as Record<string, unknown>,
     paymentIntentId: intent.id,
-    event: {
-      id: eventId,
-      object: 'event',
-      livemode: intent.livemode,
-      type: eventType,
-      created: toUnix(new Date()),
-      data: { object: toPaymentIntentDTO(intent) },
-    },
-    url,
+    requestId: null,
+    idempotencyKey: null,
+  });
+  const id = await enqueueDelivery(gatewayDb(), {
+    merchantId: merchant.id,
+    eventId: event.id,
+    endpointId: endpoint.id,
+    url: endpoint.url,
   });
 
   if (values.pending !== true) {
     await recordDeliveryAttempt(gatewayDb(), {
       id,
       outcome: { kind: 'delivered' },
-      url,
+      url: endpoint.url,
       nextAttemptAt: null,
     });
   }
@@ -439,6 +487,37 @@ export async function seedDelivery(
   const row = await findDeliveryForMerchant(gatewayDb(), id, merchant.id);
   if (!row) throw new Error(`seedDelivery: delivery ${id} vanished after enqueue`);
   return row;
+}
+
+/**
+ * The stored events matching every given field, oldest first, each with its
+ * rendering — the exact object its deliveries carry and `/v1/events` returns.
+ */
+export async function storedEvents(
+  filter: {
+    readonly merchantId?: string;
+    readonly paymentIntentId?: string;
+    readonly type?: WebhookEventType;
+  } = {},
+): Promise<{ row: EventRow; event: WebhookEvent }[]> {
+  const conditions = [
+    filter.merchantId === undefined ? undefined : eq(schema.events.merchantId, filter.merchantId),
+    filter.paymentIntentId === undefined
+      ? undefined
+      : eq(schema.events.paymentIntentId, filter.paymentIntentId),
+    filter.type === undefined ? undefined : eq(schema.events.type, filter.type),
+  ];
+  const ids = await gatewayDb()
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .where(and(...conditions))
+    .orderBy(asc(schema.events.id));
+  const out: { row: EventRow; event: WebhookEvent }[] = [];
+  for (const { id } of ids) {
+    const row = await findEventById(gatewayDb(), id);
+    if (row) out.push({ row, event: toEventDTO(row) });
+  }
+  return out;
 }
 
 export interface SeedAttributionValues {

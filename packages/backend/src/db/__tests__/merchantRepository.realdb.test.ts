@@ -4,11 +4,15 @@ import { HDKey } from '@scure/bip32';
 import { TESTNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
 import { uuidv7 } from '@oxy.so/db';
 import {
+  findEndpointForMerchant,
+  findEndpointSigningTarget,
+  insertEndpoint,
+} from '../webhooks/webhookEndpointRepository';
+import {
   WatchOnlyViolationError,
   findMerchantByAppEnvironment,
   findMerchantById,
   findMerchantsByIds,
-  findWebhookTarget,
   insertMerchant,
   updateMerchantSettings,
 } from '../merchants/merchantRepository';
@@ -147,11 +151,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
   it('patches only the mutable fields and leaves the rest alone', async () => {
     const created = await insertMerchant(must(suite).db, registration());
     const patched = await updateMerchantSettings(must(suite).db, must(created).id, {
-      webhookUrl: 'https://merchant.example/hook',
+      displayName: 'Merchant Example',
       requiredConfirmations: 6,
     });
 
-    expect(patched?.webhookUrl).toBe('https://merchant.example/hook');
+    expect(patched?.displayName).toBe('Merchant Example');
     expect(patched?.requiredConfirmations).toBe(6);
     // Untouched by a patch that did not mention them.
     expect(patched?.xpub).toBe(XPUB);
@@ -159,10 +163,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     expect(patched?.environment).toBe('development');
   });
 
-  it('clears a webhook with an explicit null, and ignores an absent field', async () => {
+  it('clears a field with an explicit null, and ignores an absent field', async () => {
     const created = await insertMerchant(
       must(suite).db,
-      registration({ webhookUrl: 'https://merchant.example/hook', webhookSecret: 'shh' }),
+      registration({ description: 'A shop that sells things' }),
     );
 
     // Absent means "change nothing" — NOT "set to null". The two are different
@@ -170,12 +174,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     const untouched = await updateMerchantSettings(must(suite).db, must(created).id, {
       requiredConfirmations: 2,
     });
-    expect(untouched?.webhookUrl).toBe('https://merchant.example/hook');
+    expect(untouched?.description).toBe('A shop that sells things');
 
     const cleared = await updateMerchantSettings(must(suite).db, must(created).id, {
-      webhookUrl: null,
+      description: null,
     });
-    expect(cleared?.webhookUrl).toBeNull();
+    expect(cleared?.description).toBeNull();
   });
 
   it('treats an empty patch as a no-op read rather than a failed update', async () => {
@@ -186,35 +190,31 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
   });
 
   /**
-   * The signing key is loaded by exactly one function, and never by an ordinary
-   * merchant read. `MerchantRow` has no `webhookSecret` property at all, so a
-   * serializer reaching for one fails `tsc` rather than publishing it.
+   * A webhook endpoint's signing secret is loaded by exactly one function, and
+   * never by an ordinary read. `WebhookEndpointRow` has no `secret` property at
+   * all, so a serializer reaching for one fails `tsc` rather than publishing it.
    */
-  it('loads the webhook secret only through the delivery-path read', async () => {
-    const created = await insertMerchant(
-      must(suite).db,
-      registration({ webhookUrl: 'https://merchant.example/hook', webhookSecret: 'shh' }),
-    );
-
-    expect(await findWebhookTarget(must(suite).db, must(created).id)).toEqual({
+  it('loads an endpoint secret only through the delivery-path read', async () => {
+    const created = must(await insertMerchant(must(suite).db, registration()));
+    const endpoint = await insertEndpoint(must(suite).db, {
+      publicId: 'we_secret_read',
+      merchantId: created.id,
       url: 'https://merchant.example/hook',
-      secret: 'shh',
+      enabledEvents: ['*'],
+      metadata: {},
+      apiVersion: '2026-11-03',
+      secret: 'whsec_only_the_dispatcher_reads_this',
     });
-    expect(
-      Object.keys((await findMerchantById(must(suite).db, must(created).id)) ?? {}),
-    ).not.toContain('webhookSecret');
-  });
+    if (endpoint === 'limit_reached') throw new Error('unexpected limit');
 
-  /** A half-configured webhook is not a target — the delivery path must not sign with a missing key. */
-  it('reports no webhook target when only one half is configured', async () => {
-    const urlOnly = await insertMerchant(
-      must(suite).db,
-      registration({ webhookUrl: 'https://merchant.example/hook' }),
-    );
-    expect(await findWebhookTarget(must(suite).db, must(urlOnly).id)).toBeNull();
-
-    const secretOnly = await insertMerchant(must(suite).db, registration({ webhookSecret: 'shh' }));
-    expect(await findWebhookTarget(must(suite).db, must(secretOnly).id)).toBeNull();
+    expect(await findEndpointSigningTarget(must(suite).db, endpoint.id)).toEqual({
+      url: 'https://merchant.example/hook',
+      status: 'enabled',
+      secrets: ['whsec_only_the_dispatcher_reads_this'],
+    });
+    const read = await findEndpointForMerchant(must(suite).db, 'we_secret_read', created.id);
+    expect(Object.keys(read ?? {})).not.toContain('secret');
+    expect(Object.keys(read ?? {})).not.toContain('previousSecret');
   });
 
   /**
@@ -235,11 +235,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     const found = await findMerchantsByIds(must(suite).db, [one.id, two.id, uuidv7()]);
     expect(found.map((row) => row.id).sort()).toEqual([one.id, two.id].sort());
     expect(found.map((row) => row.id)).not.toContain(uninvolved.id);
-    // The signing key must not ride along on a read that feeds a public
-    // enrichment DTO — `MERCHANT_COLUMNS` is the guard, and this is the assertion
-    // that would notice a batch read assembling its own column list.
-    expect(found.every((row) => !('webhookSecret' in row))).toBe(true);
-
+    // The derivation counter must not ride along on a read that feeds a public
+    // enrichment DTO — `MERCHANT_COLUMNS` is the guard.
+    expect(found.every((row) => !('nextDerivationIndex' in row))).toBe(true);
     // The empty input answers empty. This pins the BEHAVIOUR, not the guard
     // that produces it: on drizzle-orm 0.45.2 `inArray(col, [])` renders
     // `where false`, so removing the short-circuit changes nothing observable

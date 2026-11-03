@@ -8,7 +8,7 @@ const DEFAULT_MERCHANT_NAME = 'Peable merchant';
 /**
  * Resolve the public, secret-free merchant identity that a payer-facing
  * surface (the hosted checkout page, a payment link's public display) may
- * render. Never touches `webhookUrl`/`webhookSecret`/`xpub` — those never
+ * render. Never touches `xpub` or `nextDerivationIndex` — those never
  * leave the merchant-authed DTO (`toMerchantDTO`).
  *
  * The avatar is resolved through the SDK's canonical media chokepoint

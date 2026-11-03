@@ -25,7 +25,7 @@ import {
 import { getDb } from '../../db/postgres';
 import { newId } from '../../lib/ids';
 import { toConnectedAccountDTO } from '../../lib/serializeSettlement';
-import { enqueueConnectedAccountWebhook } from '../intentTransition';
+import { recordConnectedAccountEvent } from '../intentTransition';
 import { selectCardProvider, selectStoredProvider } from '../providers/environmentGuard';
 import {
   isAccountHoldingProvider,
@@ -460,7 +460,7 @@ export async function refreshConnectedAccount(
     const updated = await applyAccountSnapshot(tx, account.id, toAccountSnapshot(snapshot));
     if (!updated) return account;
     if (readinessChanged(account, updated)) {
-      await enqueueConnectedAccountWebhook(tx, updated.merchantId, toConnectedAccountDTO(updated));
+      await recordConnectedAccountEvent(tx, updated.merchantId, toConnectedAccountDTO(updated));
     }
     return updated;
   });

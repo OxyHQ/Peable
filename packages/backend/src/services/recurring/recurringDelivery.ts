@@ -1,14 +1,15 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../../db/postgres';
-import { merchants, recurringMirrors, recurringObservationOutbox } from '../../db/schema';
-import { enqueueWebhook } from '../../db/webhooks/webhookOutboxRepository';
-import { buildEvent } from '../webhookDispatcher';
+import { recurringMirrors, recurringObservationOutbox } from '../../db/schema';
+import { recordEvent } from '../events';
 import { toUnix } from '../../lib/time';
 import type { BillingCohort } from '../billing/billingService';
 import { recurringSnapshotSchema } from './contracts';
 /** Disabled returns before schema access. Requires pre migration.
- * Relay pointer + public delivery commit together; the private promise already
- * committed with the observation. Wake-up only, never paid/grant authority. */
+ * The relay marker and the public event commit together; the private promise
+ * already committed with the observation. Wake-up only, never paid/grant
+ * authority. The event is recorded whether or not the merchant has an
+ * endpoint that wants it — `/v1/events` is the record (ADR 0014 D4). */
 export async function relayRecurringObservations(options: {
   enabled?: boolean;
   db: Database;
@@ -28,14 +29,12 @@ export async function relayRecurringObservations(options: {
         .select({
           observation: recurringObservationOutbox,
           mirror: recurringMirrors,
-          merchant: merchants,
         })
         .from(recurringObservationOutbox)
         .innerJoin(recurringMirrors, eq(recurringObservationOutbox.mirrorId, recurringMirrors.id))
-        .innerJoin(merchants, eq(recurringMirrors.merchantId, merchants.id))
         .where(
           and(
-            isNull(recurringObservationOutbox.deliveryId),
+            isNull(recurringObservationOutbox.relayedAt),
             eq(recurringMirrors.merchantId, cohort.merchantId),
             eq(recurringMirrors.oxyAppId, cohort.oxyAppId),
             eq(recurringMirrors.environment, cohort.environment),
@@ -48,8 +47,7 @@ export async function relayRecurringObservations(options: {
         .limit(limit)
         .for('update', { of: recurringObservationOutbox, skipLocked: true });
       let count = 0;
-      for (const { observation, mirror, merchant } of rows) {
-        if (!merchant.webhookUrl || !merchant.webhookSecret) continue;
+      for (const { observation, mirror } of rows) {
         // Use this immutable observation revision, not the mirror's later snapshot.
         const snapshot = recurringSnapshotSchema.parse(observation.snapshot);
         if (
@@ -61,24 +59,23 @@ export async function relayRecurringObservations(options: {
           snapshot.providerAccountId !== mirror.providerAccountId
         )
           throw new Error('Recurring delivery snapshot identity differs');
-        const event = buildEvent('billing.observation.updated', {
-          object: 'billing_observation',
-          livemode: cohort.livemode,
-          resource_kind: mirror.kind as 'subscription' | 'invoice',
-          resource_id: mirror.objectRef,
-          subscription_id:
-            snapshot.kind === 'subscription' ? snapshot.objectRef : snapshot.subscriptionRef,
-          revision: observation.revision,
-          observed_at: toUnix(observation.observedAt),
-        });
-        const deliveryId = await enqueueWebhook(tx, {
-          merchantId: merchant.id,
-          url: merchant.webhookUrl,
-          event,
+        const event = await recordEvent(tx, {
+          merchantId: mirror.merchantId,
+          type: 'billing.observation.updated',
+          object: {
+            object: 'billing_observation',
+            livemode: cohort.livemode,
+            resource_kind: mirror.kind as 'subscription' | 'invoice',
+            resource_id: mirror.objectRef,
+            subscription_id:
+              snapshot.kind === 'subscription' ? snapshot.objectRef : snapshot.subscriptionRef,
+            revision: observation.revision,
+            observed_at: toUnix(observation.observedAt),
+          },
         });
         await tx
           .update(recurringObservationOutbox)
-          .set({ deliveryId })
+          .set({ relayedAt: event.createdAt, eventId: event.id })
           .where(eq(recurringObservationOutbox.id, observation.id));
         count++;
       }

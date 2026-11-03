@@ -19,6 +19,8 @@ const EVENT: WebhookEvent = {
   livemode: false,
   type: 'payment_intent.settled',
   created: TIMESTAMP,
+  api_version: '2026-11-03',
+  request: { id: 'req_1', idempotency_key: null },
   data: {
     object: {
       id: 'pi_1',
@@ -129,6 +131,34 @@ describe('WebhooksResource.constructEvent', () => {
       PeableSignatureVerificationError,
     );
   });
+
+  /**
+   * A `roll_secret` overlap: Peable signs with the new AND the previous
+   * secret, so a receiver still holding only the old one, and one already
+   * switched, both accept the same delivery.
+   */
+  test('accepts a dual-signed delivery with either secret of a rotation', () => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const header = signWebhook(['whsec_new', 'whsec_old'], RAW_BODY, timestamp);
+    const resource = new WebhooksResource();
+
+    expect(resource.constructEvent(RAW_BODY, header, 'whsec_old')).toEqual(EVENT);
+    expect(resource.constructEvent(RAW_BODY, header, 'whsec_new')).toEqual(EVENT);
+    expect(() => resource.constructEvent(RAW_BODY, header, 'whsec_other')).toThrow(
+      PeableSignatureVerificationError,
+    );
+  });
+
+  test('accepts the receiver-side list of secrets when any one matches', () => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const header = signWebhook('whsec_new', RAW_BODY, timestamp);
+    const resource = new WebhooksResource();
+
+    expect(resource.constructEvent(RAW_BODY, header, ['whsec_old', 'whsec_new'])).toEqual(EVENT);
+    expect(() => resource.constructEvent(RAW_BODY, header, ['whsec_old'])).toThrow(
+      PeableSignatureVerificationError,
+    );
+  });
 });
 
 // Full published payloads, matching backend intentTransition's three producers.
@@ -185,6 +215,20 @@ const payloads = {
     revision: 1,
     observed_at: EVENT.created,
   },
+  'webhook_endpoint.test': {
+    id: 'we_fixture',
+    object: 'webhook_endpoint',
+    livemode: false,
+    url: 'https://merchant.example/hook',
+    description: null,
+    enabled_events: ['*'],
+    status: 'enabled',
+    disabled_reason: null,
+    api_version: '2026-11-03',
+    metadata: {},
+    created: EVENT.created,
+    updated_at: EVENT.created,
+  },
 } satisfies WebhookEventPayload;
 
 describe('published event family parity', () => {
@@ -196,6 +240,8 @@ describe('published event family parity', () => {
         livemode: false,
         type,
         created: EVENT.created,
+        api_version: '2026-11-03',
+        request: { id: null, idempotency_key: null },
         data: { object: payloads[type] },
       };
       const raw = JSON.stringify(expected);
@@ -215,6 +261,17 @@ describe('published event family parity', () => {
       ).toThrow(PeableSignatureVerificationError);
     });
   }
+  test('rejects a signed event whose envelope carries no api_version or request', () => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const { api_version: _version, ...withoutVersion } = EVENT;
+    const { request: _request, ...withoutRequest } = EVENT;
+    for (const shape of [withoutVersion, withoutRequest, { ...EVENT, request: { id: 1 } }]) {
+      const raw = JSON.stringify(shape);
+      expect(() =>
+        new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET),
+      ).toThrow(PeableSignatureVerificationError);
+    }
+  });
   test('rejects a signed event whose envelope carries no livemode', () => {
     const { livemode: _omitted, ...withoutMode } = EVENT;
     const raw = JSON.stringify(withoutMode);

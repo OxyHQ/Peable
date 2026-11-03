@@ -30,7 +30,7 @@ import {
   findIntentById,
   updateIntentState,
 } from '../../db/payments/paymentIntentRepository';
-import { webhookDeliveries } from '../../db/schema';
+import { events } from '../../db/schema';
 import { transitionIntent } from '../intentTransition';
 import {
   gatewayDb,
@@ -49,19 +49,18 @@ let merchant: MerchantRow;
 
 async function deliveryTypesFor(intentId: string): Promise<string[]> {
   const rows = await gatewayDb()
-    .select({ eventType: webhookDeliveries.eventType })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.paymentIntentId, intentId));
-  return rows.map((row) => row.eventType);
+    .select({ type: events.type })
+    .from(events)
+    .where(eq(events.paymentIntentId, intentId))
+    .orderBy(events.id);
+  return rows.map((row) => row.type);
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('a transition from a status the intent has left', () => {
   useGatewayDatabase();
 
   beforeEach(async () => {
-    // BOTH halves: `findWebhookTarget` returns null without a url AND a secret,
-    // and a null target makes the enqueue a no-op — so the delivery counts
-    // below would pass vacuously on a merchant with only one of them.
+    // With an endpoint, so each recorded event also fans out a delivery.
     merchant = await seedMerchant({
       webhookUrl: 'https://merchant.invalid/hook',
       webhookSecret: 'whsec_stale_transition',

@@ -52,7 +52,7 @@ import { refreshConnectedAccount } from '../accounts/connectedAccountService';
 import { getDb } from '../../db/postgres';
 import { applyEvent, type IntentEvent } from '../intentState';
 import { reconcileIntentWithProvider } from '../intentReconciliation';
-import { announceIntentChange, enqueueDisputeWebhook, transitionIntent } from '../intentTransition';
+import { announceIntentChange, recordDisputeEvent, transitionIntent } from '../intentTransition';
 import { upsertDispute } from '../../db/disputes/disputeRepository';
 import { toDisputeDTO } from '../../lib/serialize';
 import type { DisputeStatus } from '../../db/schema/valueSets';
@@ -790,7 +790,7 @@ async function handleDisputeEvent(
   /**
    * The row and the merchant's notification commit TOGETHER (ADR 0001 D7).
    *
-   * They did not. `upsertDispute` ran on `db` and `enqueueDisputeWebhook` ran
+   * They did not. `upsertDispute` ran on `db` and `recordDisputeEvent` ran
    * on `db` after it, as two statements with no transaction around them — so a
    * crash between them stored the dispute and lost its first notification
    * permanently. `created` is false on every redelivery afterwards, which is
@@ -816,7 +816,7 @@ async function handleDisputeEvent(
       // and a merchant who has to make a second call to learn when evidence is
       // due is a merchant who can miss it while their integration works as
       // documented.
-      await enqueueDisputeWebhook(
+      await recordDisputeEvent(
         tx,
         intent,
         toDisputeDTO(upserted.dispute, intent.publicId),

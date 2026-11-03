@@ -100,6 +100,21 @@ same transaction that records the change — the rule `transitionIntent` already
 enforces for webhook enqueueing (ADR 0001 D7). A webhook delivery is that event
 sent to one endpoint.
 
+As built (`services/events.ts`, tables `events`, `webhook_endpoints`,
+`webhook_deliveries`): `recordEvent` is the one writer and fans out, in the same
+transaction, one delivery per enabled endpoint whose `enabled_events` holds the
+type or `*`. The envelope is `{id, object, type, created, livemode, api_version,
+account?, data: {object, previous_attributes?}, request: {id, idempotency_key}}`;
+`request` comes from the merchant API call (or dashboard write) the change was
+part of and is `null` for a background change. Endpoints (`we_…`, at most 16 per
+merchant) carry a Peable-generated `whsec_…` shown only on create and
+`roll_secret`; a roll may keep the previous secret signing for up to 24 hours,
+and every delivery in that window carries one `v1=` per secret. Deliveries retry
+for about three days; an endpoint failing every attempt for three days is
+disabled (`delivery_failures`). The merchant's single `webhook_url` /
+`webhook_secret` were removed in the same change, each existing pair migrated to
+one `['*']` endpoint keeping its secret.
+
 ### D5 — The contract is the source of truth
 
 Every route's request and response schema lives in `packages/contracts` as Zod,

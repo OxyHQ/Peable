@@ -3,6 +3,7 @@ import { must } from './helpers/must';
 import { eq } from 'drizzle-orm';
 import { merchants, paymentIntents } from '../db/schema';
 import { WatchOnlyViolationError } from '../db/merchants/merchantRepository';
+import { countEndpointsForMerchant } from '../db/webhooks/webhookEndpointRepository';
 import {
   POSTGRES_TESTS_ENABLED,
   gatewayDb,
@@ -106,7 +107,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the gateway test harness', () => {
     expect(merchant.oxyAppId).toBe('app_fixed');
     expect(merchant.environment).toBe('production');
     expect(merchant.network).toBe('mainnet');
-    expect(merchant.webhookUrl).toBe('https://merchant.example/hook');
+    expect(await countEndpointsForMerchant(gatewayDb(), merchant.id)).toBe(1);
     expect(merchant.requiredConfirmations).toBe(6);
   });
 

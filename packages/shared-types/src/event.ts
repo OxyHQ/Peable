@@ -1,8 +1,17 @@
-// Webhook event envelope — Stripe-parity dotted event types with the resource
-// object nested under `data.object`, delivered HMAC-signed by the dispatcher.
+// Event envelope — Stripe-parity dotted event types with the resource object
+// nested under `data.object`. Stored once (`/v1/events`, 30 days) and delivered
+// HMAC-signed to every matching webhook endpoint (ADR 0014 D4).
 import type { Dispute } from './dispute';
 import type { PaymentIntent } from './paymentIntent';
 import type { ConnectedAccount } from './settlement';
+import type { WebhookEndpoint } from './webhookEndpoint';
+
+/**
+ * The wire date every response names in `Peable-Version`, and the
+ * `api_version` an event is stored under (ADR 0014 D2/D4). One constant, so
+ * the header and the stored events cannot name two different wires.
+ */
+export const PEABLE_API_VERSION = '2026-11-03';
 
 export type WebhookEventType =
   | 'payment_intent.confirming'
@@ -69,7 +78,14 @@ export type WebhookEventType =
    * this union keeps compiling and simply never matches it.
    */
   | 'connected_account.updated'
-  | 'billing.observation.updated';
+  | 'billing.observation.updated'
+  /**
+   * A synthetic event sent to ONE endpoint when its owner asks to test it
+   * (Orbit's "send test event"). It is stored like any other event, so the
+   * delivery has a referent and appears in `/v1/events`, but it never fans
+   * out and it cannot be subscribed to: `enabled_events` refuses it.
+   */
+  | 'webhook_endpoint.test';
 
 /**
  * Which resource each event type carries under `data.object`.
@@ -104,6 +120,20 @@ export interface WebhookEventPayload {
   'payment_intent.disputed': Dispute;
   'payment_intent.dispute_closed': Dispute;
   'connected_account.updated': ConnectedAccount;
+  /** The endpoint being tested, as `GET /v1/webhook_endpoints/:id` returns it (no secret). */
+  'webhook_endpoint.test': WebhookEndpoint;
+}
+
+/**
+ * What caused an event, when an API request did (Stripe's `event.request`).
+ * Both `null` for an event caused by something else — the chain watcher, the
+ * expiry sweeper, a provider's own notification.
+ */
+export interface WebhookEventRequest {
+  /** The `Request-Id` of the request whose change produced the event. */
+  id: string | null;
+  /** The `Idempotency-Key` that request carried, if any. */
+  idempotency_key: string | null;
 }
 
 /**
@@ -144,6 +174,20 @@ export type WebhookEvent<K extends WebhookEventType = WebhookEventType> = {
      * without opening `data.object`.
      */
     account?: string;
-    data: { object: WebhookEventPayload[T] };
+    /**
+     * The wire version the event was rendered with — the `Peable-Version` of
+     * the deployment that stored it. An event is a stored snapshot; it is not
+     * re-rendered when the wire moves on.
+     */
+    api_version: string;
+    data: {
+      object: WebhookEventPayload[T];
+      /**
+       * The fields of `object` that this change moved, with their values
+       * BEFORE it. Absent when the event is not a change of an existing object.
+       */
+      previous_attributes?: Record<string, unknown>;
+    };
+    request: WebhookEventRequest;
   };
 }[K];
