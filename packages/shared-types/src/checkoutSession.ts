@@ -12,6 +12,11 @@ import type { ConnectedAccount } from './settlement';
 export interface CheckoutSession {
   id: string;
   object: 'checkout_session';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** The wrapped payment's `pi_…`, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
   payment_intent: string | PaymentIntent;
   /** The wrapped intent's `client_secret`, returned to the merchant on create. */
@@ -46,6 +51,11 @@ export interface CheckoutSessionPublic {
   billing_quote?: BillingFaircoinFxQuote;
   id: string;
   object: 'checkout_session';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   success_url?: string;
   cancel_url?: string;
   merchant: MerchantDisplay;

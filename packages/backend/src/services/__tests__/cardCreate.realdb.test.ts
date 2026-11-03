@@ -9,6 +9,7 @@
  * nothing can find and no reconciliation can start from.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../providers/provider';
 
 interface ProviderCall {
   readonly fn: string;
@@ -65,18 +66,20 @@ const fakeProvider = {
  * measured, as a stack overflow. Copying the values before the mock is
  * installed is what actually captures the originals.
  */
+const realRegistry = await import('../providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../providers/registry');
+} = realRegistry;
 let useFakeRegistry = false;
 
 mock.module('../providers/registry', () => ({
-  resolveProvider: (id: 'stripe') =>
-    useFakeRegistry ? (railEnabled ? fakeProvider : undefined) : realResolveProvider(id),
-  resolveCardProvider: () =>
-    useFakeRegistry ? (railEnabled ? fakeProvider : undefined) : realResolveCardProvider(),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFakeRegistry ? (railEnabled ? fakeProvider : undefined) : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFakeRegistry ? (railEnabled ? fakeProvider : undefined) : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },

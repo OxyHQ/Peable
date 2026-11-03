@@ -24,6 +24,11 @@ export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
 export interface WebhookDelivery {
   id: string;
   object: 'webhook_delivery';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   merchant_id: string;
   /**
    * The `pi_…` this delivery is about — `null` when the event is not about a

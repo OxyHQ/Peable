@@ -26,7 +26,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Prefixed public ids, `object` field | 🟡 | Most resources; `WebhookDelivery.id` is the internal id; social/enrich/contributions lack `object` | Every object |
 | Single field style | ✅ | snake_case everywhere, root change (no legacy) | |
 | Unix timestamps | ✅ | `created` and every instant as integer seconds | |
-| `livemode` on objects | 🟡 | Tax and billing DTOs only | Every object |
+| `livemode` on objects | ✅ | Every merchant-scoped DTO (intent, link, session, refund, transfer, reversal, dispute, connected account, account link, settlement, webhook delivery, merchant) and the event envelope; derived from the merchant's environment (ADR 0017) | |
 | One wire, clean cut | ✅ | Handlers, types, SDK, checkout and app speak ADR 0014 D1; stored wire JSON migrated (`0036`) | |
 | Error envelope | 🟡 | `{type, code?, param?, message, request_id}`; 400 validation; strict bodies; no leak | + `doc_url` once docs.peable.to exists |
 | `Request-Id` | ✅ | Header on every response and `request_id` in every error | |
@@ -44,8 +44,8 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Capability | State | Today | Target |
 |---|---|---|---|
 | Secret credentials | 🟡 | Oxy application credentials; 2 scopes | Managed from Orbit over Oxy authority; per-resource scopes |
-| Publishable key | ❌ | Provider key returned inside `client_action` | `pk_test_` / `pk_live_` |
-| Test + live in one deployment | ❌ | One provider key per deployment (ADR 0009) | ADR 0017 |
+| Publishable key | ❌ | Provider key of the payment's own mode returned inside `client_action` | `pk_test_` / `pk_live_` |
+| Test + live in one deployment | ✅ | `STRIPE_*_TEST` / `STRIPE_*_LIVE` side by side; credential selects the mode, stored rows resolve by their own; webhooks verified per mode on the same paths (ADR 0017) | |
 | Events API | ❌ | Envelopes exist only inside deliveries | `/v1/events`, 30 days |
 | Webhook endpoints | 🟡 | One URL per merchant, merchant-chosen secret, all events | `we_` resource, many per merchant, `enabled_events`, generated `whsec_`, rotation overlap, per-endpoint `api_version` |
 | Event catalog | 🟡 | 11 types | Stripe-equivalent catalog across all resources |

@@ -16,10 +16,10 @@ import { fileURLToPath } from 'node:url';
  * and the rail was **unreachable in production** while every test, every build
  * and every deploy stayed green.
  *
- * The silence is not incidental, it is designed in. `resolveStripeEnabled` is a
- * conjunction: with none of the six set it returns `false` at the FIRST check,
- * so it does not even reach the branch that warns about an incomplete
- * configuration. The rail is off, `resolveProvider` answers "this rail is not
+ * The silence is not incidental, it is designed in. The card rail is a
+ * conjunction (per mode since ADR 0017, `config.ts`'s `readStripeMode`): with no
+ * key set a mode does not exist at all, so nothing even reaches the branch that
+ * warns about an incomplete configuration. The rail is off, `resolveProvider` answers "this rail is not
  * configured", `/v1/refunds` answers 503 — every one of which is the correct
  * behaviour for a rail nobody switched on, and indistinguishable from a rail
  * somebody meant to switch on and could not.
@@ -136,18 +136,37 @@ describe('the deploy syncs what the config reads', () => {
   it('syncs every Stripe secret the card rail cannot work without', () => {
     const synced = new Set(syncedVariables());
 
-    // Spelled out rather than left to the sweep above, because these six are the
-    // ones that were actually missing and the sweep would also pass if somebody
-    // "fixed" it by adding them to NOT_SYNCED.
+    // Spelled out rather than left to the sweep above, because these were the
+    // ones that were once actually missing, and the sweep would also pass if
+    // somebody "fixed" it by adding them to NOT_SYNCED. Both modes (ADR 0017).
     for (const name of [
       'STRIPE_ENABLED',
+      ...['TEST', 'LIVE'].flatMap((mode) => [
+        `STRIPE_SECRET_KEY_${mode}`,
+        `STRIPE_PUBLISHABLE_KEY_${mode}`,
+        `STRIPE_WEBHOOK_SECRET_${mode}`,
+        `STRIPE_CONNECT_WEBHOOK_SECRET_${mode}`,
+        `STRIPE_WEBHOOK_SECRET_PREVIOUS_${mode}`,
+        `STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_${mode}`,
+      ]),
+    ]) {
+      expect([name, synced.has(name)]).toEqual([name, true]);
+    }
+  });
+
+  it('syncs no single-mode Stripe variable any more', () => {
+    // ADR 0017 removed them outright; a sync line left behind would write an
+    // SSM parameter nothing reads, and look like configuration that matters.
+    const synced = syncedVariables();
+    for (const name of [
       'STRIPE_SECRET_KEY',
+      'STRIPE_PUBLISHABLE_KEY',
       'STRIPE_WEBHOOK_SECRET',
       'STRIPE_CONNECT_WEBHOOK_SECRET',
       'STRIPE_WEBHOOK_SECRET_PREVIOUS',
       'STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS',
     ]) {
-      expect([name, synced.has(name)]).toEqual([name, true]);
+      expect([name, synced.includes(name)]).toEqual([name, false]);
     }
   });
 

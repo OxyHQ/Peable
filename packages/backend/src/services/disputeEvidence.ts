@@ -1,52 +1,11 @@
-/**
- * Answering a dispute — the half of this surface that did not exist.
- *
- * ## Why there was no write here, and why there is one now
- *
- * `routes/disputes.ts` was read-only, and its own docblock explained that:
- * submitting evidence needs a provider-port method that did not exist, and
- * *"adding the route without it would give merchants a surface that accepts
- * their evidence and does nothing with it, which is worse for them than having
- * no route at all: they would believe they had responded."*
- *
- * That was the right call while the port was missing. It is not a permanent
- * position — the deadline was exposed and the response was not, so a merchant
- * could read `evidenceDueAt`, watch it pass, and lose a dispute this gateway
- * had told them about and given them no way to answer. The port has the method
- * now (`DisputeHandlingProvider`), so the route exists.
- *
- * ## One shot, and nothing kept
- *
- * **Submitting is one-way at the network.** Stripe's update call doubles as a
- * draft save and the draft is final once submitted, so offering both would owe
- * every draft a durable identity to keep a retry from becoming a second write —
- * cost out of proportion to the value. This submits. A second attempt is
- * refused by reading `evidence_submitted_at`, not by asking the provider and
- * interpreting an error.
- *
- * **The evidence is never stored.** It carries a customer's name, their email,
- * a billing address and correspondence: `redactProviderPayload` exists because
- * this gateway does not keep that class of data, and a dispute response is the
- * richest example of it the system handles. It is forwarded and forgotten; what
- * is recorded is THAT a response was submitted and when. What it said is at the
- * acquirer, readable by someone with their own authorization.
- *
- * **Files are out of scope, explicitly.** Attachments need the provider's
- * upload API, a size and type policy, and somewhere for the bytes to live on
- * the way through. Offering half of that would let a merchant submit a defence
- * missing the receipt it rests on — which is the same failure the read-only
- * route was avoiding, one level down.
- */
-import type { MerchantEnvironment } from '@peable.to/shared-types';
 import { markDisputeEvidenceSubmitted, type DisputeRow } from '../db/disputes/disputeRepository';
 import { getDb } from '../db/postgres';
-import { assertEnvironmentMatchesProvider } from './providers/environmentGuard';
+import { selectStoredProvider } from './providers/environmentGuard';
 import {
   isDisputeHandlingProvider,
   type DisputeEvidence,
   type ProviderId,
 } from './providers/provider';
-import { resolveProvider } from './providers/registry';
 
 /** The rail cannot answer disputes — true of the chain rail, which has none. */
 export class DisputesUnanswerableError extends Error {
@@ -65,7 +24,6 @@ export class DisputeNotAnswerableError extends Error {
 }
 
 export interface SubmitEvidenceInput {
-  readonly environment: MerchantEnvironment;
   readonly dispute: DisputeRow;
   readonly evidence: DisputeEvidence;
 }
@@ -90,11 +48,6 @@ export async function submitDisputeEvidence(
   input: SubmitEvidenceInput,
 ): Promise<SubmitEvidenceResult> {
   const { dispute } = input;
-  // FIRST, like every other money-adjacent operation: a wrong-mode credential
-  // must not be able to act, nor to learn a dispute's state from which refusal
-  // it gets back.
-  assertEnvironmentMatchesProvider(input.environment);
-
   if (dispute.evidenceSubmittedAt !== null) {
     // Already answered. History, and submitting is one-way — so this is
     // reported rather than repeated.
@@ -118,10 +71,12 @@ export async function submitDisputeEvidence(
     throw new DisputeNotAnswerableError('a response needs at least one field');
   }
 
-  const provider = resolveProvider(dispute.provider as ProviderId);
+  // The dispute's own mode (ADR 0017): it is answered through the key whose
+  // charge was disputed.
+  const provider = selectStoredProvider(dispute.provider as ProviderId, dispute.livemode);
   if (!provider) {
     throw new DisputesUnanswerableError(
-      `the ${dispute.provider} rail is not configured on this deployment`,
+      `the ${dispute.provider} rail is not configured for ${dispute.livemode ? 'live' : 'test'} mode on this deployment`,
     );
   }
   if (!isDisputeHandlingProvider(provider)) {

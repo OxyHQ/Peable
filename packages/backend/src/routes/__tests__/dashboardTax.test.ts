@@ -56,7 +56,7 @@ beforeAll(async () => {
   app.use(express.json());
   app.use(
     createDashboardTaxRouter({
-      tax: createTaxService({ db: gatewayDb(), provider }),
+      tax: createTaxService({ db: gatewayDb(), providers: [provider] }),
       requireOxyUser,
       assertAppMembership: async (userId) => MEMBERS[userId] ?? { allowed: false },
     }),

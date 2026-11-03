@@ -398,13 +398,15 @@ the **`environment`** on your service credential (`development`/`staging` → te
 **test-environment credential** while building; swap to a production-environment
 credential to go live. Same code, different credential.
 
-**A deployment serves ONE mode, and the Gateway enforces it.** Peable holds the
-provider key, so that key's mode IS the deployment's mode, and a credential from
-the other environment is refused with a `403` **before any call reaches the
-acquirer** — not filtered afterwards, and not merely separated by which merchant
-row it resolves. A `development` credential pointed at the live host cannot
-create a live charge, open a live connected account, refund or settle. If you
-see that 403, you are pointed at the wrong host for your credential.
+**One host serves both modes, and your credential picks one** (ADR 0017). Peable
+holds a test provider key and a live one side by side; a `production` credential's
+payments, refunds, transfers and connected accounts go through the live key, every
+other environment's through the test key, and an operation on an existing object
+always uses the key that created it. Nothing you send can choose the other one.
+Every object you get back — and every webhook event envelope — carries
+`livemode: true | false` so you can tell which world it belongs to. If the mode
+your credential selects is not configured on the deployment, card operations
+answer `503` like any unavailable rail.
 
 ---
 

@@ -92,7 +92,9 @@ webhook (`/v1/webhooks/stripe`), and delivers every event in
 `charge.refunded`, `refund.created`, `refund.updated`, `refund.failed`,
 `credit_note.created`, `credit_note.updated`, `credit_note.voided`. The
 endpoint is created in the Stripe dashboard (or API) with those events and its
-signing secret goes to `STRIPE_WEBHOOK_SECRET`; Peable does not create it.
+signing secret goes to `STRIPE_WEBHOOK_SECRET_LIVE` or `STRIPE_WEBHOOK_SECRET_TEST`,
+the mode the cohort's `deployment.livemode` names (ADR 0017); Peable does not
+create it.
 
 ## What does not change
 

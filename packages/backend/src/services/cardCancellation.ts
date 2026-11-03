@@ -32,7 +32,7 @@ import {
   type PaymentProvider,
   type ProviderPaymentStatus,
 } from './providers/provider';
-import { resolveProvider } from './providers/registry';
+import { selectStoredProvider } from './providers/environmentGuard';
 
 export type CardCancellation =
   /** The provider reports the payment cancelled. Nothing can be charged. */
@@ -95,7 +95,7 @@ export async function cancelCardPaymentAtProvider(
   idempotencyKey: string,
 ): Promise<CardCancellation> {
   if (!intent.provider || !intent.providerObjectId) return { kind: 'nothing_to_cancel' };
-  const provider = resolveProvider(intent.provider);
+  const provider = selectStoredProvider(intent.provider, intent.livemode);
   if (!provider) return { kind: 'nothing_to_cancel' };
 
   try {

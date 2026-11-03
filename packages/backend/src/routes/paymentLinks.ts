@@ -25,17 +25,10 @@ import {
   resolveRail,
   type ResolvedRail,
 } from '../services/createIntent';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { newId } from '../lib/ids';
 import { toPaymentLinkDTO, toPublicPaymentLinkDTO, toPaymentIntentDTO } from '../lib/serialize';
-import {
-  sendEnvironmentMismatch,
-  sendError,
-  wrap,
-  requireAuthenticated,
-  sendValidationError,
-} from '../lib/http';
+import { sendError, wrap, requireAuthenticated, sendValidationError } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { resolveMerchant } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
@@ -118,7 +111,7 @@ export function createPaymentLinksRouter(deps: {
         // SENDS to customers, so a rail this deployment cannot serve has to be
         // refused here, to the merchant, rather than at mint time to a payer
         // who is already looking at the price.
-        assertRailAvailable(resolved.rail);
+        assertRailAvailable(resolved.rail, merchant.environment);
       } catch (err) {
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
           sendError(res, 400, 'invalid_request_error', err.message);
@@ -417,15 +410,6 @@ export function createPaymentLinksRouter(deps: {
         // not something the caller can fix by sending different fields.
         if (err instanceof RailUnavailableError) {
           sendError(res, 503, 'api_error', err.message);
-          return;
-        }
-        // A link created by a development credential, opened against a live
-        // deployment. Unreachable while the link, its merchant and this
-        // deployment agree — the link's environment comes from its merchant —
-        // but this is the PAYER's path, so a misconfiguration here would charge
-        // a real card against a test integration.
-        if (err instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, err.message);
           return;
         }
         throw err;

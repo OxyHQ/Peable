@@ -1,5 +1,6 @@
 /**
- * Read-only readiness probe for the deployment's tax provider, run as a
+ * Read-only readiness probe for the deployment's tax providers — one per mode
+ * whose Stripe key it holds (ADR 0017) — run as a
  * one-shot task with the service's own task definition:
  *
  *   bun packages/backend/src/services/tax/providerProbe.ts
@@ -9,19 +10,23 @@
  * no payment, no transaction and no Peable row; nothing here writes anywhere.
  * Prints one JSON line and never a credential or a provider error's text.
  */
-import { config } from '../../config';
+import { providerModeOf } from '../providers/provider';
 import { getStripeClient } from '../providers/stripe/client';
-import { configuredTaxProvider } from './configuredTax';
-import { TaxProviderUnavailableError } from './provider';
+import { configuredTaxProviders } from './configuredTax';
+import { TaxProviderUnavailableError, type TaxProvider } from './provider';
 
 const PROBES = [
   { name: 'us_de', customer: { country: 'US', state: 'DE', postal_code: '19901' } },
   { name: 'de', customer: { country: 'DE', postal_code: '10115' } },
 ] as const;
 
-export async function probeTaxProvider() {
-  const provider = configuredTaxProvider();
-  if (!provider) return { provider: null, keyMode: config.stripe.keyMode };
+export async function probeTaxProviders() {
+  const providers = configuredTaxProviders();
+  if (providers.length === 0) return { providers: [] };
+  return { providers: await Promise.all(providers.map(probeTaxProvider)) };
+}
+
+async function probeTaxProvider(provider: TaxProvider) {
   const reason = (error: unknown) =>
     error instanceof TaxProviderUnavailableError
       ? error.reason
@@ -36,7 +41,10 @@ export async function probeTaxProvider() {
   }
   let registrations: unknown;
   try {
-    const list = await getStripeClient().tax.registrations.list({ status: 'active', limit: 100 });
+    const list = await getStripeClient(providerModeOf(provider.livemode)).tax.registrations.list({
+      status: 'active',
+      limit: 100,
+    });
     registrations = list.data.map((row) => ({
       country: row.country,
       type: Object.values(
@@ -86,7 +94,7 @@ export async function probeTaxProvider() {
 }
 
 if (import.meta.main) {
-  probeTaxProvider()
+  probeTaxProviders()
     .then((result) => console.log(`[tax-probe] ${JSON.stringify(result)}`))
     .catch(() => {
       console.log('[tax-probe] {"error":"probe_failed"}');

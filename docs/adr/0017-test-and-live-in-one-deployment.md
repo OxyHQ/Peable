@@ -49,3 +49,35 @@ not run.
 - Secrets sync (`deploy-aws.yml` → SSM) gains the two keys and their webhook
   secrets; the skip-empty rule keeps a half-configured deployment serving the mode
   it has.
+
+## Implementation (2026-11-03)
+
+- **Configuration.** Per mode, each optional: `STRIPE_SECRET_KEY_{TEST,LIVE}`,
+  `STRIPE_PUBLISHABLE_KEY_{TEST,LIVE}`, `STRIPE_WEBHOOK_SECRET_{TEST,LIVE}`,
+  `STRIPE_CONNECT_WEBHOOK_SECRET_{TEST,LIVE}` and the rotation pair
+  `STRIPE_WEBHOOK_SECRET_PREVIOUS_{TEST,LIVE}` /
+  `STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_{TEST,LIVE}`. `STRIPE_ENABLED` stays the
+  operator's switch for the card rail. The single-mode names are gone with no
+  fallback. Boot fails when a secret key is not `sk_<mode>_`/`rk_<mode>_` or a
+  publishable key is not `pk_<mode>_` for the variable's mode.
+- **Selection.** `registry.ts` is keyed by `(provider, mode)`;
+  `environmentGuard.ts` exports `selectCardProvider(environment)` for new
+  operations and `selectStoredProvider(provider, livemode)` for operations on a
+  stored object. The old mismatch refusal (`EnvironmentModeMismatchError`, 403)
+  is removed; a mode without a key answers 503 like any unavailable rail.
+- **Where a row's mode is stored.** In ONE place: `merchants.livemode`, which the
+  single writer derives from `environment` and `merchants_livemode_agrees_check`
+  pins. Every provider-bound row references its merchant, and each repository
+  reads the mode in the row's own statement (`db/merchants/merchantLivemode.ts`),
+  so no migration was needed and no copy can disagree with its source. A
+  per-table `livemode` column would only be needed if a row could ever belong to
+  a mode other than its merchant's.
+- **Inbound webhooks.** Per-mode secret verification on the existing two paths,
+  not new paths: the mode whose endpoint secrets verify a delivery is its mode;
+  an event whose `livemode` disagrees with that secret, or of a mode with no key,
+  is refused with 400 and nothing is stored. The drain refuses (and leaves
+  visible) an event of a key-less mode and one naming an object of the other
+  mode.
+- **Tax and billing.** One Stripe Tax provider per configured mode, chosen by the
+  merchant's environment; a billing cohort uses the key of the mode its
+  `deployment.livemode` names.

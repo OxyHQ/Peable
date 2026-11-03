@@ -63,7 +63,7 @@ handoff and realtime status. The separate app payment sheet supports payments to
 people from Oxy apps. The unified merchant checkout composes reusable Bloom UI
 with the optional `@peable.to/sdk/checkout/ui` entry and Mention as its first
 consumer. Server imports remain independent of UI dependencies. Buyers use one
-checkout; test or live processing is determined by the configured environment.
+checkout; test or live processing is determined by the merchant's environment.
 Development fixtures are separate from that buyer journey. Publication and
 production acceptance must be verified for the exact release.
 
@@ -162,8 +162,10 @@ creates and HMAC signed webhooks carrying a timestamp against replay.
 
 Test and live are isolated by the environment on the credential that authenticated the
 call, not by a flag the caller sends. One Oxy app gets at most one merchant per
-environment — and a deployment holds ONE provider key, so a credential from the other
-environment is refused before any call reaches the acquirer.
+environment, and one deployment holds a test key and a live key side by side
+([ADR 0017](docs/adr/0017-test-and-live-in-one-deployment.md)): a `production`
+credential's payments go through the live key, every other environment's through the
+test key, and every object carries `livemode` to say which world it belongs to.
 
 Amounts are canonical base unit strings and never floats, on both rails.
 

@@ -8,6 +8,7 @@ import type { StoredContribution } from '../schema/payments';
 import type { DatabaseOrTransaction } from '../postgres';
 import { keyset, type KeysetPage } from '../keyset';
 import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 
 /**
  * Reads and writes for `payment_links` — a shareable, reusable generator of
@@ -17,6 +18,12 @@ import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../meta
  */
 
 export interface PaymentLinkRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly contribution?: StoredContribution | null;
   readonly contributionKey?: string | null;
@@ -37,6 +44,7 @@ export interface PaymentLinkRow {
 }
 
 const LINK_COLUMNS = {
+  livemode: merchantLivemodeOf(paymentLinks.merchantId),
   contribution: paymentLinks.contribution,
   contributionKey: paymentLinks.contributionKey,
   id: paymentLinks.id,

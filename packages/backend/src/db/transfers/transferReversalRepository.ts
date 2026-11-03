@@ -15,11 +15,18 @@ import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { transferReversals } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { ProviderId } from '../../services/providers/provider';
 
 export type TransferReversalStatus = 'pending' | 'succeeded' | 'failed';
 
 export interface TransferReversalRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly publicId: string;
   readonly merchantId: string;
@@ -36,6 +43,7 @@ export interface TransferReversalRow {
 }
 
 const REVERSAL_COLUMNS = {
+  livemode: merchantLivemodeOf(transferReversals.merchantId),
   id: transferReversals.id,
   publicId: transferReversals.publicId,
   merchantId: transferReversals.merchantId,

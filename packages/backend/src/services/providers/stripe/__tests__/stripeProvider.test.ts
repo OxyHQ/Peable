@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 interface Recorded {
   readonly fn: string;
+  /** The mode the adapter called in — every client call takes it first (ADR 0017). */
+  readonly mode: unknown;
   readonly args: readonly unknown[];
 }
 
@@ -23,8 +25,8 @@ let transferResponse: Record<string, unknown> = {};
 let retrievedTransferResponse: Record<string, unknown> = {};
 let accountResponse: Record<string, unknown> = {};
 
-function record(fn: string, args: readonly unknown[]) {
-  calls.push({ fn, args });
+function record(fn: string, [mode, ...args]: readonly unknown[]) {
+  calls.push({ fn, mode, args });
 }
 
 mock.module('../client', () => ({
@@ -125,8 +127,28 @@ describe('StripePaymentProvider', () => {
     };
   });
 
+  test('sends every call through the client of its OWN mode', async () => {
+    // ADR 0017: the adapter is bound to one mode for its life, and the mode is
+    // the first argument of every client call — a live adapter can never reach
+    // the test client, nor the reverse.
+    const live = new StripePaymentProvider({ mode: 'live' });
+    await live.createPayment({
+      intentId: 'pi_live_1',
+      amount: { amount: '100', currency: 'EUR' },
+      idempotencyKey: 'pay:pi_live_1',
+      metadata: {},
+    });
+    await live.getStatus('pi_1');
+    await new StripePaymentProvider({ mode: 'test' }).getStatus('pi_2');
+    expect(calls.map((call) => [call.fn, call.mode])).toEqual([
+      ['createStripePaymentIntent', 'live'],
+      ['retrieveStripePaymentIntent', 'live'],
+      ['retrieveStripePaymentIntent', 'test'],
+    ]);
+  });
+
   test("creates a payment with the gateway's intent id in metadata and transfer_group", async () => {
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
     const result = await provider.createPayment({
       intentId: 'pi_public_1',
       amount: { amount: '2500', currency: 'EUR' },
@@ -155,6 +177,7 @@ describe('StripePaymentProvider', () => {
   test('pins an immutable integration method allowlist without changing the dynamic default', async () => {
     const methods: Array<'card'> = ['card'];
     const provider = new StripePaymentProvider({
+      mode: 'test',
       allowedPaymentMethodTypes: methods,
     });
     methods.length = 0;
@@ -171,7 +194,10 @@ describe('StripePaymentProvider', () => {
   });
 
   test('selects one integration configuration without a conflicting allowlist', async () => {
-    const provider = new StripePaymentProvider({ paymentMethodConfiguration: 'pmc_local' });
+    const provider = new StripePaymentProvider({
+      mode: 'test',
+      paymentMethodConfiguration: 'pmc_local',
+    });
     await provider.createPayment({
       intentId: 'pi_configured',
       amount: { amount: '599', currency: 'USD' },
@@ -185,6 +211,7 @@ describe('StripePaymentProvider', () => {
     expect(
       () =>
         new StripePaymentProvider({
+          mode: 'test',
           paymentMethodConfiguration: 'pmc_local',
           allowedPaymentMethodTypes: ['card'],
         }),
@@ -201,7 +228,7 @@ describe('StripePaymentProvider', () => {
    * number representable.
    */
   test('refuses an amount that cannot survive the conversion to a Stripe amount', async () => {
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
     const attempt = provider.createPayment({
       intentId: 'pi_public_2',
       amount: { amount: '9007199254740993', currency: 'EUR' },
@@ -223,7 +250,7 @@ describe('StripePaymentProvider', () => {
    */
   test('capture reads back rather than re-capturing an already captured payment', async () => {
     paymentIntentResponse = { id: 'pi_1', status: 'succeeded', client_secret: 's' };
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
 
     const result = await provider.capture({
       intentId: 'pi_public_1',
@@ -237,7 +264,7 @@ describe('StripePaymentProvider', () => {
 
   test('capture does capture when the payment is genuinely awaiting it', async () => {
     paymentIntentResponse = { id: 'pi_1', status: 'requires_capture', client_secret: 's' };
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
 
     await provider.capture({
       intentId: 'pi_public_1',
@@ -262,7 +289,7 @@ describe('StripePaymentProvider', () => {
    * calls.
    */
   test('a transfer names its source transaction and its group', async () => {
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
     await provider.createTransfer({
       intentId: 'pi_public_1',
       transferId: 'tr_gateway_1',
@@ -295,7 +322,7 @@ describe('StripePaymentProvider', () => {
       amount: 200,
       transfer: { id: 'tr_1', amount_reversed: 500 },
     };
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
 
     const result = await provider.reverseTransfer({
       transferId: 'tr_gateway_1',
@@ -328,7 +355,7 @@ describe('StripePaymentProvider', () => {
   test('a reversal re-reads the transfer when Stripe did not expand it', async () => {
     transferResponse = { id: 'trr_2', amount: 500, transfer: 'tr_2' };
     retrievedTransferResponse = { id: 'tr_2', amount_reversed: 1000 };
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
 
     const result = await provider.reverseTransfer({
       transferId: 'tr_gateway_2',
@@ -352,7 +379,7 @@ describe('StripePaymentProvider', () => {
    * demo passes.
    */
   test('account creation requests card_payments alongside transfers', async () => {
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
     await provider.createAccount({
       accountId: 'acc_gateway_1',
       country: 'ES',
@@ -382,7 +409,7 @@ describe('StripePaymentProvider', () => {
    * requirements — indistinguishable from one that is genuinely blocked.
    */
   test('account creation reads the account back through the v1 API', async () => {
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
     const snapshot = await provider.createAccount({
       accountId: 'acc_gateway_1',
       country: 'ES',
@@ -404,7 +431,7 @@ describe('StripePaymentProvider', () => {
    * requirement that was always coming.
    */
   test('an onboarding link collects eventually-due requirements', async () => {
-    const provider = new StripePaymentProvider();
+    const provider = new StripePaymentProvider({ mode: 'test' });
     const link = await provider.accountLink({
       providerAccountId: 'acct_1',
       refreshUrl: 'https://gateway.example/refresh',

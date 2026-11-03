@@ -51,6 +51,7 @@ export async function relayRecurringObservations(options: {
         if (!merchant.webhookUrl || !merchant.webhookSecret) continue;
         const event = buildEvent('billing.observation.updated', {
           object: 'billing_observation',
+          livemode: cohort.livemode,
           resource_kind: mirror.kind as 'subscription' | 'invoice',
           resource_id: mirror.objectRef,
           revision: observation.revision,

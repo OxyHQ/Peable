@@ -12,6 +12,7 @@
  * state and waiting for a row that will never appear is the bug.
  */
 import { beforeAll, describe, expect, it } from 'bun:test';
+import { useStripeKeys } from '../../__tests__/helpers/stripeModes';
 import type { Dispute, WebhookEvent } from '@peable.to/shared-types';
 import { eq } from 'drizzle-orm';
 import {
@@ -131,6 +132,7 @@ async function disputePayloadsFor(intentId: string): Promise<Dispute[]> {
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
   useGatewayDatabase();
+  useStripeKeys();
 
   beforeAll(async () => {
     // BOTH halves, deliberately: `findWebhookTarget` returns null unless the

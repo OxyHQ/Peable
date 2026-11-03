@@ -36,6 +36,20 @@ import type { CurrencyCode, DisputeEvidence } from '@peable.to/shared-types';
 export type ProviderId = 'stripe';
 
 /**
+ * The provider's two worlds (ADR 0017). One deployment holds both; every
+ * provider object, stored row and inbound event belongs to exactly one, and an
+ * operation on it is sent through that mode's credential and no other.
+ */
+export type ProviderMode = 'test' | 'live';
+
+export const PROVIDER_MODES: readonly ProviderMode[] = ['test', 'live'];
+
+/** A stored `livemode` (a row's, an event's) as the mode that acts on it. */
+export function providerModeOf(livemode: boolean): ProviderMode {
+  return livemode ? 'live' : 'test';
+}
+
+/**
  * The stages a payment can fail at — used by diagnostics and by the contract
  * suite's failure injection, which walks every one of them.
  */

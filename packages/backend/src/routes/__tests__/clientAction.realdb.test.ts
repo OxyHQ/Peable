@@ -15,6 +15,7 @@
  * explicitly, and the polled payer read never does.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../../services/providers/provider';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
@@ -56,22 +57,26 @@ const fakeProvider = {
   },
 };
 
+const realRegistry = await import('../../services/providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../../services/providers/registry');
+} = realRegistry;
 let useFake = false;
 
 mock.module('../../services/providers/registry', () => ({
-  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
-  resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },
 }));
 
-const { config } = await import('../../config');
+const { setStripeModes, stripeModeFixture } = await import('../../__tests__/helpers/stripeModes');
 const { createPaymentIntentsRouter } = await import('../paymentIntents');
 const { insertPaymentIntent, linkProviderObject, updateIntentState } = await import(
   '../../db/payments/paymentIntentRepository'
@@ -87,7 +92,7 @@ let merchant: Merchant;
 let server: Server;
 let baseUrl = '';
 let counter = 0;
-let publishableRestore: string | undefined;
+let restoreModes: () => void = () => undefined;
 /** Whether the stubbed credential presents a merchant service token. */
 let asMerchant = true;
 
@@ -143,8 +148,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
   beforeAll(async () => {
     useFake = true;
     merchant = await seedMerchant();
-    publishableRestore = config.stripe.publishableKey;
-    (config.stripe as { publishableKey: string | undefined }).publishableKey = 'pk_test_abc';
+    // Both modes configured: a development merchant's payment must be handed
+    // the TEST publishable key, never the live one beside it (ADR 0017).
+    restoreModes = setStripeModes({
+      test: stripeModeFixture('test', { publishableKey: 'pk_test_abc' }),
+      live: stripeModeFixture('live', { publishableKey: 'pk_live_xyz' }),
+    });
 
     const stubAuth: RequestHandler = (req, _res, next) => {
       if (asMerchant) {
@@ -180,7 +189,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
   });
 
   afterAll(async () => {
-    (config.stripe as { publishableKey: string | undefined }).publishableKey = publishableRestore;
+    restoreModes();
     useFake = false;
     await new Promise<void>((resolve) => {
       server.close(() => {

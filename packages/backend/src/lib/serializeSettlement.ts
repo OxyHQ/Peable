@@ -49,6 +49,7 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
   return {
     id: row.publicId,
     object: 'connected_account',
+    livemode: row.livemode,
     external_ref: row.externalRef,
     rails,
     faircoin: toFaircoinHalf(row),
@@ -107,6 +108,7 @@ export function toTransferDTO(
   return {
     id: row.publicId,
     object: 'transfer',
+    livemode: row.livemode,
     external_ref: row.externalRef,
     connected_account: connectedAccountPublicId,
     payment_intent: paymentIntentPublicId,

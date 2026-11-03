@@ -36,6 +36,7 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
   return {
     id: row.publicId,
     object: 'payment_intent',
+    livemode: row.livemode,
     status: row.status,
     rail: row.rail,
     amount: row.amount,
@@ -72,6 +73,7 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
   return {
     id: row.publicId,
     object: 'merchant',
+    livemode: row.livemode,
     oxy_app_id: row.oxyAppId,
     environment: row.environment,
     network: row.network,
@@ -113,6 +115,7 @@ export function toWebhookDeliveryDTO(
   return {
     id: row.id,
     object: 'webhook_delivery',
+    livemode: row.livemode,
     merchant_id: row.merchantId,
     intent_id: intentPublicId,
     event_id: row.eventId,
@@ -154,6 +157,7 @@ export function toPaymentLinkDTO(row: PaymentLinkRow): PaymentLink {
   return {
     id: row.publicId,
     object: 'payment_link',
+    livemode: row.livemode,
     amount: row.amount,
     currency: row.currency,
     rail: row.rail,
@@ -184,6 +188,7 @@ export function toPublicPaymentLinkDTO(
   return {
     id: row.publicId,
     object: 'payment_link',
+    livemode: row.livemode,
     amount: row.amount,
     currency: row.currency,
     rail: row.rail,
@@ -212,6 +217,7 @@ export function toCheckoutSessionDTO(
   return {
     id: row.publicId,
     object: 'checkout_session',
+    livemode: row.livemode,
     payment_intent: intent.publicId,
     client_secret: intent.clientSecret,
     amount: row.amount,
@@ -246,6 +252,7 @@ export function toCheckoutSessionPublicDTO(
   return {
     id: row.publicId,
     object: 'checkout_session',
+    livemode: row.livemode,
     success_url: row.successUrl ?? undefined,
     cancel_url: row.cancelUrl ?? undefined,
     merchant,
@@ -269,6 +276,7 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
   return {
     id: row.publicId,
     object: 'dispute',
+    livemode: row.livemode,
     payment_intent: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,

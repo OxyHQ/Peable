@@ -7,6 +7,7 @@ import { checkoutSessions } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import { keyset, type KeysetPage } from '../keyset';
 import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 
 /**
  * Reads and writes for `checkout_sessions` — a hosted-checkout session wrapping
@@ -22,6 +23,12 @@ import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../meta
  */
 
 export interface CheckoutSessionRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly publicId: string;
   readonly merchantId: string;
@@ -41,6 +48,7 @@ export interface CheckoutSessionRow {
 }
 
 const SESSION_COLUMNS = {
+  livemode: merchantLivemodeOf(checkoutSessions.merchantId),
   id: checkoutSessions.id,
   publicId: checkoutSessions.publicId,
   merchantId: checkoutSessions.merchantId,

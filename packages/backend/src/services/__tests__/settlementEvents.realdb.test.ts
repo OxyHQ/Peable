@@ -8,6 +8,7 @@
  * is the one where no event is delivered at all.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../providers/provider';
 import { eq } from 'drizzle-orm';
 import type { WebhookEvent } from '@peable.to/shared-types';
 
@@ -67,16 +68,20 @@ const fakeProvider = {
 };
 
 // Inert outside this describe block — `mock.module` is process-global in bun.
+const realRegistry = await import('../providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../providers/registry');
+} = realRegistry;
 let useFake = false;
 
 mock.module('../providers/registry', () => ({
-  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
-  resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },
@@ -101,6 +106,7 @@ const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
+const { useStripeKeys } = await import('../../__tests__/helpers/stripeModes');
 const { uuidv7 } = await import('@oxy.so/db');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
@@ -161,6 +167,9 @@ async function seedAccount(ref: string, providerAccountId: string) {
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('settlement events and the sync sweep', () => {
   useGatewayDatabase();
+  // The rail ON in test mode: the sync sweep reads only the modes whose rail is
+  // on, and every provider call here goes to the fake registry.
+  useStripeKeys(['test'], { cardRail: true });
 
   beforeAll(async () => {
     useFake = true;

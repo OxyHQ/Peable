@@ -72,7 +72,7 @@ function fakeProvider(answer: 'standard_rated' | 'not_collecting' | 'down' = 'st
 
 async function approvedMerchant(provider: TaxProvider) {
   const merchant = await seedMerchant({ environment: 'production', network: 'mainnet' });
-  const tax = createTaxService({ db: gatewayDb(), provider });
+  const tax = createTaxService({ db: gatewayDb(), providers: [provider] });
   await tax.updateSettings(merchant, {
     legal_name: 'Example Seller, Inc.',
     head_office: { country: 'US', state: 'DE' },
@@ -104,7 +104,7 @@ describe('Peable Tax', () => {
 
   it('a registration needs a provider: a third-party app cannot approve one', async () => {
     const merchant = await seedMerchant({ environment: 'production', network: 'mainnet' });
-    const tax = createTaxService({ db: gatewayDb(), provider: fakeProvider().provider });
+    const tax = createTaxService({ db: gatewayDb(), providers: [fakeProvider().provider] });
     await tax.updateSettings(merchant, { legal_name: 'X', head_office: { country: 'US' } });
     await tax.createRegistration(merchant, { country: 'GB', scheme: 'standard' });
     await expect(
@@ -205,7 +205,7 @@ describe('Peable Tax', () => {
 
   it('refuses to price a sale before approval or on insufficient evidence', async () => {
     const merchant = await seedMerchant({ environment: 'production', network: 'mainnet' });
-    const tax = createTaxService({ db: gatewayDb(), provider: fakeProvider().provider });
+    const tax = createTaxService({ db: gatewayDb(), providers: [fakeProvider().provider] });
     const one = await tax.recordEvidence(merchant, {
       customer_ref: 'c',
       evidence: [{ type: 'billing_address', address: { country: 'DE' } }],

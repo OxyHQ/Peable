@@ -14,7 +14,8 @@ design", and it is a legal one.
 
 There is no `provider_connections` table. There never was. `services/providers/
 stripe/client.ts` constructs ONE process-wide Stripe client from
-`config.stripe.secretKey` — a single `STRIPE_SECRET_KEY` belonging to whoever
+`config.stripe.secretKey` — a single `STRIPE_SECRET_KEY` (one per mode since
+ADR 0017) belonging to whoever
 operates the Peable deployment — and every payment, refund, transfer and
 connected account goes through it. `services/providers/registry.ts` resolves
 that client without taking a merchant as an argument, because there is nothing
@@ -48,6 +49,13 @@ described:
    credential whose environment disagrees with it, before any provider call.
    Separating merchant ROWS by environment — which this gateway already did —
    is isolation of data and not of money.
+
+   > **Amended by [ADR 0017](0017-test-and-live-in-one-deployment.md).** A
+   > deployment now holds `STRIPE_SECRET_KEY_TEST` and `STRIPE_SECRET_KEY_LIVE`
+   > side by side and `STRIPE_SECRET_KEY` is gone. The guard no longer refuses:
+   > it SELECTS the mode from the credential (`production` ⟺ live), and an
+   > operation on a stored object uses the mode of its row. The rest of this
+   > ADR — Peable holds the keys, merchants supply none — is unchanged.
 2. **The platform account's exposure is Peable's.** ADR 0001 D3 established that
    separate charges and transfers require
    `controller.losses.payments = application`, so the platform account answers

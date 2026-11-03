@@ -12,7 +12,7 @@
  *    depends on the platform's balance from other traffic. Refusing here makes
  *    it deterministic.
  */
-import type { CurrencyCode, MerchantEnvironment } from '@peable.to/shared-types';
+import type { CurrencyCode } from '@peable.to/shared-types';
 import {
   applyTransferReversal,
   findTransferByExternalRef,
@@ -34,7 +34,7 @@ import type { ConnectedAccountRow } from '../../db/accounts/connectedAccountRepo
 import type { PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
 import { getDb } from '../../db/postgres';
 import { newId } from '../../lib/ids';
-import { assertEnvironmentMatchesProvider } from '../providers/environmentGuard';
+import { selectStoredProvider } from '../providers/environmentGuard';
 import {
   isSettlingProvider,
   ProviderError,
@@ -42,7 +42,6 @@ import {
   type SettlingPaymentProvider,
 } from '../providers/provider';
 import { redactProviderMessage } from '../providers/redact';
-import { resolveProvider } from '../providers/registry';
 
 /** The rail cannot settle sub-merchants — a true statement about the chain rail. */
 export class TransfersUnavailableError extends Error {
@@ -96,10 +95,20 @@ export class TransferExceedsPaymentError extends Error {
   }
 }
 
-function requireSettlingProvider(id: TransferRow['provider']): SettlingPaymentProvider {
-  const provider = resolveProvider(id);
+/**
+ * The adapter that settles from a STORED object, in that object's own mode
+ * (ADR 0017): a transfer is funded by the payment's charge and reversed through
+ * the key that made it, so both resolve by the row and never by a default.
+ */
+function requireSettlingProvider(
+  id: TransferRow['provider'],
+  livemode: boolean,
+): SettlingPaymentProvider {
+  const provider = selectStoredProvider(id, livemode);
   if (!provider) {
-    throw new TransfersUnavailableError(`the ${id} rail is not configured on this deployment`);
+    throw new TransfersUnavailableError(
+      `the ${id} rail is not configured for ${livemode ? 'live' : 'test'} mode on this deployment`,
+    );
   }
   if (!isSettlingProvider(provider)) {
     throw new TransfersUnavailableError(`the ${id} rail cannot settle sub-merchants`);
@@ -109,8 +118,6 @@ function requireSettlingProvider(id: TransferRow['provider']): SettlingPaymentPr
 
 export interface CreateTransferInput {
   readonly merchantId: string;
-  /** The asking credential's environment — checked against the provider's mode. */
-  readonly environment: MerchantEnvironment;
   readonly intent: PaymentIntentRow;
   readonly account: ConnectedAccountRow;
   /** The MERCHANT's own id for what this settles. The idempotency. */
@@ -185,11 +192,6 @@ async function resolveSourceCharge(
  * settlement of a payment has no transfer rows to lock.
  */
 export async function createTransfer(input: CreateTransferInput): Promise<CreateTransferResult> {
-  // FIRST, for the same reason the refund path checks it first: this is an
-  // authorization decision, and a wrong-mode credential must not be able to
-  // probe a payment's state or a seller's readiness by reading which refusal
-  // it gets back.
-  assertEnvironmentMatchesProvider(input.environment);
   if (input.intent.status !== 'settled') {
     throw new PaymentNotSettledError(input.intent.status);
   }
@@ -221,7 +223,7 @@ export async function createTransfer(input: CreateTransferInput): Promise<Create
     );
   }
 
-  const provider = requireSettlingProvider(input.intent.provider);
+  const provider = requireSettlingProvider(input.intent.provider, input.intent.livemode);
   const db = getDb();
 
   /**
@@ -330,8 +332,6 @@ export async function createTransfer(input: CreateTransferInput): Promise<Create
 
 export interface ReverseTransferInput {
   readonly merchantId: string;
-  /** The asking credential's environment — checked against the provider's mode. */
-  readonly environment: MerchantEnvironment;
   readonly transfer: TransferRow;
   /**
    * The MERCHANT's own id for THIS reversal — their `Idempotency-Key` header or
@@ -377,13 +377,12 @@ export interface ReverseTransferResult {
  */
 export async function reverseTransfer(input: ReverseTransferInput): Promise<ReverseTransferResult> {
   const { transfer } = input;
-  assertEnvironmentMatchesProvider(input.environment);
   if (!transfer.providerObjectId) {
     throw new TransfersUnavailableError(
       'this transfer never reached the provider; there is nothing to reverse',
     );
   }
-  const provider = requireSettlingProvider(transfer.provider);
+  const provider = requireSettlingProvider(transfer.provider, transfer.livemode);
   const db = getDb();
 
   const inserted = await insertTransferReversal(db, {

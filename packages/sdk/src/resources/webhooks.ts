@@ -41,6 +41,7 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
   const valid =
     typeof candidate.id === 'string' &&
     candidate.object === 'event' &&
+    typeof candidate.livemode === 'boolean' &&
     typeof candidate.type === 'string' &&
     // biome-ignore lint/suspicious/noPrototypeBuiltins: the published SDK targets ES2020, and Object.hasOwn is ES2022
     Object.prototype.hasOwnProperty.call(WEBHOOK_EVENT_TYPES, candidate.type) &&
@@ -55,6 +56,7 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     const v = data as unknown as Record<string, unknown>;
     return (
       v.object === 'billing_observation' &&
+      v.livemode === candidate.livemode &&
       (v.resource_kind === 'subscription' || v.resource_kind === 'invoice') &&
       typeof v.resource_id === 'string' &&
       v.resource_id.length > 0 &&
@@ -63,7 +65,9 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
       v.revision > 0 &&
       Number.isSafeInteger(v.observed_at) &&
       Object.keys(v).every((k) =>
-        ['object', 'resource_kind', 'resource_id', 'revision', 'observed_at'].includes(k),
+        ['object', 'livemode', 'resource_kind', 'resource_id', 'revision', 'observed_at'].includes(
+          k,
+        ),
       )
     );
   }

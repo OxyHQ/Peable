@@ -41,7 +41,7 @@ import {
   UNKNOWN_SETTLEMENT,
   type ProviderSettlement,
 } from './providers/provider';
-import { resolveProvider } from './providers/registry';
+import { selectStoredProvider } from './providers/environmentGuard';
 
 /**
  * What the provider says this payment settled to.
@@ -69,7 +69,7 @@ export async function reportSettlement(intent: PaymentIntentRow): Promise<Provid
   // or the two-step create never linked. Not a fee of zero.
   if (!intent.providerChargeId) return UNKNOWN_SETTLEMENT;
 
-  const provider = resolveProvider(intent.provider);
+  const provider = selectStoredProvider(intent.provider, intent.livemode);
   if (!provider || !isSettlementReportingProvider(provider)) return UNKNOWN_SETTLEMENT;
 
   try {

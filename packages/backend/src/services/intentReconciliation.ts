@@ -26,7 +26,7 @@ import { getDb } from '../db/postgres';
 import { applyEvent, type IntentEvent } from './intentState';
 import { announceIntentChange, transitionIntent } from './intentTransition';
 import type { ProviderPaymentResult, ProviderPaymentStatus } from './providers/provider';
-import { resolveProvider } from './providers/registry';
+import { selectStoredProvider } from './providers/environmentGuard';
 
 /**
  * Which card event a provider's own status means.
@@ -78,7 +78,7 @@ export async function reconcileIntentWithProvider(
   intent: PaymentIntentRow,
 ): Promise<ReconcileOutcome> {
   if (!intent.provider || !intent.providerObjectId) return { kind: 'unreadable' };
-  const provider = resolveProvider(intent.provider);
+  const provider = selectStoredProvider(intent.provider, intent.livemode);
   if (!provider) return { kind: 'unreadable' };
 
   let current: ProviderPaymentResult;

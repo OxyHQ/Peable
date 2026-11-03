@@ -28,6 +28,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import type { Database } from '../../db/postgres';
 import { stripeBillingClient } from '../providers/stripe/client';
+import { providerModeOf } from '../providers/provider';
 import {
   billingDeploymentSchema,
   billingOwnerSchema,
@@ -328,9 +329,14 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
       : undefined;
   if (parsed.checkoutOperationReaderRef && !checkoutOperationReader)
     throw new Error('Configured checkout operation reader is unavailable');
-  if (!injectedClient && (!config.stripe.secretKey || config.stripe.keyMode === 'unknown'))
-    throw new Error('Recurring billing requires the configured platform Stripe key');
-  const client = injectedClient ?? stripeBillingClient();
+  // The cohort names its mode, and its key is that mode's (ADR 0017): a live
+  // cohort can never be served through the test key, nor the reverse.
+  const mode = providerModeOf(parsed.deployment.livemode);
+  if (!injectedClient && !config.stripe[mode])
+    throw new Error(
+      `Recurring billing requires the platform Stripe key of its mode (STRIPE_SECRET_KEY_${mode.toUpperCase()})`,
+    );
+  const client = injectedClient ?? stripeBillingClient(mode);
   const cohorts = parsed.cohorts.map(({ offers: _offers, ...owner }) => ({
     ...owner,
     ...parsed.deployment,

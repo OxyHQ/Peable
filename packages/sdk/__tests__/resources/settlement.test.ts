@@ -27,6 +27,7 @@ import {
 const ACCOUNT: ConnectedAccount = {
   id: 'ca_1',
   object: 'connected_account',
+  livemode: false,
   external_ref: 'store_1',
   rails: ['card'],
   faircoin: null,
@@ -47,6 +48,7 @@ const ACCOUNT: ConnectedAccount = {
 const TRANSFER: Transfer = {
   id: 'tr_1',
   object: 'transfer',
+  livemode: false,
   external_ref: 'order_1',
   connected_account: 'ca_1',
   payment_intent: 'pi_1',
@@ -62,6 +64,7 @@ const TRANSFER: Transfer = {
 const REFUND: Refund = {
   id: 're_1',
   object: 'refund',
+  livemode: false,
   external_ref: 'refund_1',
   origin: 'merchant',
   payment_intent: 'pi_1',
@@ -245,6 +248,7 @@ describe('settlement reporting', () => {
   test('carries nulls with a status rather than zeros', async () => {
     const { fetch: fetchImpl, requests } = gateway({
       object: 'settlement',
+      livemode: false,
       payment_intent: 'pi_1',
       status: 'unknown',
       gross: null,

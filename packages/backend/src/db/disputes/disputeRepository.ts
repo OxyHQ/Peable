@@ -4,10 +4,17 @@ import type { DisputeStatus } from '../schema/valueSets';
 import { disputes, paymentIntents } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { ProviderId } from '../../services/providers/provider';
 
 /** A dispute row as the service reads it back. */
 export interface DisputeRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly publicId: string;
   readonly merchantId: string;
@@ -26,6 +33,7 @@ export interface DisputeRow {
 }
 
 const DISPUTE_COLUMNS = {
+  livemode: merchantLivemodeOf(disputes.merchantId),
   id: disputes.id,
   publicId: disputes.publicId,
   merchantId: disputes.merchantId,

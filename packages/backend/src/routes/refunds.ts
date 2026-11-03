@@ -26,13 +26,10 @@ import {
   RefundsUnavailableError,
   remainingRefundable,
 } from '../services/refunds/refundService';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { reportSettlement } from '../services/settlementReport';
 import { ProviderError } from '../services/providers/provider';
 import {
   requireAuthenticated,
-  requireProviderMode,
-  sendEnvironmentMismatch,
   sendError,
   sendProviderError,
   sendValidationError,
@@ -90,6 +87,7 @@ function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatu
   return {
     id: row.publicId,
     object: 'refund',
+    livemode: row.livemode,
     external_ref: row.externalRef,
     origin: row.origin,
     payment_intent: paymentIntentPublicId,
@@ -116,10 +114,6 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      // BEFORE the intent lookup, whose 404 would otherwise let a wrong-mode
-      // credential probe which `pi_…` values this merchant owns.
-      if (!requireProviderMode(merchant.environment, res)) return;
-
       const parsed = createRefundBodySchema.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
@@ -164,7 +158,6 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       try {
         const { refund, created, paymentStatus } = await createRefund({
           merchantId: merchant.id,
-          environment: merchant.environment,
           intent,
           externalRef: body.external_ref,
           amount: body.amount,
@@ -180,10 +173,6 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         }
         if (error instanceof RefundsUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
@@ -371,6 +360,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       const settlement = await reportSettlement(intent);
       const body: Settlement = {
         object: 'settlement',
+        livemode: intent.livemode,
         payment_intent: intent.publicId,
         status: settlement.status,
         gross: settlement.gross,

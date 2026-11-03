@@ -13,6 +13,7 @@ import { sql } from 'drizzle-orm';
  * has a wrong answer that loses money or spins forever.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { useStripeKeys } from '../../__tests__/helpers/stripeModes';
 import { eq } from 'drizzle-orm';
 import { insertProviderEvent } from '../../db/providers/providerEventRepository';
 import { findProviderEventById } from '../../db/providers/providerEventRepository';
@@ -72,6 +73,7 @@ async function deliveriesFor(intentId: string): Promise<string[]> {
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
   useGatewayDatabase();
+  useStripeKeys();
 
   beforeAll(async () => {
     // WITH a webhook target, so the transition's outbox write is exercised:

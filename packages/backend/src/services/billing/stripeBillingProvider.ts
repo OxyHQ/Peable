@@ -1,7 +1,7 @@
 import type Stripe from 'stripe';
 import { z } from 'zod';
 import { BILLING_SUBSCRIPTION_STATUSES } from '@peable.to/shared-types';
-import { STRIPE_API_VERSION, stripeBillingClient } from '../providers/stripe/client';
+import { STRIPE_API_VERSION } from '../providers/stripe/client';
 import {
   BillingError,
   billingDeploymentSchema,
@@ -119,7 +119,7 @@ export function normalizeBillingSubscription(raw: unknown): ProviderBillingSubsc
 }
 export function createStripeBillingProvider(
   deploymentInput: BillingDeployment,
-  client: StripeBillingClient = stripeBillingClient(),
+  client: StripeBillingClient,
   options: { portalConfigurationRef: string; now?: () => Date },
 ): BillingProvider {
   const deployment = billingDeploymentSchema.parse(deploymentInput);

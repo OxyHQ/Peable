@@ -32,14 +32,11 @@ import {
   DisputesUnanswerableError,
   submitDisputeEvidence,
 } from '../services/disputeEvidence';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import type { DisputeEvidence } from '@peable.to/shared-types';
 import { ProviderError } from '../services/providers/provider';
 import { toDisputeDTO } from '../lib/serialize';
 import {
   requireAuthenticated,
-  requireProviderMode,
-  sendEnvironmentMismatch,
   sendError,
   sendProviderError,
   sendValidationError,
@@ -257,10 +254,6 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      // BEFORE the dispute lookup, whose 404 would otherwise let a wrong-mode
-      // credential probe which `dp_…` values this merchant owns.
-      if (!requireProviderMode(merchant.environment, res)) return;
-
       const { disputeId } = req.params;
       if (!disputeId) {
         sendError(res, 400, 'invalid_request_error', 'disputeId is required');
@@ -290,7 +283,6 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
 
       try {
         const { dispute: answered, submitted } = await submitDisputeEvidence({
-          environment: merchant.environment,
           dispute,
           evidence: parsed.data,
         });
@@ -308,10 +300,6 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
         }
         if (error instanceof DisputesUnanswerableError) {
           sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
