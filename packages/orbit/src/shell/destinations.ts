@@ -42,6 +42,13 @@ export type OrbitDestinationKey =
   | 'connect'
   | 'reports'
   | 'tax'
+  | 'tax-business'
+  | 'tax-registrations'
+  | 'tax-documents'
+  | 'tax-review'
+  | 'tax-deadlines'
+  | 'tax-history'
+  | 'tax-collection'
   | 'contributions'
   | 'account'
   | 'branding'
@@ -54,7 +61,7 @@ export type OrbitNavSection = 'main' | 'products' | 'business' | 'footer';
 export const ORBIT_TREE_SECTIONS = ['products', 'business'] as const;
 export type OrbitTreeSection = (typeof ORBIT_TREE_SECTIONS)[number];
 
-export type OrbitNavGroupKey = 'payments-group' | 'billing';
+export type OrbitNavGroupKey = 'payments-group' | 'billing' | 'tax-group';
 
 export interface OrbitNavGroup {
   key: OrbitNavGroupKey;
@@ -78,6 +85,8 @@ export interface OrbitDestination {
 export const ORBIT_NAV_GROUPS: readonly OrbitNavGroup[] = [
   { key: 'payments-group', labelKey: 'shell.group.payments', section: 'products' },
   { key: 'billing', labelKey: 'shell.group.billing', section: 'products' },
+  // The Tax workspace (ADR 0020): one page per section under `/tax`.
+  { key: 'tax-group', labelKey: 'nav.tax', section: 'products' },
 ];
 
 /** In sidebar order within each section. */
@@ -174,10 +183,67 @@ export const ORBIT_DESTINATIONS: readonly OrbitDestination[] = [
   },
   {
     key: 'tax',
-    labelKey: 'nav.tax',
+    labelKey: 'compliance.nav.overview',
     href: '/tax',
     section: 'products',
-    keywords: ['vat', 'sales tax', 'registrations'],
+    parent: 'tax-group',
+    keywords: ['tax', 'vat', 'sales tax', 'assessment', 'thresholds', 'obligations'],
+  },
+  {
+    key: 'tax-business',
+    labelKey: 'compliance.nav.business',
+    href: '/tax/business',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'legal entity', 'operating locations', 'sales destinations', 'onboarding'],
+  },
+  {
+    key: 'tax-registrations',
+    labelKey: 'compliance.nav.registrations',
+    href: '/tax/registrations',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'registrations', 'authority', 'vat number', 'permit'],
+  },
+  {
+    key: 'tax-documents',
+    labelKey: 'compliance.nav.documents',
+    href: '/tax/documents',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'documents', 'certificate', 'checklist'],
+  },
+  {
+    key: 'tax-review',
+    labelKey: 'compliance.nav.review',
+    href: '/tax/review',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'review queue', 'findings', 'decisions'],
+  },
+  {
+    key: 'tax-deadlines',
+    labelKey: 'compliance.nav.deadlines',
+    href: '/tax/deadlines',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'deadlines', 'due dates', 'returns', 'oss'],
+  },
+  {
+    key: 'tax-history',
+    labelKey: 'compliance.nav.history',
+    href: '/tax/history',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'history', 'audit', 'actions'],
+  },
+  {
+    key: 'tax-collection',
+    labelKey: 'compliance.nav.collection',
+    href: '/tax/collection',
+    section: 'products',
+    parent: 'tax-group',
+    keywords: ['tax', 'collection', 'approval', 'tax settings', 'tax report', 'csv'],
   },
   {
     key: 'contributions',

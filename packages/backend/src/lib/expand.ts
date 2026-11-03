@@ -71,6 +71,13 @@ export type ExpandableType =
   | 'webhook_endpoint'
   | 'event'
   | 'tax.transaction'
+  | 'tax.operating_location'
+  | 'tax.sales_destination'
+  | 'tax.registration_declaration'
+  | 'tax.document'
+  | 'tax.assessment'
+  | 'tax.review_item'
+  | 'tax.compliance_action'
   | 'product'
   | 'price'
   | 'coupon'
@@ -146,6 +153,14 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   payment_method_configuration: {},
   payment_method_domain: {},
   'tax.transaction': {},
+  // Business compliance (ADR 0020): nothing expands yet; `expand[]` is still validated.
+  'tax.operating_location': {},
+  'tax.sales_destination': {},
+  'tax.registration_declaration': {},
+  'tax.document': {},
+  'tax.assessment': {},
+  'tax.review_item': {},
+  'tax.compliance_action': {},
   product: { default_price: 'price' },
   price: { product: 'product' },
   coupon: {},

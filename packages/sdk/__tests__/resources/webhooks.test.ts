@@ -15,6 +15,7 @@ import {
   type PaymentMethod,
   type Refund,
   type SetupIntent,
+  type TaxReviewItem,
 } from '@peable.to/shared-types';
 import { WebhooksResource } from '../../src/resources/webhooks';
 import { PeableSignatureVerificationError } from '../../src/core/errors';
@@ -31,6 +32,26 @@ import { BILLING_EVENT_PAYLOADS } from '../support/billingFixtures';
 
 const SECRET = 'whsec_test_secret';
 const TIMESTAMP = 1700000000;
+
+function reviewItemFixture(): TaxReviewItem {
+  return {
+    object: 'tax.review_item',
+    id: 'taxrev_fixture',
+    livemode: false,
+    code: 'registration_status_unknown',
+    severity: 'review',
+    status: 'open',
+    rule: 'us_tx_sales_tax',
+    country: 'US',
+    state: 'TX',
+    message: 'The registration status here is recorded as unknown.',
+    first_assessment: 'taxasm_fixture',
+    latest_assessment: 'taxasm_fixture',
+    decision: null,
+    created: TIMESTAMP,
+    updated: TIMESTAMP,
+  };
+}
 
 const EVENT: WebhookEvent = {
   id: 'evt_1',
@@ -511,6 +532,27 @@ const payloads = {
     result: null,
     succeeded_at: null,
   },
+  'tax.assessment.created': {
+    object: 'tax.assessment',
+    id: 'taxasm_fixture',
+    livemode: false,
+    rule_set_version: '2026-11-03.1',
+    as_of: EVENT.created,
+    inputs_digest: 'a'.repeat(64),
+    results: [],
+    summary: {
+      registration_declared: 0,
+      likely_required: 0,
+      approaching_threshold: 0,
+      not_indicated: 0,
+      uncertain: 0,
+      unsupported: 0,
+    },
+    created_by: { type: 'service', id: null },
+    created: EVENT.created,
+  },
+  'tax.review_item.created': reviewItemFixture(),
+  'tax.review_item.updated': reviewItemFixture(),
   'webhook_endpoint.test': {
     id: 'we_fixture',
     object: 'webhook_endpoint',

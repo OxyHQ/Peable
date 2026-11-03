@@ -285,7 +285,7 @@ Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
 `paymentMethodConfigurations` (configurations and wallet domains),
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
-`refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `transfers`,
+`refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `taxCompliance`, `transfers`,
 `webhookDeliveries`, `webhookEndpoints`, and the billing engine's
 `billingEngine/*` (subscriptions, invoices, credit notes, test clocks, settings,
 meters, entitlements, portal, and its anonymous `public` invoice and portal
@@ -492,6 +492,23 @@ A quoted card subscription's renewal is HELD as a draft until Peable has
 repriced it (ADR 0013) — never release a draft whose Stripe totals are not
 the fresh quote — and refunds are reversals netted into the same report rows,
 never deletions of the original transaction.
+
+**Business compliance (ADR 0020) records and assesses; it never activates.**
+`services/tax/compliance/*` holds onboarding facts, declared registration
+statuses (always `unverified`), `tax_document` Files, the versioned rule set,
+assessments, the review queue, deadlines and the action history. It writes no
+`tax_settings` or `tax_registrations`, calls no provider, and nothing it stores
+is read by the calculator — so no declaration, decision, service credential or
+assistant can make Peable collect. Onboarding writes and review decisions are
+Orbit-only (`billing:manage`); the merchant API reads and assesses. The rule
+set is CODE, one immutable version per change (`ruleSet.ts`), with sources and
+effective dates; an assessment stores its version and inputs and must replay
+byte-for-byte. Everything outside the supported rules is `unsupported` —
+report it, open a review item, infer nothing. Registration submission,
+returns and remittance are `not_available` capabilities, never simulated
+states. Never infer liability from an incorporation address, a company number,
+a language or a currency, and keep company identifiers out of fixtures, logs
+and issues.
 
 ### Oxy Files (ADR 0043 of the oxy repo)
 

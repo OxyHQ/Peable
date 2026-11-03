@@ -106,6 +106,9 @@ const WEBHOOK_EVENT_TYPES = {
   'balance.available': true,
   'reporting.report_run.succeeded': true,
   'reporting.report_run.failed': true,
+  'tax.assessment.created': true,
+  'tax.review_item.created': true,
+  'tax.review_item.updated': true,
   'webhook_endpoint.test': true,
 } satisfies Record<WebhookEventType, true>;
 

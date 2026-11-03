@@ -3,6 +3,7 @@ import { GATEWAY_API_URL, OXY_BASE_URL } from '../config';
 import { createContributionsApi } from './contributions';
 import { createDashboardApi } from './dashboard';
 import { createOrbitTransport } from './transport';
+import { createTaxComplianceApi } from '../tax/complianceApi';
 
 /**
  * The ONE `OxyServices` instance, handed to `OxyProvider` in `app/_layout.tsx`,
@@ -21,3 +22,4 @@ const transport = createOrbitTransport(gateway.client);
 
 export const dashboardApi = createDashboardApi(transport);
 export const contributionsApi = createContributionsApi(transport);
+export const taxComplianceApi = createTaxComplianceApi(transport);

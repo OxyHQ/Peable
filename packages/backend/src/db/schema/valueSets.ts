@@ -372,6 +372,11 @@ export const WEBHOOK_EVENT_SCOPES = {
   'billing_portal.configuration.created': 'merchant',
   'billing_portal.configuration.updated': 'merchant',
   'billing_portal.session.created': 'merchant',
+  // Peable Tax business compliance (ADR 0020): about the merchant's own
+  // assessments and review queue.
+  'tax.assessment.created': 'merchant',
+  'tax.review_item.created': 'merchant',
+  'tax.review_item.updated': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;

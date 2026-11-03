@@ -316,3 +316,7 @@ export interface BillingInvoiceTaxLine {
   inclusive: boolean;
   taxability_reason: string;
 }
+
+// Business compliance (ADR 0020) travels with the `/tax` subpath, so a browser
+// bundle reaches it without the root barrel's node:crypto signer.
+export * from './taxCompliance';

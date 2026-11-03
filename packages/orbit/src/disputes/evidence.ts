@@ -127,6 +127,7 @@ export const ORBIT_FILE_POLICIES: Readonly<
   additional_verification: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
   // A report run's CSV: written by Peable, never uploaded (not a `FileUploadPurpose`).
   finance_report_run: { types: ['csv'], max_bytes: 64 * 1024 * 1024 },
+  tax_document: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
 };
 
 /** Filename extensions a picker should offer for `purpose` (`jpg` also as `jpeg`). */

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.22.0 — Peable Tax business compliance (ADR 0020)
+
+Requires `@peable.to/shared-types` 0.20.0. Additive.
+
+Added:
+
+- `tax.compliance`: read the owner's business profile, operating locations,
+  sales destinations, declared registration statuses, documents and document
+  checklist; the versioned rule set, capabilities and deadlines; run
+  (`createAssessment`), read and `replayAssessment` assessments; read the
+  review queue and the action history. Recording onboarding facts and deciding
+  review items are the owner's, in Orbit — no SDK method does either, and
+  nothing here registers, files, pays or turns tax collection on.
+- File purpose `tax_document` (private, ≤ 10 MiB PDF/PNG/JPEG).
+- Webhook events `tax.assessment.created`, `tax.review_item.created`,
+  `tax.review_item.updated`.
+
 ## 0.21.0 — Report downloads, more report types, transfer reversals, events of a payment
 
 Requires `@peable.to/shared-types` 0.19.0.

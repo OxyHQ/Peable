@@ -512,6 +512,20 @@
       "when": 1793736443780,
       "tag": "0072_provider_events_received_seq_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793737392237,
+      "tag": "0073_tax_compliance",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793737394605,
+      "tag": "0074_tax_compliance_validate",
+      "breakpoints": true
     }
   ]
 }

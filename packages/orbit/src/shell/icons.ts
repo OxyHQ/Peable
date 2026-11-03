@@ -11,7 +11,15 @@ import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
 import { RiBankLine } from '@oxy.so/bloom/icons/RiBankLine';
 import { RiBarChartBoxLine } from '@oxy.so/bloom/icons/RiBarChartBoxLine';
 import { RiBox3Line } from '@oxy.so/bloom/icons/RiBox3Line';
+import { RiBuilding2Line } from '@oxy.so/bloom/icons/RiBuilding2Line';
+import { RiCalendarEventLine } from '@oxy.so/bloom/icons/RiCalendarEventLine';
 import { RiCalendarScheduleLine } from '@oxy.so/bloom/icons/RiCalendarScheduleLine';
+import { RiCoinsLine } from '@oxy.so/bloom/icons/RiCoinsLine';
+import { RiDashboardLine } from '@oxy.so/bloom/icons/RiDashboardLine';
+import { RiFolder3Line } from '@oxy.so/bloom/icons/RiFolder3Line';
+import { RiHistoryLine } from '@oxy.so/bloom/icons/RiHistoryLine';
+import { RiQuestionLine } from '@oxy.so/bloom/icons/RiQuestionLine';
+import { RiShieldCheckLine } from '@oxy.so/bloom/icons/RiShieldCheckLine';
 import { RiCommunityLine } from '@oxy.so/bloom/icons/RiCommunityLine';
 import { RiEqualizerLine } from '@oxy.so/bloom/icons/RiEqualizerLine';
 import { RiFileList3Line } from '@oxy.so/bloom/icons/RiFileList3Line';
@@ -45,7 +53,14 @@ export const ORBIT_ICONS: Record<OrbitDestinationKey | OrbitNavGroupKey, OrbitGl
   'billing-settings': RiEqualizerLine,
   connect: RiCommunityLine,
   reports: RiBarChartBoxLine,
-  tax: RiReceiptLine,
+  tax: RiDashboardLine,
+  'tax-business': RiBuilding2Line,
+  'tax-registrations': RiShieldCheckLine,
+  'tax-documents': RiFolder3Line,
+  'tax-review': RiQuestionLine,
+  'tax-deadlines': RiCalendarEventLine,
+  'tax-history': RiHistoryLine,
+  'tax-collection': RiCoinsLine,
   contributions: RiHandHeartLine,
   account: RiStore2Line,
   branding: RiPaletteLine,
@@ -53,6 +68,7 @@ export const ORBIT_ICONS: Record<OrbitDestinationKey | OrbitNavGroupKey, OrbitGl
   settings: RiSettings3Line,
   'payments-group': RiBankCardLine,
   billing: RiCalendarScheduleLine,
+  'tax-group': RiReceiptLine,
 };
 
 export function orbitIcon(key: string): OrbitGlyph {

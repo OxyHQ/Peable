@@ -942,3 +942,35 @@ otherwise undo:
   `prices_recurring_check`, `events_type_check`,
   `webhook_endpoints_enabled_events_check`) re-added `NOT VALID` by hand;
   `0066` (`post`) validates them.
+
+## Tax business compliance (ADR 0020)
+
+- **Nothing here is read by the calculator.** `tax_registration_declarations`
+  is what the owner SAYS about an authority; `tax_registrations` (ADR 0011) is
+  what Peable collects under. A declaration's `collection_registration_id`
+  only points at the latter; no write flows through it in either direction.
+- **A declaration's dates follow its status**, by CHECK: `registered` and
+  `ended` carry `effective_from`, `ended` carries `effective_to`, and an end
+  follows its start. `unknown` may carry neither — it is an answer, not a gap.
+- **A document is the merchant's own `tax_document` File, structurally**:
+  `(file_id, merchant_id, file_purpose)` references `files (id, merchant_id,
+  purpose)` with the purpose pinned by CHECK — the `dispute_evidence_files`
+  pattern. `file_id` is unique: one file is one document, so a retried attach
+  answers the same document.
+- **One OPEN review item per finding**: `tax_review_items_open_key` is a partial
+  unique index on `(merchant_id, dedupe_key) where status = 'open'`, and the
+  upsert is ONE statement, so two concurrent assessments still leave one item.
+  Open ⟺ undecided ⟺ no decider ⟺ no decision time
+  (`tax_review_items_decided_check`); a decision is a compare-and-swap on
+  `status = 'open'`.
+- **An assessment is frozen**: its `inputs` are stored verbatim beside their
+  SHA-256 (`inputs_digest`, 64 hex by CHECK) and the rule set version, so a
+  replay re-runs exactly what was judged. Results are written in the creating
+  transaction once its review items exist, and never again.
+- **The history holds field names and statuses, never values** — no
+  registration number, note or document content in `details`.
+- Four foreign keys are NAMED by hand: drizzle's generated names exceed
+  Postgres' 63-byte identifier limit and would be silently truncated.
+- Migrations: `0073` (pre) creates the tables and re-adds the widened
+  `events`, `files` and `webhook_endpoints` CHECKs `NOT VALID`; `0074` (post)
+  validates them.

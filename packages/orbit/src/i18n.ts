@@ -23,6 +23,8 @@ import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
 import { SHELL_EN, SHELL_ES } from './shell/strings';
+import { TAX_COMPLIANCE_EN } from './tax/strings';
+import { TAX_COMPLIANCE_ES } from './tax/stringsEs';
 
 export const SUPPORTED_LOCALES = ['en', 'es'];
 export const FALLBACK_LOCALE = 'en';
@@ -33,6 +35,7 @@ const en: Record<string, string> = {
   ...SEARCH_EN,
   ...ORBIT_EN,
   ...SHELL_EN,
+  ...TAX_COMPLIANCE_EN,
   'app.name': 'Orbit',
   'app.byline': 'by Peable',
   'error.generic': 'Something went wrong. Try again.',
@@ -1008,6 +1011,7 @@ const es: Record<string, string> = {
   ...REPORTS_ES,
   ...SEARCH_ES,
   ...ORBIT_ES,
+  ...TAX_COMPLIANCE_ES,
   'app.name': 'Orbit',
   'app.byline': 'de Peable',
   'error.generic': 'Algo ha fallado. Inténtalo de nuevo.',

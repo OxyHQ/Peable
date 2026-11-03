@@ -14,6 +14,7 @@ export const FILE_PURPOSES = [
   'identity_document',
   'additional_verification',
   'finance_report_run',
+  'tax_document',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
@@ -28,6 +29,7 @@ export const FILE_UPLOAD_PURPOSES = [
   'business_logo',
   'identity_document',
   'additional_verification',
+  'tax_document',
 ] as const satisfies readonly FilePurpose[];
 export type FileUploadPurpose = (typeof FILE_UPLOAD_PURPOSES)[number];
 
@@ -64,6 +66,9 @@ export const FILE_PURPOSE_POLICIES: Readonly<
   identity_document: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
   additional_verification: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
   finance_report_run: { types: ['csv'], max_bytes: 64 * 1024 * 1024 },
+  // A business's own tax records (ADR 0020): private, attachable only to its
+  // own `tax.document`s, never forwarded to a provider.
+  tax_document: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
 });
 
 /**

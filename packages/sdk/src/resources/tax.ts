@@ -16,6 +16,7 @@ import type {
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { TaxComplianceResource } from './taxCompliance';
 
 /**
  * Peable Tax for the merchant's server: what its tax settings and
@@ -57,8 +58,11 @@ export class TaxResource {
      * `from` is inclusive and `to` exclusive, both Unix seconds. */
     summary(params: { from: number; to: number }): Promise<TaxReport>;
   };
+  /** Business compliance (ADR 0020): read the owner's records and the review queue, run assessments. */
+  readonly compliance: TaxComplianceResource;
 
   constructor(private readonly client: RestClient) {
+    this.compliance = new TaxComplianceResource(client);
     this.locationEvidence = {
       create: (params) => client.request('POST', '/v1/tax/location_evidence', { body: params }),
       retrieve: (id) =>

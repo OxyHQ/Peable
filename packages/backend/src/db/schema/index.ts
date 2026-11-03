@@ -82,6 +82,16 @@ export {
   taxTransactions,
 } from './tax';
 export {
+  taxBusinessProfiles,
+  taxComplianceActions,
+  taxComplianceAssessments,
+  taxComplianceDocuments,
+  taxOperatingLocations,
+  taxRegistrationDeclarations,
+  taxReviewItems,
+  taxSalesDestinations,
+} from './taxCompliance';
+export {
   merchantAvatarAudit,
   oxyFileEvents,
   oxyFileReconciliationRuns,
