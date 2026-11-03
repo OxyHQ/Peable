@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fromUnix } from '../../lib/time';
 import type { Database } from '../../db/postgres';
 import { recurringMirrors } from '../../db/schema';
 import { mirrorIdentity } from '../../db/recurring/recurringMirrorRepository';
@@ -96,8 +97,8 @@ export function createOwnedBillingRecurringReader(options: {
           periods: [
             {
               itemRef: 'owned_subscription',
-              start: sub.current_period_start,
-              end: sub.current_period_end,
+              start: fromUnix(sub.current_period_start).toISOString(),
+              end: fromUnix(sub.current_period_end).toISOString(),
             },
           ],
           hasMorePeriods: false,
@@ -130,7 +131,13 @@ export function createOwnedBillingRecurringReader(options: {
         amountRefunded: value.amount_refunded,
         paymentIntentRef: value.payment_intent_id,
         chargeRef: value.charge_id,
-        periods: [{ itemRef: value.line_id, start: value.period_start, end: value.period_end }],
+        periods: [
+          {
+            itemRef: value.line_id,
+            start: fromUnix(value.period_start).toISOString(),
+            end: fromUnix(value.period_end).toISOString(),
+          },
+        ],
         hasMorePeriods: false,
       };
     },
