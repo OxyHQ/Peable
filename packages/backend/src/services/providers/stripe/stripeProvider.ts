@@ -576,7 +576,7 @@ export class StripePaymentProvider
 
   // -------------------------------------------------------------------------
 
-  private toResult(intent: Stripe.PaymentIntent): ProviderPaymentResult {
+  protected toResult(intent: Stripe.PaymentIntent): ProviderPaymentResult {
     const status = mapPaymentIntentStatus(intent.status);
     const chargeObjectId = readChargeId(intent.latest_charge);
     return {

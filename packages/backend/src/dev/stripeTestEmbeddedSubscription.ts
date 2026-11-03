@@ -1,3 +1,4 @@
+import { createBootstrapProofScope, createImmutableRuntimeCache } from './stripeTestBootstrapScope';
 import {
   localSubscriptionPaymentMethods,
   type LocalPaymentMethodCapability,
@@ -77,8 +78,11 @@ async function context(intent: PaymentIntentRow) {
   };
 }
 
-async function proof(intent: PaymentIntentRow) {
-  const ctx = await context(intent);
+async function proof(
+  intent: PaymentIntentRow,
+  verifiedContext?: Awaited<ReturnType<typeof context>>,
+) {
+  const ctx = verifiedContext ?? (await context(intent));
   const customer = await findBillingCustomerForStore(
     ctx.db,
     ctx.configuration.deployment,
@@ -154,6 +158,11 @@ async function proof(intent: PaymentIntentRow) {
   return { ...ctx, subscription, invoice, pi };
 }
 
+const bootstrapProof = createBootstrapProofScope<Awaited<ReturnType<typeof proof>>>();
+const billingRuntime =
+  createImmutableRuntimeCache<NonNullable<Awaited<ReturnType<typeof configureBillingRuntime>>>>();
+export const withLocalSubscriptionBootstrap = bootstrapProof.run;
+
 /** Isolated runner adapter: a real first-invoice PI uses the ordinary Peable lifecycle. */
 export class LocalSubscriptionStripeProvider extends StripePaymentProvider {
   override async createPayment(request: CreatePaymentRequest) {
@@ -179,8 +188,12 @@ export class LocalSubscriptionStripeProvider extends StripePaymentProvider {
       planId: ctx.selected.plan,
       evidenceRef: ctx.evidenceRef,
     });
-    const runtime = await configureBillingRuntime(ctx.db, JSON.stringify(ctx.configuration));
-    if (!runtime) throw new Error('Local billing unavailable');
+    const configurationKey = JSON.stringify(ctx.configuration);
+    const runtime = await billingRuntime(configurationKey, async () => {
+      const value = await configureBillingRuntime(ctx.db, configurationKey);
+      if (!value) throw new Error('Local billing unavailable');
+      return value;
+    });
     const customer = await runtime.service.ensureCustomer(
       ctx.owner,
       { storeId: ctx.storeId, storeName: 'Local checkout', rail: 'stripe' },
@@ -205,8 +218,16 @@ export class LocalSubscriptionStripeProvider extends StripePaymentProvider {
         },
         { idempotencyKey: `embedded-subscription-${intent.publicId}` },
       );
-    const verified = await proof(intent);
-    return super.getStatus(verified.pi.id);
+    const verified = await proof(intent, ctx);
+    bootstrapProof.remember(
+      {
+        intentId: intent.publicId,
+        merchantId: intent.merchantId,
+        providerObjectId: verified.pi.id,
+      },
+      verified,
+    );
+    return this.toResult(verified.pi);
   }
 
   override async cancel(request: PaymentOperationRequest) {
@@ -262,7 +283,17 @@ export async function readLocalSubscription(
   const intent = await findIntentByPublicId(getDb(), intentId);
   if (!intent || (capability !== undefined && !verifySecret(capability, intent.clientSecret)))
     throw new Error('Subscription not found');
-  const verified = await proof(intent);
+  const cached = intent.providerObjectId
+    ? bootstrapProof.read(
+        {
+          intentId: intent.publicId,
+          merchantId: intent.merchantId,
+          providerObjectId: intent.providerObjectId,
+        },
+        { status: intent.status, capabilityPresent: capability !== undefined },
+      )
+    : undefined;
+  const verified = cached ?? (await proof(intent));
   const item = verified.subscription.items.data[0];
   let ready = false;
   if (

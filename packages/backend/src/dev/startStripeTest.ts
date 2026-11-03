@@ -35,15 +35,18 @@ async function run() {
   const gateway = await start({ listenHost: '127.0.0.1', billingConfiguration });
   const { createLocalStripeTestCheckoutRouter } = await import('./stripeTestCheckoutRouter');
   const { createLocalStripeTestIntent } = await import('./stripeTestCheckout');
-  const { readLocalSubscription } = await import('./stripeTestEmbeddedSubscription');
+  const { readLocalSubscription, withLocalSubscriptionBootstrap } = await import(
+    './stripeTestEmbeddedSubscription'
+  );
   gateway.app.use(
     createLocalStripeTestCheckoutRouter({
       read: readLocalSubscription,
-      create: async (key, interval) => {
-        const { created } = await createLocalStripeTestIntent(key, interval);
-        const snapshot = await readLocalSubscription(created.intent.publicId);
-        return { ...snapshot, clientSecret: created.intent.clientSecret };
-      },
+      create: (key, interval) =>
+        withLocalSubscriptionBootstrap(async () => {
+          const { created } = await createLocalStripeTestIntent(key, interval);
+          const snapshot = await readLocalSubscription(created.intent.publicId);
+          return { ...snapshot, clientSecret: created.intent.clientSecret };
+        }),
     }),
   );
 }

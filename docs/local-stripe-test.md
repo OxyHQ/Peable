@@ -227,3 +227,16 @@ authority, a signing-key reference for invoice authority, and a fresh quote from
 the configured Explorer USD price source. Its renewals are payer-initiated.
 Never invent a receiving key, balance, payable QR/address or FX quote to make an
 unconfigured method look active.
+
+Bootstrap avoids repeating its verified subscription proof within the same
+request. The scope requires the exact intent, merchant and provider-payment
+identity, and is discarded after that operation. Capability-authenticated reads,
+subsequent requests and settled-payment observations always obtain fresh proof;
+a cached opening snapshot can never establish paid readiness. The validated
+Billing service is reused only for the identical immutable runtime configuration.
+A configuration change requires restarting the runner.
+
+On the local test account, measured fresh bootstrap latency fell from 7.8 seconds
+to 5.7 seconds cold / 5.1 seconds warm after removing duplicate proof reads.
+These are observations, not an SLA: provider creation and ownership verification
+still require network round trips. No subscription is created on page view.
