@@ -12,6 +12,9 @@ import type {
   BillingCustomer,
   BillingHostedSession,
   BillingCheckoutSession,
+  BillingEmbeddedCheckoutSession,
+  BillingEmbeddedCheckoutBinding,
+  BillingEmbeddedCheckoutConfiguration,
   BillingRailList,
   BillingSubscription,
   RetrieveBillingCheckoutOperationParams,
@@ -26,6 +29,8 @@ import { toUnix } from '../../lib/time';
 import type { Database, Transaction } from '../../db/postgres';
 import {
   findBillingCustomerForStore,
+  findBillingCheckoutOperation,
+  requireBillingBindingById,
   findOwnedBillingCheckoutOperationByKey,
   completeRecoveredBillingCheckout,
   findBillingRenewalTax,
@@ -44,6 +49,8 @@ import {
   checkoutOperationRequestSchema,
   billingHostedSessionSchema,
   billingCheckoutSessionSchema,
+  billingEmbeddedCheckoutSessionSchema,
+  billingAnyCheckoutSessionSchema,
   parseBillingResult,
   billingSubscriptionSchema,
   billingOwnerSchema,
@@ -164,7 +171,7 @@ export function createBillingService(options: BillingServiceOptions) {
     if (claim.kind === 'replay')
       return (
         operation === 'checkout'
-          ? billingCheckoutSessionSchema.parse({
+          ? billingAnyCheckoutSessionSchema.parse({
               ...claim.result,
               id: claim.operation.providerObjectRef,
             })
@@ -251,6 +258,142 @@ export function createBillingService(options: BillingServiceOptions) {
       throw new BillingError('identity_conflict');
     return parsed;
   }
+  async function createCheckout(
+    owner: BillingOwner,
+    params: CreateBillingCheckoutParams,
+    idempotencyKey: string,
+    embedded: boolean,
+  ): Promise<BillingCheckoutSession | BillingEmbeddedCheckoutSession> {
+    authorize(owner);
+    const input = checkoutSchema.parse(params);
+    if (embedded) {
+      if (
+        !input.tax_quote ||
+        !options.taxCheckoutAdapter?.createEmbeddedCheckout ||
+        !provider.embeddedConfiguration
+      )
+        throw new BillingError('not_found', 404);
+      await provider.embeddedConfiguration();
+    }
+    if (
+      !input.tax_quote &&
+      cohorts.some(
+        (cohort) =>
+          cohort.merchantId === owner.merchantId &&
+          cohort.oxyAppId === owner.oxyAppId &&
+          cohort.environment === owner.environment &&
+          cohort.requireTaxQuote,
+      )
+    )
+      throw new BillingError('not_found', 404);
+    const customer = await requireBillingBinding(
+      db,
+      deployment,
+      owner,
+      'customer',
+      input.provider_customer_id,
+    );
+    const price = await requireBillingBinding(
+      db,
+      deployment,
+      owner,
+      'price',
+      input.provider_price_id,
+    );
+    if (customer.externalSubjectRef !== input.store_id || price.planRef !== input.plan_id)
+      throw new BillingError('identity_conflict');
+    let snapshot: BillingTaxCheckoutSnapshot | undefined;
+    if (input.tax_quote) {
+      if (
+        !options.taxQuoteCalculator ||
+        !options.taxCheckoutAdapter ||
+        !options.finalInvoiceAuthority
+      )
+        throw new BillingError('not_found', 404);
+      const merchant = await findMerchantById(db, owner.merchantId);
+      if (
+        !merchant ||
+        merchant.oxyAppId !== owner.oxyAppId ||
+        merchant.environment !== owner.environment
+      )
+        throw new BillingError('not_found', 404);
+      snapshot = await prepareBillingTaxCheckout(
+        options.taxQuoteCalculator,
+        options.taxCheckoutAdapter,
+        owner,
+        merchant.publicId,
+        { ...input, tax_quote: input.tax_quote },
+        now,
+      );
+    }
+    const taxCheckoutAdapter = options.taxCheckoutAdapter;
+    const immutableSnapshot = snapshot === undefined ? undefined : structuredClone(snapshot);
+    return perform(
+      owner,
+      'checkout',
+      idempotencyKey,
+      embedded ? { ...input, presentation: 'embedded' } : input,
+      async (key) => {
+        // Recheck expiry after deployment verification and durable claim, before effects.
+        if (immutableSnapshot && immutableSnapshot.taxQuote.quote.expires_at <= toUnix(now()))
+          throw new BillingError('result_expired');
+        if (immutableSnapshot && !taxCheckoutAdapter) throw new BillingError('not_found', 404);
+        const embeddedCreate = taxCheckoutAdapter?.createEmbeddedCheckout;
+        const value =
+          embedded && immutableSnapshot && embeddedCreate
+            ? await embeddedCreate(
+                {
+                  owner: { ...owner },
+                  deployment: { ...deployment },
+                  checkout: structuredClone(input),
+                  snapshot: structuredClone(immutableSnapshot),
+                },
+                key,
+              )
+            : immutableSnapshot && taxCheckoutAdapter
+              ? await taxCheckoutAdapter.createCheckout(
+                  {
+                    owner: { ...owner },
+                    deployment: { ...deployment },
+                    checkout: structuredClone(input),
+                    snapshot: structuredClone(immutableSnapshot),
+                  },
+                  key,
+                )
+              : await provider.createCheckoutSession(input, key);
+        if (
+          value.livemode !== deployment.livemode ||
+          value.providerObjectRef.startsWith('cs_live_') !== deployment.livemode ||
+          value.providerCustomerId !== customer.providerRef ||
+          (immutableSnapshot !== undefined &&
+            value.expiresAt > immutableSnapshot.taxQuote.quote.expires_at)
+        )
+          throw new BillingError('identity_conflict');
+        return {
+          result: embedded
+            ? billingEmbeddedCheckoutSessionSchema.parse({
+                id: value.providerObjectRef,
+                presentation: 'embedded',
+                expires_at: value.expiresAt,
+              })
+            : billingCheckoutSessionSchema.parse({
+                id: value.providerObjectRef,
+                url: 'url' in value ? value.url : undefined,
+                expires_at: value.expiresAt,
+              }),
+          objectRef: value.providerObjectRef,
+        };
+      },
+      undefined,
+      undefined,
+      {
+        customerBindingId: customer.id,
+        priceBindingId: price.id,
+        ...(immutableSnapshot ? { taxCheckoutSnapshot: immutableSnapshot } : {}),
+      },
+    );
+  }
+
   return {
     async ensureCustomer(
       owner: BillingOwner,
@@ -297,110 +440,114 @@ export function createBillingService(options: BillingServiceOptions) {
     async createCheckoutSession(
       owner: BillingOwner,
       params: CreateBillingCheckoutParams,
-      idempotencyKey: string,
+      key: string,
     ): Promise<BillingCheckoutSession> {
+      return billingCheckoutSessionSchema.parse(await createCheckout(owner, params, key, false));
+    },
+    async createEmbeddedCheckoutSession(
+      owner: BillingOwner,
+      params: CreateBillingCheckoutParams,
+      key: string,
+    ): Promise<BillingEmbeddedCheckoutSession> {
+      return billingEmbeddedCheckoutSessionSchema.parse(
+        await createCheckout(owner, params, key, true),
+      );
+    },
+    async embeddedCheckoutConfiguration(
+      owner: BillingOwner,
+    ): Promise<BillingEmbeddedCheckoutConfiguration> {
       authorize(owner);
-      const input = checkoutSchema.parse(params);
       if (
-        !input.tax_quote &&
-        cohorts.some(
-          (cohort) =>
-            cohort.merchantId === owner.merchantId &&
-            cohort.oxyAppId === owner.oxyAppId &&
-            cohort.environment === owner.environment &&
-            cohort.requireTaxQuote,
-        )
+        !provider.embeddedConfiguration ||
+        !options.taxCheckoutAdapter?.createEmbeddedCheckout ||
+        !options.taxQuoteCalculator ||
+        !options.finalInvoiceAuthority
       )
         throw new BillingError('not_found', 404);
-      const customer = await requireBillingBinding(
-        db,
-        deployment,
-        owner,
-        'customer',
-        input.provider_customer_id,
-      );
-      const price = await requireBillingBinding(
-        db,
-        deployment,
-        owner,
-        'price',
-        input.provider_price_id,
-      );
-      if (customer.externalSubjectRef !== input.store_id || price.planRef !== input.plan_id)
+      const merchant = await findMerchantById(db, owner.merchantId);
+      if (
+        !merchant ||
+        merchant.oxyAppId !== owner.oxyAppId ||
+        merchant.environment !== owner.environment
+      )
+        throw new BillingError('not_found', 404);
+      const config = await provider.embeddedConfiguration();
+      return {
+        scope: {
+          merchant_id: merchant.publicId,
+          app_id: owner.oxyAppId,
+          environment: owner.environment,
+          mode: deployment.livemode ? 'live' : 'test',
+        },
+        publishable_key: config.publishableKey,
+        payment_methods: [{ id: 'card', available: true }],
+      };
+    },
+    async retrieveEmbeddedCheckoutAction(
+      owner: BillingOwner,
+      ref: string,
+    ): Promise<BillingEmbeddedCheckoutBinding> {
+      authorize(owner);
+      if (!provider.retrieveEmbeddedAction || !provider.embeddedConfiguration)
+        throw new BillingError('not_found', 404);
+      const operation = await findBillingCheckoutOperation(db, deployment, ref);
+      if (
+        !operation ||
+        operation.merchantId !== owner.merchantId ||
+        operation.oxyAppId !== owner.oxyAppId ||
+        operation.environment !== owner.environment ||
+        !operation.customerBindingId ||
+        !operation.priceBindingId ||
+        !operation.taxCheckoutSnapshot ||
+        operation.state !== 'succeeded'
+      )
+        throw new BillingError('not_found', 404);
+      const stored = billingEmbeddedCheckoutSessionSchema.parse(operation.result);
+      if (stored.id !== ref) throw new BillingError('result_expired');
+      const [customer, price, merchant] = await Promise.all([
+        requireBillingBindingById(db, deployment, owner, 'customer', operation.customerBindingId),
+        requireBillingBindingById(db, deployment, owner, 'price', operation.priceBindingId),
+        findMerchantById(db, owner.merchantId),
+      ]);
+      if (
+        !customer.externalSubjectRef ||
+        !price.planRef ||
+        !merchant ||
+        merchant.oxyAppId !== owner.oxyAppId ||
+        merchant.environment !== owner.environment
+      )
+        throw new BillingError('not_found', 404);
+      await provider.verifyDeployment();
+      const value = await provider.retrieveEmbeddedAction(ref);
+      const snapshot = operation.taxCheckoutSnapshot;
+      if (
+        value.livemode !== deployment.livemode ||
+        value.providerCustomerId !== customer.providerRef ||
+        value.providerPriceId !== price.providerRef ||
+        (value.action !== null && value.action.session_id !== ref) ||
+        value.amountMinorUnits !== snapshot.taxQuote.quote.gross_minor_units ||
+        value.taxMinorUnits !== snapshot.taxQuote.quote.tax_minor_units ||
+        value.currency !== snapshot.taxQuote.quote.currency ||
+        value.expiresAt !== stored.expires_at ||
+        value.expiresAt > snapshot.taxQuote.quote.expires_at
+      )
         throw new BillingError('identity_conflict');
-      let snapshot: BillingTaxCheckoutSnapshot | undefined;
-      if (input.tax_quote) {
-        if (
-          !options.taxQuoteCalculator ||
-          !options.taxCheckoutAdapter ||
-          !options.finalInvoiceAuthority
-        )
-          throw new BillingError('not_found', 404);
-        const merchant = await findMerchantById(db, owner.merchantId);
-        if (
-          !merchant ||
-          merchant.oxyAppId !== owner.oxyAppId ||
-          merchant.environment !== owner.environment
-        )
-          throw new BillingError('not_found', 404);
-        snapshot = await prepareBillingTaxCheckout(
-          options.taxQuoteCalculator,
-          options.taxCheckoutAdapter,
-          owner,
-          merchant.publicId,
-          { ...input, tax_quote: input.tax_quote },
-          now,
-        );
-      }
-      const taxCheckoutAdapter = options.taxCheckoutAdapter;
-      const immutableSnapshot = snapshot === undefined ? undefined : structuredClone(snapshot);
-      return perform(
-        owner,
-        'checkout',
-        idempotencyKey,
-        input,
-        async (key) => {
-          // Recheck expiry after deployment verification and durable claim, before effects.
-          if (immutableSnapshot && immutableSnapshot.taxQuote.quote.expires_at <= toUnix(now()))
-            throw new BillingError('result_expired');
-          if (immutableSnapshot && !taxCheckoutAdapter) throw new BillingError('not_found', 404);
-          const value =
-            immutableSnapshot && taxCheckoutAdapter
-              ? await taxCheckoutAdapter.createCheckout(
-                  {
-                    owner: { ...owner },
-                    deployment: { ...deployment },
-                    checkout: structuredClone(input),
-                    snapshot: structuredClone(immutableSnapshot),
-                  },
-                  key,
-                )
-              : await provider.createCheckoutSession(input, key);
-          if (
-            value.livemode !== deployment.livemode ||
-            value.providerObjectRef.startsWith('cs_live_') !== deployment.livemode ||
-            value.providerCustomerId !== customer.providerRef ||
-            (immutableSnapshot !== undefined &&
-              value.expiresAt > immutableSnapshot.taxQuote.quote.expires_at)
-          )
-            throw new BillingError('identity_conflict');
-          return {
-            result: billingCheckoutSessionSchema.parse({
-              id: value.providerObjectRef,
-              url: value.url,
-              expires_at: value.expiresAt,
-            }),
-            objectRef: value.providerObjectRef,
-          };
+      return {
+        status: value.status,
+        action: value.action,
+        scope: {
+          merchant_id: merchant.publicId,
+          app_id: owner.oxyAppId,
+          environment: owner.environment,
+          mode: deployment.livemode ? 'live' : 'test',
+          store_id: customer.externalSubjectRef,
+          plan_id: price.planRef,
+          provider_customer_id: customer.providerRef,
+          provider_price_id: price.providerRef,
         },
-        undefined,
-        undefined,
-        {
-          customerBindingId: customer.id,
-          priceBindingId: price.id,
-          ...(immutableSnapshot ? { taxCheckoutSnapshot: immutableSnapshot } : {}),
-        },
-      );
+        tax_quote: structuredClone(snapshot.taxQuote),
+        expires_at: value.expiresAt,
+      };
     },
     async createPortalSession(
       owner: BillingOwner,
@@ -522,7 +669,7 @@ export function createBillingService(options: BillingServiceOptions) {
           throw new BillingError('reconciliation_required');
       }
       if (operation.state !== 'succeeded') return { state: operation.state, source };
-      const result = billingCheckoutSessionSchema.parse({
+      const result = billingAnyCheckoutSessionSchema.parse({
         id: operation.providerObjectRef,
         ...parseBillingResult('checkout', operation.result),
       });
@@ -533,7 +680,7 @@ export function createBillingService(options: BillingServiceOptions) {
         checkout: {
           id: result.id,
           expires_at: result.expires_at,
-          ...(result.expires_at > toUnix(now()) ? { url: result.url } : {}),
+          ...('url' in result && result.expires_at > toUnix(now()) ? { url: result.url } : {}),
         },
       };
     },
@@ -686,14 +833,19 @@ export function createBillingService(options: BillingServiceOptions) {
     },
   };
 }
-export type BillingService = ReturnType<typeof createBillingService> & {
-  /** Native FAIR is explicitly renewed by the payer; existing card providers may omit this. */
-  renew?: (
-    owner: BillingOwner,
-    subscriptionRef: string,
-    input: CreateBillingCheckoutParams,
-    idempotencyKey: string,
-  ) => Promise<BillingCheckoutSession>;
-  /** The rails the merchant's payers can choose from (the multi-rail router). */
-  listRails?: (owner: BillingOwner) => Promise<BillingRailList>;
-};
+type EmbeddedMethods =
+  | 'createEmbeddedCheckoutSession'
+  | 'embeddedCheckoutConfiguration'
+  | 'retrieveEmbeddedCheckoutAction';
+export type BillingService = Omit<ReturnType<typeof createBillingService>, EmbeddedMethods> &
+  Partial<Pick<ReturnType<typeof createBillingService>, EmbeddedMethods>> & {
+    /** Native FAIR is explicitly renewed by the payer; existing card providers may omit this. */
+    renew?: (
+      owner: BillingOwner,
+      subscriptionRef: string,
+      input: CreateBillingCheckoutParams,
+      idempotencyKey: string,
+    ) => Promise<BillingCheckoutSession>;
+    /** The rails the merchant's payers can choose from (the multi-rail router). */
+    listRails?: (owner: BillingOwner) => Promise<BillingRailList>;
+  };

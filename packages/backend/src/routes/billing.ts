@@ -150,6 +150,34 @@ export function createBillingRouter(deps: {
       service.createCheckoutSession(owner, input(checkoutSchema, req.body), key(req)),
     ),
   );
+  router.get(
+    '/v1/billing/embedded_checkout_configuration',
+    ...read,
+    handle((service, owner) => {
+      if (!service.embeddedCheckoutConfiguration) throw new BillingError('not_found', 404);
+      return service.embeddedCheckoutConfiguration(owner);
+    }),
+  );
+  router.post(
+    '/v1/billing/embedded_checkout_sessions',
+    ...write,
+    handle((service, owner, req) => {
+      if (!service.createEmbeddedCheckoutSession) throw new BillingError('not_found', 404);
+      return service.createEmbeddedCheckoutSession(
+        owner,
+        input(checkoutSchema, req.body),
+        key(req),
+      );
+    }),
+  );
+  router.get(
+    '/v1/billing/embedded_checkout_sessions/:id/client_action',
+    ...read,
+    handle((service, owner, req) => {
+      if (!service.retrieveEmbeddedCheckoutAction) throw new BillingError('not_found', 404);
+      return service.retrieveEmbeddedCheckoutAction(owner, req.params.id ?? '');
+    }),
+  );
   router.post(
     '/v1/billing/portal_sessions',
     ...write,

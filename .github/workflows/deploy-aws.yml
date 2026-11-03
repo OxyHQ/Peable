@@ -22,11 +22,6 @@ on:
   # for it (`deploy-scope.sh gate` checks that, once, and refuses otherwise).
   workflow_dispatch:
     inputs:
-      sync_secrets:
-        description: 'Opt in only after reviewing GitHub secret changes. Readiness promotion preserves SSM.'
-        required: false
-        default: false
-        type: boolean
       migration_phase:
         description: 'Migration run. Leave as pre-post for a normal release; `all` is the from-zero genesis / cutover only.'
         required: false
@@ -154,101 +149,9 @@ jobs:
           role-to-assume: arn:aws:iam::237343248947:role/oxy-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      # The secrets are enumerated one at a time, on purpose.
-      #
-      # The allowlist below already existed, but the VALUES still came from
-      # `toJSON(secrets)`, and it is that expression which holds deploys: a
-      # workflow that walks every repository secret into a shell loop is shaped
-      # exactly like an exfiltration payload, so GitHub creates the run with
-      # conclusion `action_required` and ZERO jobs until a human clicks
-      # "Approve and run" in the UI. The REST approve endpoint only serves fork
-      # pull requests, so it cannot be automated, and the approval is per run —
-      # every deploy needs a person. Filtering the blob after the fact does not
-      # help; the blob must never be built.
-      #
-      # The list is the secrets the `peable` task definition actually consumes.
-      # Adding a new one means adding it here, or it never reaches SSM.
-      - name: Sync GitHub secrets -> SSM (GitHub is the source of truth)
-        if: github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true
-        env:
-          # The Postgres connection string, and the one the service cannot boot
-          # without: `config.ts` refuses to load without it and `server.ts`
-          # opens the pool before listening. An unset or placeholder GitHub
-          # secret is SKIPPED by sync_secret below, so this can never overwrite
-          # a value provisioned directly in SSM.
-          APP_DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # Read by @oxy.so/core (request hashing).
-          APP_IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
-          APP_DEVICE_ID_SALT: ${{ secrets.DEVICE_ID_SALT }}
-          # The card rail (ADR 0001), test and live side by side (ADR 0017).
-          # A conjunction, per mode (`config.ts` readStripeMode): a mode is on only
-          # with STRIPE_ENABLED, its secret key and both of its endpoint
-          # secrets, so with none of these set the rail is simply off and
-          # `/v1/refunds` answers 503 — a silence by design.
-          #
-          # Each mode is optional and independent: sync_secret SKIPS an empty
-          # value, so a deployment holding only the test half keeps serving the
-          # test mode and answers 503 for live, and vice versa. The gateway
-          # refuses to BOOT if a key's prefix contradicts the mode in its name
-          # (sk_/rk_live_ in a _TEST variable, pk_test_ in a _LIVE one).
-          #
-          # The publishable key is public by construction and carried here
-          # anyway: it has to describe the SAME mode as its secret key, and
-          # splitting them across two provisioning mechanisms is how a live
-          # payment ends up mounting a test card form.
-          #
-          # The _PREVIOUS names are the rotation window. A gateway cannot
-          # atomically swap a webhook secret, so a rotation is: set the outgoing
-          # one as _PREVIOUS, switch, clear. Left unset they are skipped by
-          # sync_secret, which is the correct steady state.
-          APP_STRIPE_ENABLED: ${{ secrets.STRIPE_ENABLED }}
-          APP_STRIPE_SECRET_KEY_TEST: ${{ secrets.STRIPE_SECRET_KEY_TEST }}
-          APP_STRIPE_PUBLISHABLE_KEY_TEST: ${{ secrets.STRIPE_PUBLISHABLE_KEY_TEST }}
-          APP_STRIPE_WEBHOOK_SECRET_TEST: ${{ secrets.STRIPE_WEBHOOK_SECRET_TEST }}
-          APP_STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST: ${{ secrets.STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST }}
-          APP_STRIPE_CONNECT_WEBHOOK_SECRET_TEST: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET_TEST }}
-          APP_STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST }}
-          APP_STRIPE_SECRET_KEY_LIVE: ${{ secrets.STRIPE_SECRET_KEY_LIVE }}
-          APP_STRIPE_PUBLISHABLE_KEY_LIVE: ${{ secrets.STRIPE_PUBLISHABLE_KEY_LIVE }}
-          APP_STRIPE_WEBHOOK_SECRET_LIVE: ${{ secrets.STRIPE_WEBHOOK_SECRET_LIVE }}
-          APP_STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE: ${{ secrets.STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE }}
-          APP_STRIPE_CONNECT_WEBHOOK_SECRET_LIVE: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET_LIVE }}
-          APP_STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE }}
-          # Oxy's file events (ADR 0043 D9): the signing secret Oxy shows ONCE
-          # when Peable's endpoint is set, and the rotation window beside it.
-          # Unset, `/v1/webhooks/oxy/files` still answers the verification
-          # challenge and refuses events with a 503, which Oxy retries.
-          APP_OXY_FILES_WEBHOOK_SECRET: ${{ secrets.OXY_FILES_WEBHOOK_SECRET }}
-          APP_OXY_FILES_WEBHOOK_SECRET_PREVIOUS: ${{ secrets.OXY_FILES_WEBHOOK_SECRET_PREVIOUS }}
-        run: |
-          sync_secret() {
-            name="$1"; value="$2"; path="$3"
-            if [ -z "$value" ] || [ "$value" = "-" ]; then
-              echo "::warning::skip empty/placeholder secret $name; SSM unchanged"
-              return 0
-            fi
-            aws ssm put-parameter --name "$path" --value "$value" --type SecureString --overwrite >/dev/null
-            echo "synced -> $path"
-          }
-
-          sync_secret DATABASE_URL "$APP_DATABASE_URL" "/oxy/$APP/DATABASE_URL"
-          sync_secret IP_HASH_SALT "$APP_IP_HASH_SALT" "/oxy/$APP/IP_HASH_SALT"
-          sync_secret DEVICE_ID_SALT "$APP_DEVICE_ID_SALT" "/oxy/$APP/DEVICE_ID_SALT"
-          sync_secret STRIPE_ENABLED "$APP_STRIPE_ENABLED" "/oxy/$APP/STRIPE_ENABLED"
-          sync_secret STRIPE_SECRET_KEY_TEST "$APP_STRIPE_SECRET_KEY_TEST" "/oxy/$APP/STRIPE_SECRET_KEY_TEST"
-          sync_secret STRIPE_PUBLISHABLE_KEY_TEST "$APP_STRIPE_PUBLISHABLE_KEY_TEST" "/oxy/$APP/STRIPE_PUBLISHABLE_KEY_TEST"
-          sync_secret STRIPE_WEBHOOK_SECRET_TEST "$APP_STRIPE_WEBHOOK_SECRET_TEST" "/oxy/$APP/STRIPE_WEBHOOK_SECRET_TEST"
-          sync_secret STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST "$APP_STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST" "/oxy/$APP/STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST"
-          sync_secret STRIPE_CONNECT_WEBHOOK_SECRET_TEST "$APP_STRIPE_CONNECT_WEBHOOK_SECRET_TEST" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET_TEST"
-          sync_secret STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST "$APP_STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST"
-          sync_secret STRIPE_SECRET_KEY_LIVE "$APP_STRIPE_SECRET_KEY_LIVE" "/oxy/$APP/STRIPE_SECRET_KEY_LIVE"
-          sync_secret STRIPE_PUBLISHABLE_KEY_LIVE "$APP_STRIPE_PUBLISHABLE_KEY_LIVE" "/oxy/$APP/STRIPE_PUBLISHABLE_KEY_LIVE"
-          sync_secret STRIPE_WEBHOOK_SECRET_LIVE "$APP_STRIPE_WEBHOOK_SECRET_LIVE" "/oxy/$APP/STRIPE_WEBHOOK_SECRET_LIVE"
-          sync_secret STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE "$APP_STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE" "/oxy/$APP/STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE"
-          sync_secret STRIPE_CONNECT_WEBHOOK_SECRET_LIVE "$APP_STRIPE_CONNECT_WEBHOOK_SECRET_LIVE" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET_LIVE"
-          sync_secret STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE "$APP_STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE"
-          sync_secret OXY_FILES_WEBHOOK_SECRET "$APP_OXY_FILES_WEBHOOK_SECRET" "/oxy/$APP/OXY_FILES_WEBHOOK_SECRET"
-          sync_secret OXY_FILES_WEBHOOK_SECRET_PREVIOUS "$APP_OXY_FILES_WEBHOOK_SECRET_PREVIOUS" "/oxy/$APP/OXY_FILES_WEBHOOK_SECRET_PREVIOUS"
+      # Runtime credentials are owned exclusively in AWS SSM SecureString.
+      # Deployment preserves reviewed task secret references; it never copies
+      # repository secrets into AWS or reads another application's namespace.
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2

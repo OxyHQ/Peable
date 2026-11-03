@@ -14,7 +14,7 @@
 // payment, or the reverse.
 
 /** The provider's script, pinned to the versioned URL they publish. */
-const PROVIDER_SDK_URL = 'https://js.stripe.com/v3/';
+const PROVIDER_SDK_URL = 'https://js.stripe.com/endive/stripe.js';
 
 /** Minimal shapes — only what this app calls. The SDK's own types are not a dependency. */
 export interface ProviderFieldEvent {
@@ -49,12 +49,42 @@ export interface ProviderConfirmResult {
   paymentIntent?: { status?: string };
 }
 
+/** Minimal Checkout Elements contract; no provider UI or entitlement ownership. */
+export interface ProviderCheckoutSession {
+  id: string;
+  livemode: boolean;
+  currency: string;
+  minorUnitsAmountDivisor: number;
+  canConfirm: boolean;
+  total: { total: { minorUnitsAmount: number } };
+  status: { type: 'open' | 'expired' | 'complete'; paymentStatus?: string };
+}
+export interface ProviderCheckoutActions {
+  getSession(): ProviderCheckoutSession;
+  confirm(options: {
+    paymentMethod: string;
+    redirect: 'if_required';
+    returnUrl?: string;
+    email?: string;
+  }): Promise<
+    | { type: 'success'; session: ProviderCheckoutSession }
+    | { type: 'error'; error: { message?: string } }
+  >;
+}
+export interface ProviderCheckoutElements {
+  loadActions(): Promise<
+    | { type: 'success'; actions: ProviderCheckoutActions }
+    | { type: 'error'; error: { message?: string } }
+  >;
+}
+
 export interface ProviderSdk {
+  initCheckoutElementsSdk?(options: { clientSecret: string }): ProviderCheckoutElements;
   elements(options: Record<string, unknown>): ProviderElements;
   createPaymentMethod?(data: {
     type: 'card';
     card: ProviderElement;
-    billing_details: { address: { country: string; postal_code: string } };
+    billing_details: { address: { country: string; postal_code: string }; email?: string };
   }): Promise<{
     error?: { message?: string };
     paymentMethod?: { id: string; card?: { brand?: string; last4?: string } };
@@ -66,7 +96,7 @@ export interface ProviderSdk {
         | string
         | {
             card: ProviderElement;
-            billing_details: { address: { country: string; postal_code: string } };
+            billing_details: { address: { country: string; postal_code: string }; email?: string };
           };
       return_url?: string;
     },

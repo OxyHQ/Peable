@@ -155,6 +155,92 @@ export function createStripePeableTaxCheckout(options: {
 }): BillingTaxCheckoutAdapter {
   const { db, client } = options;
   const now = options.now ?? (() => new Date());
+  async function createSession(
+    {
+      owner,
+      deployment,
+      checkout,
+      snapshot,
+    }: Parameters<BillingTaxCheckoutAdapter['createCheckout']>[0],
+    key: string,
+    embedded: boolean,
+  ) {
+    if (!client.createTaxRate || !client.expireCheckout) throw new BillingError('not_found', 404);
+    const quote = snapshot.taxQuote.quote;
+    const expiresAt = quote.expires_at;
+    if (expiresAt * 1000 - now().getTime() < MIN_CHECKOUT_LIFETIME_MS)
+      throw new BillingError('result_expired');
+    const taxRate = await createFrozenTaxRate(
+      { db, client, owner, livemode: deployment.livemode, quote },
+      `${key}:tax_rate`,
+    );
+    const successUrl = new URL(checkout.return_url);
+    successUrl.searchParams.set('billing', 'complete');
+    const cancelUrl = new URL(checkout.return_url);
+    cancelUrl.searchParams.set('billing', 'cancelled');
+    const raw = await client.createCheckout(
+      {
+        mode: 'subscription',
+        // The signed quote's currency must survive hosted checkout unchanged.
+        adaptive_pricing: { enabled: false },
+        customer: checkout.provider_customer_id,
+        line_items: [
+          {
+            price: checkout.provider_price_id,
+            quantity: 1,
+            ...(taxRate ? { tax_rates: [taxRate] } : {}),
+          },
+        ],
+        // Peable Tax priced this sale; Stripe must not price it again.
+        automatic_tax: { enabled: false },
+        // A renewal is repriced from what Stripe holds about the payer (ADR
+        // 0013): the billing address is collected and kept on the customer.
+        billing_address_collection: 'required',
+        customer_update: { address: 'auto' },
+        expires_at: expiresAt,
+        subscription_data: { metadata: { peable_tax_quote: quote.id } },
+        ...(embedded
+          ? { ui_mode: 'elements' as const, return_url: checkout.return_url }
+          : { success_url: successUrl.toString(), cancel_url: cancelUrl.toString() }),
+      },
+      key,
+    );
+    const id = z
+      .object({
+        id: z
+          .string()
+          .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
+          .max(128),
+      })
+      .parse(raw).id;
+    const session = z
+      .object({
+        customer: z.literal(checkout.provider_customer_id),
+        mode: z.literal('subscription'),
+        livemode: z.literal(deployment.livemode),
+        url: embedded ? z.null() : billingReturnUrl,
+        ...(embedded ? { ui_mode: z.enum(['custom', 'elements']) } : {}),
+        expires_at: z.literal(expiresAt),
+        currency: z.literal(quote.currency.toLowerCase()),
+        amount_total: z.literal(quote.gross_minor_units),
+        total_details: z.object({ amount_tax: z.literal(quote.tax_minor_units) }),
+        automatic_tax: z.object({ enabled: z.literal(false) }),
+      })
+      .safeParse(raw);
+    if (!session.success || id.startsWith('cs_live_') !== deployment.livemode) {
+      // Stripe would charge something other than the quote: end it unpaid.
+      await client.expireCheckout(id).catch(() => undefined);
+      throw new BillingError('invalid_provider_response', 502);
+    }
+    const common = {
+      providerObjectRef: id,
+      providerCustomerId: session.data.customer,
+      livemode: session.data.livemode,
+      expiresAt,
+    };
+    if (embedded) return { ...common, presentation: 'embedded' as const };
+    return { ...common, url: billingReturnUrl.parse(session.data.url) };
+  }
   return {
     async resolveOffer(owner, providerPriceId) {
       const matches = options
@@ -180,79 +266,15 @@ export function createStripePeableTaxCheckout(options: {
       if (!price.success) throw new BillingError('identity_conflict');
       return offer;
     },
-    async createCheckout({ owner, deployment, checkout, snapshot }, key) {
-      if (!client.createTaxRate || !client.expireCheckout) throw new BillingError('not_found', 404);
-      const quote = snapshot.taxQuote.quote;
-      const expiresAt = quote.expires_at;
-      if (expiresAt * 1000 - now().getTime() < MIN_CHECKOUT_LIFETIME_MS)
-        throw new BillingError('result_expired');
-      const taxRate = await createFrozenTaxRate(
-        { db, client, owner, livemode: deployment.livemode, quote },
-        `${key}:tax_rate`,
-      );
-      const successUrl = new URL(checkout.return_url);
-      successUrl.searchParams.set('billing', 'complete');
-      const cancelUrl = new URL(checkout.return_url);
-      cancelUrl.searchParams.set('billing', 'cancelled');
-      const raw = await client.createCheckout(
-        {
-          mode: 'subscription',
-          // The signed quote's currency must survive hosted checkout unchanged.
-          adaptive_pricing: { enabled: false },
-          customer: checkout.provider_customer_id,
-          line_items: [
-            {
-              price: checkout.provider_price_id,
-              quantity: 1,
-              ...(taxRate ? { tax_rates: [taxRate] } : {}),
-            },
-          ],
-          // Peable Tax priced this sale; Stripe must not price it again.
-          automatic_tax: { enabled: false },
-          // A renewal is repriced from what Stripe holds about the payer (ADR
-          // 0013): the billing address is collected and kept on the customer.
-          billing_address_collection: 'required',
-          customer_update: { address: 'auto' },
-          expires_at: expiresAt,
-          subscription_data: { metadata: { peable_tax_quote: quote.id } },
-          success_url: successUrl.toString(),
-          cancel_url: cancelUrl.toString(),
-        },
-        key,
-      );
-      const id = z
-        .object({
-          id: z
-            .string()
-            .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
-            .max(128),
-        })
-        .parse(raw).id;
-      const session = z
-        .object({
-          customer: z.literal(checkout.provider_customer_id),
-          mode: z.literal('subscription'),
-          livemode: z.literal(deployment.livemode),
-          url: billingReturnUrl,
-          expires_at: z.literal(expiresAt),
-          currency: z.literal(quote.currency.toLowerCase()),
-          amount_total: z.literal(quote.gross_minor_units),
-          total_details: z.object({ amount_tax: z.literal(quote.tax_minor_units) }),
-          automatic_tax: z.object({ enabled: z.literal(false) }),
-        })
-        .safeParse(raw);
-      if (!session.success || id.startsWith('cs_live_') !== deployment.livemode) {
-        // Stripe would charge something other than the quote: end it unpaid.
-        await client.expireCheckout(id).catch(() => undefined);
-        throw new BillingError('invalid_provider_response', 502);
-      }
-      return {
-        providerObjectRef: id,
-        providerCustomerId: session.data.customer,
-        livemode: session.data.livemode,
-        url: session.data.url,
-        expiresAt,
-      };
+    async createCheckout(input, key) {
+      const result = await createSession(input, key, false);
+      if (!('url' in result)) throw new BillingError('invalid_provider_response', 502);
+      return result;
+    },
+    async createEmbeddedCheckout(input, key) {
+      const result = await createSession(input, key, true);
+      if (!('presentation' in result)) throw new BillingError('invalid_provider_response', 502);
+      return result;
     },
   };
 }

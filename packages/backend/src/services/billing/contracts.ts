@@ -114,6 +114,20 @@ export const billingCheckoutSessionSchema = billingHostedSessionSchema
       .max(128),
   })
   .strict();
+export const billingEmbeddedCheckoutSessionSchema = z
+  .object({
+    id: z
+      .string()
+      .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
+      .max(128),
+    presentation: z.literal('embedded'),
+    expires_at: unixSeconds,
+  })
+  .strict();
+export const billingAnyCheckoutSessionSchema = z.union([
+  billingCheckoutSessionSchema,
+  billingEmbeddedCheckoutSessionSchema,
+]);
 export const billingSubscriptionSchema = z
   .object({
     provider_subscription_id: subscriptionRef,
@@ -174,13 +188,19 @@ export type BillingOperationKind = (typeof BILLING_OPERATIONS)[number];
 export type BillingOperationResult =
   | z.infer<typeof billingCustomerSchema>
   | z.infer<typeof billingHostedSessionSchema>
+  | z.infer<typeof billingEmbeddedCheckoutSessionSchema>
   | z.infer<typeof billingSubscriptionSchema>;
 export function parseBillingResult(
   operation: BillingOperationKind,
   result: unknown,
 ): BillingOperationResult {
   if (operation === 'checkout')
-    return billingHostedSessionSchema.extend({ id: z.string().optional() }).strict().parse(result);
+    return z
+      .union([
+        billingHostedSessionSchema.extend({ id: z.string().optional() }).strict(),
+        billingEmbeddedCheckoutSessionSchema,
+      ])
+      .parse(result);
   if (operation === 'ensure_customer') return billingCustomerSchema.parse(result);
   if (operation === 'cancel_at_period_end') return billingSubscriptionSchema.parse(result);
   return billingHostedSessionSchema.parse(result);

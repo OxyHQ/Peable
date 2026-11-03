@@ -103,6 +103,25 @@ export function createMultiRailBillingService(rails: readonly BillingRail[]): Bi
         params.provider_customer_id,
         params.rail,
       ).service.createCheckoutSession(owner, strip(params), key),
+    async createEmbeddedCheckoutSession(owner, params, key) {
+      const service = owning(owner, 'customer', params.provider_customer_id, params.rail).service;
+      if (!service.createEmbeddedCheckoutSession) throw new BillingError('rail_unavailable', 404);
+      return service.createEmbeddedCheckoutSession(owner, strip(params), key);
+    },
+    async embeddedCheckoutConfiguration(owner) {
+      const service = choose(
+        owner,
+        undefined,
+        (rail) => !!rail.service.embeddedCheckoutConfiguration,
+      ).service;
+      if (!service.embeddedCheckoutConfiguration) throw new BillingError('rail_unavailable', 404);
+      return service.embeddedCheckoutConfiguration(owner);
+    },
+    async retrieveEmbeddedCheckoutAction(owner, ref) {
+      const service = owning(owner, 'checkout', ref).service;
+      if (!service.retrieveEmbeddedCheckoutAction) throw new BillingError('rail_unavailable', 404);
+      return service.retrieveEmbeddedCheckoutAction(owner, ref);
+    },
     async renew(owner, ref, params, key) {
       const rail = owning(owner, 'subscription', ref, params.rail);
       if (owning(owner, 'customer', params.provider_customer_id).id !== rail.id)

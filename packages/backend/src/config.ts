@@ -158,6 +158,7 @@ export type StripeMode = 'test' | 'live';
  * rail this deployment has not configured.
  */
 export interface StripeModeConfig {
+  accountId?: string | undefined;
   mode: StripeMode;
   /** `mode === 'live'`, spelled the way Stripe's own objects spell it. */
   livemode: boolean;
@@ -209,8 +210,8 @@ export interface StripeModeConfig {
  * The Stripe card rail (ADR 0001 D2/D3) and the platform account's key for
  * tax and billing, per mode (ADR 0017).
  *
- * There is deliberately no account-id variable: the platform account is
- * implied by each secret key, and connected-account ids live only in rows.
+ * A reviewed expected account independently pins each configured mode before
+ * its card rail starts. Connected-account ids remain scoped to their own rows.
  */
 export interface StripeConfig {
   test: StripeModeConfig | undefined;
@@ -238,6 +239,7 @@ export function classifyStripeKey(secretKey: string | undefined): StripeKeyMode 
 
 /** The raw variables of one mode, each read by its full NAME in `readStripeConfig`. */
 interface StripeModeVariables {
+  accountId?: string | undefined;
   secretKey: string | undefined;
   publishableKey: string | undefined;
   webhookSecret: string | undefined;
@@ -298,6 +300,7 @@ function readStripeMode(
   }
   return {
     mode,
+    accountId: raw.accountId,
     livemode: mode === 'live',
     secretKey: raw.secretKey,
     publishableKey: raw.publishableKey,
@@ -320,6 +323,7 @@ function readStripeConfig(env: Record<string, string | undefined>): StripeConfig
   const railAsked = readOptional(env.STRIPE_ENABLED) === 'true';
   const stripe: StripeConfig = {
     test: readStripeMode('test', railAsked, {
+      accountId: readOptional(env.STRIPE_ACCOUNT_ID_TEST) ?? readOptional(env.STRIPE_ACCOUNT_ID),
       secretKey: readOptional(env.STRIPE_SECRET_KEY_TEST),
       publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY_TEST),
       webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET_TEST),
@@ -328,6 +332,7 @@ function readStripeConfig(env: Record<string, string | undefined>): StripeConfig
       connectWebhookSecretPrevious: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST),
     }),
     live: readStripeMode('live', railAsked, {
+      accountId: readOptional(env.STRIPE_ACCOUNT_ID_LIVE) ?? readOptional(env.STRIPE_ACCOUNT_ID),
       secretKey: readOptional(env.STRIPE_SECRET_KEY_LIVE),
       publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY_LIVE),
       webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET_LIVE),

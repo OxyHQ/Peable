@@ -78,8 +78,14 @@ export interface DisputeListParams extends ListParams {
 export class MerchantsResource {
   constructor(private readonly client: RestClient) {}
 
-  register(params: RegisterMerchantParams = {}): Promise<Merchant> {
-    return this.client.request<Merchant>('POST', '/v1/merchants', { body: params });
+  register(
+    params: RegisterMerchantParams = {},
+    options?: { idempotencyKey: string },
+  ): Promise<Merchant> {
+    return this.client.request<Merchant>('POST', '/v1/merchants', {
+      body: params,
+      idempotencyKey: options?.idempotencyKey,
+    });
   }
 
   retrieve(): Promise<Merchant> {

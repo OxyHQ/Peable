@@ -19,7 +19,7 @@ import {
   verifyBillingTaxQuote,
   type BillingTaxQuoteCalculator,
 } from './tax-quote';
-import type { ProviderHostedSession } from './provider';
+import type { ProviderHostedSession, ProviderEmbeddedSession } from './provider';
 
 export const billingTaxOfferSchema = z
   .object({
@@ -57,6 +57,15 @@ export interface BillingTaxCheckoutAdapter {
     },
     idempotencyKey: string,
   ): Promise<ProviderHostedSession>;
+  createEmbeddedCheckout?(
+    input: {
+      owner: BillingOwner;
+      deployment: BillingDeployment;
+      checkout: CreateBillingCheckoutParams;
+      snapshot: BillingTaxCheckoutSnapshot;
+    },
+    idempotencyKey: string,
+  ): Promise<ProviderEmbeddedSession>;
 }
 export async function prepareBillingTaxCheckout(
   calculator: BillingTaxQuoteCalculator,
