@@ -319,6 +319,21 @@ stores it as a `finance_report_run` File, and completes the run AND records
 Oxy, readable only through `GET /v1/files/:id/contents`. The ledger reports read
 the same ledger `GET /v1/balance` does (`services/money/ledgerScope.ts`).
 
+**A run and a download are ONE report.** `GET /v1/reporting/report_types/:id/csv`
+takes a run's `parameters` as a query and streams the same CSV: both pass
+`admitReportRequest` (`routes/reporting.ts`) and both start from `openReport`
+(`services/reporting/reports.ts`) — the layout's columns, their one computation, the
+one reader per report and the one line renderer (`services/reporting/csv.ts`). A run
+writes into memory under the file ceiling (`buildReport`); a download writes batches to
+the socket, waiting on `drain` (`streamReport`), so its memory is a batch, not the
+interval. Every refusal comes before the header row; a read that fails afterwards
+DESTROYS the response (the error handler would `end()` it and a truncated file would
+look complete). Never add a second CSV path or a second column list: a new report is a
+layout in `REPORT_TYPE_LAYOUTS` (shared-types, browser-safe at
+`@peable.to/shared-types/reporting`), its computations and reader here, and — because
+`report_runs_report_type_check` is rendered from the ids — a migration. A column is
+only ever appended to a version's `columns`; its `default_columns` never change.
+
 ### The catalog (ADR 0018)
 
 Products, prices, coupons and promotion codes are Orbit rows with no provider
@@ -651,6 +666,12 @@ could represent one — a design that adds one supersedes ADR 0015 first.
 - **`Peable-Account`** is accepted only on the routes in
   `PEABLE_ACCOUNT_ROUTES` (`routes/money.ts`) and refused elsewhere by
   `refuseMisplacedPeableAccount`.
+- **Connect's cores are shared with Orbit.** `routes/connectedAccounts.ts` and
+  `routes/transfers.ts` export `(req, res, merchant[, surface])` cores that the
+  dashboard mounts behind its membership gate (`…/connected_accounts`,
+  `…/transfers`, `…/transfers/:id/reversals`), writes under `runIdempotent`. A
+  seller read is always `IS_SELLER`; there is still no dashboard (or service)
+  path that sets a seller's FairCoin key (ADR 0012).
 
 **A dispute response is one shot, and none of its words are stored — the
 provider is the store of a draft.** `POST /v1/disputes/:id` (Stripe's) STAGES
