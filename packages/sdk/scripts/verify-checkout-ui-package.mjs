@@ -13,7 +13,8 @@ async function verify(target) {
 }
 await verify(manifest.exports);
 const ui = manifest.exports['./checkout/ui'];
-if (!ui || 'require' in ui) throw new Error('Checkout UI must remain an optional ESM/native entry.');
+if (!ui || 'require' in ui)
+  throw new Error('Checkout UI must remain an optional ESM/native entry.');
 for (const name of ['peable.png', 'success.ogg', 'failed.ogg', 'success.m4a', 'failed.m4a']) {
   await access(new URL(`dist/esm/ui/assets/${name}`, root));
 }
