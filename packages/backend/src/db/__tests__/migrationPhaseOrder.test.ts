@@ -78,8 +78,7 @@ const SHIPPED_BEFORE: Record<string, string> = {
     'released with #203; deployed before 0065 (billing engine) merges',
   // The billing engine's validate half ships with #206; it must be DEPLOYED
   // (its post phase applied) before the report types' `0067`–`0068` merge.
-  '0066_billing_engine_validate':
-    'released with #206; deployed before 0067 (report types) merges',
+  '0066_billing_engine_validate': 'released with #206; deployed before 0067 (report types) merges',
 };
 
 interface Migration {
