@@ -85,11 +85,18 @@ export type Expand<T> =
  * Never the type of a finished contract: `contracts.test.ts` asserts every
  * reference resolves. It exists so a resource can reference an object another
  * module defines before that module is written.
+ *
+ * Its other fields are `any`, not `unknown`: an object EMBEDDED by another
+ * resource (a subscription item's `price`) is always this type until its own
+ * module registers it, and consumers that already read it as the shared-types
+ * interface it will become (`item.price.currency`) must keep compiling, as an
+ * interface is assignable to an `any` index signature and not an `unknown` one.
  */
 export interface UnresolvedObject<K extends string> {
   readonly id: string;
   readonly object: K;
-  readonly [field: string]: unknown;
+  // biome-ignore lint/suspicious/noExplicitAny: a placeholder until the module defining `K` registers it; see above
+  readonly [field: string]: any;
 }
 
 /** The wire type a schema describes (its output, references resolved). */

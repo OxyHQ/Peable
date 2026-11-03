@@ -1125,3 +1125,208 @@ describe('the scheduler', () => {
     });
   });
 });
+
+/**
+ * Every route of the billing engine answered once, so the contract preload
+ * (`__tests__/setup/contractCheck.ts`) checks each answer against its
+ * `RouteContract` — the lifecycles above reach only some of them.
+ */
+describe('the contracts (ADR 0014 D5)', () => {
+  test('subscription items, the upcoming invoice, invoice and item edits answer their contracts', async () => {
+    const payer = await customer(null);
+    const plan = await price('900');
+    const addOn = await price('300');
+    const sub = await ok('POST', '/v1/subscriptions', {
+      customer: payer.id,
+      items: [{ price: plan.id, quantity: 1 }],
+      default_payment_method: payer.invoice_settings.default_payment_method,
+    });
+    const added = await ok('POST', '/v1/subscription_items', {
+      subscription: sub.id,
+      price: addOn.id,
+      quantity: 2,
+      proration_behavior: 'none',
+    });
+    expect(added).toMatchObject({ object: 'subscription_item', quantity: 2 });
+    expect(added.price.id).toBe(addOn.id);
+    const items = await ok('GET', `/v1/subscription_items?subscription=${sub.id}`);
+    expect(items.data).toHaveLength(2);
+    expect((await ok('GET', `/v1/subscription_items/${added.id}`)).id).toBe(added.id);
+    const changed = await ok('POST', `/v1/subscription_items/${added.id}`, {
+      quantity: 3,
+      proration_behavior: 'none',
+      metadata: { seat: 'extra' },
+    });
+    expect(changed).toMatchObject({ quantity: 3, metadata: { seat: 'extra' } });
+    const upcoming = await ok(
+      'GET',
+      `/v1/invoices/upcoming?customer=${payer.id}&subscription_items[0][id]=${added.id}&subscription_items[0][quantity]=4`,
+    );
+    expect(upcoming).toMatchObject({ object: 'invoice', billing_reason: 'upcoming' });
+    expect(
+      await ok('DELETE', `/v1/subscription_items/${added.id}`, { proration_behavior: 'none' }),
+    ).toEqual({ id: added.id, object: 'subscription_item', deleted: true });
+    const updated = await ok('POST', `/v1/subscriptions/${sub.id}`, {
+      description: 'Team plan',
+      metadata: { team: 'core' },
+      expand: ['customer', 'default_payment_method'],
+    });
+    expect(updated.customer.id).toBe(payer.id);
+    expect(updated.default_payment_method.object).toBe('payment_method');
+
+    const draft = await ok('POST', '/v1/invoices', { customer: payer.id, currency: 'EUR' });
+    const inline = await ok('POST', '/v1/invoiceitems', {
+      customer: payer.id,
+      invoice: draft.id,
+      price_data: { product: plan.product, currency: 'EUR', unit_amount: '250' },
+      quantity: 2,
+      expand: ['invoice'],
+    });
+    expect(inline).toMatchObject({ amount: '500', unit_amount: '250' });
+    expect(inline.invoice.id).toBe(draft.id);
+    const tooBig = await call('POST', '/v1/invoiceitems', {
+      customer: payer.id,
+      price_data: { product: plan.product, currency: 'EUR', unit_amount: '100000000000000' },
+    });
+    expect(tooBig.status).toBe(400);
+    expect(tooBig.json.error.param).toBe('price_data[unit_amount]');
+    const pending = await ok('POST', '/v1/invoiceitems', {
+      customer: payer.id,
+      amount: '150',
+      currency: 'EUR',
+    });
+    expect((await ok('GET', `/v1/invoiceitems/${pending.id}`)).invoice).toBeNull();
+    expect(
+      (await ok('POST', `/v1/invoiceitems/${pending.id}`, { description: 'Later' })).description,
+    ).toBe('Later');
+    expect((await ok('GET', `/v1/invoiceitems?invoice=${draft.id}`)).data).toHaveLength(1);
+    expect(await ok('DELETE', `/v1/invoiceitems/${pending.id}`)).toEqual({
+      id: pending.id,
+      object: 'invoiceitem',
+      deleted: true,
+    });
+    expect(
+      (await ok('POST', `/v1/invoices/${draft.id}`, { description: 'Extras' })).description,
+    ).toBe('Extras');
+    expect((await ok('GET', `/v1/invoices/${draft.id}?expand[]=customer`)).customer.id).toBe(
+      payer.id,
+    );
+    const lines = await ok('GET', `/v1/invoices/${draft.id}/lines`);
+    expect(lines).toMatchObject({ object: 'list', has_more: false });
+    expect(lines.data).toHaveLength(1);
+    const other = await ok('POST', '/v1/invoices', { customer: payer.id, currency: 'EUR' });
+    expect(await ok('DELETE', `/v1/invoices/${other.id}`)).toEqual({
+      id: other.id,
+      object: 'invoice',
+      deleted: true,
+    });
+    const final = await ok('POST', `/v1/invoices/${draft.id}/finalize`, { auto_advance: false });
+    expect(final.status).toBe('open');
+    const pdf = await fetch(`${baseUrl}/v1/invoices/${draft.id}/pdf`);
+    expect(pdf.headers.get('content-type')).toContain('application/pdf');
+    await pdf.arrayBuffer();
+    expect((await ok('POST', `/v1/invoices/${draft.id}/mark_uncollectible`, {})).status).toBe(
+      'uncollectible',
+    );
+  });
+
+  test('send, credit notes, the balance ledger and the portal answer their contracts', async () => {
+    const payer = await customer(null);
+    const invoice = await ok('POST', '/v1/invoices', {
+      customer: payer.id,
+      currency: 'EUR',
+      collection_method: 'send_invoice',
+      days_until_due: 10,
+    });
+    await ok('POST', '/v1/invoiceitems', {
+      customer: payer.id,
+      invoice: invoice.id,
+      amount: '1000',
+      currency: 'EUR',
+    });
+    await ok('POST', `/v1/invoices/${invoice.id}/finalize`, {});
+    expect((await ok('POST', `/v1/invoices/${invoice.id}/send`, {})).status).toBe('open');
+    const preview = await ok(
+      'GET',
+      `/v1/credit_notes/preview?invoice=${invoice.id}&amount=300&reason=duplicate`,
+    );
+    expect(preview).toMatchObject({ object: 'credit_note', total: '300', id: '' });
+    const note = await ok('POST', '/v1/credit_notes', {
+      invoice: invoice.id,
+      amount: '300',
+      expand: ['invoice', 'customer'],
+    });
+    expect(note.invoice.id).toBe(invoice.id);
+    expect((await ok('GET', `/v1/credit_notes?invoice=${invoice.id}`)).data).toHaveLength(1);
+    expect((await ok('GET', `/v1/credit_notes/${note.id}`)).id).toBe(note.id);
+    expect((await ok('POST', `/v1/credit_notes/${note.id}/void`, {})).status).toBe('void');
+
+    const credit = await ok('POST', `/v1/customers/${payer.id}/balance_transactions`, {
+      amount: '-500',
+      currency: 'EUR',
+      description: 'Goodwill',
+      expand: ['customer'],
+    });
+    expect(credit).toMatchObject({ amount: '-500', ending_balance: '-500', type: 'adjustment' });
+    expect(credit.customer.id).toBe(payer.id);
+    expect(
+      (await ok('GET', `/v1/customers/${payer.id}/balance_transactions/${credit.id}`)).id,
+    ).toBe(credit.id);
+
+    const plan = await price('800');
+    const upgrade = await price('1600', { product: plan.product });
+    const sub = await ok('POST', '/v1/subscriptions', {
+      customer: payer.id,
+      items: [{ price: plan.id }],
+    });
+    const configuration = await ok('POST', '/v1/billing_portal/configurations', {
+      business_profile: { headline: 'Manage your plan' },
+      features: {
+        customer_update: { enabled: true, allowed_updates: ['name', 'email'] },
+        subscription_update: {
+          enabled: true,
+          default_allowed_updates: ['price'],
+          products: [{ product: plan.product, prices: [plan.id, upgrade.id] }],
+        },
+      },
+    });
+    expect(configuration).toMatchObject({
+      object: 'billing_portal.configuration',
+      is_default: true,
+    });
+    expect(
+      (await ok('GET', '/v1/billing_portal/configurations?is_default=true')).data,
+    ).toHaveLength(1);
+    expect((await ok('GET', `/v1/billing_portal/configurations/${configuration.id}`)).id).toBe(
+      configuration.id,
+    );
+    const bad = await call(
+      'GET',
+      `/v1/billing_portal/configurations/${configuration.id}?expand[]=customer`,
+    );
+    expect(bad.status).toBe(400);
+    expect(bad.json.error.param).toBe('expand');
+    expect(
+      (
+        await ok('POST', `/v1/billing_portal/configurations/${configuration.id}`, {
+          default_return_url: 'https://app.example/account',
+        })
+      ).default_return_url,
+    ).toBe('https://app.example/account');
+    const session = await ok('POST', '/v1/billing_portal/sessions', { customer: payer.id });
+    const token = String(session.url).split('/portal/')[1];
+    const portal = `/v1/billing_portal/public/${token}`;
+    const switched = await ok('POST', `${portal}/change_plan`, {
+      subscription: sub.id,
+      price: upgrade.id,
+    });
+    expect(switched.subscriptions[0].items[0].price).toBe(upgrade.id);
+    expect(switched.plans[0].prices).toHaveLength(2);
+    expect((await ok('POST', `${portal}/customer`, { name: 'Renamed Payer' })).customer.name).toBe(
+      'Renamed Payer',
+    );
+    await ok('POST', `${portal}/cancel`, { subscription: sub.id });
+    const renewed = await ok('POST', `${portal}/renew`, { subscription: sub.id });
+    expect(renewed.subscriptions[0].cancel_at_period_end).toBe(false);
+  });
+});
