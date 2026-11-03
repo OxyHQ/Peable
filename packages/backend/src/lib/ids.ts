@@ -33,7 +33,8 @@ export function newId(
     | 'taxreg'
     | 'taxloc'
     | 'taxcalc'
-    | 'taxtxn',
+    | 'taxtxn'
+    | 'req',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

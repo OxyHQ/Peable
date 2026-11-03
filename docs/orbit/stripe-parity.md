@@ -28,8 +28,8 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Unix timestamps | ❌ | ISO strings | `created` integer seconds |
 | `livemode` on objects | 🟡 | Tax and billing DTOs only | Every object |
 | Dated versioning | 🟡 | `Peable-Version` echoed, not accepted | Request header + merchant pin + transforms; legacy frozen |
-| Error envelope | 🟡 | `{type, message, code?}`; 422 validation; 500 leaks `err.message` | `{type, code, param, message, doc_url, request_id}`; 400; no leak |
-| `Request-Id` | ❌ | — | Header on every response |
+| Error envelope | 🟡 | `{type, message, code?}`; 422 validation; unmapped 500s no longer leak `err.message` | `{type, code, param, message, doc_url, request_id}`; 400; no leak |
+| `Request-Id` | 🟡 | Header on every response (`lib/requestId.ts`); not yet in error bodies | + `request_id` in error bodies on the Orbit version |
 | Generic idempotency | 🟡 | Required on PI create, optional on sessions, `externalRef` elsewhere; no replay | Every POST; stored response replay; 24 h |
 | List pagination | 🟡 | `starting_after`, `limit`; three envelopes; sub-lists unpaginated | + `ending_before`, `created[...]`, `url`; one envelope everywhere |
 | `expand[]` | ❌ | — | Depth 4, merchant-scoped |
