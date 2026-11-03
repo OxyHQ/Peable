@@ -1,8 +1,8 @@
 import { type SQL, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { METADATA_MAX_KEYS, type MetadataPatch } from '../lib/metadata';
+import { METADATA_MAX_KEYS, type MetadataPatch } from '@peable.to/contracts';
 
-export type { MetadataPatch } from '../lib/metadata';
+export type { MetadataPatch } from '@peable.to/contracts';
 
 /**
  * A metadata update, merged by the database in the statement that writes it.

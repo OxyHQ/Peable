@@ -48,7 +48,13 @@ import {
   listCustomerSubscriptions,
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
-import { answerList, parseQuery, type QuerySurface, resolveListReference } from '../../lib/list';
+import {
+  answerList,
+  parseQuery,
+  type QuerySurface,
+  resolveListReference,
+  surfaceQuery,
+} from '../../lib/list';
 import {
   renderInvoice,
   renderInvoiceItems,
@@ -82,7 +88,7 @@ import {
 import { upcomingInvoice } from '../../services/billingEngine/upcoming';
 import { invoicePdf } from '../../services/billingEngine/invoicePdf';
 import type { CatalogRoute } from '../catalogRoutes';
-import { answerObject, bySurface, cleared, idParam, parseBody } from './helpers';
+import { answerObject, cleared, idParam, parseBody } from './helpers';
 
 /**
  * Every request schema is the contract's (`@peable.to/contracts`
@@ -90,9 +96,9 @@ import { answerObject, bySurface, cleared, idParam, parseBody } from './helpers'
  * `customerBalanceTransactionRoutes`); the dashboard's reads add only its
  * Test/Live toggle.
  */
-const listQuery = bySurface(listInvoicesQuery);
-const retrieveQuery = bySurface(expandOnlyQuery);
-const upcomingSurface = bySurface(upcomingInvoiceQuery);
+const listQuery = surfaceQuery(listInvoicesQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
+const upcomingSurface = surfaceQuery(upcomingInvoiceQuery);
 
 async function answer(
   res: Response,
@@ -326,7 +332,7 @@ async function pdf(req: Request, res: Response, merchant: MerchantRow) {
 
 // ---- Invoice items --------------------------------------------------------------------
 
-const listItemsQuery = bySurface(listInvoiceItemsQuery);
+const listItemsQuery = surfaceQuery(listInvoiceItemsQuery);
 
 async function answerItem(
   res: Response,
@@ -467,8 +473,8 @@ function creditNoteInput(body: CreditNoteFields) {
   };
 }
 
-const previewSurface = bySurface(previewCreditNoteQuery);
-const listCreditNotesSurface = bySurface(listCreditNotesQuery);
+const previewSurface = surfaceQuery(previewCreditNoteQuery);
+const listCreditNotesSurface = surfaceQuery(listCreditNotesQuery);
 
 async function answerCreditNote(
   res: Response,
@@ -566,7 +572,7 @@ async function listNotes(
 
 // ---- Customer balance ---------------------------------------------------------------------
 
-const listBalanceQuery = bySurface(listCustomerBalanceTransactionsQuery);
+const listBalanceQuery = surfaceQuery(listCustomerBalanceTransactionsQuery);
 
 async function customerOf(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);

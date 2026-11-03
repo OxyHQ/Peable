@@ -35,7 +35,7 @@ import {
 import { findMeterForMerchant, listMeters } from '../../db/billingEngine/meterRepository';
 import { findLiveTestClockForMerchant } from '../../db/billingEngine/testClockRepository';
 import { getDb } from '../../db/postgres';
-import { answerList, parseQuery, surfaceQuery, surfaceRetrieveQuery } from '../../lib/list';
+import { answerList, parseQuery, surfaceQuery } from '../../lib/list';
 import { toTestClockDTO } from '../../lib/serializeBilling';
 import {
   activeEntitlements,
@@ -67,8 +67,6 @@ import {
 } from '../../services/billingEngine/testClocks';
 import type { CatalogRoute } from '../catalogRoutes';
 import { idParam, parseBody } from './helpers';
-
-const _retrieveQuery = surfaceRetrieveQuery();
 
 // Test clocks, billing settings, meters and entitlements validate with the
 // contract's schemas (`@peable.to/contracts`); the dashboard surface adds its

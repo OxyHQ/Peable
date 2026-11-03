@@ -59,11 +59,7 @@ export function sessionFixture(
     publishable_key: 'pk_test_abc',
     expires_at: now + 3600,
     ...overrides,
-    // TRANSITIONAL: the contract types `payment_intent` as the registered
-    // PaymentIntent object; until the payments contract registers it, the
-    // shared-types interface is cast to it. A no-op once it does.
-    payment_intent: (overrides.payment_intent ??
-      null) as unknown as CheckoutSessionPublic['payment_intent'],
+    payment_intent: overrides.payment_intent ?? null,
   };
 }
 

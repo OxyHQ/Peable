@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { embedded } from '../../common/objects';
 import { priceDataParams } from '../catalog/prices';
 import { deletedOf, listOf } from '../../common/envelopes';
 import { defineComponent, defineObject, type Expand, expandable } from '../../common/objects';
@@ -21,7 +22,7 @@ import {
   unixSeconds,
 } from '../../common/primitives';
 import { defineRoute } from '../../route';
-import { amountParam, currencyParam, embedded, quantityParam, shortText } from './params';
+import { amountParam, currencyParam, quantityParam, shortText } from './params';
 
 /**
  * Invoice items (`ii_…`, ADR 0018 §2): a charge waiting for an invoice — a

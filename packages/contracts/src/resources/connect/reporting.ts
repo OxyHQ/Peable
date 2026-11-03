@@ -1,13 +1,7 @@
 import { z } from 'zod';
+import { embedded } from '../../common/objects';
 import { listOf } from '../../common/envelopes';
-import {
-  defineComponent,
-  defineObject,
-  describe,
-  type Expand,
-  type ObjectMap,
-  resolveObject,
-} from '../../common/objects';
+import { defineComponent, defineObject, describe, type Expand } from '../../common/objects';
 import {
   emptyQuery,
   expandOnlyQuery,
@@ -103,33 +97,6 @@ export const reportRunParametersSchema = defineComponent(
 );
 export type ReportRunParameters = z.output<typeof reportRunParametersSchema>;
 
-/**
- * The result File, embedded (Stripe's shape). The schema is the Files
- * contract's (`resolveObject('file')`); the TYPE is `ObjectMap['file']` once
- * that module registers it.
- *
- * TRANSITIONAL: until it does, the File's documented fields stand in for it, so
- * the run type is usable on its own. Once `file` is registered this is
- * `Ref<'file'>` exactly, and should be written so.
- */
-export type ReportRunResultFile = ObjectMap extends { file: infer F }
-  ? F
-  : {
-      id: string;
-      object: 'file';
-      livemode: boolean;
-      purpose: string;
-      filename: string | null;
-      size: number;
-      type: string;
-      status: string;
-      url: string | null;
-      created: number;
-    };
-const embeddedFile = z.lazy(() =>
-  resolveObject('file'),
-) as unknown as z.ZodType<ReportRunResultFile>;
-
 /** `reporting.report_run` (`frr_…`). */
 export const reportRunSchema = defineObject(
   'reporting.report_run',
@@ -144,7 +111,7 @@ export const reportRunSchema = defineObject(
       parameters: reportRunParametersSchema,
       status: z.enum(REPORT_RUN_STATUSES),
       error: z.string().nullable().describe('Why a `failed` run failed; `null` otherwise.'),
-      result: embeddedFile
+      result: embedded('file')
         .nullable()
         .describe(
           'The CSV once `succeeded` — a File of purpose `finance_report_run` (`GET /v1/files/{id}/contents` reads it).',

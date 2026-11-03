@@ -17,7 +17,7 @@ import {
   listPortalConfigurations,
 } from '../../db/billingEngine/portalRepository';
 import { getDb } from '../../db/postgres';
-import { answerList, parseQuery } from '../../lib/list';
+import { answerList, parseQuery, surfaceQuery } from '../../lib/list';
 import { missing } from '../../services/billingEngine/errors';
 import {
   changePortalConfiguration,
@@ -26,10 +26,10 @@ import {
   toPortalConfigurationDTO,
 } from '../../services/billingEngine/portal';
 import type { CatalogRoute } from '../catalogRoutes';
-import { answerObject, bySurface, cleared, idParam, parseBody } from './helpers';
+import { answerObject, cleared, idParam, parseBody } from './helpers';
 
-const listConfigurationsQuery = bySurface(listBillingPortalConfigurationsQuery);
-const retrieveQuery = bySurface(expandOnlyQuery);
+const listConfigurationsQuery = surfaceQuery(listBillingPortalConfigurationsQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 export const PORTAL_ROUTES: readonly CatalogRoute[] = [
   {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { unresolvedObjectReferences } from '../common/objects';
+import { objectTypes, resolveObject } from '../common/objects';
 import { buildOpenApiDocument } from '../openapi';
 import { routes } from '../routes';
 import type { RouteContract } from '../route';
@@ -56,8 +56,9 @@ describe('the route contracts', () => {
 });
 
 describe('the object registry', () => {
-  test('every reference resolves to a registered object (no stand-in left)', () => {
-    buildOpenApiDocument();
-    expect([...unresolvedObjectReferences]).toEqual([]);
+  test('every reference resolves to a registered object', () => {
+    // A reference to an unregistered type throws while the document is built.
+    expect(() => buildOpenApiDocument()).not.toThrow();
+    for (const type of objectTypes()) expect(() => resolveObject(type)).not.toThrow();
   });
 });

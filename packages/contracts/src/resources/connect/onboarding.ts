@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { defineComponent, defineObject, type Expand } from '../../common/objects';
 import { network, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
+import { merchantDisplaySchema } from '../checkout/shared';
 
 /**
  * The SELLER-facing half of FairCoin connected accounts (ADR 0012 D3).
@@ -23,15 +24,9 @@ export const connectOnboardingSchema = defineObject(
       account_id: z.string().describe('The `ca_…` being onboarded.'),
       // The platform's public display, as a payer would see it: never a
       // webhook secret, never a key.
-      platform: z
-        .object({
-          name: z.string(),
-          avatar_url: z.string().nullable(),
-          logo_url: z.string().nullable(),
-          description: z.string().nullable(),
-        })
-        .strict()
-        .describe("Who is asking: the PLATFORM's public display, as a payer would see it."),
+      platform: merchantDisplaySchema.describe(
+        "Who is asking: the PLATFORM's public display, as a payer would see it.",
+      ),
       network: network.describe('The chain the seller will be paid on. Their key must be for it.'),
       expires_at: unixSeconds.describe('When this link stops working.'),
       return_url: z.string().describe('Where to send the seller once the key is registered.'),
