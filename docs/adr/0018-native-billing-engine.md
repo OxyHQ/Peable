@@ -197,6 +197,22 @@ proxy keeps every path it had (`/v1/billing/portal_sessions` included).
     subscription search walks every status: hiding canceled subscriptions is
     the list's default, not the search's.
 
+17. **Adoption** (`adoption.ts`, the migration's entry point, §7 below) inserts
+    a subscription in its CURRENT state — status, period, anchor, trial, one
+    licensed price, the adopted card — with NO invoice, and records
+    `customer.subscription.created` and the entitlement refresh in the
+    caller's transaction. Two columns carry what makes it different:
+    `provider_billed_until` (a prorating item change before it is refused 400
+    `param: proration_behavior` — there is no engine line to credit, and
+    charging the new price's remaining time without that credit bills the
+    payer twice; `proration_behavior: none` is accepted) and
+    `provider_handoff_pending` (the previous provider still renews it: the
+    subscription is INERT — `next_action_at` null, no renewal, no trial end,
+    and merchant writes answer 409 — until `releaseProviderHandoff`, which
+    recomputes the schedule, so a period end already past renews at the next
+    pass). While held, `realignHeldPeriod` moves it onto a period the provider
+    billed meanwhile; nothing else moves a period from outside the engine.
+
 ### Not built yet
 
 Subscription schedules and quotes (as §5 says); `invoice.finalization_failed`;

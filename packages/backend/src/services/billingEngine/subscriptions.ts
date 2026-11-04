@@ -320,6 +320,22 @@ async function writeDraft(
 
 // ---- Create ---------------------------------------------------------------------
 
+/**
+ * An adopted subscription whose previous provider still renews it belongs to
+ * the migration until the release (ADR 0018 §7): a change now would act on a
+ * subscription two systems could bill.
+ */
+function assertNotHeld(subscription: SubscriptionRow): void {
+  if (subscription.providerHandoffPending) {
+    throw new BillingEngineError(
+      'subscription_unexpected_state',
+      'this subscription is being handed over from its previous billing provider; retry shortly',
+      undefined,
+      409,
+    );
+  }
+}
+
 export interface CreateSubscriptionInput {
   readonly customer: string;
   readonly items: readonly {
@@ -863,7 +879,22 @@ export async function updateSubscription(
     committed(async (tx) => {
       let subscription = await lockSubscription(tx, found.id);
       if (!subscription) throw missing('subscription');
+      assertNotHeld(subscription);
       const now = await engineNow(tx, subscription.testClockId);
+      if (
+        newItems &&
+        prorationBehavior !== 'none' &&
+        subscription.providerBilledUntil &&
+        now.getTime() < subscription.providerBilledUntil.getTime()
+      ) {
+        // The previous provider billed this period: no engine line covers it,
+        // so its unused time cannot be credited, and charging the new price's
+        // remaining time without that credit would bill the payer twice.
+        throw invalid(
+          'this period was billed by the previous billing provider; change items with proration_behavior=none, or after the period ends',
+          'proration_behavior',
+        );
+      }
       const patch: {
         -readonly [K in keyof SubscriptionPatch]: SubscriptionPatch[K];
       } = {};
@@ -1278,6 +1309,7 @@ export async function cancelSubscriptionNow(
         'this subscription is no longer cancelable',
       );
     }
+    assertNotHeld(subscription);
     const now = await engineNow(tx, subscription.testClockId);
     const result = await cancelInTx(tx, subscription, now, {
       reason: 'cancellation_requested',
@@ -1557,6 +1589,12 @@ async function stepOnce(
   subscription: SubscriptionRow,
   now: Date,
 ): Promise<{ finalize?: string; void?: string }> {
+  // Held for the previous provider's release: nothing is due (`nextActionAt`
+  // is null for it), and a claim that reaches it anyway must not renew.
+  if (subscription.providerHandoffPending) {
+    await writeSubscription(tx, subscription.id, { nextActionAt: null });
+    return {};
+  }
   const write = writeSubscription;
   const reschedule = async (row: SubscriptionRow, extra: SubscriptionPatch = {}) => {
     const merged = { ...row, ...extra } as SubscriptionRow;

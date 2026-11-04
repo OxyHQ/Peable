@@ -94,6 +94,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // `0075`–`0076` (ADR 0014 D1) existed.
   '0074_tax_compliance_validate':
     'released with #204; applied in production by the 0ee84a3e deploy',
+  // The tax amounts' settle half is applied in production: a read-only ledger
+  // probe on 2026-11-04 counted 77 rows (`0000`–`0076`) before subscription
+  // adoption's `0077`–`0078` (ADR 0018 §7) existed.
+  '0076_tax_amounts_strings_settle':
+    'applied in production; ledger read 2026-11-04 held 0000–0076 before 0077 was authored',
 };
 
 interface Migration {
