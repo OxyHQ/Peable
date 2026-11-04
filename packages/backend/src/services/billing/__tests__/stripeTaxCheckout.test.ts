@@ -22,9 +22,9 @@ describe('exactTaxRatePercentage', () => {
     ];
     for (const { net, tax, gross, taxTreatment } of cases) {
       const quote = {
-        net_minor_units: net,
-        tax_minor_units: tax,
-        gross_minor_units: gross,
+        net_minor_units: String(net),
+        tax_minor_units: String(tax),
+        gross_minor_units: String(gross),
         tax_treatment: taxTreatment,
       };
       const percentage = exactTaxRatePercentage(quote);
@@ -35,17 +35,17 @@ describe('exactTaxRatePercentage', () => {
     }
     expect(
       exactTaxRatePercentage({
-        net_minor_units: 2999,
-        tax_minor_units: 600,
-        gross_minor_units: 3599,
+        net_minor_units: '2999',
+        tax_minor_units: '600',
+        gross_minor_units: '3599',
         tax_treatment: 'exclusive',
       }),
     ).toBe(20);
     expect(
       exactTaxRatePercentage({
-        net_minor_units: 0,
-        tax_minor_units: 0,
-        gross_minor_units: 0,
+        net_minor_units: '0',
+        tax_minor_units: '0',
+        gross_minor_units: '0',
         tax_treatment: 'exclusive',
       }),
     ).toBeNull();

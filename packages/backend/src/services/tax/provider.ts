@@ -28,13 +28,14 @@ export interface TaxProvider {
   ensureHeadOffice?(address: TaxAddress): Promise<void>;
 }
 
+/** Amounts are base units of `currency`, exact: a provider converts at its own API. */
 export interface TaxProviderCalculationInput {
   currency: string;
   customer: TaxAddress;
   shipFrom: TaxAddress | null;
   lineItems: {
     reference: string;
-    amount: number;
+    amount: bigint;
     quantity: number;
     taxCode: string;
     taxBehavior: TaxBehavior;
@@ -48,8 +49,8 @@ export interface TaxProviderCalculation {
   livemode: boolean;
   lineItems: {
     reference: string;
-    amount: number;
-    amountTax: number;
+    amount: bigint;
+    amountTax: bigint;
     taxBehavior: TaxBehavior;
     breakdown: TaxBreakdownEntry[];
   }[];

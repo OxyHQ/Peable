@@ -66,7 +66,7 @@ async function probeTaxProvider(provider: TaxProvider) {
         lineItems: [
           {
             reference: 'peable_tax_probe',
-            amount: 1000,
+            amount: 1000n,
             quantity: 1,
             taxCode: 'txcd_10103000',
             taxBehavior: 'exclusive',
@@ -76,7 +76,7 @@ async function probeTaxProvider(provider: TaxProvider) {
       });
       calculations[probe.name] = {
         livemode: result.livemode,
-        amountTax: result.lineItems[0]?.amountTax,
+        amountTax: result.lineItems[0]?.amountTax.toString(),
         reasons: result.lineItems[0]?.breakdown.map((entry) => entry.taxability_reason),
         rates: result.lineItems[0]?.breakdown.map((entry) => entry.rate_percentage),
       };

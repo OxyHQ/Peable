@@ -33,7 +33,12 @@ import {
 import { findMerchantById } from '../../db/merchants/merchantRepository';
 import { taxCalculations, taxTransactions } from '../../db/schema/tax';
 import { commitTaxTransaction, reverseTaxTransaction, type TaxService } from '../tax/taxService';
-import { BillingError, billingOwnerSchema, type BillingDeployment } from './contracts';
+import {
+  BillingError,
+  billingOwnerSchema,
+  providerAmountOf,
+  type BillingDeployment,
+} from './contracts';
 import { createFrozenTaxRate } from './stripeTaxCheckout';
 import type { StripeBillingClient } from './stripeBillingProvider';
 import { billingTaxCheckoutSnapshotSchema, type BillingTaxCheckoutSnapshot } from './tax-checkout';
@@ -77,7 +82,7 @@ const ref = (prefix: string) =>
     .string()
     .regex(new RegExp(`^${prefix}[A-Za-z0-9]+$`))
     .max(128);
-const amount = z.number().int().safe().nonnegative();
+const amount = z.number().int().safe().nonnegative().transform(BigInt);
 const stripeAddress = z
   .object({
     country: z.string().nullable(),
@@ -200,9 +205,9 @@ export function createStripeInvoiceTaxRecorder(options: {
     const quote = snapshot.taxQuote.quote;
     if (
       paid.currency !== quote.currency ||
-      paid.amount_paid !== String(quote.gross_minor_units) ||
-      paid.net_amount !== String(quote.net_minor_units) ||
-      paid.tax_amount !== String(quote.tax_minor_units)
+      paid.amount_paid !== quote.gross_minor_units ||
+      paid.net_amount !== quote.net_minor_units ||
+      paid.tax_amount !== quote.tax_minor_units
     )
       throw new BillingError('invalid_provider_response', 502);
     await commitTaxTransaction(db, {
@@ -233,8 +238,8 @@ export function createStripeInvoiceTaxRecorder(options: {
         id: z.literal(invoiceRef),
         status: z.literal('draft'),
         currency: z.literal(quote.currency.toLowerCase()),
-        total: z.literal(quote.gross_minor_units),
-        total_excluding_tax: z.literal(quote.net_minor_units),
+        total: providerAmountOf(quote.gross_minor_units),
+        total_excluding_tax: providerAmountOf(quote.net_minor_units),
         automatic_tax: z.object({ enabled: z.literal(false) }),
       })
       .safeParse(await client.retrieveInvoice(invoiceRef)).success;
@@ -367,7 +372,7 @@ export function createStripeInvoiceTaxRecorder(options: {
           quote.currency !== offer.currency ||
           quote.tax_treatment !== offer.taxTreatment ||
           (offer.taxTreatment === 'inclusive' ? quote.gross_minor_units : quote.net_minor_units) !==
-            offer.grossMinorUnits
+            String(offer.grossMinorUnits)
         )
           throw new BillingError('identity_conflict');
         const snapshot: BillingTaxCheckoutSnapshot = {
@@ -484,7 +489,7 @@ export function createStripeInvoiceTaxRecorder(options: {
         })
         .parse(await client.retrieveInvoice(original.reference));
       // Credited on the paid invoice (refunded, to balance or out of band).
-      let credited = 0;
+      let credited = 0n;
       const linked = new Set<string>();
       let cursor: string | undefined;
       for (let page = 0; ; page++) {
@@ -537,7 +542,7 @@ export function createStripeInvoiceTaxRecorder(options: {
       const intent = z
         .object({ latest_charge: z.object({ id: ref('ch_') }) })
         .parse(await client.retrievePaidPaymentIntent(payment.payment.payment_intent));
-      let refunded = 0;
+      let refunded = 0n;
       cursor = undefined;
       for (let page = 0; ; page++) {
         if (page >= 20) throw new BillingError('reconciliation_required');
@@ -558,12 +563,13 @@ export function createStripeInvoiceTaxRecorder(options: {
         if (!refunds.has_more) break;
         cursor = refunds.data.at(-1)?.id;
       }
-      const target = Math.min(invoice.total, credited + refunded);
+      const returned = credited + refunded;
+      const target = returned < invoice.total ? returned : invoice.total;
       const reversal = await reverseTaxTransaction(db, {
         originalId: original.id,
         reference: (sequence) => `${original.reference}:reversal:${sequence}`,
         reversedAt: now(),
-        target: (_reversed, total) => Math.min(total, target),
+        target: (_reversed, total) => (target < total ? target : total),
       });
       return reversal ? 'reversed' : 'unchanged';
     },

@@ -45,7 +45,7 @@ function fixture() {
     observed_at: unix(+now),
   };
   const authority: BillingFinalInvoiceAuthority = {
-    schema_version: 2,
+    schema_version: 3,
     source: {
       invoice_id: paid.invoice_id,
       payment_intent_id: paid.payment_intent_id,
@@ -61,10 +61,10 @@ function fixture() {
     invoice: {
       platform: 'peable',
       currency: 'USD',
-      gross_minor_units: 2999,
-      net_minor_units: 2499,
-      tax_minor_units: 500,
-      merchant_fee_minor_units: 0,
+      gross_minor_units: '2999',
+      net_minor_units: '2499',
+      tax_minor_units: '500',
+      merchant_fee_minor_units: '0',
       tax_treatment: 'inclusive',
       seller_id: 'seller_fixture',
       invoice_issuer_id: 'issuer_fixture',
@@ -125,7 +125,7 @@ describe('pinned SDK invoice authority', () => {
     await expect(
       resource.retrieveFinalInvoiceAuthority('sub_another', 'in_fixture'),
     ).rejects.toThrow('verification failed');
-    authority.invoice.gross_minor_units++;
+    authority.invoice.gross_minor_units = '3000';
     await expect(
       resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture'),
     ).rejects.toThrow('verification failed');
@@ -168,8 +168,18 @@ describe('pinned SDK invoice authority', () => {
         ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')
       ).method,
     ).toBe('faircoin');
-    // The ISO-instant schema (version 1) is refused, even when signed.
-    const unsupported = { ...authority, schema_version: 1 as unknown as 2 };
+    // The number-amount schema (version 2) is refused, even when signed.
+    const unsupported = {
+      ...authority,
+      schema_version: 2 as unknown as 3,
+      invoice: {
+        ...authority.invoice,
+        gross_minor_units: 2999 as unknown as string,
+        net_minor_units: 2499 as unknown as string,
+        tax_minor_units: 500 as unknown as string,
+        merchant_fee_minor_units: 0 as unknown as string,
+      },
+    };
     resign(unsupported);
     await expect(
       BillingOver(client(unsupported, requests), pinned).retrieveFinalInvoiceAuthority(
@@ -239,8 +249,8 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
       state: null,
       tax_type: 'vat',
       rate_percentage: '19.0',
-      taxable_minor_units: 2499,
-      tax_minor_units: 500,
+      taxable_minor_units: '2499',
+      tax_minor_units: '500',
       inclusive: true,
       taxability_reason: 'standard_rated',
     },
@@ -252,10 +262,10 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
     { include: 'tax_lines' },
   );
   expect(queries.at(-1)).toEqual({ include: 'tax_lines' });
-  expect(withLines.invoice.tax_lines?.[0]?.tax_minor_units).toBe(500);
+  expect(withLines.invoice.tax_lines?.[0]?.tax_minor_units).toBe('500');
   // Lines that do not add up to the tax are refused even when signed.
   const line = authority.invoice.tax_lines[0];
-  if (line) line.tax_minor_units = 400;
+  if (line) line.tax_minor_units = '400';
   resign(authority);
   await expect(
     BillingOver(recording(authority), pinned).retrieveFinalInvoiceAuthority(

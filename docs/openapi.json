@@ -36344,10 +36344,8 @@
                           "maxLength": 200
                         },
                         "amount": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991,
-                          "description": "Unit amount × quantity, minor units. Includes tax when inclusive."
+                          "type": "string",
+                          "description": "Unit amount × quantity, base units. Includes tax when inclusive."
                         },
                         "quantity": {
                           "type": "integer",
@@ -39766,10 +39764,8 @@
                     "description": "The refund's own reference; a repeated reference returns the same reversal."
                   },
                   "amount": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991,
-                    "description": "Gross minor units refunded (what the payer got back). Omitted: everything not yet reversed."
+                    "type": "string",
+                    "description": "Base units of the currency, as an integer string (`\"1999\"` is 19.99 EUR)."
                   }
                 },
                 "required": [
@@ -53704,9 +53700,9 @@
             "type": "string"
           },
           "amount_minor_units": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "currency": {
             "type": "string"
@@ -53916,9 +53912,9 @@
             "const": "USD"
           },
           "gross_minor_units": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "amount_base_units": {
             "type": "string"
@@ -53975,24 +53971,24 @@
             "pattern": "^[A-Z]{3}$"
           },
           "gross_minor_units": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "net_minor_units": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "tax_minor_units": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "merchant_fee_minor_units": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "tax_treatment": {
             "type": "string",
@@ -54186,7 +54182,7 @@
         "properties": {
           "schema_version": {
             "type": "number",
-            "const": 2
+            "const": 3
           },
           "source": {
             "$ref": "#/components/schemas/BillingInvoiceAuthoritySource"
@@ -54370,20 +54366,34 @@
             "type": "string"
           },
           "amount_paid": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "net_amount": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "tax_amount": {
-            "description": "A provider observation, not a tax quote or seller configuration.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A provider observation, not a tax quote or seller configuration."
           },
           "period_start": {
             "type": "integer",
@@ -54409,7 +54419,9 @@
             "type": "string"
           },
           "amount_refunded": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "state": {
             "type": "string",
@@ -54476,14 +54488,14 @@
             ]
           },
           "taxable_minor_units": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "tax_minor_units": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "inclusive": {
             "type": "boolean"
@@ -54849,20 +54861,34 @@
             "type": "string"
           },
           "amount_paid": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "net_amount": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "tax_amount": {
-            "description": "A provider observation, not a tax quote or seller configuration.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A provider observation, not a tax quote or seller configuration."
           },
           "period_start": {
             "type": "integer",
@@ -55250,9 +55276,9 @@
             "type": "string"
           },
           "gross_minor_units": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "tax_treatment": {
             "type": "string",
@@ -55569,7 +55595,7 @@
         "properties": {
           "schema_version": {
             "type": "number",
-            "const": 2
+            "const": 3
           },
           "source": {
             "type": "object",
@@ -55638,19 +55664,19 @@
                 "pattern": "^[A-Z]{3}$"
               },
               "gross_minor_units": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
               },
               "net_minor_units": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
               },
               "tax_minor_units": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
               },
               "tax_treatment": {
                 "type": "string",
@@ -67167,16 +67193,14 @@
             ]
           },
           "taxable_amount": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "amount": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "inclusive": {
             "type": "boolean"
@@ -67412,28 +67436,24 @@
             ]
           },
           "amount_total": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
             "description": "What the customer pays."
           },
           "amount_net": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "tax_amount_exclusive": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "tax_amount_inclusive": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
           },
           "line_items": {
             "type": "array",
@@ -67498,19 +67518,19 @@
             "customer_location_evidence_id": "taxloc_0193b8f2c1a87d3e9f4a",
             "country": "DE",
             "state": null,
-            "amount_total": 1190,
-            "amount_net": 1000,
-            "tax_amount_exclusive": 190,
-            "tax_amount_inclusive": 0,
+            "amount_total": "1190",
+            "amount_net": "1000",
+            "tax_amount_exclusive": "190",
+            "tax_amount_inclusive": "0",
             "line_items": [
               {
                 "reference": "plan_pro_monthly",
                 "quantity": 1,
                 "tax_code": "txcd_10103001",
                 "tax_behavior": "exclusive",
-                "amount": 1000,
-                "amount_tax": 190,
-                "amount_net": 1000,
+                "amount": "1000",
+                "amount_tax": "190",
+                "amount_net": "1000",
                 "breakdown": [
                   {
                     "country": "DE",
@@ -67519,8 +67539,8 @@
                     "display_name": "VAT",
                     "tax_type": "vat",
                     "rate_percentage": "19.0",
-                    "taxable_amount": 1000,
-                    "amount": 190,
+                    "taxable_amount": "1000",
+                    "amount": "190",
                     "inclusive": false,
                     "taxability_reason": "standard_rated"
                   }
@@ -67556,21 +67576,18 @@
             ]
           },
           "amount": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
             "description": "As given: includes tax when inclusive."
           },
           "amount_tax": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "amount_net": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
             "description": "Excluding tax."
           },
           "breakdown": {
@@ -68967,8 +68984,8 @@
                 "currency": "EUR",
                 "transactions": 42,
                 "reversals": 1,
-                "taxable_amount": 41000,
-                "tax_amount": 7790
+                "taxable_amount": "41000",
+                "tax_amount": "7790"
               }
             ]
           }
@@ -69050,16 +69067,14 @@
             "description": "Reversals netted into this row."
           },
           "taxable_amount": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "tax_amount": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           }
         },
         "required": [
@@ -69658,22 +69673,19 @@
         "type": "object",
         "properties": {
           "amount_total": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "amount_net": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "tax_amount": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Minor units of `currency` (cents), as an integer."
+            "type": "string",
+            "pattern": "^(0|-?[1-9][0-9]*)$",
+            "description": "Signed base units of `currency`, as an integer string."
           },
           "line_items": {
             "type": "array",

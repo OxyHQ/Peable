@@ -16,7 +16,7 @@ const action: CheckoutSessionAction = {
   session_id: 'cs_test_owned',
   client_secret: 'opaque-session-capability',
   publishable_key: 'pk_test_owned',
-  amount_minor_units: 599,
+  amount_minor_units: '599',
   currency: 'USD',
 };
 const messages = { failed: 'failed', incomplete: 'incomplete', busy: 'busy', closed: 'closed' };

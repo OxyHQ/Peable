@@ -23,10 +23,10 @@ Object type: `tax.calculation`.
 | `customer_location_evidence_id` | string | `taxloc_…`. |
 | `country` | string | ISO 3166-1 alpha-2. |
 | `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
-| `amount_total` | integer | What the customer pays. At least -9007199254740991. |
-| `amount_net` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
-| `tax_amount_exclusive` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
-| `tax_amount_inclusive` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `amount_total` | string | What the customer pays. Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_net` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `tax_amount_exclusive` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `tax_amount_inclusive` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `line_items` | array of [TaxCalculationLineItem](/reference/objects/tax-calculation-line-item) |  |
 | `tax_date` | integer | Unix seconds. |
 | `created` | integer | Unix seconds. |
@@ -47,19 +47,19 @@ Object type: `tax.calculation`.
   "customer_location_evidence_id": "taxloc_0193b8f2c1a87d3e9f4a",
   "country": "DE",
   "state": null,
-  "amount_total": 1190,
-  "amount_net": 1000,
-  "tax_amount_exclusive": 190,
-  "tax_amount_inclusive": 0,
+  "amount_total": "1190",
+  "amount_net": "1000",
+  "tax_amount_exclusive": "190",
+  "tax_amount_inclusive": "0",
   "line_items": [
     {
       "reference": "plan_pro_monthly",
       "quantity": 1,
       "tax_code": "txcd_10103001",
       "tax_behavior": "exclusive",
-      "amount": 1000,
-      "amount_tax": 190,
-      "amount_net": 1000,
+      "amount": "1000",
+      "amount_tax": "190",
+      "amount_net": "1000",
       "breakdown": [
         {
           "country": "DE",
@@ -68,8 +68,8 @@ Object type: `tax.calculation`.
           "display_name": "VAT",
           "tax_type": "vat",
           "rate_percentage": "19.0",
-          "taxable_amount": 1000,
-          "amount": 190,
+          "taxable_amount": "1000",
+          "amount": "190",
           "inclusive": false,
           "taxability_reason": "standard_rated"
         }

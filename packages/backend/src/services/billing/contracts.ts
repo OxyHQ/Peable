@@ -24,6 +24,16 @@ import {
 /** An instant on the wire: integer Unix seconds (ADR 0014 D1). */
 export const unixSeconds = billingInstant;
 
+/**
+ * A provider's integer amount (Stripe's SDK counts in JS numbers), as the
+ * base-unit string the wire carries. Anything that is not an exact
+ * non-negative integer is refused, never rounded.
+ */
+export const providerAmount = z.number().int().nonnegative().safe().transform(String);
+
+/** A provider amount that must be exactly `expected`, compared as base-unit strings. */
+export const providerAmountOf = (expected: string) => providerAmount.pipe(z.literal(expected));
+
 const subscriptionRef = z
   .string()
   .regex(/^sub_[A-Za-z0-9]+$/)

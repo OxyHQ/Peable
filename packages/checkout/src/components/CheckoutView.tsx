@@ -71,7 +71,7 @@ export function CheckoutView({
         <div className="billing-quote">
           <p>
             {t('quoteCatalogue', {
-              amount: formatAmount(String(billingQuote.gross_minor_units), 'USD', locale),
+              amount: formatAmount(billingQuote.gross_minor_units, 'USD', locale),
             })}
           </p>
           <p>

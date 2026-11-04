@@ -17,6 +17,7 @@ import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
+import { formatSignedAmount } from '@/format/money';
 import { formatInstant, nowSeconds } from '@/format/time';
 import { t } from '@/i18n';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
@@ -444,9 +445,8 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                 </Text>
                 <Text variant="caption-1-regular" selectable className="text-muted-foreground">
                   {t('tax.reportAmounts', {
-                    taxable: (row.taxable_amount / 100).toFixed(2),
-                    tax: (row.tax_amount / 100).toFixed(2),
-                    currency: row.currency,
+                    taxable: formatSignedAmount(row.taxable_amount, row.currency),
+                    tax: formatSignedAmount(row.tax_amount, row.currency),
                   })}
                 </Text>
               </View>

@@ -81,11 +81,6 @@ export async function checkoutTax(
         },
       ],
     });
-    for (const line of priced) {
-      if (line.amount > BigInt(Number.MAX_SAFE_INTEGER)) {
-        return { status: 'failed', taxes: NONE, calculationId: null, reason: 'amount_too_large' };
-      }
-    }
     const calculation = await tax.calculate(
       merchant,
       {
@@ -93,7 +88,7 @@ export async function checkoutTax(
         customer_location_evidence_id: evidence.id,
         line_items: priced.map((line) => ({
           reference: line.key,
-          amount: Number(line.amount),
+          amount: line.amount.toString(),
           quantity: line.quantity,
           ...(line.taxCode ? { tax_code: line.taxCode } : {}),
           ...(line.taxBehavior !== 'unspecified' ? { tax_behavior: line.taxBehavior } : {}),

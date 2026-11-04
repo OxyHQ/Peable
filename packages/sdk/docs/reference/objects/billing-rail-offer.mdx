@@ -15,7 +15,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `plan_id` | string |  |
 | `interval` | string | One of `month`, `year`. |
 | `currency` | string |  |
-| `gross_minor_units` | integer | At least -9007199254740991. |
+| `gross_minor_units` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `tax_treatment` | string | One of `inclusive`, `exclusive`. |
 
 ## Used in

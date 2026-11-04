@@ -31,6 +31,7 @@ import { MemoryMailer } from '../../services/email/mailer';
 import { dispatchCustomerEmails } from '../../services/email/dispatcher';
 import { registerSubscriptionCheckoutFulfiller } from '../../services/checkout/subscriptionFulfiller';
 import type { TaxService } from '../../services/tax/taxService';
+import { exclusiveTaxOf } from '../../__tests__/helpers/fakeTax';
 import { must } from '../../__tests__/helpers/must';
 import {
   gatewayDb,
@@ -81,7 +82,7 @@ const fakeTax = {
     _m: unknown,
     raw: {
       customer_location_evidence_id: string;
-      line_items: { reference: string; amount: number; tax_behavior?: string }[];
+      line_items: { reference: string; amount: string; tax_behavior?: string }[];
     },
   ) {
     if (raw.customer_location_evidence_id === 'taxloc_XX') {
@@ -92,7 +93,7 @@ const fakeTax = {
       id: newId('taxcalc'),
       line_items: raw.line_items.map((line) => ({
         reference: line.reference,
-        amount_tax: Math.round(line.amount * 0.21),
+        amount_tax: exclusiveTaxOf(BigInt(line.amount), 21n).toString(),
         tax_behavior: line.tax_behavior ?? 'exclusive',
       })),
     };

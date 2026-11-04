@@ -22,6 +22,7 @@ import {
 import { createPeableTaxQuoteCalculator } from '../../services/tax/billingTaxQuotes';
 import { createTaxService } from '../../services/tax/taxService';
 import type { TaxProvider } from '../../services/tax/provider';
+import { exclusiveTaxOf, inclusiveTaxOf } from '../helpers/fakeTax';
 import { taxLocationEvidence, taxRegistrations, taxSettings } from '../../db/schema/tax';
 import { createBillingRouter } from '../../routes/billing';
 import { createMerchantsRouter } from '../../routes/merchants';
@@ -154,8 +155,8 @@ async function initialize(input: {
         lineItems: request.lineItems.map((line) => {
           const amountTax =
             line.taxBehavior === 'inclusive'
-              ? line.amount - Math.round(line.amount / 1.2)
-              : Math.round(line.amount * 0.2);
+              ? inclusiveTaxOf(line.amount, 20n)
+              : exclusiveTaxOf(line.amount, 20n);
           return {
             reference: line.reference,
             amount: line.amount,
@@ -169,9 +170,11 @@ async function initialize(input: {
                 display_name: 'SYNTHETIC_NOT_REAL_TAX',
                 tax_type: 'vat',
                 rate_percentage: '20.0',
-                taxable_amount:
-                  line.taxBehavior === 'inclusive' ? line.amount - amountTax : line.amount,
-                amount: amountTax,
+                taxable_amount: (line.taxBehavior === 'inclusive'
+                  ? line.amount - amountTax
+                  : line.amount
+                ).toString(),
+                amount: amountTax.toString(),
                 inclusive: line.taxBehavior === 'inclusive',
                 taxability_reason: 'standard_rated',
               },
@@ -204,7 +207,7 @@ async function initialize(input: {
       id: `fx_${randomUUID()}`,
       currency: 'USD',
       gross_minor_units: amount,
-      amount_base_units: String(BigInt(amount) * 1000000n),
+      amount_base_units: (BigInt(amount) * 1000000n).toString(),
       usd_per_fair: '1',
       source: 'SYNTHETIC_NOT_REAL_FX',
       observed_at: toUnix(clock()),

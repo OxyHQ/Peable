@@ -89,6 +89,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // `0073`–`0074` (ADR 0020) merge.
   '0072_provider_events_received_seq_validate':
     'released with #208; deployed before 0073 (tax compliance) merges',
+  // Business compliance's validate half shipped with #204, whose deploy
+  // (0ee84a3e) applied its post phase in production before the tax amounts'
+  // `0075`–`0076` (ADR 0014 D1) existed.
+  '0074_tax_compliance_validate':
+    'released with #204; applied in production by the 0ee84a3e deploy',
 };
 
 interface Migration {

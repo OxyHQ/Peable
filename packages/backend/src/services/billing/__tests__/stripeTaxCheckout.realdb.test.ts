@@ -7,6 +7,7 @@ import {
   seedMerchant,
   useGatewayDatabase,
 } from '../../../__tests__/helpers/gatewayTestDatabase';
+import { exclusiveTaxOf } from '../../../__tests__/helpers/fakeTax';
 import { bindBillingObject } from '../../../db/billing/billingRepository';
 import { billingRenewalTaxes, taxTransactions } from '../../../db/schema';
 import { STRIPE_API_VERSION } from '../../providers/stripe/client';
@@ -29,7 +30,7 @@ const provider: TaxProvider = {
     livemode: true,
     expiresAt: null,
     lineItems: input.lineItems.map((line) => {
-      const amountTax = Math.round((line.amount * vatRate) / 100);
+      const amountTax = exclusiveTaxOf(line.amount, BigInt(vatRate));
       return {
         reference: line.reference,
         amount: line.amount,
@@ -43,8 +44,8 @@ const provider: TaxProvider = {
             display_name: 'VAT',
             tax_type: 'vat',
             rate_percentage: `${vatRate}.0`,
-            taxable_amount: line.amount,
-            amount: amountTax,
+            taxable_amount: line.amount.toString(),
+            amount: amountTax.toString(),
             inclusive: false,
             taxability_reason: 'standard_rated',
           },
@@ -364,11 +365,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
       provider_price_id: 'price_one',
       customer_location_evidence_id: evidence.id,
     });
-    expect(quote).toMatchObject({ schema_version: 2, signature: { key_id: 'peable-test' } });
+    expect(quote).toMatchObject({ schema_version: 3, signature: { key_id: 'peable-test' } });
     expect(quote.quote).toMatchObject({
-      gross_minor_units: 3599,
-      net_minor_units: 2999,
-      tax_minor_units: 600,
+      gross_minor_units: '3599',
+      net_minor_units: '2999',
+      tax_minor_units: '600',
       tax_service_ref: 'peable_tax',
       customer_location_evidence_id: evidence.id,
     });
@@ -411,14 +412,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
       taxLines: true,
     });
     expect(authority).toMatchObject({
-      schema_version: 2,
+      schema_version: 3,
       method: 'card',
       signature: { key_id: 'peable-test' },
-      invoice: { gross_minor_units: 3599, tax_minor_units: 600, tax_quote_id: quote.quote.id },
+      invoice: {
+        gross_minor_units: '3599',
+        net_minor_units: '2999',
+        tax_minor_units: '600',
+        merchant_fee_minor_units: '0',
+        tax_quote_id: quote.quote.id,
+      },
     });
-    expect(
-      authority.invoice.tax_lines?.reduce((sum, entry) => sum + entry.tax_minor_units, 0),
-    ).toBe(600);
+    expect(authority.invoice.tax_lines?.map((entry) => entry.tax_minor_units)).toEqual(['600']);
 
     // The renewal: the rate changed, so the draft is held, repriced from fresh
     // evidence at 19% and released only once Stripe's totals are the quote.
@@ -445,7 +450,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
     const renewal = await service.retrieveFinalInvoiceAuthority(owner, 'sub_one', 'in_two', {
       taxLines: true,
     });
-    expect(renewal.invoice).toMatchObject({ gross_minor_units: 3569, tax_minor_units: 570 });
+    expect(renewal.invoice).toMatchObject({ gross_minor_units: '3569', tax_minor_units: '570' });
     expect(renewal.invoice.tax_quote_id).not.toBe(quote.quote.id);
 
     // Half refunded: the renewal's transaction is reversed by half, once.
@@ -460,14 +465,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
     const reversal = listed.data.find((row) => row.type === 'reversal');
     expect(reversal).toMatchObject({
       reference: 'in_two:reversal:1',
-      reversal: { amount_total: -1785, tax_amount: -285 },
+      reversal: { amount_total: '-1785', tax_amount: '-285' },
     });
     expect(reversal?.reversal_of).toBe(listed.data.find((row) => row.reference === 'in_two')?.id);
     const report = await tax.report(merchant, window);
     expect(report.rows.find((row) => row.rate_percentage === '19.0')).toMatchObject({
       transactions: 1,
       reversals: 1,
-      tax_amount: 285,
+      tax_amount: '285',
     });
   });
 });

@@ -2,18 +2,22 @@ import { describe, expect, it } from 'bun:test';
 import { createExplorerFaircoinQuote, faircoinBaseUnitsForUsd } from '../faircoin-fx';
 describe('USD commercial price to exact expiring FAIR settlement quote', () => {
   it('rounds up exactly to 1e-8 FAIR without cent/base-unit confusion', () => {
-    expect(faircoinBaseUnitsForUsd(2999, '0.12')).toBe('24991666667');
-    expect(faircoinBaseUnitsForUsd(2999, '1')).toBe('2999000000');
-    expect(faircoinBaseUnitsForUsd(1, '3')).toBe('333334');
-    expect(faircoinBaseUnitsForUsd(1, '1e-8')).toBe('100000000000000');
-    expect(faircoinBaseUnitsForUsd(2999, '0.1200')).toBe('24991666667');
+    expect(faircoinBaseUnitsForUsd('2999', '0.12')).toBe('24991666667');
+    expect(faircoinBaseUnitsForUsd('2999', '1')).toBe('2999000000');
+    expect(faircoinBaseUnitsForUsd('1', '3')).toBe('333334');
+    expect(faircoinBaseUnitsForUsd('1', '1e-8')).toBe('100000000000000');
+    expect(faircoinBaseUnitsForUsd('2999', '0.1200')).toBe('24991666667');
     for (const rate of ['0', '-1', 'NaN', 'Infinity', '1e900', '0.1garbage'])
-      expect(() => faircoinBaseUnitsForUsd(2999, rate)).toThrow();
+      expect(() => faircoinBaseUnitsForUsd('2999', rate)).toThrow();
+    // A USD amount is a canonical base-unit string, and it stays exact past 2^53.
+    for (const usd of ['0', '01', '-1', '29.99', ''])
+      expect(() => faircoinBaseUnitsForUsd(usd, '1')).toThrow();
+    expect(faircoinBaseUnitsForUsd('9007199254740993', '1')).toBe('9007199254740993000000');
   });
   it('uses fresh source evidence and refuses a stale/missing quote', async () => {
     const now = new Date();
     const read = (value: unknown) => (async () => Response.json(value)) as unknown as typeof fetch;
-    const quote = await createExplorerFaircoinQuote(2999, {
+    const quote = await createExplorerFaircoinQuote('2999', {
       now,
       fetch: read({ price: 0.12, source: 'wfair-base', updatedAt: now.toISOString() }),
     });
@@ -29,13 +33,15 @@ describe('USD commercial price to exact expiring FAIR settlement quote', () => {
       { price: 0.12, source: 'wfair-base', updatedAt: new Date(+now - 120_001).toISOString() },
       { price: 0.12, source: 'wfair-base', updatedAt: new Date(+now + 2000).toISOString() },
     ]) {
-      await expect(createExplorerFaircoinQuote(2999, { now, fetch: read(body) })).rejects.toThrow();
+      await expect(
+        createExplorerFaircoinQuote('2999', { now, fetch: read(body) }),
+      ).rejects.toThrow();
     }
   });
   it('reads the current official response and identifies the server client', async () => {
     const now = new Date('2026-10-15T10:47:22.537Z');
     let request: RequestInit | undefined;
-    const quote = await createExplorerFaircoinQuote(2999, {
+    const quote = await createExplorerFaircoinQuote('2999', {
       now,
       fetch: (async (_url, options) => {
         request = options;

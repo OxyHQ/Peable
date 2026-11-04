@@ -13,7 +13,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | --- | --- | --- |
 | `id` | string |  |
 | `currency` | `"USD"` |  |
-| `gross_minor_units` | integer | At least -9007199254740991. |
+| `gross_minor_units` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `amount_base_units` | string |  |
 | `usd_per_fair` | string |  |
 | `source` | string |  |

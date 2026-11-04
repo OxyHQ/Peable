@@ -523,14 +523,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         },
         async calculate({ source }) {
           return resign({
-            schema_version: 2,
+            schema_version: 3,
             source,
             quote: {
               id: 'quote_fixture',
               currency: 'USD',
-              gross_minor_units: 2999,
-              net_minor_units: 2500,
-              tax_minor_units: 499,
+              gross_minor_units: '2999',
+              net_minor_units: '2500',
+              tax_minor_units: '499',
               tax_treatment: 'inclusive',
               seller_id: 'seller_fixture',
               invoice_issuer_id: 'issuer_fixture',
@@ -554,7 +554,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           if (!taxCheckoutSnapshot) throw new Error('Missing persisted checkout quote');
           const quote = taxCheckoutSnapshot.taxQuote.quote;
           const authority: BillingFinalInvoiceAuthority = {
-            schema_version: 2,
+            schema_version: 3,
             source: {
               invoice_id: paid.invoice_id,
               payment_intent_id: paid.payment_intent_id,
@@ -573,7 +573,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
               gross_minor_units: quote.gross_minor_units,
               net_minor_units: quote.net_minor_units,
               tax_minor_units: quote.tax_minor_units,
-              merchant_fee_minor_units: 0,
+              merchant_fee_minor_units: '0',
               tax_treatment: quote.tax_treatment,
               seller_id: quote.seller_id,
               invoice_issuer_id: quote.invoice_issuer_id,
@@ -723,9 +723,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         status: 'open',
         client_secret: 'cs_test_embedded_secret_ephemeral',
         expires_at: fixture.quote.quote.expires_at,
-        amount_total: fixture.quote.quote.gross_minor_units,
+        amount_total: Number(fixture.quote.quote.gross_minor_units),
         currency: 'usd',
-        total_details: { amount_tax: fixture.quote.quote.tax_minor_units },
+        total_details: { amount_tax: Number(fixture.quote.quote.tax_minor_units) },
         line_items: {
           has_more: false,
           data: [{ quantity: 1, price: { id: checkout.provider_price_id } }],
@@ -885,7 +885,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           quote.quote.expires_at = toUnix(time);
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.net_minor_units++;
+          quote.quote.net_minor_units = '2501';
         },
         (quote: BillingTaxQuote) => {
           quote.quote.seller_id = 'seller_other';
@@ -1832,7 +1832,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         verificationKeys,
         async read({ owner: invoiceOwner, merchantPublicId, invoice: paid }) {
           const authority: BillingFinalInvoiceAuthority = {
-            schema_version: 2,
+            schema_version: 3,
             source: {
               invoice_id: paid.invoice_id,
               payment_intent_id: paid.payment_intent_id,
@@ -1848,10 +1848,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             invoice: {
               platform: 'peable',
               currency: paid.currency,
-              gross_minor_units: 2999,
-              net_minor_units: 2500,
-              tax_minor_units: 499,
-              merchant_fee_minor_units: 0,
+              gross_minor_units: '2999',
+              net_minor_units: '2500',
+              tax_minor_units: '499',
+              merchant_fee_minor_units: '0',
               tax_treatment: 'inclusive',
               seller_id: 'seller_fixture',
               invoice_issuer_id: 'issuer_fixture',
@@ -1894,7 +1894,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         await verifiedSdk.billing.retrieveFinalInvoiceAuthority('sub_one', 'in_one'),
       ).toMatchObject({
         source: { invoice_id: 'in_one', app_id: owner.oxyAppId },
-        invoice: { gross_minor_units: 2999 },
+        invoice: { gross_minor_units: '2999' },
       });
       expect(
         (await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one', 'other'))

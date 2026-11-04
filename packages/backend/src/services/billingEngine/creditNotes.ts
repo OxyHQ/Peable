@@ -445,7 +445,10 @@ export async function reverseInvoiceTax(
     originalId: original,
     reference,
     reversedAt: at,
-    target: (reversed, total) => Math.max(0, Math.min(total, reversed + Number(gross))),
+    target: (reversed, total) => {
+      const target = reversed + gross;
+      return target < 0n ? 0n : target > total ? total : target;
+    },
   });
 }
 

@@ -57,16 +57,14 @@ export function verifyFinalInvoiceAuthority(
     context.period_end !== paid.period_end ||
     context.period_end <= context.period_start ||
     invoice.currency !== paid.currency ||
-    BigInt(invoice.gross_minor_units) !== BigInt(paid.amount_paid) ||
-    paid.net_amount === null ||
-    paid.tax_amount === null ||
-    BigInt(invoice.net_minor_units) !== BigInt(paid.net_amount) ||
-    BigInt(invoice.tax_minor_units) !== BigInt(paid.tax_amount) ||
-    invoice.net_minor_units + invoice.tax_minor_units !== invoice.gross_minor_units ||
+    invoice.gross_minor_units !== paid.amount_paid ||
+    invoice.net_minor_units !== paid.net_amount ||
+    invoice.tax_minor_units !== paid.tax_amount ||
+    BigInt(invoice.net_minor_units) + BigInt(invoice.tax_minor_units) !==
+      BigInt(invoice.gross_minor_units) ||
     (invoice.tax_lines !== undefined &&
-      invoice.tax_lines.reduce((sum, line) => sum + line.tax_minor_units, 0) !==
-        invoice.tax_minor_units) ||
-    !Number.isSafeInteger(invoice.net_minor_units + invoice.tax_minor_units) ||
+      invoice.tax_lines.reduce((sum, line) => sum + BigInt(line.tax_minor_units), 0n) !==
+        BigInt(invoice.tax_minor_units)) ||
     invoice.issued_at > clock ||
     invoice.expires_at <= clock ||
     invoice.expires_at <= invoice.issued_at ||

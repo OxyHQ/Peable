@@ -120,7 +120,7 @@ test('an expired frozen subscription quote shows canonical amounts and no paymen
   const quote = {
     id: 'fx_expired',
     currency: 'USD' as const,
-    gross_minor_units: 100,
+    gross_minor_units: '100',
     amount_base_units: '333333334',
     usd_per_fair: '0.3',
     source: 'official',

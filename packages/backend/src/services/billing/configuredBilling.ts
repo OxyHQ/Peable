@@ -205,7 +205,7 @@ async function configureFaircoinRail({ db, body, adapters }: RailContext): Promi
           plan_id: offer.planId,
           interval: offer.interval,
           currency: offer.currency,
-          gross_minor_units: offer.grossMinorUnits,
+          gross_minor_units: String(offer.grossMinorUnits),
           tax_treatment: offer.taxTreatment,
         })),
     },
@@ -486,7 +486,7 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
             plan_id: offer.planId,
             interval: offer.interval,
             currency: offer.currency,
-            gross_minor_units: offer.grossMinorUnits,
+            gross_minor_units: String(offer.grossMinorUnits),
             tax_treatment: offer.taxTreatment,
           }))
         : null;

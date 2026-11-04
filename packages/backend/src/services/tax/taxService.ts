@@ -2,6 +2,7 @@ import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or } from 'd
 import { alias } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 import {
+  type CreateTaxCalculationParams,
   createTaxCalculationParams,
   createTaxLocationEvidenceParams,
   createTaxRegistrationParams,
@@ -593,7 +594,8 @@ export function createTaxService(options: TaxServiceOptions) {
      */
     async calculate(
       merchant: MerchantRow,
-      raw: unknown,
+      /** Typed for internal callers; a route's body is parsed the same either way. */
+      raw: CreateTaxCalculationParams,
       opts: { requireActive: boolean },
     ): Promise<TaxCalculation> {
       const input = parseTaxRequest(createTaxCalculationParams, raw);
@@ -638,7 +640,7 @@ export function createTaxService(options: TaxServiceOptions) {
         if (!isKnownTaxCode(taxCode)) throw new TaxError('invalid_tax_code', taxCode);
         return {
           reference: line.reference,
-          amount: line.amount,
+          amount: BigInt(line.amount),
           quantity: line.quantity ?? 1,
           taxCode,
           taxBehavior: (line.tax_behavior ??
@@ -662,12 +664,12 @@ export function createTaxService(options: TaxServiceOptions) {
         quantity: line.quantity,
         tax_code: line.taxCode,
         tax_behavior: line.taxBehavior,
-        amount: line.amount,
+        amount: line.amount.toString(),
       });
       const untaxed = (line: (typeof lines)[number], reason: string): TaxCalculationLineItem => ({
         ...wireLine(line),
-        amount_tax: 0,
-        amount_net: line.amount,
+        amount_tax: '0',
+        amount_net: line.amount.toString(),
         breakdown: [
           {
             country,
@@ -676,8 +678,8 @@ export function createTaxService(options: TaxServiceOptions) {
             display_name: null,
             tax_type: null,
             rate_percentage: null,
-            taxable_amount: 0,
-            amount: 0,
+            taxable_amount: '0',
+            amount: '0',
             inclusive: line.taxBehavior === 'inclusive',
             taxability_reason: reason,
           },
@@ -735,16 +737,15 @@ export function createTaxService(options: TaxServiceOptions) {
             !got ||
             got.amount !== line.amount ||
             got.taxBehavior !== line.taxBehavior ||
-            !Number.isSafeInteger(got.amountTax) ||
-            got.amountTax < 0 ||
+            got.amountTax < 0n ||
             (line.taxBehavior === 'inclusive' && got.amountTax > line.amount)
           )
             throw new TaxError('tax_calculation_unavailable', 'inconsistent_answer');
+          const net = line.taxBehavior === 'inclusive' ? line.amount - got.amountTax : line.amount;
           return {
             ...wireLine(line),
-            amount_tax: got.amountTax,
-            amount_net:
-              line.taxBehavior === 'inclusive' ? line.amount - got.amountTax : line.amount,
+            amount_tax: got.amountTax.toString(),
+            amount_net: net.toString(),
             breakdown: got.breakdown,
           };
         });
@@ -761,16 +762,16 @@ export function createTaxService(options: TaxServiceOptions) {
         providerRef = answer.providerRef;
         providerExpiry = answer.expiresAt;
       }
-      const taxAmountExclusive = computed
-        .filter((line) => line.tax_behavior === 'exclusive')
-        .reduce((sum, line) => sum + line.amount_tax, 0);
-      const taxAmountInclusive = computed
-        .filter((line) => line.tax_behavior === 'inclusive')
-        .reduce((sum, line) => sum + line.amount_tax, 0);
-      const amountNet = computed.reduce((sum, line) => sum + line.amount_net, 0);
-      const amountTotal = computed.reduce((sum, line) => sum + line.amount, 0) + taxAmountExclusive;
-      if (![amountNet, amountTotal].every(Number.isSafeInteger))
-        throw new TaxError('invalid_tax_request', 'amount overflow');
+      const taxAmountExclusive = sumOf(
+        computed.filter((line) => line.tax_behavior === 'exclusive'),
+        (line) => line.amount_tax,
+      );
+      const taxAmountInclusive = sumOf(
+        computed.filter((line) => line.tax_behavior === 'inclusive'),
+        (line) => line.amount_tax,
+      );
+      const amountNet = sumOf(computed, (line) => line.amount_net);
+      const amountTotal = sumOf(computed, (line) => line.amount) + taxAmountExclusive;
       const expiresAt = new Date(
         Math.min(
           +evidence.expiresAt,
@@ -789,10 +790,10 @@ export function createTaxService(options: TaxServiceOptions) {
         customer_location_evidence_id: evidence.publicId,
         country,
         state: evidence.state,
-        amount_total: amountTotal,
-        amount_net: amountNet,
-        tax_amount_exclusive: taxAmountExclusive,
-        tax_amount_inclusive: taxAmountInclusive,
+        amount_total: amountTotal.toString(),
+        amount_net: amountNet.toString(),
+        tax_amount_exclusive: taxAmountExclusive.toString(),
+        tax_amount_inclusive: taxAmountInclusive.toString(),
         line_items: computed,
         tax_date: toUnix(at),
         created: toUnix(at),
@@ -902,7 +903,8 @@ export function createTaxService(options: TaxServiceOptions) {
         originalId: original.id,
         reference: input.reference,
         reversedAt: now(),
-        target: (reversed, total) => (input.amount === undefined ? total : reversed + input.amount),
+        target: (reversed, total) =>
+          input.amount === undefined ? total : reversed + BigInt(input.amount),
       });
       if (!row) throw new TaxError('invalid_tax_request', 'nothing left to reverse');
       return row;
@@ -918,7 +920,15 @@ export function createTaxService(options: TaxServiceOptions) {
             .where(eq(taxRegistrations.merchantId, merchant.id))
         ).map((row) => [row.publicId, row.scheme]),
       );
-      const rows = new Map<string, TaxReportRow>();
+      // Each row's amounts are summed exactly and spelled once, at the end.
+      const rows = new Map<
+        string,
+        {
+          row: Omit<TaxReportRow, 'taxable_amount' | 'tax_amount'>;
+          taxable: bigint;
+          tax: bigint;
+        }
+      >();
       let cursor: string | undefined;
       for (;;) {
         const page = await transactionsBetween(
@@ -944,23 +954,25 @@ export function createTaxService(options: TaxServiceOptions) {
                 calculation.currency,
               ]);
               const existing = rows.get(key) ?? {
-                country: entry.country,
-                state: entry.state,
-                registration_id: calculation.registration_id,
-                scheme: calculation.registration_id
-                  ? (schemes.get(calculation.registration_id) ?? null)
-                  : null,
-                collection: calculation.collection,
-                tax_type: entry.tax_type,
-                rate_percentage: entry.rate_percentage,
-                currency: calculation.currency,
-                transactions: 0,
-                reversals: 0,
-                taxable_amount: 0,
-                tax_amount: 0,
+                row: {
+                  country: entry.country,
+                  state: entry.state,
+                  registration_id: calculation.registration_id,
+                  scheme: calculation.registration_id
+                    ? (schemes.get(calculation.registration_id) ?? null)
+                    : null,
+                  collection: calculation.collection,
+                  tax_type: entry.tax_type,
+                  rate_percentage: entry.rate_percentage,
+                  currency: calculation.currency,
+                  transactions: 0,
+                  reversals: 0,
+                },
+                taxable: 0n,
+                tax: 0n,
               };
-              existing.taxable_amount += entry.taxable_amount;
-              existing.tax_amount += entry.amount;
+              existing.taxable += BigInt(entry.taxable_amount);
+              existing.tax += BigInt(entry.amount);
               rows.set(key, existing);
             }
           // Count each transaction once per row it contributes to.
@@ -980,7 +992,7 @@ export function createTaxService(options: TaxServiceOptions) {
             ),
           );
           for (const key of keys) {
-            const existing = rows.get(key);
+            const existing = rows.get(key)?.row;
             if (existing && reversal) existing.reversals += 1;
             else if (existing) existing.transactions += 1;
           }
@@ -992,12 +1004,20 @@ export function createTaxService(options: TaxServiceOptions) {
         object: 'tax.report',
         from: input.from,
         to: input.to,
-        rows: [...rows.values()].sort(
-          (a, b) =>
-            a.country.localeCompare(b.country) ||
-            (a.state ?? '').localeCompare(b.state ?? '') ||
-            (a.rate_percentage ?? '').localeCompare(b.rate_percentage ?? ''),
-        ),
+        rows: [...rows.values()]
+          .map(
+            ({ row, taxable, tax }): TaxReportRow => ({
+              ...row,
+              taxable_amount: taxable.toString(),
+              tax_amount: tax.toString(),
+            }),
+          )
+          .sort(
+            (a, b) =>
+              a.country.localeCompare(b.country) ||
+              (a.state ?? '').localeCompare(b.state ?? '') ||
+              (a.rate_percentage ?? '').localeCompare(b.rate_percentage ?? ''),
+          ),
       };
     },
   };
@@ -1118,28 +1138,32 @@ export async function commitTaxTransaction(
     .onConflictDoNothing();
 }
 
-/** Round `value × numerator / denominator` half up, for non-negative integers. */
-function scaled(value: number, numerator: number, denominator: number): number {
-  const sign = value < 0 ? -1n : 1n;
-  const magnitude = BigInt(Math.abs(value)) * BigInt(numerator);
-  const d = BigInt(denominator);
-  return Number(sign * ((2n * magnitude + d) / (2n * d)));
+/** The exact sum of the base-unit strings `amount` picks out of `items`. */
+function sumOf<T>(items: readonly T[], amount: (item: T) => string): bigint {
+  return items.reduce((total, item) => total + BigInt(amount(item)), 0n);
+}
+
+/** Round `value × numerator / denominator` half away from zero; `numerator`
+ * and `denominator` are non-negative. */
+function scaled(value: bigint, numerator: bigint, denominator: bigint): bigint {
+  const sign = value < 0n ? -1n : 1n;
+  const magnitude = sign * value * numerator;
+  return sign * ((2n * magnitude + denominator) / (2n * denominator));
 }
 
 /** What a cumulative reversal of `reversed` out of `total` gives back, line by
  * line. Always cumulative, so the parts of several partial reversals add up to
  * exactly the original once everything is reversed. */
-function cumulativeLines(calculation: TaxCalculation, reversed: number) {
-  const total = calculation.amount_total;
+function cumulativeLines(calculation: TaxCalculation, reversed: bigint) {
+  const total = BigInt(calculation.amount_total);
   return calculation.line_items.map((line) => {
     const breakdown = line.breakdown.map((entry) => ({
-      ...entry,
-      taxable_amount: scaled(entry.taxable_amount, reversed, total),
-      amount: scaled(entry.amount, reversed, total),
+      taxable: scaled(BigInt(entry.taxable_amount), reversed, total),
+      tax: scaled(BigInt(entry.amount), reversed, total),
     }));
-    const amountTax = breakdown.reduce((sum, entry) => sum + entry.amount, 0);
+    const amountTax = breakdown.reduce((sum, entry) => sum + entry.tax, 0n);
     const gross = scaled(
-      line.amount + (line.tax_behavior === 'exclusive' ? line.amount_tax : 0),
+      BigInt(line.amount) + (line.tax_behavior === 'exclusive' ? BigInt(line.amount_tax) : 0n),
       reversed,
       total,
     );
@@ -1165,7 +1189,7 @@ export async function reverseTaxTransaction(
     /** The reversal's own reference, or one minted from its sequence number. */
     reference: string | ((sequence: number) => string);
     reversedAt: Date;
-    target: (reversed: number, total: number) => number;
+    target: (reversed: bigint, total: bigint) => bigint;
   },
 ): Promise<TaxTransaction | null> {
   return db.transaction(async (tx) => {
@@ -1193,12 +1217,15 @@ export async function reverseTaxTransaction(
         calculation,
         originalPublicId: original.publicId,
       });
-    const total = calculation.result.amount_total;
-    const reversed = -existing.reduce((sum, row) => sum + (row.reversal?.amount_total ?? 0), 0);
+    const total = BigInt(calculation.result.amount_total);
+    const reversed = -existing.reduce(
+      (sum, row) => sum + BigInt(row.reversal?.amount_total ?? '0'),
+      0n,
+    );
     const target = input.target(reversed, total);
-    if (!Number.isSafeInteger(target) || target < 0 || target > total)
+    if (target < 0n || target > total)
       throw new TaxError('invalid_tax_request', 'a reversal cannot exceed the original');
-    if (target === reversed || total === 0) return null;
+    if (target === reversed || total === 0n) return null;
     const before = cumulativeLines(calculation.result, reversed);
     const after = cumulativeLines(calculation.result, target);
     // Negative: what this reversal gives back (positive when it reinstates).
@@ -1209,26 +1236,27 @@ export async function reverseTaxTransaction(
       const gross = was.gross - now.gross;
       return {
         ...now.line,
-        amount: gross - (now.line.tax_behavior === 'exclusive' ? amountTax : 0),
-        amount_tax: amountTax,
-        amount_net: gross - amountTax,
-        breakdown: now.breakdown.map((entry, at) => {
+        amount: (gross - (now.line.tax_behavior === 'exclusive' ? amountTax : 0n)).toString(),
+        amount_tax: amountTax.toString(),
+        amount_net: (gross - amountTax).toString(),
+        breakdown: now.line.breakdown.map((entry, at) => {
           const prior = was.breakdown[at];
-          if (!prior) throw new Error('reversal breakdown diverged');
+          const current = now.breakdown[at];
+          if (!prior || !current) throw new Error('reversal breakdown diverged');
           return {
             ...entry,
-            taxable_amount: prior.taxable_amount - entry.taxable_amount,
-            amount: prior.amount - entry.amount,
+            taxable_amount: (prior.taxable - current.taxable).toString(),
+            amount: (prior.tax - current.tax).toString(),
           };
         }),
       };
     });
-    const taxAmount = lineItems.reduce((sum, line) => sum + line.amount_tax, 0);
-    const amountNet = lineItems.reduce((sum, line) => sum + line.amount_net, 0);
+    const taxAmount = sumOf(lineItems, (line) => line.amount_tax);
+    const amountNet = sumOf(lineItems, (line) => line.amount_net);
     const reversal: TaxTransactionReversal = {
-      amount_total: amountNet + taxAmount,
-      amount_net: amountNet,
-      tax_amount: taxAmount,
+      amount_total: (amountNet + taxAmount).toString(),
+      amount_net: amountNet.toString(),
+      tax_amount: taxAmount.toString(),
       line_items: lineItems,
     };
     const [row] = await tx
