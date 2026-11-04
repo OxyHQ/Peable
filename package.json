@@ -31,6 +31,7 @@
     "start:orbit": "bun run --filter @peable.to/orbit start",
     "postinstall": "bun run build:contracts && bun run build:shared-types && bun run build:sdk && bun run build:pay",
     "test:edge": "bun test scripts/edge-worker.test.ts",
+    "test:browser-entries": "bun test scripts/browser-entries.test.ts",
     "build:pay": "bun run --filter @peable.to/pay build",
     "build:contracts": "bun run --filter @peable.to/contracts build",
     "build:sdk": "bun run --filter @peable.to/sdk build",
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@types/node": "^20.0.0",
+    "esbuild": "0.25.12",
     "github-slugger": "2.0.0",
     "typescript": "~5.9.2"
   },
