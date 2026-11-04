@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- `webhooks.constructEvent` decodes a byte payload strictly: invalid UTF-8 (or a
+  leading BOM the signer did not sign) is a `PeableSignatureVerificationError`.
+  A lenient decoder could map two different byte bodies to the same string and
+  let both pass one signature.
+
 ## 1.0.0 — generated from the contracts; retries, timeouts, typed errors (ADR 0014)
 
 Requires `@peable.to/contracts` 1.0.0 and `@peable.to/shared-types` 1.0.0. A

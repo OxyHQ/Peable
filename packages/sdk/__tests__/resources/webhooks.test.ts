@@ -83,6 +83,37 @@ const EVENT: WebhookEvent = {
 const RAW_BODY = JSON.stringify(EVENT);
 
 describe('WebhooksResource.constructEvent', () => {
+  test('a byte payload verifies when it is exactly the signed UTF-8 body', () => {
+    const header = signWebhook(SECRET, RAW_BODY, TIMESTAMP);
+    const event = new WebhooksResource().constructEvent(
+      new TextEncoder().encode(RAW_BODY),
+      header,
+      SECRET,
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect(event.id).toBe(EVENT.id);
+  });
+
+  test('invalid UTF-8 bytes are refused even when their lenient decoding would match the signature', () => {
+    // A lenient decoder maps the lone 0xff to U+FFFD, so these bytes would decode
+    // to exactly the text that was signed.
+    const signedText = `${RAW_BODY.slice(0, -1)}\ufffd}`;
+    const header = signWebhook(SECRET, signedText, TIMESTAMP);
+    const encoded = new TextEncoder().encode(RAW_BODY.slice(0, -1));
+    const bytes = new Uint8Array([...encoded, 0xff, 0x7d]);
+    expect(() =>
+      new WebhooksResource().constructEvent(bytes, header, SECRET, Number.MAX_SAFE_INTEGER),
+    ).toThrow(PeableSignatureVerificationError);
+  });
+
+  test('a leading BOM is part of the bytes, not silently dropped', () => {
+    const header = signWebhook(SECRET, RAW_BODY, TIMESTAMP);
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(RAW_BODY)]);
+    expect(() =>
+      new WebhooksResource().constructEvent(bytes, header, SECRET, Number.MAX_SAFE_INTEGER),
+    ).toThrow(PeableSignatureVerificationError);
+  });
+
   test('verifies a payload signed by shared-types signWebhook and returns the typed event', () => {
     const header = signWebhook(SECRET, RAW_BODY, TIMESTAMP);
     const resource = new WebhooksResource();
