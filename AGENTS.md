@@ -128,8 +128,14 @@ surface and are not contracts.
   every schema. A closed value set a schema needs lives in `contracts/src/vocabulary/`.
 - **The SDK's browser entries import a vocabulary MODULE, never the barrel**
   (`@peable.to/contracts/vocabulary/errors`, not `…/vocabulary`): Metro does not tree-shake, so
-  an app pays for every module behind a barrel. `sdk/__tests__/browser-bundle.test.ts` lists what
-  `./checkout` and `./checkout/ui` may reach and fails on anything else.
+  an app pays for every module behind a barrel.
+- **No browser or React Native entry reaches a Node-only module** (`node:*` or a bare builtin, or
+  `webhookSigner`, anywhere in its graph, third-party dependencies included): `@peable.to/sdk`
+  1.0.0's `./checkout/ui` reached `node:crypto` through the `shared-types` barrel and broke
+  Mention's Android bundle. `scripts/browser-entries.test.ts` (`bun run test:browser-entries`, CI)
+  lists every such entry — `sdk/checkout`, `sdk/checkout/ui`, `sdk/display`, `pay/ui`,
+  `shared-types/tax` and `/reporting` — with the vocabulary modules each may reach; a new browser
+  entry is a new row there.
 - **`sdk`** on a route is its server-SDK method path; every `service` route has one and no other route
   does (`openapi.test.ts`). Renaming it renames a published method.
 

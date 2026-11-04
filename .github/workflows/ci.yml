@@ -271,6 +271,13 @@ jobs:
       # skipped.
       - run: bun run --filter '*' test
 
+      # Every browser / React Native entry (scripts/browser-entries.test.ts):
+      # no Node-only module anywhere in its graph, third-party dependencies
+      # included, and only the vocabulary modules it reads. Resolves the
+      # contracts and shared-types dist built above.
+      - name: Browser entries reach no Node-only module
+        run: bun run test:browser-entries
+
       # Orbit's typecheck and tests ran with every package above; this proves
       # its web export, which is what deploy-orbit.yml ships. A Metro resolution
       # failure (a workspace `dist` missing, a native-only import on web) only

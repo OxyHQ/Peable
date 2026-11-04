@@ -7,7 +7,7 @@
 // must stay free of Node built-ins and of anything that constructs a schema,
 // and it imports the ONE vocabulary module it reads: an app bundler that does
 // not tree-shake (Metro) bundles every module of the `vocabulary` barrel
-// (`__tests__/browser-bundle.test.ts`).
+// (`scripts/browser-entries.test.ts`).
 
 import { ERROR_CODES, type ErrorType, errorDocUrl } from '@peable.to/contracts/vocabulary/errors';
 import type { PaymentIntent } from '@peable.to/shared-types';
