@@ -934,6 +934,13 @@ otherwise undo:
   `invoice` and `invoice_payment_failed`, `invoice_id`): owed in the change's
   transaction, sent by the dispatcher; `invoice.sent` is recorded only when the
   relay accepted the email.
+- **An adopted subscription carries two facts, not a mode** (`0077`/`0078`,
+  ADR 0018 §7): `provider_billed_until` (the previous provider billed the
+  current period through it — no engine line covers it, so no proration can
+  credit it) and `provider_handoff_pending` (that provider still renews it —
+  the engine must not). `subscriptions_provider_handoff_check` ties them. The
+  hold is a column, not `pause_collection`: a merchant can clear a pause, and a
+  hold the merchant can clear is a double charge waiting for a click.
 - **Migrations `0065`/`0066`**. `0065` is `pre`: new
   tables, additive columns, and the constraints added to EXISTING tables
   (`customer_emails_invoice_fkey`, `customer_emails_kind_check`,

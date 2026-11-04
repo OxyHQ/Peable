@@ -488,6 +488,11 @@ are migrated (ADR 0018 "as built" has the plan). Invariants:
   customer's clock (a test clock's frozen time in test mode).
 - **FairCoin is never debited**: FAIR subscriptions and invoices are
   `send_invoice` (CHECKed) and paid by the payer on the hosted invoice page.
+- **An adopted subscription is held until its old provider stops renewing**
+  (`adoption.ts`, ADR 0018 §7): `provider_handoff_pending` makes it inert —
+  no renewal, no trial end, merchant writes 409 — and only
+  `releaseProviderHandoff` hands renewal to the engine. Never clear it any
+  other way: two systems would bill the next period.
 - **Entitlements are the access answer**: features attached to products,
   active while a granting product is on a `trialing`/`active`/`past_due`
   subscription — Mention Plus through Plus OR Oxy One is one entitlement.

@@ -212,6 +212,20 @@ export const subscriptions = pgTable(
     discountEnd: timestamptz(),
     latestInvoiceId: text(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
+    /**
+     * An ADOPTED subscription (ADR 0018 §7, the Stripe-Billing migration):
+     * its current period was billed by the previous provider up to this
+     * instant, so no engine line covers it and nothing before it can be
+     * credited by a proration. NULL for every subscription the engine billed.
+     */
+    providerBilledUntil: timestamptz(),
+    /**
+     * The previous provider still holds renewal authority: until the
+     * migration has stopped it renewing, the engine neither renews this
+     * subscription nor ends its trial — exactly one system bills the next
+     * period. Written true only at adoption and false only by the release.
+     */
+    providerHandoffPending: boolean().notNull().default(false),
     nextActionAt: timestamptz(),
     leaseExpiresAt: timestamptz(),
     createdAt: createdAt(),
@@ -300,6 +314,11 @@ export const subscriptions = pgTable(
       ),
     ),
     check('subscriptions_metadata_check', sql`jsonb_typeof(${table.metadata}) = 'object'`),
+    /** A held renewal names the instant the previous provider billed through. */
+    check(
+      'subscriptions_provider_handoff_check',
+      sql.raw('not provider_handoff_pending or provider_billed_until is not null'),
+    ),
   ],
 );
 

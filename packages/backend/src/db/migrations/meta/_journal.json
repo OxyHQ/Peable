@@ -540,6 +540,20 @@
       "when": 1793759095271,
       "tag": "0076_tax_amounts_strings_settle",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793800966012,
+      "tag": "0077_subscription_adoption",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793800973690,
+      "tag": "0078_subscription_adoption_validate",
+      "breakpoints": true
     }
   ]
 }
