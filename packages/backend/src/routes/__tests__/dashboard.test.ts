@@ -77,9 +77,9 @@ const access = stubOxyAccess({
     userId === MEMBER_USER_ID
       ? { ownerAccountId: OWNER_ACCOUNT_ID }
       : userId === OXY_DOWN_USER_ID
-        ? 'unavailable'
+        ? 'ACCESS_UNAVAILABLE'
         : userId === STALE_SESSION_USER_ID
-          ? 'session_required'
+          ? 'ACCESS_SESSION_REQUIRED'
           : undefined,
 });
 

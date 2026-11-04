@@ -3,7 +3,8 @@ import type { Request, RequestHandler, Response } from 'express';
 import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
-import { type OxyAccess, oxyAccess } from '../services/oxyAccess';
+import type { OxyAccess } from '../services/oxyAccess';
+import { oxy } from '../oxy';
 import { dashboardGate, resolveDashboardAccess } from './dashboardAccess';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { registerMerchant, applyMerchantPatch, sendMerchantWriteError } from './merchants';
@@ -114,13 +115,13 @@ const paymentIntentsListQuery = dashboardQuery(listPaymentIntentsQuery);
  * service-authed `/v1/*` routes — a single handler never accepts both auth
  * strategies. Every route: `requireOxyUser` (human bearer) → the gate for the
  * route's ACTION (`dashboardAccess.ts`: environment, then the permission
- * `DASHBOARD_PERMISSIONS` names for it, asked of Oxy through `oxyAccess`) →
+ * `DASHBOARD_PERMISSIONS` names for it, asked of Oxy through `services/oxyAccess.ts`) →
  * the application's merchant → the EXACT SAME cores the service-authed routers
  * run. Every GET is `read`; every write names the action it is.
  */
 export function createDashboardRouter(deps: {
   requireOxyUser: RequestHandler;
-  /** What Oxy lets the caller do (default the real `oxyAccess`). */
+  /** What Oxy lets the caller do (default the process's `oxy`). */
   access?: OxyAccess;
   safeFetch?: SafeFetchFn;
   /** Oxy Files, for the avatar ownership check. Default: the real client. */
@@ -130,7 +131,7 @@ export function createDashboardRouter(deps: {
 }): Router {
   const files = deps.files ?? oxyFilesClient;
   const { requireOxyUser } = deps;
-  const access = deps.access ?? oxyAccess;
+  const access = deps.access ?? oxy;
   const gate = dashboardGate(access);
   const safeFetch = deps.safeFetch;
   const router = Router();

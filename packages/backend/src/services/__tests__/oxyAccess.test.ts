@@ -10,18 +10,14 @@ import {
 } from 'bun:test';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import express, { type Request } from 'express';
-import type { OxyAuthRequest } from '@oxy.so/core/server';
-import {
-  authorizeApplication,
-  type CallerClient,
-  createOxyAccess,
-  type OxyAccess,
-  OxyAccessError,
-} from '../oxyAccess';
+import express from 'express';
+import { OxyServer, type OxyApplicationAccess } from '@oxy.so/core/server';
+import type { DashboardAction } from '@peable.to/contracts/vocabulary';
+import { authorizeAccount, authorizeApplication, type OxyAccess } from '../oxyAccess';
 
 /**
- * oxy-api stand-in on LOOPBACK, reached through the real Oxy SDK client.
+ * The real path: Peable's gate over `@oxy.so/core`'s `applicationAccessFor` /
+ * `accountAccessFor`, against an oxy-api stand-in on LOOPBACK.
  *
  * Loopback is the point: in production `api.oxy.so` resolves, inside the VPC,
  * to the internal load balancer — a private address — and the SSRF guard the
@@ -30,7 +26,7 @@ import {
  */
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 let handler: Handler;
-let server: Server;
+let oxyApi: Server;
 let oxyApiUrl: string;
 const seen: { url?: string; authorization?: string }[] = [];
 
@@ -42,20 +38,44 @@ function answer(status: number, body: unknown): Handler {
   };
 }
 
-const application = (extra: Record<string, unknown> = {}) => ({
+/** `GET /applications/:id` as oxy-api serializes it for a member. */
+const application = (extra: Record<string, unknown> = {}, permissions = ['app:read']) => ({
   application: {
-    _id: 'app',
+    _id: 'app_1',
+    type: 'third_party',
     status: 'active',
+    isOfficial: false,
+    isInternal: false,
     ownerAccountId: 'acct_owner',
-    callerMembership: { role: 'owner', permissions: ['app:read', 'billing:read'] },
+    callerMembership: {
+      role: 'admin',
+      permissions,
+      source: 'account',
+      ownerAccountId: 'acct_owner',
+    },
+    ...extra,
+  },
+});
+
+/** `GET /accounts/:id` as oxy-api serializes it. */
+const account = (extra: Record<string, unknown> = {}) => ({
+  account: {
+    accountId: 'org_1',
+    kind: 'organization',
+    relationship: 'member',
+    callerAccess: {
+      role: 'admin',
+      permissions: ['account:read'],
+      status: 'active',
+      source: 'direct',
+    },
     ...extra,
   },
 });
 
 /**
- * A JWT-shaped user bearer, as Oxy mints them (the SDK attaches only a token
- * whose claims it can read). Unsigned: oxy-api — here the stand-in — is what
- * verifies it, never the gateway.
+ * A JWT-shaped user bearer, as Oxy mints them. Unsigned: oxy-api — here the
+ * stand-in — is what verifies it, never the gateway.
  */
 function userBearer(sessionId: string): string {
   const part = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -64,113 +84,139 @@ function userBearer(sessionId: string): string {
 }
 const BEARER = userBearer('sess_test');
 
-/** A request as `requireOxyUser` leaves it. */
-function signedIn(userId = 'user_1', extra: Partial<OxyAuthRequest> = {}): Request {
-  return Object.assign(Object.create(express.request) as Request, {
-    userId,
-    accessToken: BEARER,
-    sessionId: `sess_${userId}`,
-    ...extra,
-  });
-}
-
-/** What a check threw, or `null` when it answered. */
-async function failure(check: Promise<unknown>): Promise<string | null> {
-  try {
-    await check;
-    return null;
-  } catch (error) {
-    if (error instanceof OxyAccessError) return error.reason;
-    throw error;
-  }
-}
-
-let warn: ReturnType<typeof spyOn>;
 let access: OxyAccess;
+let warn: ReturnType<typeof spyOn>;
 
 beforeAll(async () => {
-  server = createServer((req, res) => handler(req, res));
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  oxyApiUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  oxyApi = createServer((req, res) => handler(req, res));
+  await new Promise<void>((resolve) => oxyApi.listen(0, '127.0.0.1', resolve));
+  oxyApiUrl = `http://127.0.0.1:${(oxyApi.address() as AddressInfo).port}`;
 });
 afterAll(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await new Promise<void>((resolve) => oxyApi.close(() => resolve()));
 });
 beforeEach(() => {
   seen.length = 0;
   warn = spyOn(console, 'warn').mockImplementation(() => undefined);
-  // A fresh instance per test: its cache never crosses tests.
-  access = createOxyAccess({ oxyApiUrl });
+  // A fresh server per test: its answer cache never crosses tests.
+  access = new OxyServer({ baseURL: oxyApiUrl, enableRetry: false });
 });
 afterEach(() => {
   warn.mockRestore();
 });
 
-describe('application access through the Oxy SDK, oxy-api on a private address', () => {
-  test("a member's permissions, owner account and status, the caller's bearer forwarded", async () => {
+interface Caller {
+  readonly userId?: string;
+  readonly sessionId?: string;
+  readonly service?: boolean;
+}
+
+/** One request through a gate, as `requireOxyUser` would leave it. */
+async function through(
+  gate: (req: express.Request, res: express.Response) => Promise<unknown>,
+  method: 'GET' | 'POST' = 'GET',
+  caller: Caller = {},
+): Promise<{ status: number; code?: string; granted?: unknown }> {
+  const app = express();
+  app.use((req, _res, next) => {
+    Object.assign(req, {
+      userId: caller.userId ?? 'user_1',
+      sessionId: caller.sessionId ?? 'sess_1',
+      accessToken: BEARER,
+      ...(caller.service ? { serviceApp: { appId: 'svc' } } : {}),
+    });
+    next();
+  });
+  app.all('/', async (req, res) => {
+    const granted = await gate(req, res);
+    if (granted) res.status(200).json({ granted });
+  });
+  const listening = app.listen(0);
+  try {
+    const url = `http://127.0.0.1:${(listening.address() as AddressInfo).port}/`;
+    const res = await fetch(url, { method });
+    const body = (await res.json()) as { error?: { code: string }; granted?: unknown };
+    return { status: res.status, code: body.error?.code, granted: body.granted };
+  } finally {
+    listening.close();
+  }
+}
+
+const gateFor = (action: DashboardAction) => (req: express.Request, res: express.Response) =>
+  authorizeApplication(req, res, 'app_1', action, access);
+
+describe('application access through @oxy.so/core, oxy-api on a private address', () => {
+  test("a member's permissions, owner account, status and trust, the caller's bearer forwarded", async () => {
     handler = answer(200, application());
-    expect(await access.application(signedIn(), 'app_1')).toEqual({
+    const { status, granted } = await through(gateFor('read'));
+    expect(status).toBe(200);
+    expect(granted).toMatchObject({
       applicationId: 'app_1',
       ownerAccountId: 'acct_owner',
-      permissions: ['app:read', 'billing:read'],
+      permissions: ['app:read'],
       official: false,
-      active: true,
+      status: 'active',
     });
     expect(seen).toEqual([{ url: '/applications/app_1', authorization: `Bearer ${BEARER}` }]);
   });
 
-  test('an answer is reused for a read within the TTL; `fresh` (every write) asks again', async () => {
-    handler = answer(200, application());
-    await access.application(signedIn(), 'app_1');
-    await access.application(signedIn(), 'app_1');
+  test('an answer is reused for a read; a write always asks again', async () => {
+    handler = answer(200, application({}, ['app:read', 'app:update']));
+    await through(gateFor('read'));
+    await through(gateFor('read'));
     expect(seen).toHaveLength(1);
-    await access.application(signedIn(), 'app_1', { fresh: true });
+    expect((await through(gateFor('configure'), 'POST')).status).toBe(200);
     expect(seen).toHaveLength(2);
   });
 
-  test('the cache is per (user, session): another person, or another session, asks again', async () => {
+  test('another session asks again', async () => {
     handler = answer(200, application());
-    await access.application(signedIn('user_a'), 'app_1');
-    await access.application(signedIn('user_b'), 'app_1');
-    await access.application(signedIn('user_a', { sessionId: 'sess_other' }), 'app_1');
-    expect(seen).toHaveLength(3);
+    await through(gateFor('read'));
+    await through(gateFor('read'), 'GET', { sessionId: 'sess_other' });
+    expect(seen).toHaveLength(2);
   });
 
-  test('an official application is reported as such; an archived one as inactive', async () => {
-    handler = answer(200, application({ type: 'first_party', status: 'archived' }));
-    const granted = await access.application(signedIn(), 'app_1');
-    expect(granted.official).toBe(true);
-    expect(granted.active).toBe(false);
+  test("Oxy's own application is official by Oxy's trust rule, a suspended one says so", async () => {
+    handler = answer(200, application({ type: 'first_party', status: 'suspended' }));
+    const { granted } = await through(gateFor('read'));
+    expect((granted as OxyApplicationAccess).official).toBe(true);
+    expect((granted as OxyApplicationAccess).status).toBe('suspended');
   });
 
   test.each([
-    ['a null callerMembership', 200, application({ callerMembership: null })],
-    ['a 403', 403, { error: 'nope', message: 'nope' }],
-    ['a 404', 404, { error: 'nope', message: 'nope' }],
-  ] as const)('%s is "no" — and "no" is never cached', async (_label, status, body) => {
-    handler = answer(status, body);
-    expect(await failure(access.application(signedIn(), 'app_1'))).toBe('denied');
+    ['a 403', 403],
+    ['a 404', 404],
+  ] as const)('%s is "no" — and "no" is never cached', async (_label, status) => {
+    handler = answer(status, { error: { code: 'forbidden', message: 'nope' } });
+    expect(await through(gateFor('read'))).toMatchObject({
+      status: 403,
+      code: 'application_membership_required',
+    });
     handler = answer(200, application());
-    expect(await failure(access.application(signedIn(), 'app_1'))).toBeNull();
+    expect((await through(gateFor('read'))).status).toBe(200);
     expect(seen).toHaveLength(2);
   });
 
   test('a 401 asks the caller to sign in again, and is not cached', async () => {
-    handler = answer(401, { error: 'Invalid session', message: 'Session not found or expired' });
-    expect(await failure(access.application(signedIn(), 'app_1'))).toBe('session_required');
+    handler = answer(401, { error: { code: 'invalid_session', message: 'expired' } });
+    expect(await through(gateFor('read'))).toMatchObject({ status: 401, code: 'session_invalid' });
     handler = answer(200, application());
-    expect(await failure(access.application(signedIn(), 'app_1'))).toBeNull();
+    expect((await through(gateFor('read'))).status).toBe(200);
   });
 
   test.each([
     ['a 500', 500, { error: 'boom' }],
     ['a 503', 503, { error: 'down' }],
-    ['an answer off the contract', 200, { application: { callerMembership: 'yes' } }],
-  ] as const)('%s is an outage, never cached as "no"', async (_label, status, body) => {
+    ['an answer off the contract', 200, { application: { _id: 'app_1', callerMembership: 'yes' } }],
+  ] as const)('%s is an outage (503), never cached as "no"', async (_label, status, body) => {
     handler = answer(status, body);
-    expect(await failure(access.application(signedIn(), 'app_1'))).toBe('unavailable');
+    expect(await through(gateFor('read'))).toMatchObject({
+      status: 503,
+      code: 'membership_unavailable',
+    });
     handler = answer(200, application());
-    expect(await failure(access.application(signedIn(), 'app_1'))).toBeNull();
+    expect((await through(gateFor('read'))).status).toBe(200);
+    expect(seen).toHaveLength(2);
   });
 
   test('oxy-api unreachable is an outage', async () => {
@@ -178,159 +224,66 @@ describe('application access through the Oxy SDK, oxy-api on a private address',
     await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
     const deadUrl = `http://127.0.0.1:${(closed.address() as AddressInfo).port}`;
     await new Promise<void>((resolve) => closed.close(() => resolve()));
-    const down = createOxyAccess({ oxyApiUrl: deadUrl });
-    expect(await failure(down.application(signedIn(), 'app_1'))).toBe('unavailable');
+    access = new OxyServer({ baseURL: deadUrl, enableRetry: false });
+    expect(await through(gateFor('read'))).toMatchObject({
+      status: 503,
+      code: 'membership_unavailable',
+    });
   });
 
-  test('a service credential, or no session, is refused before Oxy is asked', async () => {
+  test('a service credential is refused before Oxy is asked', async () => {
     handler = answer(200, application());
-    expect(
-      await failure(access.application(signedIn('user_1', { serviceApp: {} as never }), 'app_1')),
-    ).toBe('session_required');
-    expect(
-      await failure(access.application(signedIn('user_1', { accessToken: undefined }), 'app_1')),
-    ).toBe('session_required');
+    expect(await through(gateFor('read'), 'GET', { service: true })).toMatchObject({
+      status: 401,
+      code: 'session_invalid',
+    });
     expect(seen).toHaveLength(0);
+  });
+
+  test('a member without the action’s permission is refused, naming the code', async () => {
+    handler = answer(200, application({}, ['app:read']));
+    expect(await through(gateFor('money'), 'POST')).toMatchObject({
+      status: 403,
+      code: 'permission_required',
+    });
+    handler = answer(200, application({}, ['app:read', 'billing:manage']));
+    expect((await through(gateFor('money'), 'POST')).status).toBe(200);
+  });
+
+  test('billing:manage contains billing:read; nothing else is implied', async () => {
+    handler = answer(200, application({}, ['app:read', 'billing:manage']));
+    expect((await through(gateFor('taxRead'))).status).toBe(200);
+    handler = answer(200, application({}, ['app:read', 'app:update']));
+    expect((await through(gateFor('webhooks'), 'POST')).status).toBe(403);
   });
 });
 
 describe('account access', () => {
+  const accountGate = (req: express.Request, res: express.Response) =>
+    authorizeAccount(req, res, 'org_1', access);
+
   test("an organization's kind and the caller's permissions over it", async () => {
-    handler = answer(200, {
-      account: {
-        accountId: 'org_1',
-        kind: 'organization',
-        relationship: 'member',
-        callerMembership: { role: 'editor', permissions: ['account:read', 'apps:update'] },
-      },
-    });
-    expect(await access.account(signedIn(), 'org_1')).toEqual({
+    handler = answer(200, account());
+    const { status, granted } = await through(accountGate);
+    expect(status).toBe(200);
+    expect(granted).toMatchObject({
       accountId: 'org_1',
       kind: 'organization',
-      permissions: ['account:read', 'apps:update'],
+      permissions: ['account:read'],
     });
     expect(seen).toEqual([{ url: '/accounts/org_1', authorization: `Bearer ${BEARER}` }]);
   });
 
-  test('their own account carries no membership row and is still theirs', async () => {
-    handler = answer(200, {
-      account: { accountId: 'me', kind: 'personal', relationship: 'self', callerMembership: null },
-    });
-    expect((await access.account(signedIn(), 'me')).kind).toBe('personal');
-  });
-
-  test('no membership of someone else is "no"', async () => {
-    handler = answer(200, {
-      account: {
-        accountId: 'x',
-        kind: 'organization',
-        relationship: 'none',
-        callerMembership: null,
-      },
-    });
-    expect(await failure(access.account(signedIn(), 'x'))).toBe('denied');
-  });
-});
-
-describe('the per-check client', () => {
-  test('one client per check, for the caller, disposed after it', async () => {
-    const made: { token: string; baseURL: string; disposed: boolean }[] = [];
-    const clientFor = (token: string, baseURL: string): CallerClient => {
-      const entry = { token, baseURL, disposed: false };
-      made.push(entry);
-      return {
-        apps: { get: async () => application().application },
-        accounts: { get: async () => ({}) },
-        dispose: () => {
-          entry.disposed = true;
-        },
-      };
-    };
-    await createOxyAccess({ clientFor, oxyApiUrl: 'https://oxy.test' }).application(
-      signedIn(),
-      'app_1',
-    );
-    expect(made).toEqual([{ token: BEARER, baseURL: 'https://oxy.test', disposed: true }]);
-  });
-
-  test('TTL expiry asks Oxy again instead of serving a stale answer', async () => {
-    let calls = 0;
-    const clientFor = (): CallerClient => ({
-      apps: {
-        get: async () => {
-          calls += 1;
-          return application({ callerMembership: calls === 1 ? { permissions: [] } : null })
-            .application;
-        },
-      },
-      accounts: { get: async () => ({}) },
-    });
-    const short = createOxyAccess({ clientFor, ttlMs: 10 });
-    expect(await failure(short.application(signedIn(), 'app_1'))).toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(await failure(short.application(signedIn(), 'app_1'))).toBe('denied');
-    expect(calls).toBe(2);
-  });
-});
-
-describe('authorizeApplication: the canonical HTTP answer', () => {
-  const stub = (
-    result: () => Promise<never> | ReturnType<OxyAccess['application']>,
-  ): OxyAccess => ({
-    application: result,
-    account: () => Promise.reject(new Error('not used')),
-  });
-  const granted = (permissions: string[]) =>
-    stub(async () => ({
-      applicationId: 'app_1',
-      ownerAccountId: 'acct',
-      permissions,
-      official: false,
-      active: true,
-    }));
-
-  async function respond(gate: OxyAccess, action: Parameters<typeof authorizeApplication>[3]) {
-    const app = express();
-    app.use((req, _res, next) => {
-      Object.assign(req, { userId: 'user_1', accessToken: BEARER });
-      next();
-    });
-    app.all('/', async (req, res) => {
-      if (await authorizeApplication(req, res, 'app_1', action, gate)) res.status(204).end();
-    });
-    const listening = app.listen(0);
-    try {
-      const url = `http://127.0.0.1:${(listening.address() as AddressInfo).port}/`;
-      const res = await fetch(url, { method: 'POST' });
-      const body = res.status === 204 ? null : ((await res.json()) as { error: { code: string } });
-      return { status: res.status, code: body?.error.code };
-    } finally {
-      listening.close();
-    }
-  }
-
-  test.each([
-    ['session_required', 401, 'session_invalid'],
-    ['denied', 403, 'application_membership_required'],
-    ['unavailable', 503, 'membership_unavailable'],
-  ] as const)('%s → %d %s', async (reason, status, code) => {
-    const failing = stub(() => Promise.reject(new OxyAccessError(reason, 'x')));
-    expect(await respond(failing, 'read')).toEqual({ status, code });
-  });
-
-  test('a member without the action’s permission is refused, naming the code', async () => {
-    expect(await respond(granted(['app:read']), 'money')).toEqual({
+  test('a refusal is 403, an outage 503', async () => {
+    handler = answer(403, { error: { code: 'forbidden', message: 'nope' } });
+    expect(await through(accountGate)).toMatchObject({
       status: 403,
-      code: 'permission_required',
+      code: 'account_membership_required',
     });
-    expect(await respond(granted(['app:read', 'billing:manage']), 'money')).toEqual({
-      status: 204,
-      code: undefined,
+    handler = answer(502, { error: 'bad gateway' });
+    expect(await through(accountGate)).toMatchObject({
+      status: 503,
+      code: 'membership_unavailable',
     });
-  });
-
-  test('billing:manage contains billing:read; nothing else is implied', async () => {
-    expect((await respond(granted(['app:read', 'billing:manage']), 'taxRead')).status).toBe(204);
-    expect((await respond(granted(['app:read', 'app:update']), 'webhooks')).status).toBe(403);
   });
 });

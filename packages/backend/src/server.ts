@@ -34,9 +34,14 @@ import {
 import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
-import { oxy, PEABLE_SERVICE_AUDIENCE } from './oxy';
+import { oxy } from './oxy';
 import type { OxyAccess } from './services/oxyAccess';
-import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/server';
+import {
+  createOxyCors,
+  createOxyRateLimit,
+  createOxySocketCors,
+  oxyTrustProxy,
+} from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
@@ -254,7 +259,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // ONE-LABEL `*.oxy.so` subdomains, so a two-label host like the F2.5
   // dashboard (`dashboard.peable.to`) must be listed explicitly via
   // `config.allowedOrigins` (`PEABLE_ALLOWED_ORIGINS`) — the SAME list the
-  // Socket.io `cors.origin` check below already reads.
+  // Socket.IO's `createOxySocketCors` below reads.
   // A browser reading a response may see which request it was and whether it
   // is a replay of an earlier one (ADR 0014 D1, D3).
   app.use(
@@ -283,7 +288,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // `routes/__tests__/oxyFileEvents.realdb.test.ts` asserts the order.
   app.use(createOxyFileEventsRouter());
 
-  app.use(createOxyRateLimit(oxy, { auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE } }));
+  app.use(createOxyRateLimit(oxy));
   app.use(express.json());
   // Before every router: it records each answered merchant `/v1` request on
   // the response's `finish` (`lib/requestLog.ts`).
@@ -295,20 +300,12 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(refuseMisplacedPeableAccount);
   // Both refuse in the ONE error envelope (`oxyGuard`, ADR 0014 D1), not the library's own shape.
   const requireMerchant: RequestHandler =
-    deps.requireMerchant ??
-    oxyGuard(oxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE }));
+    deps.requireMerchant ?? oxyGuard(oxy.middleware.service());
   const optionalServiceAuth: RequestHandler =
-    deps.optionalServiceAuth ??
-    oxyGuard(
-      oxy.middleware.auth({
-        optional: true,
-        expectedAudience: PEABLE_SERVICE_AUDIENCE,
-      }),
-    );
+    deps.optionalServiceAuth ?? oxyGuard(oxy.middleware.auth({ optional: true }));
   const publicRateLimit: RequestHandler =
     deps.publicRateLimit ??
     createOxyRateLimit(oxy, {
-      auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE },
       anonymousMax: PUBLIC_RATE_LIMIT_MAX,
       // `createOxyRateLimit` resolves `oxy.middleware.auth({ optional: true })` BEFORE
       // limiting regardless of route auth, so ANY caller with a valid Oxy
@@ -385,20 +382,12 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createInternalErrorHandler());
 
   const httpServer = createServer(app);
+  // The browsers `createOxyCors` admits, on BOTH transports: `cors` answers
+  // long-polling, `allowRequest` refuses a WebSocket handshake from any other
+  // origin (browsers apply no CORS to an upgrade). No credentials: auth is a
+  // token in the handshake, not a cookie.
   const io = new SocketServer(httpServer, {
-    // No reflected origins and no credentials (auth is a token in the handshake,
-    // not a cookie), so a cross-site page cannot hijack a socket. A browser
-    // origin must be explicitly allowlisted; non-browser clients send no Origin.
-    cors: {
-      origin(origin, callback): void {
-        if (origin === undefined || config.allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(null, false);
-      },
-      credentials: false,
-    },
+    ...createOxySocketCors({ appOrigins: config.allowedOrigins, allowCredentials: false }),
   });
   initSocket(io, { socketAuth: deps.socketAuth });
 

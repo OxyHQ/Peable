@@ -18,5 +18,6 @@ export * from './payments';
 export * from './version';
 export * from './checkout';
 export * from './files';
+export * from './identity';
 export * from './merchants';
 export * from './paymentMethodConfigurations';

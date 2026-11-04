@@ -891,14 +891,18 @@ sweep's `expireIntentNow` — never a status write of their own.
 ## Auth
 
 Backend uses `@oxy.so/core/server`: the one `OxyServer` is `src/oxy.ts`
-(`oxy`, with `serviceIdentity: 'when-anonymous'` and Peable's `applicationId`,
-from which `PEABLE_SERVICE_AUDIENCE` is derived), and the one end-user auth
+(`oxy`, with `serviceIdentity: 'when-anonymous'`, `applicationId:
+PEABLE_OXY_APPLICATION_ID` and `expectedAudience: PEABLE_SERVICE_AUDIENCE` — the
+audience every mount accepts, named at no mount; both constants are
+`@peable.to/contracts/vocabulary`'s, the same ones the SDK addresses), and the one end-user auth
 middleware is `requireOxyUser` in `lib/http.ts` (in the one error envelope),
 which `server.ts` hands every
 user-authenticated router (none builds its own). `getRequiredOxyUserId`
 to read the caller, `oxy.middleware.service()` / `.requireScope()` for merchant
 service tokens (EdDSA plus live authority; canonical own audience, bounded external legacy audience), `oxy.middleware.socket()`
-for Socket.IO, plus `createOxyCors` and `createOxyRateLimit` in `server.ts`. There is no
+for Socket.IO behind `createOxySocketCors` (the same origins as `createOxyCors`,
+on polling and on the WebSocket handshake), plus `createOxyCors` and
+`createOxyRateLimit` in `server.ts`. There is no
 `requireOxyAuth` call site in this repo. Frontend uses `OxyProvider` and `useOxy`
 from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
 
@@ -909,20 +913,23 @@ do not add an Oxy auth requirement to a payer-facing route.
 
 **`services/oxyAccess.ts` is the ONLY place Peable asks Oxy what a person may
 do**, for every user-authorised surface: Orbit's dashboard, Peable Tax and the
-tax workspace, Orbit uploads and the contribution routes. `application(req, A)`
-is `apps.get(A)` with the caller's own bearer (`callerMembership.permissions`,
-oxy-api's application vocabulary; never `appPermissionsFor`, which answers a
-different question); `account(req, X)` is `accounts.get(X)`. Outcomes are
-translated once: 401 or a service credential → 401 `session_invalid`; 403/404
-or no membership → 403 `application_membership_required`; anything else → 503
-`membership_unavailable`, never cached as "no". Only answers that let someone in
-are cached (30 s, per user and session), and every non-GET asks again (`fresh`).
-`services/__tests__/oxyAccessIsTheOnlyPath.test.ts` fails on a second
-`apps.get` / `accounts.get` / `callerMembership` / per-user `OxyServices`, a
-second `createOxyAuthMiddleware`, or a permission string spelled out in the
-gateway. When `@oxy.so/core` ships `applicationAccessFor` / `accountAccessFor`,
-`createOxyAccess`'s two methods become those calls and `callerClient`, the
-schemas and the cache are deleted; nothing else changes.
+tax workspace, Orbit uploads and the contribution routes. It is a thin layer
+over `@oxy.so/core`: `oxy.applicationAccessFor(req, A)` (the person's
+application permissions through the account that owns A, plus `ownerAccountId`,
+`official` and `status`; never `appPermissionsFor`, which answers a different
+question) and `oxy.accountAccessFor(req, X)`. The SDK asks Oxy with the
+caller's own bearer, refuses a service credential, caches only answers that let
+someone in (30 s, per session) and types every other outcome as an
+`OxyAccessError`; Peable adds the action's permission, `fresh` on every non-GET
+and the answer in its own envelope: 401 → `session_invalid`; 403/404 →
+`application_membership_required`; anything else → 503
+`membership_unavailable`, never cached as "no". Peable keeps no client, schema
+or cache of its own.
+`services/__tests__/oxyAccessIsTheOnlyPath.test.ts` fails on an access read or
+a `createOxyAuthMiddleware` outside their one module, on a raw `apps.get` /
+`accounts.get` / `callerMembership` read, a per-user client (`new OxyServices`,
+`withUser`, `asUser`) or the SDK's own access middleware anywhere in the
+gateway, and on a permission string spelled out in the gateway.
 
 **Each action needs one permission, defined once** in
 `@peable.to/contracts/vocabulary` (`DASHBOARD_PERMISSIONS`,

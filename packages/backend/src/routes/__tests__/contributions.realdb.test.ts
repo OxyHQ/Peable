@@ -365,7 +365,7 @@ test('a write needs app:update; reading needs only membership', async () => {
   expect(asked.some((q) => q.fresh)).toBe(true);
 });
 test('only an active application of the organization that owns it, and only an organization', async () => {
-  application = { ownerAccountId: 'organization', active: false };
+  application = { ownerAccountId: 'organization', status: 'suspended' };
   try {
     expect((await request(`${root}?environment=development`)).status).toBe(403);
   } finally {
@@ -381,8 +381,8 @@ test('only an active application of the organization that owns it, and only an o
 });
 test('Oxy unavailable is a 503, a refused session a 401 — never a "no"', async () => {
   for (const [answer, status] of [
-    ['unavailable', 503],
-    ['session_required', 401],
+    ['ACCESS_UNAVAILABLE', 503],
+    ['ACCESS_SESSION_REQUIRED', 401],
   ] as const) {
     application = answer;
     try {
