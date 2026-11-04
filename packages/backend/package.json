@@ -14,6 +14,7 @@
     "db:migrate": "bun src/db/migrate.ts",
     "db:check-locks": "oxy-db-check-migration-locks --migrations=src/db/migrations --after=34 --hot-tables=checkout_sessions,connected_accounts,merchants,payment_intents,provider_events,social_receive_cursors,webhook_deliveries",
     "oxy-files:reconcile": "bun src/services/oxyFiles/reconcileCli.ts",
+    "billing:migrate-proxy": "bun src/services/billing/proxyMigrationCli.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

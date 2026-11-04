@@ -1,6 +1,6 @@
 # ADR 0018 — Orbit runs its own billing engine
 
-**Status:** accepted; Phase 4b as built (below), the proxy migration pending.
+**Status:** accepted; Phase 4b as built (below); the proxy migration's tooling built, its live cutover pending.
 **Supersedes, when implemented:** ADR 0010 (card rail) and ADR 0013's renewal hold.
 **Date:** 2026-11-03.
 
@@ -223,46 +223,105 @@ subscription mode; the portal's card update needs the provider SDK to expose
 setup confirmation in the browser (`@peable.to/sdk`'s `ProviderSdk` type covers
 payments only today).
 
-### Migrating the Stripe-Billing proxy onto native objects (§7) — for the owner to schedule
+### Migrating the Stripe-Billing proxy onto native objects (§7) — as built
 
-Per proxy subscription (a Stripe `sub_…` reached through `/v1/billing/*`, bound
-in `billing_object_bindings`), in this order, idempotently, one subscription
-per transaction:
+`bun run billing:migrate-proxy -- --mode=test|live` (`services/billing/proxyMigration.ts`,
+CLI `proxyMigrationCli.ts`), run as a one-shot task of the release image. Each
+proxied subscription (a Stripe `sub_…` bound in `billing_object_bindings`) is
+planned on its own, and its record — `billing_proxy_migrations`, unique per
+binding — is both the audit (binding, Stripe `sub_…`, native customer, card,
+price and subscription, `adopted_at`/`released_at`) and the marker a rerun
+skips on. Cohorts are merchants; test mode first.
 
-1. **Customer.** Find or create the Orbit `cus_…` for the proxy customer (by
-   the binding's subject) and record the existing Stripe customer as its
-   `customer_provider_bindings` row (ADR 0016 D2) — no new provider customer.
-2. **Payment method.** Read the Stripe subscription's default payment method,
-   register it as the customer's `pm_…` (`registerPaymentMethod`, provider
-   object = the Stripe `pm_…`) and make it the customer's default.
-3. **Catalog.** Map the bound Stripe price to the Orbit `price_…` of the same
-   offer (created once per offer with the same amount, currency, interval and
-   `tax_behavior`), and attach the offer's features (`mention_plus` to Plus AND
-   to One).
-4. **Subscription.** Insert the native subscription directly in its CURRENT
-   state — status from Stripe (`active`/`trialing`/`past_due`), the current
-   period's start and end, `billing_cycle_anchor` = Stripe's anchor,
-   `cancel_at_period_end`, `automatic_tax.enabled` when the cohort used Peable
-   Tax — with NO first invoice (the current period is already paid at Stripe)
-   and `next_action_at` = the period end. This is a migration entry point in
-   the engine, not `POST /v1/subscriptions`, so no charge and no proration can
-   occur.
-5. **Stop Stripe renewing it.** Set the Stripe subscription
-   `cancel_at_period_end: true` (no proration, no refund) so its paid period
-   ends naturally; from the next period the engine invoices and charges
-   off-session against the migrated payment method — no second charge for the
-   period already paid, and ADR 0013's draft hold is never needed for it.
-6. **Consumers.** Switch each consumer (Mention, the oxy personal plans) from
-   the proxy's `billing.*` calls to `subscriptions` and
-   `entitlements.activeEntitlements` in the release that migrates its
-   subscriptions; access is read from active entitlements, which include
-   One → Plus.
-7. **Remove the proxy** (ADR 0016 §5) once no proxy subscription is left
-   un-migrated: the `/v1/billing/*` routes other than meters, the proxy code in
-   `services/billing/*`, its contracts and SDK methods; ADR 0010 and ADR 0013's
-   draft hold marked superseded, their tax-reversal rules carried over.
+**The plan reads only** (a dry run plans inside a READ-ONLY transaction, over a
+provider holding only Stripe reads, and is the default). Per subscription it
+answers `migrate`, `resume` (an `adopted` record), `released`, `skip`
+(`ended` at Stripe) or `blocked` with the reason: `status_<s>` (only `active`
+and `trialing` move — `incomplete`, `past_due`, `unpaid` are resolved at Stripe
+first), `open_invoice` (a draft, open or uncollectible invoice: a renewal in
+progress, an ADR 0013 hold included), `items`, `discount`, `cancel_at`,
+`collection_paused`, `no_payment_method`, `payment_method_not_attached`,
+`price_unmapped` / `price_missing` / `price_mismatch_<field>` (the plan file
+maps each bound Stripe price to the Orbit price of the same offer; currency,
+amount, interval, usage and `tax_behavior` must be identical), `customer_*`,
+`tax_settings_not_active` / `tax_location_missing` (a Peable-Tax-quoted
+subscription — its checkout operation holds a tax snapshot — or one Stripe
+taxed migrates with `automatic_tax` on, which needs approved settings and the
+payer's billing address), `period_mismatch` (Stripe's period is not the
+engine's anchored period), `period_ends_soon` (inside `--lead-hours`, default
+48 — left for after Stripe's renewal), `platform_account_mismatch`,
+`provider_key_missing`. Nothing is guessed.
 
-Safety: a dry run that lists every planned mapping first; the binding row as
-the per-subscription marker, so a rerun skips what is migrated; never migrate a
-subscription whose Stripe state is `incomplete` or `unpaid`, or that has an open
-invoice — those are resolved at Stripe first.
+**Execution, and what a crash between two steps leaves:**
+
+1. **Adopt, one transaction**: the Orbit customer bound to the SAME Stripe
+   customer (`customer_provider_bindings`, found or created with
+   `metadata.store_id` = the proxy's store reference, email, name and billing
+   address copied — no new provider customer), the SAME Stripe card registered
+   as its `pm_…` (its default when it had none), the native subscription via
+   `adoptSubscription` (current state, no invoice, `metadata.store_id` and
+   `plan_id`) and the record, `adopted`. Access is native from this commit.
+   The subscription is HELD: Stripe still renews it, the engine cannot.
+   *Crash before:* nothing written. *Crash after:* one biller (Stripe), access
+   unchanged; the next run resumes at 2.
+2. **Release at Stripe**: `cancel_at_period_end: true`, `pause_collection:
+   {behavior: void}`, `proration_behavior: none`, `metadata.orbit_subscription`
+   = the native `sub_…`, under a key derived from the record and the period.
+   No refund, no charge; the paid period ends naturally, and the voided
+   collection means a subscriber who undoes the cancellation in a Stripe
+   portal session opened before the migration is still never charged again.
+   If Stripe renewed while a stuck record waited, the held subscription is
+   realigned onto the period Stripe billed first (`realignHeldPeriod`); if
+   Stripe ended it without this release, the record stays `adopted` as
+   `anomaly:provider_ended_early` for an operator. *Crash after Stripe
+   answered:* the next run reads the flags and the marker back and goes to 3
+   without writing again.
+3. **Release natively, one transaction**: `releaseProviderHandoff` and the
+   record `released` (CAS). The engine renews at the period end, off-session
+   against the adopted card; a period end that passed while the release waited
+   renews at the next pass — late, never twice, never missed.
+
+Every run resumes `adopted` records before migrating anything, and
+re-verifies `released` ones until Stripe's period has ended: a release undone
+at Stripe is reported (`provider_release_reverted` in a dry run) and
+re-asserted. One subscription's failure is reported on its line; the run goes
+on. A live `--execute` moves ONE `--cohort` and requires `--confirm-live`
+naming it.
+
+**Run in test mode against Stripe's test API (2026-11-04)**: three proxied
+subscriptions on a Stripe test clock — active, cancelling, discounted. The dry
+run planned two `migrate` and one `blocked: discount` and wrote nothing; the
+execution adopted both and Stripe accepted the release
+(`cancel_at_period_end` with `pause_collection: void`); a rerun only verified.
+Both clocks advanced past the period end: Stripe ended both subscriptions with
+their one `subscription_create` invoice (no second charge), the engine renewed
+the active one off-session against the migrated card (a succeeded Stripe test
+PaymentIntent for the same 599), the cancelling one ended natively and lost its
+entitlement, and the blocked one renewed at Stripe untouched.
+
+**The proxy freezes a migrated customer**: `checkout_sessions`,
+`portal_sessions` and `cancel_at_period_end` answer 409 `subscription_migrated`
+for a customer binding with a record — a new Stripe checkout would be a second
+subscription and a Stripe portal could undo the release. Reads (subscription,
+invoices, signed invoice authorities of the Stripe-paid periods) keep
+answering, and Stripe refunds of those periods keep being reversed by ADR
+0013's recorder.
+
+**Consumers switch in the release that migrates their cohort** (§6): a
+migrated subscriber's proxy subscription reads `cancel_at_period_end: true`,
+so a consumer still reading the proxy would show a cancellation. Each consumer
+finds its native customer by `metadata['store_id']` (customer search) and reads
+`subscriptions` and `entitlements.activeEntitlements`, which include One →
+Plus. As of 2026-11-04: oxy (Oxy One / Mention Plus personal plans) has its
+Peable runtime off in production with no Peable price bound; Mercaria's
+merchant-plan cohort is configured but reads its subscriptions straight from
+Stripe as well; Mention reads Plus from oxy. Production holds no proxy
+binding, operation or mirror at all (read-only probe), and the gateway has no
+`PEABLE_BILLING_COHORT` or Stripe key in its task definition.
+
+**Remove the proxy** (ADR 0016 §5) once no proxy subscription is left
+un-migrated and no consumer calls `/v1/billing/*` other than meters: the
+routes, `services/billing/*` (keeping ADR 0013's refund-reversal rules for the
+Stripe-paid periods), its contracts and SDK methods; ADR 0010 and ADR 0013's
+draft hold marked superseded. The FX-quoted FairCoin rail (`faircoinBillingService.ts`,
+no production subscription) is moved or removed in the same step.

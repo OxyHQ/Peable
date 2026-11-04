@@ -60136,7 +60136,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 120 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 121 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",

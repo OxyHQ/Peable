@@ -493,6 +493,13 @@ are migrated (ADR 0018 "as built" has the plan). Invariants:
   no renewal, no trial end, merchant writes 409 — and only
   `releaseProviderHandoff` hands renewal to the engine. Never clear it any
   other way: two systems would bill the next period.
+- **The proxy's subscriptions move with `billing:migrate-proxy`**
+  (`services/billing/proxyMigration.ts`, ADR 0018 §7 as built): dry run by
+  default (read-only transaction, read-only provider); adopt natively, THEN
+  release Stripe (`cancel_at_period_end` + collection voided + marker), THEN
+  the hold — every run resumes before it migrates. A migrated customer's proxy
+  writes answer 409 `subscription_migrated`. A live `--execute` names one
+  cohort twice (`--cohort`, `--confirm-live`); the owner runs it.
 - **Entitlements are the access answer**: features attached to products,
   active while a granting product is on a `trialing`/`active`/`past_due`
   subscription — Mention Plus through Plus OR Oxy One is one entitlement.

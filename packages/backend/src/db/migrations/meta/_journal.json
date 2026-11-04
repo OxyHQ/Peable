@@ -554,6 +554,13 @@
       "when": 1793800973690,
       "tag": "0078_subscription_adoption_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793801414585,
+      "tag": "0079_billing_proxy_migrations",
+      "breakpoints": true
     }
   ]
 }

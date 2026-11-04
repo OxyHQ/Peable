@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-120 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+121 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -462,6 +462,10 @@ The SetupIntent is in a status that does not allow this operation.
 ### `subscription_line_invalid`
 
 A subscription line item is not valid for Checkout.
+
+### `subscription_migrated`
+
+This billing customer or subscription moved to Orbit subscriptions; use `/v1/subscriptions` and the active entitlements instead.
 
 ### `subscription_unexpected_state`
 

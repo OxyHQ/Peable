@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   foreignKey,
+  index,
   jsonb,
   pgTable,
   text,
@@ -11,7 +12,10 @@ import {
   uniqueIndex,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { createdAt, generatedId, inList, timestamptz } from '@oxy.so/db';
+import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import { prices } from './catalog';
+import { customers, paymentMethods } from './customers';
+import { subscriptions } from './billingEngine';
 import { merchants } from './merchants';
 import { taxCalculations } from './tax';
 import {
@@ -230,5 +234,84 @@ export const billingRenewalTaxes = pgTable(
     ),
     check('billing_renewal_taxes_provider_check', sql`${table.provider} = 'stripe'`),
     check('billing_renewal_taxes_snapshot_check', sql`jsonb_typeof(${table.snapshot}) = 'object'`),
+  ],
+);
+
+/** What a proxied subscription's migration (ADR 0018 §7) has reached. */
+export const BILLING_PROXY_MIGRATION_STATES = ['adopted', 'released'] as const;
+export type BillingProxyMigrationState = (typeof BILLING_PROXY_MIGRATION_STATES)[number];
+
+/**
+ * The auditable record of moving ONE proxied Stripe subscription onto a native
+ * one (`services/billing/proxyMigration.ts`), and its per-subscription marker:
+ * a binding with a row here is never adopted again.
+ *
+ * `adopted` — the native subscription exists (written in the same transaction
+ * as this row) and is HELD (`subscriptions.provider_handoff_pending`): Stripe
+ * still renews it. `released` — Stripe was told not to renew (cancel at period
+ * end, collection voided) and the engine holds renewal authority. Nothing
+ * else: the blocked and skipped subscriptions are the dry run's report, not
+ * rows.
+ *
+ * Every reference is composite, so the customer, its card, the price and the
+ * subscription are one merchant's and one customer's by construction.
+ */
+export const billingProxyMigrations = pgTable(
+  'billing_proxy_migrations',
+  {
+    id: generatedId(),
+    merchantId: text().notNull(),
+    livemode: boolean().notNull(),
+    subscriptionBindingId: text()
+      .notNull()
+      .references(() => billingObjectBindings.id, { onDelete: 'restrict' }),
+    customerBindingId: text()
+      .notNull()
+      .references(() => billingObjectBindings.id, { onDelete: 'restrict' }),
+    /** The Stripe `sub_…` it replaced — the binding's, kept beside it for the audit. */
+    providerSubscriptionRef: text().notNull(),
+    customerId: text().notNull(),
+    paymentMethodId: text().notNull(),
+    priceId: text().notNull(),
+    subscriptionId: text().notNull(),
+    state: text({ enum: BILLING_PROXY_MIGRATION_STATES }).notNull(),
+    adoptedAt: timestamptz().notNull(),
+    releasedAt: timestamptz(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique('billing_proxy_migrations_subscription_binding_key').on(table.subscriptionBindingId),
+    unique('billing_proxy_migrations_subscription_key').on(table.subscriptionId),
+    index('billing_proxy_migrations_customer_binding_idx').on(table.customerBindingId),
+    index('billing_proxy_migrations_merchant_state_idx').on(table.merchantId, table.state),
+    foreignKey({
+      name: 'billing_proxy_migrations_customer_fkey',
+      columns: [table.customerId, table.merchantId],
+      foreignColumns: [customers.id, customers.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'billing_proxy_migrations_payment_method_fkey',
+      columns: [table.paymentMethodId, table.customerId],
+      foreignColumns: [paymentMethods.id, paymentMethods.customerId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'billing_proxy_migrations_price_fkey',
+      columns: [table.priceId, table.merchantId],
+      foreignColumns: [prices.id, prices.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'billing_proxy_migrations_subscription_fkey',
+      columns: [table.subscriptionId, table.customerId],
+      foreignColumns: [subscriptions.id, subscriptions.customerId],
+    }).onDelete('restrict'),
+    check(
+      'billing_proxy_migrations_state_check',
+      sql.raw(`state in (${inList(BILLING_PROXY_MIGRATION_STATES)})`),
+    ),
+    check(
+      'billing_proxy_migrations_released_check',
+      sql.raw(`(state = 'released') = (released_at is not null)`),
+    ),
   ],
 );
