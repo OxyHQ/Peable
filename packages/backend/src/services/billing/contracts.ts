@@ -140,7 +140,8 @@ export type BillingErrorCode =
   | 'reconciliation_required'
   | 'result_expired'
   | 'provider_unavailable'
-  | 'invalid_provider_response';
+  | 'invalid_provider_response'
+  | 'subscription_migrated';
 /** The human `message` beside each machine `code` on the wire. Deliberately
  * generic: no provider text, identifier or URL reaches a caller. */
 export const BILLING_ERROR_MESSAGES: Readonly<Record<BillingErrorCode, string>> = {
@@ -153,6 +154,8 @@ export const BILLING_ERROR_MESSAGES: Readonly<Record<BillingErrorCode, string>> 
   result_expired: 'The result of this operation has expired.',
   provider_unavailable: 'The billing provider is unavailable. Try again later.',
   invalid_provider_response: 'The billing provider answered something Peable cannot accept.',
+  subscription_migrated:
+    'This billing customer moved to Orbit subscriptions; use /v1/subscriptions and the active entitlements.',
 };
 export class BillingError extends Error {
   constructor(

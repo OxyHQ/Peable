@@ -158,6 +158,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
     "The invoice's payment needs the customer to act (a card challenge).",
   subscription_unexpected_state:
     'The subscription is in a status that does not allow this operation.',
+  subscription_migrated:
+    'This billing customer or subscription moved to Orbit subscriptions; use `/v1/subscriptions` and the active entitlements instead.',
   customer_currency_mismatch: "The currency differs from the customer's billing currency.",
   customer_test_clock_mismatch: 'The objects live on different test clocks.',
   coupon_invalid: 'The coupon does not exist or is no longer valid.',

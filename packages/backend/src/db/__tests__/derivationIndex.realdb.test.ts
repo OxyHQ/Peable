@@ -243,6 +243,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'billing_operations',
       'billing_portal_configurations',
       'billing_portal_sessions',
+      'billing_proxy_migrations',
       'billing_renewal_taxes',
       'billing_settings',
       'charges',

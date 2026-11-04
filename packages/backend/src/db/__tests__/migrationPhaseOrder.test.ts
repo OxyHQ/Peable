@@ -99,6 +99,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // adoption's `0077`–`0078` (ADR 0018 §7) existed.
   '0076_tax_amounts_strings_settle':
     'applied in production; ledger read 2026-11-04 held 0000–0076 before 0077 was authored',
+  // Subscription adoption's validate half shipped with #222, whose deploy
+  // (bfef755d) applied it: a read-only ledger probe counted 79 rows and the
+  // CHECK `convalidated` before the proxy migration's `0079` merged.
+  '0078_subscription_adoption_validate':
+    'released with #222; applied in production by the bfef755d deploy',
 };
 
 interface Migration {

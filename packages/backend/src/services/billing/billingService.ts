@@ -65,6 +65,7 @@ import {
   type BillingDeployment,
 } from './contracts';
 import type { BillingProvider, ProviderBillingSubscription } from './provider';
+import { isProxyCustomerMigrated } from '../../db/billing/proxyMigrationRepository';
 import type { VerifiedBillingBindings } from './verifiedBindings';
 
 /** Optional parts of a signed final invoice a caller asks for. */
@@ -140,6 +141,15 @@ export function createBillingService(options: BillingServiceOptions) {
       )
     )
       throw new BillingError('not_found', 404);
+  }
+  /**
+   * A customer whose subscription moved to the native engine (ADR 0018 §7) is
+   * frozen here: a new Stripe checkout would be a second subscription, and a
+   * Stripe portal could undo the release — both a second biller. Reads stay.
+   */
+  async function refuseMigrated(customerBindingId: string) {
+    if (await isProxyCustomerMigrated(db, customerBindingId))
+      throw new BillingError('subscription_migrated', 409);
   }
   async function perform<T>(
     owner: BillingOwner,
@@ -304,6 +314,7 @@ export function createBillingService(options: BillingServiceOptions) {
     );
     if (customer.externalSubjectRef !== input.store_id || price.planRef !== input.plan_id)
       throw new BillingError('identity_conflict');
+    await refuseMigrated(customer.id);
     let snapshot: BillingTaxCheckoutSnapshot | undefined;
     if (input.tax_quote) {
       if (
@@ -558,7 +569,14 @@ export function createBillingService(options: BillingServiceOptions) {
     ): Promise<BillingHostedSession> {
       authorize(owner);
       const input = createBillingPortalParams.parse(params);
-      await requireBillingBinding(db, deployment, owner, 'customer', input.provider_customer_id);
+      const customer = await requireBillingBinding(
+        db,
+        deployment,
+        owner,
+        'customer',
+        input.provider_customer_id,
+      );
+      await refuseMigrated(customer.id);
       // Replay also needs the current safe Portal configuration.
       await provider.verifyDeployment();
       await provider.verifyPortalConfiguration();
@@ -803,6 +821,7 @@ export function createBillingService(options: BillingServiceOptions) {
       idempotencyKey = `cancel:${randomUUID()}`,
     ): Promise<BillingSubscription> {
       const binding = await ownedSubscription(owner, ref);
+      if (binding.customerBindingId) await refuseMigrated(binding.customerBindingId);
       const result = await perform(
         owner,
         'cancel_at_period_end',

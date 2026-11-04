@@ -941,6 +941,14 @@ otherwise undo:
   the engine must not). `subscriptions_provider_handoff_check` ties them. The
   hold is a column, not `pause_collection`: a merchant can clear a pause, and a
   hold the merchant can clear is a double charge waiting for a click.
+- **`billing_proxy_migrations` is the proxy migration's record and marker**
+  (`0079`): unique per subscription binding (a rerun skips it) and per native
+  subscription; `adopted` → `released` by CAS only, `released_at` CHECKed with
+  it. Its references are composite (customer of the merchant, card of the
+  customer, price of the merchant, subscription of the customer), and none
+  points at `merchants` directly — a hot table, reached through
+  `customers (id, merchant_id)`. Blocked and skipped subscriptions are the dry
+  run's report, never rows.
 - **Migrations `0065`/`0066`**. `0065` is `pre`: new
   tables, additive columns, and the constraints added to EXISTING tables
   (`customer_emails_invoice_fkey`, `customer_emails_kind_check`,
