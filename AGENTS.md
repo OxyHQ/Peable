@@ -126,6 +126,10 @@ surface and are not contracts.
 - **`shared-types` never imports the contracts root at runtime** — only `export type` from it and
   values from `@peable.to/contracts/vocabulary`, so the wallet and the hosted checkout do not bundle
   every schema. A closed value set a schema needs lives in `contracts/src/vocabulary/`.
+- **The SDK's browser entries import a vocabulary MODULE, never the barrel**
+  (`@peable.to/contracts/vocabulary/errors`, not `…/vocabulary`): Metro does not tree-shake, so
+  an app pays for every module behind a barrel. `sdk/__tests__/browser-bundle.test.ts` lists what
+  `./checkout` and `./checkout/ui` may reach and fails on anything else.
 - **`sdk`** on a route is its server-SDK method path; every `service` route has one and no other route
   does (`openapi.test.ts`). Renaming it renames a published method.
 

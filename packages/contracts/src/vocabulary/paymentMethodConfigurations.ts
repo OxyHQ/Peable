@@ -1,5 +1,7 @@
 // Payment method breadth on the card rail (`pmc_…`, `pmd_…`). Zod-free.
 
+import { FIAT_CURRENCY_CODES, type FiatCurrencyCode } from './money';
+
 /**
  * The methods a configuration can turn on.
  *
@@ -35,3 +37,21 @@ export const PAYMENT_METHOD_UNAVAILABLE_REASONS = [
   'requires_card',
 ] as const;
 export type PaymentMethodUnavailableReason = (typeof PAYMENT_METHOD_UNAVAILABLE_REASONS)[number];
+
+/**
+ * The currencies each method can take a payment in. A method is offered on a
+ * payment only when its currency is listed — so iDEAL never appears on a USD
+ * payment, and a payer is never shown a method that would fail.
+ */
+export const PAYMENT_METHOD_CURRENCIES: Readonly<
+  Record<PaymentMethodConfigurationType, readonly FiatCurrencyCode[]>
+> = Object.freeze({
+  card: FIAT_CURRENCY_CODES,
+  apple_pay: FIAT_CURRENCY_CODES,
+  google_pay: FIAT_CURRENCY_CODES,
+  sepa_debit: ['EUR'],
+  ideal: ['EUR'],
+  bancontact: ['EUR'],
+  eps: ['EUR'],
+  bizum: ['EUR'],
+});

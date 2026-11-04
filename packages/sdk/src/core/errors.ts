@@ -3,11 +3,13 @@
 // `error.type` (ADR 0014 D1), plus the two the SDK itself raises — a
 // connection that never produced an answer, and a webhook that does not verify.
 //
-// Imported by the browser entry (`./checkout`) too, so it must stay free of
-// Node built-ins and of anything that constructs a schema: the vocabulary
-// subpath of the contracts is zod-free.
+// Imported by the browser entries (`./checkout`, `./checkout/ui`) too, so it
+// must stay free of Node built-ins and of anything that constructs a schema,
+// and it imports the ONE vocabulary module it reads: an app bundler that does
+// not tree-shake (Metro) bundles every module of the `vocabulary` barrel
+// (`__tests__/browser-bundle.test.ts`).
 
-import { ERROR_CODES, type ErrorType, errorDocUrl } from '@peable.to/contracts/vocabulary';
+import { ERROR_CODES, type ErrorType, errorDocUrl } from '@peable.to/contracts/vocabulary/errors';
 import type { PaymentIntent } from '@peable.to/shared-types';
 
 /**

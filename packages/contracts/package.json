@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/contracts",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "The Peable wire, declared once: Zod contracts of every public route, the OpenAPI 3.1 generator and the closed value sets (ADR 0014 D5).",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -35,6 +35,18 @@
         "default": "./dist/cjs/vocabulary/index.js"
       },
       "default": "./dist/esm/vocabulary/index.js"
+    },
+    "./vocabulary/*": {
+      "react-native": "./dist/esm/vocabulary/*.js",
+      "import": {
+        "types": "./dist/types/vocabulary/*.d.ts",
+        "default": "./dist/esm/vocabulary/*.js"
+      },
+      "require": {
+        "types": "./dist/types/vocabulary/*.d.ts",
+        "default": "./dist/cjs/vocabulary/*.js"
+      },
+      "default": "./dist/esm/vocabulary/*.js"
     },
     "./contributions": {
       "react-native": "./dist/esm/contributions.js",
@@ -105,6 +117,9 @@
     "*": {
       "vocabulary": [
         "./dist/types/vocabulary/index.d.ts"
+      ],
+      "vocabulary/*": [
+        "./dist/types/vocabulary/*.d.ts"
       ],
       "contributions": [
         "./dist/types/contributions.d.ts"

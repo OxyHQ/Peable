@@ -22,7 +22,7 @@
         "@fairco.in/core": "0.5.0",
         "@oxy.so/core": "7.18.0",
         "@oxy.so/db": "1.4.0",
-        "@peable.to/contracts": "workspace:1.1.0",
+        "@peable.to/contracts": "workspace:1.2.0",
         "@peable.to/shared-types": "*",
         "@scure/bip32": "^1.7.0",
         "drizzle-orm": "^0.45.2",
@@ -49,7 +49,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@fairco.in/core": "0.5.0",
-        "@peable.to/contracts": "workspace:1.1.0",
+        "@peable.to/contracts": "workspace:1.2.0",
         "@peable.to/sdk": "*",
         "@peable.to/shared-types": "*",
         "qr-creator": "^1.0.0",
@@ -75,8 +75,8 @@
         "peable": "dist/bin.js",
       },
       "dependencies": {
-        "@peable.to/sdk": "workspace:1.0.1",
-        "@peable.to/shared-types": "workspace:1.0.0",
+        "@peable.to/sdk": "workspace:1.0.2",
+        "@peable.to/shared-types": "workspace:1.0.1",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -86,7 +86,7 @@
     },
     "packages/contracts": {
       "name": "@peable.to/contracts",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "dependencies": {
         "zod": "^4.6.7",
       },
@@ -211,7 +211,7 @@
         "@oxy.so/contracts": "6.5.0",
         "@oxy.so/core": "7.18.0",
         "@oxy.so/services": "^14.3.4",
-        "@peable.to/contracts": "workspace:1.1.0",
+        "@peable.to/contracts": "workspace:1.2.0",
         "@peable.to/shared-types": "*",
         "@react-native-async-storage/async-storage": "^2.2.0",
         "@react-native-community/netinfo": "^12.0.1",
@@ -298,10 +298,10 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": {
-        "@peable.to/contracts": "workspace:1.1.0",
-        "@peable.to/shared-types": "workspace:1.0.0",
+        "@peable.to/contracts": "workspace:1.2.0",
+        "@peable.to/shared-types": "workspace:1.0.1",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
       },
@@ -310,6 +310,7 @@
         "@types/bun": "latest",
         "@types/node": "^20.0.0",
         "@types/react": "^19.2.17",
+        "esbuild": "0.25.12",
         "typescript": "~5.9.2",
         "zod": "^4.6.7",
       },
@@ -326,9 +327,9 @@
     },
     "packages/shared-types": {
       "name": "@peable.to/shared-types",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
-        "@peable.to/contracts": "workspace:1.1.0",
+        "@peable.to/contracts": "workspace:1.2.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
