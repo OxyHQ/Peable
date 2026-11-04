@@ -1,5 +1,3 @@
-import type { RecurringObservationOptions } from './recurring/contracts';
-import { invoiceTaxAction, type StripeInvoiceTaxRecorder } from './billing/stripeInvoiceTax';
 /**
  * The drain: stored provider events become payment state.
  *
@@ -18,12 +16,7 @@ import { invoiceTaxAction, type StripeInvoiceTaxRecorder } from './billing/strip
  * would add a way for a killed process to hold rows.
  */
 import { getDb } from '../db/postgres';
-import {
-  findUnprocessedProviderEvents,
-  deferProviderEvents,
-  markProviderEventFailed,
-} from '../db/providers/providerEventRepository';
-import { redactProviderMessage } from './providers/redact';
+import { findUnprocessedProviderEvents } from '../db/providers/providerEventRepository';
 import { processProviderEvent } from './providers/eventProcessor';
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -31,11 +24,6 @@ const DEFAULT_BATCH_SIZE = 50;
 
 export interface DrainPassOptions {
   readonly batchSize?: number;
-  /** Explicit operator-approved composition only; omitted until boot opt-in. */
-  readonly recurring?: RecurringObservationOptions;
-  /** Peable Tax on the card rail; absent unless a Stripe rail opted in. */
-  readonly invoiceTax?: StripeInvoiceTaxRecorder;
-  readonly now?: () => Date;
 }
 
 export interface DrainPassResult {
@@ -48,35 +36,6 @@ export interface DrainPassResult {
   /** Names an object no intent claims. Stays for the next pass. */
   readonly unmatched: number;
   readonly failed: number;
-}
-
-/** Payment effects may already be committed when retry scheduling fails.
- * Callers must retry this pending deferral before starting another pass. */
-export class ProviderEventDeferralError extends Error {
-  constructor(
-    readonly progress: DrainPassResult,
-    readonly pendingEventIds: readonly string[],
-    cause: unknown,
-  ) {
-    super(
-      `Provider event retry scheduling failed after committed progress: examined=${progress.examined}, applied=${progress.applied}, pending=${pendingEventIds.length}`,
-      { cause },
-    );
-    this.name = 'ProviderEventDeferralError';
-  }
-}
-
-/** Retry only scheduling; completed rows are excluded by the repository write.
- * Start the backoff at retry completion time, never at the old failed attempt. */
-export async function retryProviderEventDrainDeferral(
-  failure: ProviderEventDeferralError,
-  options: Pick<DrainPassOptions, 'now'> = {},
-): Promise<void> {
-  await deferProviderEvents(
-    getDb(),
-    failure.pendingEventIds,
-    new Date((options.now ?? (() => new Date()))().getTime() + 60_000),
-  );
 }
 
 /**
@@ -94,18 +53,11 @@ export async function retryProviderEventDrainDeferral(
 export async function runProviderEventDrainPass(
   options: DrainPassOptions = {},
 ): Promise<DrainPassResult> {
-  const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
-  if (options.recurring && (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 100))
-    throw new Error('Invalid recurring drain batch size');
-  // Due events only, in every mode: nothing but a deferral sets a retry time,
-  // so for an event that was never deferred this is the same oldest-first set.
-  const events = await findUnprocessedProviderEvents(getDb(), batchSize, {
-    dueAt: (options.now ?? (() => new Date()))(),
-  });
+  const events = await findUnprocessedProviderEvents(
+    getDb(),
+    options.batchSize ?? DEFAULT_BATCH_SIZE,
+  );
 
-  const deferred: string[] = [];
-  /** Peable Tax retries on its own clock in every mode, never every tick. */
-  const taxDeferred: string[] = [];
   let applied = 0;
   let noop = 0;
   let skipped = 0;
@@ -113,46 +65,11 @@ export async function runProviderEventDrainPass(
   let failed = 0;
 
   for (const event of events) {
-    // Peable Tax on the card rail acts first: a draft renewal is repriced
-    // before it can finalize, a paid invoice commits its calculation, and a
-    // refund or credit note reverses it. Each is idempotent, so a redelivered
-    // or retried event writes nothing twice; a failure leaves the event
-    // unprocessed and retries it a minute later (a held renewal stays held).
-    const action = options.invoiceTax ? invoiceTaxAction(event) : null;
-    if (options.invoiceTax && action) {
-      try {
-        const outcome =
-          action.kind === 'paid'
-            ? await options.invoiceTax.recordPaidInvoice(action.invoiceRef, action.customerRef)
-            : action.kind === 'renewal'
-              ? await options.invoiceTax.priceRenewalInvoice(action.invoiceRef, action.customerRef)
-              : await options.invoiceTax.reconcileReversals(action);
-        if (outcome === 'renewal_unquoted' || outcome === 'finalized_unpriced')
-          process.emitWarning(
-            `Peable Tax: renewal invoice ${'invoiceRef' in action ? action.invoiceRef : ''} of a quoted card subscription was not repriced (${outcome})`,
-          );
-      } catch (error) {
-        const message = redactProviderMessage(
-          error instanceof Error ? error.message : 'invoice tax failed',
-        );
-        await markProviderEventFailed(getDb(), event.id, message).catch(() => undefined);
-        taxDeferred.push(event.id);
-        failed += 1;
-        continue;
-      }
-    }
-    const outcome = await (options.recurring
-      ? processProviderEvent(event, options.recurring)
-      : processProviderEvent(event));
-    if (options.recurring && (outcome.kind === 'failed' || outcome.kind === 'unmatched'))
-      deferred.push(event.id);
+    const outcome = await processProviderEvent(event);
     switch (outcome.kind) {
-      case 'observed':
       case 'applied':
         applied += 1;
         break;
-      case 'unchanged':
-      case 'already_processed':
       case 'noop':
         noop += 1;
         break;
@@ -169,24 +86,6 @@ export async function runProviderEventDrainPass(
   }
 
   const progress = { examined: events.length, applied, noop, skipped, unmatched, failed };
-  if (taxDeferred.length && !options.recurring)
-    await deferProviderEvents(
-      getDb(),
-      taxDeferred,
-      new Date((options.now ?? (() => new Date()))().getTime() + 60_000),
-    ).catch(() => undefined);
-  else deferred.push(...taxDeferred);
-  if (options.recurring && deferred.length) {
-    try {
-      await deferProviderEvents(
-        getDb(),
-        deferred,
-        new Date((options.now ?? (() => new Date()))().getTime() + 60_000),
-      );
-    } catch (cause) {
-      throw new ProviderEventDeferralError(progress, [...deferred], cause);
-    }
-  }
   return progress;
 }
 
@@ -198,20 +97,12 @@ export interface StartDrainOptions extends DrainPassOptions {
 
 export function startProviderEventDrain(options: StartDrainOptions = {}): void {
   if (timer !== null) return;
-  let pendingDeferral: ProviderEventDeferralError | null = null;
   let running = false;
   timer = setInterval(() => {
     if (running) return;
     running = true;
-    void (async () => {
-      if (pendingDeferral) {
-        await retryProviderEventDrainDeferral(pendingDeferral, options);
-        pendingDeferral = null;
-      }
-      await runProviderEventDrainPass(options);
-    })()
+    void runProviderEventDrainPass(options)
       .catch((error: unknown) => {
-        if (error instanceof ProviderEventDeferralError) pendingDeferral = error;
         process.emitWarning(
           `Peable provider event drain tick failed: ${
             error instanceof Error ? error.message : String(error)

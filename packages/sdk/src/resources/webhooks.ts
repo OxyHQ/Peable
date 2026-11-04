@@ -88,7 +88,6 @@ const WEBHOOK_EVENT_TYPES = {
   'billing_portal.configuration.created': true,
   'billing_portal.configuration.updated': true,
   'billing_portal.session.created': true,
-  'billing.observation.updated': true,
   'connected_account.updated': true,
   'account.updated': true,
   'application_fee.created': true,
@@ -120,7 +119,7 @@ function isNullableString(value: unknown): boolean {
 function isWebhookEventShape(value: unknown): value is WebhookEvent {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Partial<WebhookEvent>;
-  const valid =
+  return (
     typeof candidate.id === 'string' &&
     candidate.object === 'event' &&
     typeof candidate.livemode === 'boolean' &&
@@ -135,39 +134,8 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     isNullableString(candidate.request.idempotency_key) &&
     typeof candidate.data === 'object' &&
     candidate.data !== null &&
-    'object' in candidate.data;
-  if (!valid) return false;
-  if (candidate.type === 'billing.observation.updated') {
-    const data = candidate.data?.object;
-    if (!data || typeof data !== 'object') return false;
-    const v = data as unknown as Record<string, unknown>;
-    return (
-      v.object === 'billing_observation' &&
-      v.livemode === candidate.livemode &&
-      (v.resource_kind === 'subscription' || v.resource_kind === 'invoice') &&
-      typeof v.resource_id === 'string' &&
-      v.resource_id.length > 0 &&
-      (v.subscription_id === undefined ||
-        (typeof v.subscription_id === 'string' &&
-          /^[A-Za-z0-9_.:-]{1,128}$/.test(v.subscription_id))) &&
-      typeof v.revision === 'number' &&
-      Number.isSafeInteger(v.revision) &&
-      v.revision > 0 &&
-      Number.isSafeInteger(v.observed_at) &&
-      Object.keys(v).every((k) =>
-        [
-          'object',
-          'livemode',
-          'resource_kind',
-          'resource_id',
-          'subscription_id',
-          'revision',
-          'observed_at',
-        ].includes(k),
-      )
-    );
-  }
-  return true;
+    'object' in candidate.data
+  );
 }
 
 export class WebhooksResource {

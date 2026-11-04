@@ -984,7 +984,6 @@ describe('usage, entitlements, FairCoin, portal', () => {
     await transitionIntent(intent.id, {
       from: 'processing',
       status: 'succeeded',
-      chainVerified: true,
     });
     expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('succeeded');
     const paid = await ok('GET', `/v1/subscriptions/${sub.id}?expand[]=latest_invoice`);

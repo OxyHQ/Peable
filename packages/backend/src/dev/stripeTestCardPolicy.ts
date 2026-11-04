@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
 
-export const LOCAL_TEST_CARD_CONFIGURATION = 'pmc_1UXZRQAofUef123L4QGpwlFQ';
+const LOCAL_TEST_CARD_CONFIGURATION = 'pmc_1UXZRQAofUef123L4QGpwlFQ';
 
 /** This separately owned TEST configuration leaves account defaults untouched. */
 export async function configureLocalStripeCardEntry() {
@@ -36,12 +36,5 @@ export async function configureLocalStripeCardEntry() {
   if (enabled.length !== 1 || enabled[0] !== 'card')
     throw new Error('Local card-entry configuration permits other methods');
   const { configureStripePaymentProvider } = await import('../services/providers/registry');
-  const { LocalSubscriptionStripeProvider } = await import('./stripeTestEmbeddedSubscription');
-  configureStripePaymentProvider(
-    {
-      mode: 'test',
-      paymentMethodConfiguration: configuration.id,
-    },
-    (options) => new LocalSubscriptionStripeProvider(options),
-  );
+  configureStripePaymentProvider({ mode: 'test', paymentMethodConfiguration: configuration.id });
 }

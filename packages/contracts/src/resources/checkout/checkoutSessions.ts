@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { CATALOG_LIMITS, PRICE_TAX_BEHAVIORS, RECURRING_INTERVALS } from '../../vocabulary/catalog';
 import { SETUP_INTENT_STATUSES } from '../../vocabulary/payments';
-import { billingFaircoinFxQuoteSchema } from '../catalog/billing';
 import { embedded } from '../../common/objects';
 import { listOf } from '../../common/envelopes';
 import { defineComponent, defineObject, type Expand, expandable } from '../../common/objects';
@@ -265,9 +264,6 @@ export const checkoutSessionPublicSchema = defineComponent(
         .describe(
           "The card provider's PUBLIC key for this session's mode, so the payment fields can mount before the payment exists. `null` on FairCoin.",
         ),
-      billing_quote: billingFaircoinFxQuoteSchema
-        .optional()
-        .describe('FairCoin billing invoices: the frozen USD price and FAIR settlement quote.'),
     })
     .strict(),
 );

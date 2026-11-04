@@ -4,7 +4,6 @@
  * reads the provider, and never writes.
  */
 import {
-  type BillingFaircoinFxQuote,
   type CheckoutBranding,
   type CheckoutCustomerDetails,
   type CheckoutCustomField,
@@ -231,7 +230,6 @@ export interface PublicSessionView {
   readonly discount: CheckoutSessionPublic['discount'];
   readonly termsOfServiceUrl: string | null;
   readonly publishableKey: string | null;
-  readonly billingQuote?: BillingFaircoinFxQuote | undefined;
 }
 
 /** What the hosted/embedded checkout loads — no metadata, no client reference, no internal ids. */
@@ -283,7 +281,6 @@ export function toCheckoutSessionPublicDTO(view: PublicSessionView): CheckoutSes
     merchant: view.merchant,
     branding: view.branding,
     publishable_key: view.publishableKey,
-    ...(view.billingQuote ? { billing_quote: view.billingQuote } : {}),
     expires_at: expiresAtOf(row),
   };
 }

@@ -255,12 +255,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
         });
     }
 
-    for (const options of [undefined, { dueAt: new Date() }]) {
-      const served = (await findUnprocessedProviderEvents(must(suite).db, 100, options))
-        .map((row) => row.id)
-        .filter((id) => ids.includes(id));
-      expect(served).toEqual(ids);
-    }
+    const served = (await findUnprocessedProviderEvents(must(suite).db, 100))
+      .map((row) => row.id)
+      .filter((id) => ids.includes(id));
+    expect(served).toEqual(ids);
   });
 
   /**

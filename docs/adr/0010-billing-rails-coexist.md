@@ -1,6 +1,6 @@
 # ADR 0010 — Recurring billing rails coexist, and the payer chooses
 
-**Status:** accepted.
+**Status:** superseded by [ADR 0018](0018-native-billing-engine.md) — the Stripe-Billing proxy, its rails, cohorts, signed invoice authorities and the FX-quoted FairCoin rail were retired on 2026-11-04 with nothing to migrate. Kept as history; none of the code below exists.
 **Date:** 2026-10-16.
 
 ## The defect

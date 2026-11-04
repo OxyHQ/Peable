@@ -1,12 +1,4 @@
 import { buildOpenApiDocument } from '@peable.to/contracts/openapi';
-import { startFaircoinRenewalWorker } from './services/billing/faircoin-renewal-worker';
-import {
-  configureBillingRuntime,
-  type BillingRuntimeAdapters,
-} from './services/billing/configuredBilling';
-import { startRecurringRelay } from './services/recurring/recurring-relay-worker';
-import { createBillingRouter } from './routes/billing';
-import type { BillingService } from './services/billing/billingService';
 import { createDashboardTaxRouter, createTaxRouter } from './routes/tax';
 import {
   createDashboardTaxComplianceRouter,
@@ -134,8 +126,6 @@ const PUBLIC_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const PUBLIC_RATE_LIMIT_MAX = 30;
 
 export interface GatewayDeps {
-  /** Explicitly composed, cohort-limited recurrent service. Absent by default. */
-  billingService?: BillingService;
   /** Peable Tax. Absent: the tax routes answer `tax_not_enabled`. */
   taxService?: TaxService;
   /**
@@ -347,8 +337,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createRequestLogsRouter({ requireMerchant }));
   app.use(createReportingRouter({ requireMerchant }));
   app.use(createTestHelpersRouter({ requireMerchant }));
-  // The native billing engine (ADR 0018). Before the Stripe-Billing proxy's
-  // router, which owns the rest of `/v1/billing/*`.
+  // The billing engine (ADR 0018).
   configureBillingEngine({ tax: deps.taxService });
   // Checkout's `mode: 'subscription'` is the engine's to fulfil (ADR 0018).
   registerSubscriptionCheckoutFulfiller(billingEngineCheckoutFulfiller);
@@ -364,7 +353,6 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit, checkout }));
   app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit, checkout }));
   app.use(createBrandingRouter({ requireMerchant, files: deps.oxyFiles }));
-  app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
   app.use(createTaxRouter({ requireMerchant, tax: deps.taxService }));
   app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser, access: deps.access }));
   app.use(createTaxComplianceRouter({ requireMerchant }));
@@ -414,13 +402,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * own — and both are deliberately started per PROCESS, so N tasks share the
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
-export async function start(
-  options: {
-    billingAdapters?: BillingRuntimeAdapters;
-    listenHost?: string;
-    billingConfiguration?: string;
-  } = {},
-): Promise<Gateway> {
+export async function start(options: { listenHost?: string } = {}): Promise<Gateway> {
   const database = await connectPostgres();
   for (const mode of ['test', 'live'] as const) {
     const providerConfig = config.stripe[mode];
@@ -438,19 +420,7 @@ export async function start(
   const taxProviders = configuredTaxProviders();
   const taxService = createConfiguredTaxService(database, taxProviders);
   void reportTaxProviders(taxProviders);
-  const billingRuntime = await configureBillingRuntime(
-    database,
-    options.billingConfiguration ?? config.billingCohortConfig,
-    undefined,
-    { taxService, ...options.billingAdapters },
-  );
-  const gateway = createGateway({ billingService: billingRuntime?.service, taxService });
-  const stopRecurringRelay = billingRuntime?.relay
-    ? startRecurringRelay(billingRuntime.relay)
-    : undefined;
-  const stopFaircoinRenewals = billingRuntime?.renewals
-    ? startFaircoinRenewalWorker(billingRuntime.renewals)
-    : undefined;
+  const gateway = createGateway({ taxService });
   startEcosystemActivity(() => gateway.httpServer.listening);
   let stopping = false;
   const stop = () => {
@@ -468,13 +438,11 @@ export async function start(
     stopReportRunWorker();
     stopBillingEngine();
     stopProviderEventDrain();
-    stopRecurringRelay?.();
     stopAccountSync();
     stopReferenceSync();
     stopReferenceReconciliation();
-    const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
-      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped, flushRequestLogs()])
+      void Promise.allSettled([stopEcosystemActivity(), flushRequestLogs()])
         .then(async (results) => {
           await disconnectPostgres();
           if (results.some((result) => result.status === 'rejected'))
@@ -510,10 +478,7 @@ export async function start(
   // leave them unprocessed with no sign that anything was wrong. (An event of a
   // mode with no key at all is refused per event, visibly — ADR 0017.) With no
   // events the pass reads an empty partial index and does nothing.
-  startProviderEventDrain({
-    recurring: billingRuntime?.observations,
-    invoiceTax: billingRuntime?.invoiceTax,
-  });
+  startProviderEventDrain();
   // The backstop for a missed `account.updated`. Gated on nothing, like the
   // drain: with no accounts the pass reads an empty batch and does nothing, and
   // with the rail off it stops after the first refusal rather than logging the

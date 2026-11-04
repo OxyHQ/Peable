@@ -45,7 +45,7 @@ providers are internal processing integrations, not the platform's identity.
    Native billing (ADR 0018) takes over everything it serves — Mention Plus and
    the oxy personal plans included — and the routes, contracts and SDK methods
    that pass provider ids are deleted in the same change that moves their
-   consumers. No frozen copy remains.
+   consumers. No frozen copy remains. (Done 2026-11-04: ADR 0018 §7 as built.)
 
 ## Consequences
 

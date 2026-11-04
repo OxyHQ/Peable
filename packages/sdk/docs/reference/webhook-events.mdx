@@ -1,7 +1,7 @@
 ---
 title: "Webhook events"
 description: "Every webhook event type and its payload."
-order: 951
+order: 950
 generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 ---
 
@@ -22,7 +22,6 @@ Every event Peable sends to a [webhook endpoint](/webhooks), and records as an e
 | [`billing.meter.deactivated`](#billingmeterdeactivated) | A billing Meter was deactivated. |
 | [`billing.meter.reactivated`](#billingmeterreactivated) | A billing Meter was reactivated. |
 | [`billing.meter.updated`](#billingmeterupdated) | A billing Meter was updated. |
-| [`billing.observation.updated`](#billingobservationupdated) | A recurring billing resource was observed to change. |
 | [`charge.dispute.closed`](#chargedisputeclosed) | A Dispute closed; `status` carries the outcome. |
 | [`charge.dispute.created`](#chargedisputecreated) | A cardholder disputed a charge. |
 | [`charge.dispute.funds_reinstated`](#chargedisputefunds_reinstated) | The network returned the disputed amount (the dispute was won, or withdrawn). |
@@ -389,32 +388,6 @@ A billing Meter was updated.
 | `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
 | `data` | object |  |
 | `data.object` | [BillingMeter](/reference/objects/billing-meter) |  |
-| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
-| `request` | [EventRequest](/reference/objects/event-request) |  |
-
-## `billing.observation.updated`
-
-A recurring billing resource was observed to change. A wake-up only: re-read the resource.
-
-**Parameters**
-
-| Name | In | Type | Description |
-| --- | --- | --- | --- |
-| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
-
-**Payload** (`application/json`)
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `id` | string | `evt_…`. |
-| `object` | `"event"` |  |
-| `type` | `"billing.observation.updated"` |  |
-| `created` | integer | Unix seconds. |
-| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
-| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
-| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
-| `data` | object |  |
-| `data.object` | [BillingObservation](/reference/objects/billing-observation) |  |
 | `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
 | `request` | [EventRequest](/reference/objects/event-request) |  |
 

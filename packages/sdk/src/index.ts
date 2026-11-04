@@ -6,8 +6,7 @@
 // Every resource namespace is GENERATED from the route contracts
 // (`./generated/resources.ts`, ADR 0014 D5): its methods' types are the
 // contracts' own. What is written by hand is what no route describes — webhook
-// verification, and the signature checks of the two signed billing documents
-// (`./overlays/billingAuthority.ts`).
+// verification.
 //
 // Deliberately never imports `socket.io-client` or `./browser/*` — the server
 // bundle stays lean and holds no browser-only code.
@@ -28,7 +27,6 @@ import {
 } from './core/config';
 import { createServiceTokenProvider } from './core/serviceToken';
 import { type FilesResource, GeneratedClient } from './generated/resources';
-import { withBillingAuthority } from './overlays/billingAuthority';
 import { WebhooksResource } from './resources/webhooks';
 
 /** The gateway client a `Peable` speaks through, and how to release its transport. */
@@ -78,10 +76,6 @@ export interface FilesNamespace extends FilesResource {
  * The merchant-authed client: every namespace a route contract declares
  * (inherited from `GeneratedClient`), plus `webhooks`, which verifies a
  * delivery locally and is no route.
- *
- * `billing.createTaxQuote` and `billing.retrieveFinalInvoiceAuthority` verify
- * the signed document against `taxQuoteAuthorityKeys` / `invoiceAuthorityKeys`
- * before answering, and refuse to answer without them.
  */
 export class Peable extends GeneratedClient {
   /** Release requester-bound shared transport resources after the operation. */
@@ -96,14 +90,6 @@ export class Peable extends GeneratedClient {
     super(client.gateway);
     this.dispose = client.dispose;
     this.webhooks = new WebhooksResource();
-    withBillingAuthority(this.billing, {
-      ...(resolved.invoiceAuthorityKeys === undefined
-        ? {}
-        : { invoiceAuthorityKeys: resolved.invoiceAuthorityKeys }),
-      ...(resolved.taxQuoteAuthorityKeys === undefined
-        ? {}
-        : { taxQuoteAuthorityKeys: resolved.taxQuoteAuthorityKeys }),
-    });
   }
 }
 
@@ -167,7 +153,6 @@ export type {
 export type { ServiceTokenProvider } from './core/serviceToken';
 /** The generated namespaces (`CustomersResource`, `PaymentIntentsResource`, …). */
 export type * from './generated/resources';
-export type { BillingAuthorityKeys } from './overlays/billingAuthority';
 export {
   DEFAULT_WEBHOOK_TOLERANCE_SEC,
   WEBHOOK_SIGNATURE_HEADER,
@@ -176,39 +161,6 @@ export {
 
 // The wire types an integration handles, re-exported so one import serves.
 export type {
-  CreateBillingTaxQuoteParams,
-  BillingTaxQuote,
-  BillingInvoiceAuthoritySource,
-  BillingFinalInvoice,
-  BillingFinalInvoiceAuthority,
-  BillingFaircoinRenewalChoice,
-  BillingFaircoinRenewalConsent,
-  BillingFaircoinRenewalRevocation,
-  BillingObservation,
-  BillingCustomer,
-  BillingHostedSession,
-  BillingCheckoutSession,
-  BillingEmbeddedCheckoutSession,
-  BillingEmbeddedCheckoutConfiguration,
-  BillingEmbeddedCheckoutBinding,
-  BillingEmbeddedCheckoutAction,
-  BillingEmbeddedCheckoutScope,
-  BillingCheckoutObservation,
-  RetrieveBillingCheckoutOperationParams,
-  BillingCheckoutOperationSource,
-  BillingCheckoutOperationRecovery,
-  BillingPaidInvoice,
-  BillingInvoiceState,
-  BillingSubscription,
-  CreateBillingCheckoutParams,
-  CreateBillingPortalParams,
-  EnsureBillingCustomerParams,
-  BillingRail,
-  BillingRailSettlement,
-  BillingRailOffer,
-  BillingRailOption,
-  BillingRailList,
-  BillingInvoiceTaxLine,
   TaxRegistrationScheme,
   TaxLocationEvidenceType,
   TaxBehavior,
@@ -232,8 +184,6 @@ export type {
   TaxReportRow,
   TaxReport,
 } from '@peable.to/shared-types';
-/** Production Peable's pinned billing-authority public keys, by key id. */
-export { PEABLE_BILLING_AUTHORITY_KEYS } from '@peable.to/shared-types';
 export type {
   RequestLog,
   RequestLogListParams,
@@ -563,4 +513,3 @@ export type {
   UpdateProductParams,
   UpdatePromotionCodeParams,
 } from '@peable.to/shared-types';
-export type { BillingFaircoinFxQuote } from '@peable.to/shared-types';

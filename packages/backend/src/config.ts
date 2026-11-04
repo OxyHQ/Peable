@@ -101,11 +101,6 @@ export interface AppConfig {
    * off" instead of throwing.
    */
   stripe: StripeConfig;
-  /** Explicit reviewed recurring cohort JSON; absent keeps all recurring routes closed. */
-  billingCohortConfig?: string;
-  /** PATHS of operator-mounted files, never their content. The signing key is a
-   * secret delivered as a file by the task definition; see signingKey.ts. */
-  billingInvoicePrivateKeyFile?: string;
   /** Salt for the one-way hash Peable Tax keeps of an IP address given as
    * location evidence. Absent: no trace of the address is kept at all. */
   ipHashSalt?: string;
@@ -490,10 +485,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ).replace(/\/+$/, ''),
     apiBaseUrl: readNonEmpty(env.PEABLE_API_BASE_URL, DEFAULT_API_BASE_URL).replace(/\/+$/, ''),
     oxyApiUrl: readNonEmpty(env.OXY_API_URL, DEFAULT_OXY_API_URL),
-    ...(readOptional(env.PEABLE_BILLING_COHORT)
-      ? { billingCohortConfig: readOptional(env.PEABLE_BILLING_COHORT) }
-      : {}),
-    billingInvoicePrivateKeyFile: readOptional(env.PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE),
     ipHashSalt: readOptional(env.IP_HASH_SALT),
     stripe: readStripeConfig(env),
     oxyFiles: {

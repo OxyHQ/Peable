@@ -8,7 +8,7 @@
  * actually sent; a row that can be edited says only what someone last thought
  * the provider sent.
  */
-import { and, asc, eq, isNull, sql, lte, or, inArray } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { providerEvents } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -156,25 +156,12 @@ export async function findProviderEventByIdentity(
 export async function findUnprocessedProviderEvents(
   db: DatabaseOrTransaction,
   limit: number,
-  options?: { dueAt: Date },
 ): Promise<readonly ProviderEventRow[]> {
   const rows = await db
     .select(EVENT_COLUMNS)
     .from(providerEvents)
-    .where(
-      and(
-        isNull(providerEvents.processedAt),
-        options
-          ? or(isNull(providerEvents.retryAfter), lte(providerEvents.retryAfter, options.dueAt))
-          : undefined,
-      ),
-    )
-    .orderBy(
-      options
-        ? asc(sql`coalesce(${providerEvents.retryAfter}, ${providerEvents.createdAt})`)
-        : asc(providerEvents.createdAt),
-      asc(providerEvents.receivedSeq),
-    )
+    .where(isNull(providerEvents.processedAt))
+    .orderBy(asc(providerEvents.createdAt), asc(providerEvents.receivedSeq))
     .limit(limit);
   return rows as readonly ProviderEventRow[];
 }
@@ -206,21 +193,4 @@ export async function markProviderEventFailed(
   error: string,
 ): Promise<void> {
   await db.update(providerEvents).set({ processingError: error }).where(eq(providerEvents.id, id));
-}
-
-/** Deferral never changes the authenticated envelope or marks an event completed.
- * Called after the whole explicit recurring pass, so a slow blocked batch cannot
- * become due again before the pass ends. The default drain honours it too, for
- * the Peable Tax events it defers (ADR 0013); nothing else sets it there. */
-export async function deferProviderEvents(
-  db: DatabaseOrTransaction,
-  ids: readonly string[],
-  retryAfter: Date,
-) {
-  if (!ids.length) return;
-  if (!Number.isFinite(retryAfter.getTime())) throw new Error('Invalid event retry time');
-  await db
-    .update(providerEvents)
-    .set({ retryAfter })
-    .where(and(inArray(providerEvents.id, [...ids]), isNull(providerEvents.processedAt)));
 }

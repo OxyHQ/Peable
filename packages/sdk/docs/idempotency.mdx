@@ -55,7 +55,4 @@ identity:
   A repeat answers `409`; read your merchant with `GET /v1/merchants/me`.
 - `POST /v1/payment_intents/{id}/client_action` — a read; nothing happens
   twice.
-- The `/v1/billing/*` routes of the [Stripe Billing rail](/billing#the-stripe-billing-rail),
-  which carry their own durable operation keys and recover a lost reply with
-  the same key.
 - The anonymous payer routes of the hosted checkout.

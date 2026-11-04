@@ -18,12 +18,6 @@
  * made from `object_ids` and `type`, which the ingress derived at verification
  * time and which redaction never touches.
  */
-import {
-  observeRecurringEvent,
-  recurringEventKind,
-  type ObservationOutcome,
-} from '../recurring/recurringObservation';
-import type { RecurringObservationOptions } from '../recurring/contracts';
 import type { ProviderEventRow } from '../../db/providers/providerEventRepository';
 import {
   markProviderEventFailed,
@@ -258,26 +252,7 @@ export type ProcessOutcome =
  * Never throws: the drain processes a batch, and one poisonous row must not
  * stop the rows behind it. A failure is recorded on the row and reported.
  */
-export function processProviderEvent(event: ProviderEventRow): Promise<ProcessOutcome>;
-export function processProviderEvent(
-  event: ProviderEventRow,
-  recurring: RecurringObservationOptions,
-): Promise<ProcessOutcome | ObservationOutcome>;
-export async function processProviderEvent(
-  event: ProviderEventRow,
-  recurring?: RecurringObservationOptions,
-): Promise<ProcessOutcome | ObservationOutcome> {
-  // No production caller supplies this option. Without it legacy no_mapping
-  // behavior is preserved, including historical recurring events marked handled.
-  if (recurring && recurringEventKind(event.type)) {
-    const observation = await observeRecurringEvent(event.id, recurring);
-    // Unowned refund wake-ups still belong to the existing one-off processor.
-    if (
-      observation.kind !== 'unmatched' ||
-      !(event.type === 'charge.refunded' || event.type.startsWith('refund.'))
-    )
-      return observation;
-  }
+export async function processProviderEvent(event: ProviderEventRow): Promise<ProcessOutcome> {
   const db = getDb();
 
   // Routed by the event's own mode (ADR 0017). A mode this deployment holds no

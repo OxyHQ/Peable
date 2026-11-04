@@ -8,10 +8,6 @@ import { loadProviderSdk, type ProviderElement } from '../browser/providerJs';
 import { prepareCardAuthorization, type ProviderCardPreparation } from './preparedCard';
 import type { PeableProviderFieldsProps } from './providerFieldTypes';
 import { matchingCardAction } from './cardReadiness';
-import {
-  matchingCheckoutSessionAction,
-  prepareCheckoutSessionCard,
-} from './preparedCheckoutSession';
 
 type SecureField = 'number' | 'expiry' | 'securityCode';
 const fields: readonly SecureField[] = ['number', 'expiry', 'securityCode'];
@@ -29,7 +25,6 @@ const countryCodes =
 /** The same Bloom CardForm layout, with only its three sensitive inputs hosted by the processor. */
 export function PeableProviderCardFields({
   action,
-  checkoutSession,
   cardConfiguration,
   billingDetails,
   locale = 'en',
@@ -42,14 +37,9 @@ export function PeableProviderCardFields({
   unavailableLabel = checkoutMessage(locale, 'provider.unavailable'),
 }: PeableProviderFieldsProps) {
   const { colors } = useTheme();
-  const publishableKey =
-    cardConfiguration?.publishableKey ??
-    checkoutSession?.publishable_key ??
-    action?.publishable_key;
+  const publishableKey = cardConfiguration?.publishableKey ?? action?.publishable_key;
   const actionRef = useRef(action);
   actionRef.current = action;
-  const sessionRef = useRef(checkoutSession);
-  sessionRef.current = checkoutSession;
   const [localBilling, setBilling] = useState<{
     country: string;
     postcode: string;
@@ -96,9 +86,7 @@ export function PeableProviderCardFields({
   const publish = () =>
     callbacks.current.onReady(
       !disabled &&
-        (!actionRef.current || !sessionRef.current) &&
-        (matchingCardAction(actionRef.current, publishableKey) ||
-          matchingCheckoutSessionAction(sessionRef.current, publishableKey)) &&
+        matchingCardAction(actionRef.current, publishableKey) &&
         fields.every((field) => complete.current[field]) &&
         billingRef.current.country &&
         (!requirePostalCode || billingRef.current.postcode.trim())
@@ -110,7 +98,7 @@ export function PeableProviderCardFields({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Billing completeness updates the published callback without remounting secure fields.
   useEffect(() => {
     publishRef.current();
-  }, [billing, requirePostalCode, disabled, action, checkoutSession, publishableKey]);
+  }, [billing, requirePostalCode, disabled, action, publishableKey]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit retry recreates provider-owned fields for this same intent.
   useEffect(() => {
     let active = true;
@@ -196,46 +184,6 @@ export function PeableProviderCardFields({
         confirm.current = async () => {
           const card = elements.current.number;
           const authority = matchingCardAction(actionRef.current, publishableKey);
-          const sessionAuthority = matchingCheckoutSessionAction(
-            sessionRef.current,
-            publishableKey,
-          );
-          if (sessionAuthority && !actionRef.current) {
-            if (!active || busy || !card || disabledRef.current)
-              return { prepared: false, error: checkoutMessage(locale, 'provider.busy') };
-            busy = true;
-            const snapshot = { ...sessionAuthority };
-            const billingSnapshot = { ...billingRef.current };
-            try {
-              return await prepareCheckoutSessionCard({
-                provider,
-                card,
-                billing: billingSnapshot,
-                action: snapshot,
-                returnUrl,
-                messages: {
-                  busy: checkoutMessage(locale, 'provider.busy'),
-                  closed: checkoutMessage(locale, 'provider.closed'),
-                  incomplete: checkoutMessage(locale, 'provider.incomplete'),
-                  failed: checkoutMessage(locale, 'provider.failed'),
-                },
-                isCurrent: () =>
-                  active &&
-                  billingRef.current.country === billingSnapshot.country &&
-                  billingRef.current.postcode === billingSnapshot.postcode &&
-                  billingRef.current.email === billingSnapshot.email &&
-                  !actionRef.current &&
-                  Object.entries(snapshot).every(
-                    ([key, value]) => sessionRef.current?.[key as keyof typeof snapshot] === value,
-                  ),
-              });
-            } catch {
-              return { prepared: false, error: checkoutMessage(locale, 'provider.failed') };
-            } finally {
-              busy = false;
-            }
-          }
-          if (sessionRef.current) return { prepared: false, error: unavailableLabel };
           if (!active || busy || !card || !authority || disabledRef.current)
             return { prepared: false, error: checkoutMessage(locale, 'provider.busy') };
           busy = true;

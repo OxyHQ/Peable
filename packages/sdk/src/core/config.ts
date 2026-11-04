@@ -68,9 +68,6 @@ export interface PeableConfigOptions {
   maxNetworkRetries?: number;
   /** Milliseconds one attempt may take, headers and body together. Default 80 000. */
   timeout?: number;
-  /** Pinned Ed25519 authority keys, obtained from trusted deployment configuration. */
-  invoiceAuthorityKeys?: Readonly<Record<string, string>>;
-  taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
 }
 
 /** Authenticate with an `ApplicationCredential`; the SDK mints the token. */
@@ -115,8 +112,6 @@ interface ResolvedPeableConfigOptions {
   peableAccount?: string;
   maxNetworkRetries: number;
   timeout: number;
-  invoiceAuthorityKeys?: Readonly<Record<string, string>>;
-  taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
 }
 
 /** `PeableCredentialConfig` with every optional field defaulted and normalized. */
@@ -248,12 +243,6 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
       DEFAULT_MAX_NETWORK_RETRIES,
     ),
     timeout: resolveTimeout(config.timeout, DEFAULT_TIMEOUT_MS),
-    taxQuoteAuthorityKeys: config.taxQuoteAuthorityKeys
-      ? Object.freeze({ ...config.taxQuoteAuthorityKeys })
-      : undefined,
-    invoiceAuthorityKeys: config.invoiceAuthorityKeys
-      ? Object.freeze({ ...config.invoiceAuthorityKeys })
-      : undefined,
     baseURL: stripTrailingSlash(config.baseURL ?? DEFAULT_GATEWAY_BASE_URL),
     oxyApiUrl: stripTrailingSlash(config.oxyApiUrl ?? DEFAULT_OXY_API_URL),
   };

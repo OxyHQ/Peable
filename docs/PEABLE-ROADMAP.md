@@ -51,11 +51,10 @@ receipt cannot establish that today's user journey works in production.
 | Marketplace | Seller onboarding, transfers/reversals, refunds, disputes and text evidence | Dispute attachments; dispute fee/funds movements; payout tracking |
 | Financial reporting | Provider gross/fee/net reads with explicit unknown values | Per-merchant journal, fiat balances, reserves, negative balances and bank reconciliation |
 | Orbit by Peable | Merchant/payment/webhook APIs; existing tax administration and contribution screens | Separate merchant application; unfinished workspace deferred outside this payment release, credential UI over Oxy authority and broad resource management. Stripe-parity plan and gap list: [`orbit/stripe-parity.md`](orbit/stripe-parity.md) (ADRs 0014–0018) |
-| Billing | Customers, subscription checkout/portal, subscription and invoice reads, cancellation, operation recovery | General self-service catalogue and subscription administration beyond configured offers |
-| FairCoin billing | Quoted subscription periods and explicit renewals using payment intents | External funded settlement acceptance; no claim of automatic wallet debit |
-| Tax | Location evidence, calculations, owner-approved registrations, reports, renewal repricing and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
+| Billing | Orbit's billing engine (ADR 0018): catalog, subscriptions, invoices, credit notes, meters, entitlements, customer portal; FairCoin invoices paid by the payer (`send_invoice`) | Production acceptance of the first enabled offer |
+| Tax | Location evidence, calculations, owner-approved registrations, reports and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
 | Personal app | Identity, self-custodial wallet, activity, social send/receive, profiles, QR, pockets and checkout approval | Physical-device/recovery acceptance |
-| Browser integration | `@peable.to/sdk/checkout` payer client and optional `@peable.to/sdk/checkout/ui` unified Bloom checkout, locally tested in Mention | Published release acceptance and production embedded billing binding |
+| Browser integration | `@peable.to/sdk/checkout` payer client and optional `@peable.to/sdk/checkout/ui` unified Bloom checkout, locally tested in Mention | Published release acceptance |
 | App integration | `@peable.to/pay` execution and separate `@peable.to/pay/ui` payment-to-person sheet | Commercial checkout integration; do not equate a person-payment sheet with a subscription checkout |
 | In-person payments | No terminal implementation | Terminal/contactless product |
 
@@ -70,10 +69,10 @@ The older September roadmap claimed subscriptions did not exist and no real
 provider sandbox testing had occurred. Later source and evidence supersede those
 claims:
 
+- The three October 3 records below are of the Stripe-Billing proxy (`/v1/billing/*`), retired in November 2026 in favour of the billing engine; they are history, not current capability.
 - [October 3 hosted subscription checkout](audits/2026-10-03-i08-billing-provider/checkout-sandbox/README.md): real provider test-mode checkout, customer reuse, lost-response recovery and period-end cancellation request. Oxy authentication was synthetic.
 - [October 3 lifecycle tests](audits/2026-10-03-i08-billing-provider/test-clock/README.md): trial, paid renewal, refund/idempotency, cancellation, failed renewal and unresolved authentication challenge. These fixtures do not prove production adoption or the entire marketplace rail.
 - [Historical release and deployment receipts](audits/2026-10-03-i08-billing-provider/published-release/README.md): published packages and backend/frontend/checkout checks for the recorded commit. They do not establish current package publication, configuration or payment readiness.
-- [Native FairCoin billing](integrations/native-faircoin-subscriptions.md): implementation and database/fixture verification; external funded settlement was not demonstrated in that evidence.
 
 During the 2026-11-02 local review, 191 SDK tests and 130 pay tests passed. After
 building the SDK output, six packages passed typechecking. Frontend failed at

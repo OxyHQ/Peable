@@ -38,15 +38,11 @@ import { StripePaymentProvider, type StripePaymentProviderOptions } from './stri
 const stripeInstances: Partial<Record<ProviderMode, StripePaymentProvider>> = {};
 
 /** Trusted startup configuration only; never change the policy of an active adapter. */
-export function configureStripePaymentProvider(
-  options: StripePaymentProviderOptions,
-  factory: (options: StripePaymentProviderOptions) => StripePaymentProvider = (value) =>
-    new StripePaymentProvider(value),
-): void {
+export function configureStripePaymentProvider(options: StripePaymentProviderOptions): void {
   if (stripeInstances[options.mode]) {
     throw new Error(`Stripe ${options.mode} payment provider is already initialized`);
   }
-  stripeInstances[options.mode] = factory(options);
+  stripeInstances[options.mode] = new StripePaymentProvider(options);
 }
 
 /**

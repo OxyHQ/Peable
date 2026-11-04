@@ -86,18 +86,14 @@ annually** (20% below twelve monthly payments, rounded to cents). Catalogue pric
 and purchase availability are separate: an offer can be visible while purchasing
 remains disabled. Oxy One continues to be another source of Plus access.
 
-The local unified checkout has completed actual **test-environment monthly and
-annual subscriptions**, with paid invoices and signed settlement notifications.
-Card fields use secure provider frames within the shared Bloom form; Continue
-prepares authorization and a separate Pay action confirms it. Authentication
-challenges and declined-payment retry have also been verified.
-
-These tests do **not** grant production Plus access or establish live availability.
-The backend now provides an owned embedded billing-session binding alongside
-hosted checkout, preserving the same signed tax quote, subscription ownership and
-invoice authority. Production activation still requires the correct merchant,
-provider account, approved fiscal settings and authoritative entitlement delivery
-to be configured and verified together. Closing the sheet or checkout window never grants Plus.
+Plus is sold through Orbit's own billing engine (ADR 0018): the offers are
+catalog products and prices, Subscribe opens a Checkout Session in
+`mode: 'subscription'`, the subscription and its invoices are Orbit objects,
+management is the customer portal (`billing_portal`), and access is the
+entitlement (`entitlements.activeEntitlements`) — Plus through Plus or Oxy One
+is one entitlement. Production activation still requires the correct merchant,
+the approved catalogue rows and authoritative entitlement delivery to be
+configured and verified together. Closing the sheet or checkout window never grants Plus.
 
 ### FairCoin is a payment method, not an exchange product
 

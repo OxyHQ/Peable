@@ -1,6 +1,5 @@
 // Contracts of this group: one module per resource, re-exported here, and
 // their routes concatenated into `catalogRoutes`.
-import { billingRoutes } from './billing';
 import { billingSettingsRoutes } from './billingSettings';
 import { couponRoutes } from './coupons';
 import { entitlementRoutes } from './entitlements';
@@ -10,7 +9,6 @@ import { productRoutes } from './products';
 import { promotionCodeRoutes } from './promotionCodes';
 import { testClockRoutes } from './testClocks';
 
-export * from './billing';
 export * from './billingSettings';
 export * from './coupons';
 export * from './entitlements';
@@ -24,8 +22,7 @@ export { baseUnitAmountParam, queryFlag, queryIdList } from './shared';
 
 /**
  * The catalog (products, prices, coupons, promotion codes), entitlements, the
- * billing engine's platform objects (test clocks, billing settings, meters)
- * and the recurring billing transport (`/v1/billing/*`).
+ * billing engine's platform objects (test clocks, billing settings, meters).
  */
 export const catalogRoutes = [
   ...productRoutes,
@@ -36,5 +33,4 @@ export const catalogRoutes = [
   ...testClockRoutes,
   ...billingSettingsRoutes,
   ...meterRoutes,
-  ...billingRoutes,
 ] as const;

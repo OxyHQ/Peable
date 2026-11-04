@@ -61,12 +61,13 @@ describe('closed value sets', () => {
    * to.
    */
   it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
-    // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair
+    // 27 of ADR 0019 (the proxy's `billing.observation.updated` is gone) + the catalog's ten (ADR 0018) + the dispute funds pair
     // + Orbit money's nine (ADR 0015) + checkout's four and payment links'
     // two (Orbit Phase 3) + reporting's report run pair (Phase 8) + the billing
     // engine's 34 (ADR 0018) + business compliance's three (ADR 0020).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(94);
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(93);
     for (const retired of [
+      'billing.observation.updated',
       'payment_intent.settled',
       'payment_intent.confirming',
       'payment_intent.failed',

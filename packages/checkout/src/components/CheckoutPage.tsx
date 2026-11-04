@@ -342,7 +342,6 @@ export function CheckoutPage({
                 ) : session.payment_intent ? (
                   <CheckoutView
                     intent={session.payment_intent}
-                    billingQuote={session.billing_quote}
                     providerAppearance={appearance}
                     submitLabel={label}
                     onIntentChange={() => {

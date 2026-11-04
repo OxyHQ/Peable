@@ -123,27 +123,4 @@ export type MeterAggregation = (typeof METER_AGGREGATIONS)[number];
 export const METER_STATUSES = ['active', 'inactive'] as const;
 export type MeterStatus = (typeof METER_STATUSES)[number];
 
-// ---- Recurring billing transport (`/v1/billing/*`) ---------------------------
-
-/** A provider subscription's status, as the recurring transport observes it. */
-export const BILLING_SUBSCRIPTION_STATUSES = [
-  'incomplete',
-  'incomplete_expired',
-  'trialing',
-  'active',
-  'past_due',
-  'canceled',
-  'unpaid',
-  'paused',
-] as const;
-export type BillingSubscriptionStatus = (typeof BILLING_SUBSCRIPTION_STATUSES)[number];
-
-/** `fiat` (Stripe and any further provider) or `faircoin` (native, to the merchant's watch-only wallet). */
-export const BILLING_RAIL_SETTLEMENTS = ['fiat', 'faircoin'] as const;
-export type BillingRailSettlement = (typeof BILLING_RAIL_SETTLEMENTS)[number];
-
-/** `automatic`: the provider charges each period. `payer_initiated`: each period is an explicit payment. */
-export const BILLING_RAIL_RENEWALS = ['automatic', 'payer_initiated'] as const;
-export type BillingRailRenewal = (typeof BILLING_RAIL_RENEWALS)[number];
-
 // Product tax codes are Peable Tax's vocabulary: `vocabulary/tax.ts` (`TAX_CODES`).

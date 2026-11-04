@@ -275,8 +275,9 @@ export interface InsertCheckoutSessionParams {
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
   /**
-   * A session around a payment that already exists — the FairCoin billing
-   * invoice's. Every other session gets its payment when the payer confirms.
+   * The payment this session wraps. Production sessions get theirs when the
+   * payer confirms (`linkSessionObject`); the parameter exists so the unique
+   * "one session per payment" index can be exercised directly.
    */
   readonly paymentIntentId?: string | null;
   /** `amount_total`; with no `totals`, also the subtotal. */

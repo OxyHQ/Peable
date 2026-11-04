@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.0.0 — the Stripe-Billing proxy is retired (ADR 0018)
+
+Requires `@peable.to/contracts` 3.0.0 and `@peable.to/shared-types` 3.0.0. A
+major: the provider-id recurring billing surface is removed at the root. Use the
+billing engine — catalog products and prices, `checkout.sessions.create` with
+`mode: 'subscription'`, `subscriptions`, `invoices`, `billingPortal.sessions`
+and `entitlements.activeEntitlements` for access.
+
+Removed:
+
+- **Methods.** Every `billing.*` method except `billing.meters.*` and
+  `billing.meterEvents.*`: `listRails`, `createTaxQuote`, `ensureCustomer`,
+  `createCheckoutSession`, `embeddedCheckoutConfiguration`,
+  `createEmbeddedCheckoutSession`, `retrieveEmbeddedCheckoutAction`,
+  `createPortalSession`, `retrieveCheckoutOperation`, `retrieveCheckout`,
+  `retrieveFinalInvoiceAuthority`, `retrieveInvoiceState`,
+  `retrievePaidInvoice`, `retrieveSubscription`, `renewSubscription`,
+  `cancelAtPeriodEnd`.
+- **Signed billing documents.** The `invoiceAuthorityKeys` /
+  `taxQuoteAuthorityKeys` config, `BillingAuthorityKeys` and
+  `PEABLE_BILLING_AUTHORITY_KEYS`.
+- **Types.** `Billing*` wire types of the proxy (`BillingSubscription`,
+  `BillingTaxQuote`, `BillingFinalInvoiceAuthority`, `BillingPaidInvoice`,
+  `BillingInvoiceState`, `BillingRail*`, `BillingCheckout*`,
+  `BillingEmbeddedCheckout*`, `BillingFaircoin*`, `BillingObservation`, …),
+  `BILLING_SUBSCRIPTION_STATUSES`, `BILLING_RAIL_*`.
+- **Event.** `billing.observation.updated`; `webhooks.constructEvent` refuses it.
+- **Checkout.** `CheckoutSessionPublic.billing_quote`; the
+  `checkoutSession` prop of the provider card fields and `CheckoutSessionAction`
+  (`@peable.to/sdk/checkout/ui`).
+- **Error codes.** `subscription_migrated`, `billing_not_enabled`,
+  `billing_provider_unavailable`, `invalid_billing_request`,
+  `idempotency_conflict`, `identity_conflict`, `invalid_provider_response`,
+  `provider_unavailable`, `reconciliation_required`, `result_expired` and the
+  `local_test_*` codes.
+
 ## 2.0.0 — every amount is a base-unit string (ADR 0014 D1)
 
 Requires `@peable.to/contracts` 2.0.0 and `@peable.to/shared-types` 2.0.0. A

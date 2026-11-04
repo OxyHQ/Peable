@@ -1,9 +1,4 @@
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
-import {
-  LOCAL_TEST_APP,
-  localTestBillingConfiguration,
-  localTestBillingOwner,
-} from './stripeTestBilling';
 
 let stage = 'local configuration';
 async function run() {
@@ -12,50 +7,17 @@ async function run() {
   const { configureLocalStripeCardEntry } = await import('./stripeTestCardPolicy');
   await configureLocalStripeCardEntry();
   if (process.env.PORT !== '4310') throw new Error('Local Stripe test requires port4310');
-  // This local runner does not publish workload telemetry or activate fiscal cohorts.
+  // This local runner does not publish workload telemetry.
   delete process.env.AWS_REGION;
-  if (process.env.PEABLE_BILLING_COHORT)
-    throw new Error('Configure and review test billing separately before enabling a cohort');
   const { getStripeClient } = await import('../services/providers/stripe/client');
   stage = 'Stripe Accounts read';
   const account = await getStripeClient('test').accounts.retrieve(null);
   if (account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT) {
     throw new Error('Stripe account does not match the explicitly approved local test account');
   }
-  let billingConfiguration: string | undefined;
-  if (process.env.PEABLE_TEST_ENABLE_BILLING === 'true') {
-    const { connectPostgres } = await import('../db/postgres');
-    const { findMerchantByAppEnvironment } = await import('../db/merchants/merchantRepository');
-    const db = await connectPostgres();
-    const merchant = await findMerchantByAppEnvironment(db, LOCAL_TEST_APP, 'development');
-    if (!merchant)
-      throw new Error('Seed the local test merchant before enabling recurring observations');
-    billingConfiguration = JSON.stringify(
-      localTestBillingConfiguration(await localTestBillingOwner(db, merchant), account.id),
-    );
-  }
-  stage = 'gateway startup and recurring configuration validation';
+  stage = 'gateway startup';
   const { start } = await import('../server');
-  const gateway = await start({ listenHost: '127.0.0.1', billingConfiguration });
-  const { createLocalStripeTestCheckoutRouter } = await import('./stripeTestCheckoutRouter');
-  const { createLocalStripeTestIntent } = await import('./stripeTestCheckout');
-  const { readLocalSubscription, withLocalSubscriptionBootstrap } = await import(
-    './stripeTestEmbeddedSubscription'
-  );
-  const { createLocalPreparationReader } = await import('./stripeTestPreparation');
-  const prepare = createLocalPreparationReader();
-  gateway.app.use(
-    createLocalStripeTestCheckoutRouter({
-      read: readLocalSubscription,
-      prepare,
-      create: (key, interval) =>
-        withLocalSubscriptionBootstrap(async () => {
-          const { created } = await createLocalStripeTestIntent(key, interval);
-          const snapshot = await readLocalSubscription(created.intent.publicId);
-          return { ...snapshot, client_secret: created.intent.clientSecret };
-        }),
-    }),
-  );
+  await start({ listenHost: '127.0.0.1' });
 }
 void run().catch(() => {
   console.error(

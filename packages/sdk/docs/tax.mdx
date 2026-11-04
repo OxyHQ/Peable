@@ -111,30 +111,3 @@ as a review item (`tax.assessment.created`, `tax.review_item.created`,
 the API records onboarding facts or review decisions, turns collection on, or
 registers, files or pays anything with an authority. Those are the owner's,
 in Orbit.
-
-## The Stripe Billing rail
-
-Subscriptions sold through the provider's own billing (`peable.billing.*`,
-[Subscriptions](/billing#the-stripe-billing-rail)) are taxed with a signed
-Peable Tax **quote**:
-
-```ts
-const quote = await peable.billing.createTaxQuote({
-  store_id: storeId,
-  plan_id: planId,
-  customer_location_evidence_id: evidence.id,
-});
-await peable.billing.createCheckoutSession({ /* … */ tax_quote: quote });
-```
-
-- The provider's checkout charges exactly the quoted total, its own tax stays
-  off, and the paid invoice is recorded as a tax transaction. A card quote
-  stands two hours, and the checkout needs at least 31 minutes of it left.
-- Each renewal is repriced by Peable before the provider finalizes it, from
-  the billing address and card country the provider holds, and gets its own
-  signed quote and tax transaction. A renewal Peable cannot price stays an
-  unfinalized draft and is retried — it is never released at a stale total.
-- `peable.tax.products.setTaxCode(planId, { tax_code: 'txcd_10103000' })` sets
-  a plan's tax code; `billing.retrieveFinalInvoiceAuthority(sub, inv, {
-  include: 'tax_lines' })` returns the signed invoice with its tax lines inside the
-  signature.

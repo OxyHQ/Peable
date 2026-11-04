@@ -934,21 +934,12 @@ otherwise undo:
   `invoice` and `invoice_payment_failed`, `invoice_id`): owed in the change's
   transaction, sent by the dispatcher; `invoice.sent` is recorded only when the
   relay accepted the email.
-- **An adopted subscription carries two facts, not a mode** (`0077`/`0078`,
-  ADR 0018 §7): `provider_billed_until` (the previous provider billed the
-  current period through it — no engine line covers it, so no proration can
-  credit it) and `provider_handoff_pending` (that provider still renews it —
-  the engine must not). `subscriptions_provider_handoff_check` ties them. The
-  hold is a column, not `pause_collection`: a merchant can clear a pause, and a
-  hold the merchant can clear is a double charge waiting for a click.
-- **`billing_proxy_migrations` is the proxy migration's record and marker**
-  (`0079`): unique per subscription binding (a rerun skips it) and per native
-  subscription; `adopted` → `released` by CAS only, `released_at` CHECKed with
-  it. Its references are composite (customer of the merchant, card of the
-  customer, price of the merchant, subscription of the customer), and none
-  points at `merchants` directly — a hot table, reached through
-  `customers (id, merchant_id)`. Blocked and skipped subscriptions are the dry
-  run's report, never rows.
+- **The Stripe-Billing proxy's tables are gone** (`0080`–`0082`, post, ADR
+  0018 §7 as built): its bindings, operations, renewal taxes, migration record,
+  recurring mirrors and outbox, the FX-quoted FairCoin rail's three tables,
+  the adoption columns on `subscriptions` and `provider_events.retry_after`.
+  Every one was empty in production. Do not rebuild a provider-billed
+  subscription table beside the engine.
 - **Migrations `0065`/`0066`**. `0065` is `pre`: new
   tables, additive columns, and the constraints added to EXISTING tables
   (`customer_emails_invoice_fkey`, `customer_emails_kind_check`,

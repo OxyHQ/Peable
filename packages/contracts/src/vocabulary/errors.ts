@@ -52,8 +52,6 @@ export const ERROR_CODE_DESCRIPTIONS = {
   account_invalid: 'The `Peable-Account` header names no connected account of this platform.',
   account_missing: 'The merchant has no account object yet.',
   amount_not_representable: 'The amount does not fit the currency or the rail.',
-  billing_not_enabled: 'Billing is not enabled for this merchant.',
-  billing_provider_unavailable: 'The billing provider could not be reached; retry.',
   domain_taken: 'The domain is already registered by another merchant.',
   file_too_large: 'The uploaded file is larger than its purpose allows.',
   file_unavailable: 'The file exists but its contents cannot be served right now.',
@@ -62,11 +60,9 @@ export const ERROR_CODE_DESCRIPTIONS = {
   idempotency_key_invalid: 'The `Idempotency-Key` header is not a valid key.',
   insufficient_scope:
     'The credential is valid but was not granted the Oxy scope this route requires (`payments:read`, `payments:write`, …); `message` names it.',
-  invalid_billing_request: 'The billing request is not valid for this subscription or offer.',
   keyless_recipient: 'The recipient has no receive key, so no address can be derived for them.',
   link_not_found: 'The link does not exist or is no longer active.',
   live_payments_gated: 'Live payments are not enabled for this application yet.',
-  local_test_request_required: 'This test helper only answers a local test request.',
   parameter_invalid: 'A parameter is invalid; `param` names it.',
   parameter_missing: 'A required parameter is missing; `param` names it.',
   parameter_unknown:
@@ -106,11 +102,7 @@ export const ERROR_CODE_DESCRIPTIONS = {
   dispute_already_submitted:
     'Evidence for this dispute has already been submitted; it is one shot.',
   dispute_not_answerable: 'The dispute is in a status that no longer accepts evidence.',
-  idempotency_conflict: 'The same operation key was used for a different billing request.',
-  identity_conflict: 'The billing identity already belongs to another customer or subscription.',
   in_progress: 'The same operation is still running; retry with the same key.',
-  invalid_provider_response:
-    'The provider answered with something Peable cannot trust; the operation was not applied.',
   invalid_registration: 'The tax registration is not valid.',
   invalid_registration_declaration: 'The tax registration declaration is not valid.',
   invalid_tax_code: 'The tax code does not exist.',
@@ -125,14 +117,10 @@ export const ERROR_CODE_DESCRIPTIONS = {
   product_in_use: 'The product is referenced by a subscription or a link.',
   promotion_code_invalid: 'The promotion code does not exist, is inactive or does not apply.',
   promotion_code_taken: 'Another active promotion code already uses this `code`.',
-  provider_unavailable: 'The payment provider could not be reached; retry.',
   rail_unavailable: 'The payment rail this request needs is not available.',
-  reconciliation_required:
-    'The billing operation has an unknown outcome at the provider and is being reconciled.',
   registration_immutable:
     'An approved or ended tax registration cannot be deleted or changed this way; end it instead.',
   resource_already_exists: 'An object with this identity already exists.',
-  result_expired: 'The stored result of this operation has expired.',
   review_item_not_open: 'The review item is already resolved or dismissed.',
   rule_set_version_unavailable: 'The tax rule set version is not available.',
   subscription_line_invalid: 'A subscription line item is not valid for Checkout.',
@@ -141,9 +129,6 @@ export const ERROR_CODE_DESCRIPTIONS = {
   tax_provider_registration_mismatch:
     "The provider's registrations disagree with the ones Peable has approved.",
   tax_settings_not_active: 'Tax settings are not active for this merchant.',
-  local_test_unavailable: 'The local test checkout is not available.',
-  local_test_configuration_unavailable: 'The local test checkout has no provider configuration.',
-  local_test_subscription_unavailable: 'The local test subscription cannot be read.',
   rail_mismatch: 'The operation does not apply to the rail this payment uses.',
   checkout_session_changed:
     'The Checkout Session changed while this request ran (a price, a discount, its tax); read it again and retry.',
@@ -158,8 +143,6 @@ export const ERROR_CODE_DESCRIPTIONS = {
     "The invoice's payment needs the customer to act (a card challenge).",
   subscription_unexpected_state:
     'The subscription is in a status that does not allow this operation.',
-  subscription_migrated:
-    'This billing customer or subscription moved to Orbit subscriptions; use `/v1/subscriptions` and the active entitlements instead.',
   customer_currency_mismatch: "The currency differs from the customer's billing currency.",
   customer_test_clock_mismatch: 'The objects live on different test clocks.',
   coupon_invalid: 'The coupon does not exist or is no longer valid.',

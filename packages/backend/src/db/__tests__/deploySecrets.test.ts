@@ -17,14 +17,6 @@ const INFRA_CONFIGURATION: Readonly<Record<string, string>> = {
   STRIPE_ACCOUNT_ID_TEST: 'explicit expected test provider business account identity',
   STRIPE_ACCOUNT_ID_LIVE: 'explicit expected live provider business account identity',
   STRIPE_ACCOUNT_ID: 'reviewed public provider account identity pinned at startup',
-  PEABLE_BILLING_COHORT:
-    'reviewed merchant/app/environment/platform-account cohort and Portal configuration; no credentials; absent by default and set only for the coordinated cohort activation',
-  // PATHS, not secrets. The signing key itself is the SSM SecureString
-  // /oxy/peable/BILLING_INVOICE_PRIVATE_KEY, written once by the operator and
-  // never by this workflow; oxy-infra's app-service `secret_files` mounts it
-  // read-only into the container and sets this variable to where it landed.
-  PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE:
-    'the path of the mounted signing-key file; the key is an operator-owned SSM secret mounted by the task definition',
   // Public chain infrastructure. `@fairco.in/core` supplies the default and an
   // override is an operational choice, not a credential.
   EXPLORER_BASE_URL: 'a public Explorer URL, defaulted from @fairco.in/core',

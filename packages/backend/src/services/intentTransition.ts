@@ -1,7 +1,4 @@
 import { recordFaircoinLedger } from './money/ledger';
-import { and, eq, isNull } from 'drizzle-orm';
-import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
-import { commitTaxTransaction } from './tax/taxService';
 /**
  * Advancing an intent, and telling the merchant about it, as ONE commit.
  *
@@ -82,57 +79,13 @@ export function intentEventsFor(row: PaymentIntentRow): readonly IntentEventType
 }
 
 /**
- * A FairCoin payment the WATCHER has proven — the full output at the fixed
- * address — locks its FX quote, and its Peable Tax calculation becomes a
- * committed tax transaction, in the caller's transaction. A caller-reported
- * hash (`submit_tx`) is not acceptance; only the watcher's proof is.
- *
- * Idempotent: the update matches only an invoice not yet accepted.
- */
-async function acceptVerifiedChainPayment(
-  tx: DatabaseOrTransaction,
-  row: PaymentIntentRow,
-): Promise<void> {
-  const accepted = await tx
-    .update(faircoinBillingInvoices)
-    .set({ acceptedAt: row.updatedAt })
-    .where(
-      and(
-        eq(faircoinBillingInvoices.paymentIntentId, row.id),
-        isNull(faircoinBillingInvoices.acceptedAt),
-      ),
-    )
-    .returning({
-      id: faircoinBillingInvoices.id,
-      taxSnapshot: faircoinBillingInvoices.taxSnapshot,
-    });
-  for (const invoice of accepted)
-    await commitTaxTransaction(tx, {
-      calculationPublicId: invoice.taxSnapshot.taxQuote.quote.tax_rate_evidence_id,
-      reference: invoice.id,
-      rail: 'faircoin',
-      committedAt: row.updatedAt,
-    });
-}
-
-/**
- * The watcher saw a transaction that pays in full and is still confirming — no
- * status change, but the payment is proven. Accepts it in its own transaction.
- */
-export async function recordVerifiedChainPayment(row: PaymentIntentRow): Promise<void> {
-  if (row.rail !== 'faircoin') return;
-  await getDb().transaction((tx) => acceptVerifiedChainPayment(tx, row));
-}
-
-/**
  * Apply a state change and record the merchant's events in the same
  * transaction.
  *
  * What commits with the status, beside the events:
  *  - a card intent reaching `requires_capture` or `succeeded` gets its `ch_…`
  *    (`ensureChargeForIntent`), so an intent that reports a charge has one;
- *  - a FairCoin change the watcher proved (`chainVerified`) accepts the
- *    payment's billing invoice.
+ *  - a FairCoin change is recorded for the merchant's books (ADR 0015 §5).
  *
  * A same-status write (the watcher's confirmation count) records nothing,
  * except a failed card attempt on an intent already in
@@ -144,7 +97,7 @@ export async function recordVerifiedChainPayment(row: PaymentIntentRow): Promise
  */
 export async function transitionIntent(
   intentId: string,
-  change: IntentStateChange & { readonly chainVerified?: boolean },
+  change: IntentStateChange,
 ): Promise<IntentStateResult> {
   return getDb().transaction(async (tx) => {
     const result = await updateIntentState(tx, intentId, change);
@@ -152,9 +105,6 @@ export async function transitionIntent(
     const row = result.row;
     if (row.rail === 'card' && (row.status === 'requires_capture' || row.status === 'succeeded')) {
       await ensureChargeForIntent(tx, row);
-    }
-    if (row.rail === 'faircoin' && change.chainVerified === true) {
-      await acceptVerifiedChainPayment(tx, row);
     }
     // ADR 0015 §5: a FairCoin payment that succeeded (or was rewound by a reorg)
     // is recorded for the merchant's books in the same transaction.

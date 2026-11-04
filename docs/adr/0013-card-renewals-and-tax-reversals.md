@@ -1,6 +1,6 @@
 # ADR 0013 — Card renewals are repriced, refunds are reversed
 
-**Status:** accepted.
+**Status:** the renewal hold is superseded by [ADR 0018](0018-native-billing-engine.md): it applied only to Stripe-Billing (proxy) subscriptions, retired on 2026-11-04 with none in production, and the engine taxes every invoice before finalizing it. Tax reversals stand: `reverseTaxTransaction` nets a refund into the original's report rows, for the engine's credit notes and FairCoin refunds alike.
 **Date:** 2026-10-16.
 
 ## The defect

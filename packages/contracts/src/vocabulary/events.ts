@@ -59,7 +59,6 @@ export const WEBHOOK_EVENT_OBJECTS = {
   'setup_intent.succeeded': 'setup_intent',
   'setup_intent.setup_failed': 'setup_intent',
   'setup_intent.canceled': 'setup_intent',
-  'billing.observation.updated': 'billing_observation',
   'connected_account.updated': 'connected_account',
   'product.created': 'product',
   'product.updated': 'product',

@@ -3,8 +3,8 @@
  * post-phase `0076`), against rows written in the number-amount wire.
  *
  * A database is migrated to `0074` only — the last migration before the cut —
- * then seeded the way the outgoing image wrote: a calculation, a reversal, a
- * schema 2 quote snapshot and a stored idempotent answer, with amounts beyond
+ * then seeded the way the outgoing image wrote: a calculation, a reversal and a
+ * stored idempotent answer, with amounts beyond
  * `Number.MAX_SAFE_INTEGER` spelled as exact JSON numbers. The rest of the
  * chain then runs over them, exactly as a deploy would, and every value is
  * checked digit for digit.
@@ -58,22 +58,11 @@ const calculationJson = (publicId: string) => `{
   "tax_date": 1793750400, "created": 1793750400, "expires_at": 1793836800, "livemode": false
 }`;
 
-const quoteJson = `{
-  "schema_version": 2,
-  "source": {"merchant_id": "merch_x", "app_id": "app_x", "store_id": "store_x",
-             "plan_id": "plan_x", "mode": "test", "environment": "development"},
-  "quote": {"id": "tax_x", "currency": "USD", "gross_minor_units": 2999,
-            "net_minor_units": 2500, "tax_minor_units": 499, "tax_treatment": "inclusive",
-            "quoted_at": 1793750400, "expires_at": 1793751300},
-  "signature": {"algorithm": "Ed25519", "key_id": "k", "value": "${'A'.repeat(86)}"}
-}`;
-
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('the tax amounts data migration', () => {
   const merchant = { id: uuidv7(), publicId: `merch_${uuidv7()}` };
   const calculation = { id: uuidv7(), publicId: 'taxcalc_number' };
   const original = uuidv7();
   const reversal = uuidv7();
-  const renewal = uuidv7();
   const replay = uuidv7();
 
   beforeAll(async () => {
@@ -144,18 +133,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the tax amounts data migration', () =>
       ],
     );
     await db().unsafe(
-      `insert into billing_renewal_taxes
-         (id, merchant_id, provider, livemode, invoice_ref, subscription_ref, calculation_id, snapshot)
-       values ($1, $2, 'stripe', false, 'in_x', 'sub_x', $3, $4::text::jsonb)`,
-      [
-        renewal,
-        merchant.id,
-        calculation.id,
-        `{"taxQuote": ${quoteJson}, "quoteDigest": "${'a'.repeat(64)}",
-          "offer": {"grossMinorUnits": 2999, "offerVersion": 1}}`,
-      ],
-    );
-    await db().unsafe(
       `insert into idempotency_keys
          (id, merchant_id, key, method, path, request_hash, status, response_status,
           response_body, expires_at)
@@ -215,24 +192,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the tax amounts data migration', () =>
     });
     const [sale] = await db()`select reversal from tax_transactions where id = ${original}`;
     expect(sale?.reversal).toBeNull();
-  });
-
-  it('moves a stored quote to schema 3 and leaves the snapshot’s own keys alone', async () => {
-    const [row] = await db()`select snapshot from billing_renewal_taxes where id = ${renewal}`;
-    expect(row?.snapshot).toMatchObject({
-      taxQuote: {
-        schema_version: 3,
-        quote: {
-          gross_minor_units: '2999',
-          net_minor_units: '2500',
-          tax_minor_units: '499',
-          quoted_at: 1793750400,
-        },
-        signature: { value: 'A'.repeat(86) },
-      },
-      quoteDigest: 'a'.repeat(64),
-      offer: { grossMinorUnits: 2999, offerVersion: 1 },
-    });
   });
 
   it('rewrites a stored idempotent answer so a replay speaks the one wire', async () => {

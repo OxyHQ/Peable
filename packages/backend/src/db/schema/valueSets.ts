@@ -298,7 +298,6 @@ export const WEBHOOK_EVENT_SCOPES = {
   'setup_intent.succeeded': 'merchant',
   'setup_intent.setup_failed': 'merchant',
   'setup_intent.canceled': 'merchant',
-  'billing.observation.updated': 'merchant',
   'connected_account.updated': 'merchant',
   // The catalog (ADR 0018): about the merchant's own products and offers.
   'product.created': 'merchant',

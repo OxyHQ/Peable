@@ -1,6 +1,6 @@
 # ADR 0012 — The card rail charges a signed Peable Tax quote
 
-**Status:** accepted.
+**Status:** superseded by [ADR 0018](0018-native-billing-engine.md). Signed tax quotes and final invoice authorities were the Stripe-Billing proxy's; the proxy was retired on 2026-11-04 with nothing to migrate, and the engine taxes each invoice itself (`invoiceTax.ts`). Kept as history.
 **Date:** 2026-10-16.
 
 ## The defect
