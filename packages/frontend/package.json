@@ -32,7 +32,7 @@
     "@noble/hashes": "1.8.0",
     "@noble/secp256k1": "2.3.0",
     "@oxy.so/app-preset": "^5.3.0",
-    "@oxy.so/bloom": "17.4.0",
+    "@oxy.so/bloom": "17.5.0",
     "@oxy.so/contracts": "6.5.0",
     "@oxy.so/core": "7.18.0",
     "@oxy.so/services": "^14.3.4",
