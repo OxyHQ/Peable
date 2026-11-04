@@ -1,7 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.0.2
 
+Requires `@peable.to/contracts` 1.2.0 and `@peable.to/shared-types` 1.0.1.
+
+- The browser entries no longer bundle the whole contracts vocabulary. The
+  error classes imported the `@peable.to/contracts/vocabulary` barrel and the
+  checkout sheet's method list the `@peable.to/shared-types` barrel, and Metro
+  (Expo web, React Native) does not tree-shake, so every module behind both
+  shipped. They now import the one vocabulary module each reads
+  (`@peable.to/contracts/vocabulary/errors`,
+  `…/vocabulary/paymentMethodConfigurations`): what the Peable packages add to
+  `@peable.to/sdk/checkout` falls from 31,693 to 11,626 minified bytes (20
+  modules to 1), and to `@peable.to/sdk/checkout/ui` from 46,961 to 1,072 (52
+  modules to 2). `__tests__/browser-bundle.test.ts` fails a build that reaches
+  any other module.
 - `PEABLE_SERVICE_AUDIENCE` is `@peable.to/contracts` 1.1.0's
   (`@peable.to/contracts/vocabulary`), the same constant the gateway accepts;
   its value is unchanged.

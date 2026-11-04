@@ -11,7 +11,7 @@
  * chain rail, and on the card rail the fiat set the provider settles for the
  * payment methods Orbit offers (cards, wallets, SEPA Debit, iDEAL, Bancontact,
  * EPS). A local method narrows it further per payment
- * (`PAYMENT_METHOD_CURRENCIES` in `paymentMethodConfiguration.ts`).
+ * (`PAYMENT_METHOD_CURRENCIES` in `paymentMethodConfigurations.ts`).
  *
  * A closed set, and the database mirrors it as a CHECK
  * (`db/schema/valueSets.ts`). ADR 0001 D4: the scale of an amount is a property

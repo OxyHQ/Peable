@@ -3,14 +3,9 @@
 // The wire types are the contract's (`@peable.to/contracts`
 // `paymentMethodConfigurationSchema`, `paymentMethodDomainSchema`); the closed
 // sets are its vocabulary.
-import {
-  FIAT_CURRENCY_CODES,
-  type FiatCurrencyCode,
-  type PaymentMethodConfigurationType,
-} from '@peable.to/contracts/vocabulary';
-
 export {
   PAYMENT_METHOD_CONFIGURATION_TYPES,
+  PAYMENT_METHOD_CURRENCIES,
   PAYMENT_METHOD_UNAVAILABLE_REASONS,
   type PaymentMethodConfigurationType,
   type PaymentMethodUnavailableReason,
@@ -34,21 +29,3 @@ export {
   CARD_RAIL_PAYMENT_METHOD_TYPES,
   type CardRailPaymentMethodType,
 } from '@peable.to/contracts/vocabulary';
-
-/**
- * The currencies each method can take a payment in. A method is offered on a
- * payment only when its currency is listed — so iDEAL never appears on a USD
- * payment, and a payer is never shown a method that would fail.
- */
-export const PAYMENT_METHOD_CURRENCIES: Readonly<
-  Record<PaymentMethodConfigurationType, readonly FiatCurrencyCode[]>
-> = Object.freeze({
-  card: FIAT_CURRENCY_CODES,
-  apple_pay: FIAT_CURRENCY_CODES,
-  google_pay: FIAT_CURRENCY_CODES,
-  sepa_debit: ['EUR'],
-  ideal: ['EUR'],
-  bancontact: ['EUR'],
-  eps: ['EUR'],
-  bizum: ['EUR'],
-});

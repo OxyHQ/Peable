@@ -1,9 +1,8 @@
 import {
   PAYMENT_METHOD_CURRENCIES,
-  type CurrencyCode,
-  type PaymentIntent,
   type PaymentMethodConfigurationType,
-} from '@peable.to/shared-types';
+} from '@peable.to/contracts/vocabulary/paymentMethodConfigurations';
+import type { CurrencyCode, PaymentIntent } from '@peable.to/shared-types';
 import type { CheckoutPaymentMethod } from '@oxy.so/bloom/checkout-sheet';
 
 /**
