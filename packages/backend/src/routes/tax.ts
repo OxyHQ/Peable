@@ -24,7 +24,8 @@ import {
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { resolveMerchant } from './paymentIntents';
 import { type DashboardAccess, dashboardGate } from './dashboardAccess';
-import { type OxyAccess, oxyAccess } from '../services/oxyAccess';
+import type { OxyAccess } from '../services/oxyAccess';
+import { oxy } from '../oxy';
 import { parseTaxRequest, TaxError, type TaxService } from '../services/tax/taxService';
 
 /**
@@ -282,7 +283,7 @@ export function createDashboardTaxRouter(deps: {
 }): Router {
   const router = Router();
   const { requireOxyUser } = deps;
-  const gate = dashboardGate(deps.access ?? oxyAccess);
+  const gate = dashboardGate(deps.access ?? oxy);
   const base = '/v1/dashboard/applications/:applicationId/tax';
   const route = (
     action: 'taxRead' | 'money',

@@ -6,6 +6,7 @@
 import {
   PEABLE_API_VERSION,
   PEABLE_API_VERSIONS,
+  PEABLE_SERVICE_AUDIENCE,
   type PeableApiVersion,
 } from '@peable.to/contracts/vocabulary';
 import type { ServiceTokenProvider } from './serviceToken';
@@ -23,7 +24,7 @@ export type PeableRequester = { accountId: string } & (
   | { taskId: string; token?: never; requesterContext?: never }
   | { requesterContext: string; token?: never; taskId?: never }
 );
-export const PEABLE_SERVICE_AUDIENCE = 'oxy-service:6a2f851751b784a86fd0e958';
+export { PEABLE_SERVICE_AUDIENCE };
 
 /** Default Gateway host (`api.peable.to`) — the SDK never sends a `livemode`
  * flag; the credential's `environment` rides in the minted service JWT and

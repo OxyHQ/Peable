@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `PEABLE_SERVICE_AUDIENCE` is `@peable.to/contracts` 1.1.0's
+  (`@peable.to/contracts/vocabulary`), the same constant the gateway accepts;
+  its value is unchanged.
+
 ## 1.0.1
 
 - `webhooks.constructEvent` decodes a byte payload strictly: invalid UTF-8 (or a

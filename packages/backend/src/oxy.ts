@@ -1,24 +1,31 @@
 import { OxyServer } from '@oxy.so/core/server';
 import { createAwsWorkloadCredentialProvider } from '@oxy.so/core/server/aws';
+import {
+  PEABLE_OXY_APPLICATION_ID,
+  PEABLE_SERVICE_AUDIENCE,
+} from '@peable.to/contracts/vocabulary';
 import { config } from './config';
 
-/** Peable's own Oxy application. */
-export const PEABLE_APPLICATION_ID = '6a2f851751b784a86fd0e958';
-
-/** Registered recipient identity; merchant authority still comes from verified app/environment. */
-export const PEABLE_SERVICE_AUDIENCE = `oxy-service:${PEABLE_APPLICATION_ID}`;
-
 /**
- * One shared workload client for verification, user lookups and Oxy Files.
- * `serviceIdentity: 'when-anonymous'`: a call with no user session (a profile
- * lookup by username, `users.getMany` for enrichment) carries Peable's own
- * service token, so oxy-api charges it to Peable instead of to the fleet's one
- * NAT address.
+ * One shared workload client for verification, user lookups, Oxy Files and
+ * what a signed-in person may do (`services/oxyAccess.ts`).
+ *
+ * - `serviceIdentity: 'when-anonymous'`: a call with no user session (a
+ *   profile lookup by username, `users.getMany` for enrichment) carries
+ *   Peable's own service token, so oxy-api charges it to Peable instead of to
+ *   the fleet's one NAT address.
+ * - `expectedAudience`: the audience every `middleware.auth()` / `service()`
+ *   mount — and so `createOxyAuthMiddleware` and `createOxyRateLimit` —
+ *   accepts, named once here instead of at each mount. It and the
+ *   `applicationId` are `@peable.to/contracts`' one definition, the one the
+ *   SDK addresses. Merchant authority still comes from the verified
+ *   application and environment, never from the audience.
  */
 export const workloadCredentials = createAwsWorkloadCredentialProvider();
 export const oxy = new OxyServer({
   baseURL: config.oxyApiUrl,
   workloadCredentials,
-  applicationId: PEABLE_APPLICATION_ID,
+  applicationId: PEABLE_OXY_APPLICATION_ID,
   serviceIdentity: 'when-anonymous',
+  expectedAudience: PEABLE_SERVICE_AUDIENCE,
 });

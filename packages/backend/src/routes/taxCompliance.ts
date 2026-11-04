@@ -41,7 +41,8 @@ import {
   type QuerySurface,
 } from '../lib/list';
 import { requestContextMiddleware } from '../lib/requestContext';
-import { type OxyAccess, oxyAccess } from '../services/oxyAccess';
+import type { OxyAccess } from '../services/oxyAccess';
+import { oxy } from '../oxy';
 import {
   createTaxComplianceService,
   TaxComplianceError,
@@ -437,7 +438,7 @@ export function createDashboardTaxComplianceRouter(deps: {
 }): Router {
   const router = Router();
   const { requireOxyUser } = deps;
-  const gate = dashboardGate(deps.access ?? oxyAccess);
+  const gate = dashboardGate(deps.access ?? oxy);
   for (const route of TAX_COMPLIANCE_ROUTES) {
     const handler = gate(
       route.access === 'read' ? 'taxRead' : 'money',

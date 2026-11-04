@@ -1,15 +1,11 @@
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 import { getRequiredOxyUserId, OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
-import type { OxyServiceEnvironment } from '@oxy.so/core/server';
+import type { OxyApplicationAccess, OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { DashboardAction } from '@peable.to/contracts/vocabulary';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { sendError, wrap } from '../lib/http';
-import {
-  type ApplicationAccess,
-  authorizeApplication,
-  type OxyAccess,
-} from '../services/oxyAccess';
+import { authorizeApplication, type OxyAccess } from '../services/oxyAccess';
 import type { FileActor } from '../services/oxyFiles/fileOwnership';
 import { resolveMerchantByApp } from './paymentIntents';
 
@@ -40,7 +36,7 @@ export interface DashboardAccess {
   readonly environment: OxyServiceEnvironment;
   readonly userId: string;
   /** What oxy-api says the caller may do on the application. */
-  readonly application: ApplicationAccess;
+  readonly application: OxyApplicationAccess;
   /**
    * Who may own an Oxy file this caller makes the merchant's (an avatar, an
    * imported File): the application itself, the signed-in user, and the

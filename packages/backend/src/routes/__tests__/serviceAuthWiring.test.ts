@@ -5,7 +5,7 @@ import type { Server } from 'node:http';
 import express from 'express';
 import { OxyServer } from '@oxy.so/core/server';
 import { peableForOxyService, Peable } from '@peable.to/sdk';
-import { PEABLE_SERVICE_AUDIENCE } from '../../oxy';
+import { PEABLE_SERVICE_AUDIENCE } from '@peable.to/contracts/vocabulary';
 import { seedMerchant, useGatewayDatabase } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createPaymentIntentsRouter } from '../paymentIntents';
 import { oxyGuard } from '../../lib/http';
@@ -148,17 +148,15 @@ beforeAll(async () => {
 
   // Real shared workload attestation and live introspection, with temporary
   // credentials injected at the supported provider seam rather than mint stubs.
+  // Configured as `oxy.ts` configures it: the audience is the server's, named once.
   receiverOxy = new OxyServer({
     baseURL: oxyApi,
     workloadCredentials: temporaryCredentials('ASIA_PEABLE_RECEIVER'),
+    expectedAudience: PEABLE_SERVICE_AUDIENCE,
   });
   // Composed exactly as `server.ts` composes them: refusals in the ONE error envelope.
-  const requireMerchant = oxyGuard(
-    receiverOxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE }),
-  );
-  const optionalServiceAuth = oxyGuard(
-    receiverOxy.middleware.auth({ optional: true, expectedAudience: PEABLE_SERVICE_AUDIENCE }),
-  );
+  const requireMerchant = oxyGuard(receiverOxy.middleware.service());
+  const optionalServiceAuth = oxyGuard(receiverOxy.middleware.auth({ optional: true }));
 
   const app = express();
   app.use(express.json());

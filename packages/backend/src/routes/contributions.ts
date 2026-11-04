@@ -16,12 +16,8 @@ import {
   type PaymentLinkRow,
 } from '../db/payments/paymentLinkRepository';
 import { createContributionLink, contributionRefunds } from '../db/payments/contributionRepository';
-import {
-  authorizeAccount,
-  authorizeApplication,
-  type OxyAccess,
-  oxyAccess,
-} from '../services/oxyAccess';
+import { authorizeAccount, authorizeApplication, type OxyAccess } from '../services/oxyAccess';
+import { oxy } from '../oxy';
 import { resolveRail } from '../services/createIntent';
 import { resolveMerchantByApp } from './paymentIntents';
 import { newId } from '../lib/ids';
@@ -71,7 +67,7 @@ export function createContributionsRouter(deps: {
   access?: OxyAccess;
 }) {
   const router = Router();
-  const access = deps.access ?? oxyAccess;
+  const access = deps.access ?? oxy;
   const root = '/v1/organizations/:organizationId/applications/:applicationId/contributions';
   router.use(root, deps.requireOxyUser, (req, res, next) => {
     void (async () => {
@@ -89,7 +85,7 @@ export function createContributionsRouter(deps: {
       if (
         organization.kind !== 'organization' ||
         application.ownerAccountId !== org ||
-        !application.active
+        application.status !== 'active'
       ) {
         sendError(
           res,
