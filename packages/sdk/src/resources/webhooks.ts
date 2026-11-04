@@ -197,7 +197,7 @@ export class WebhooksResource {
     if (!Number.isFinite(tolerance) || tolerance < 0) {
       throw new TypeError('Peable: the webhook tolerance is a non-negative number of seconds');
     }
-    const rawBody = typeof payload === 'string' ? payload : new TextDecoder().decode(payload);
+    const rawBody = typeof payload === 'string' ? payload : decodeExactUtf8(payload);
     const nowSec = Math.floor(Date.now() / 1000);
 
     const verified = verifyWebhook(secret, rawBody, signatureHeader, tolerance, nowSec);
@@ -223,5 +223,24 @@ export class WebhooksResource {
     }
 
     return parsed;
+  }
+}
+
+/**
+ * The exact text a byte payload signs, or a refusal.
+ *
+ * The gateway signs UTF-8 JSON, so a body that is not exactly valid UTF-8 can
+ * never be authentic. A lenient decoder would map invalid sequences to U+FFFD
+ * and strip a leading BOM, so two DIFFERENT byte bodies could decode to the
+ * same string and pass the same signature; `fatal` + `ignoreBOM` make the
+ * decoding injective, and a failure is a signature failure.
+ */
+function decodeExactUtf8(payload: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(payload);
+  } catch {
+    throw new PeableSignatureVerificationError(
+      'Webhook payload is not valid UTF-8, so it cannot be the signed body',
+    );
   }
 }
