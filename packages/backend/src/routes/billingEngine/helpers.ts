@@ -6,7 +6,6 @@ import { sendError, sendValidationError } from '../../lib/http';
 
 /** Shared request pieces of the billing engine's routes (ADR 0018). */
 
-export const unixSeconds = z.number().int().min(0).max(253_402_300_799);
 export const queryUnixSeconds = z.coerce.number().int().min(0).max(253_402_300_799);
 export const idString = z.string().min(1).max(255);
 export const shortText = (max: number) => z.string().min(1).max(max);

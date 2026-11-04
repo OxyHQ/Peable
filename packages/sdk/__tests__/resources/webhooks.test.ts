@@ -530,14 +530,6 @@ const payloads = {
   'payout.failed': payoutFixture({ status: 'failed', failure_code: 'account_closed' }),
   'payout.canceled': payoutFixture({ status: 'canceled' }),
   'balance.available': balanceFixture(),
-  'billing.observation.updated': {
-    object: 'billing_observation',
-    livemode: false,
-    resource_kind: 'invoice',
-    resource_id: 'in_fixture',
-    revision: 1,
-    observed_at: EVENT.created,
-  },
   'reporting.report_run.succeeded': {
     id: 'frr_fixture',
     object: 'reporting.report_run',
@@ -685,58 +677,4 @@ describe('published event family parity', () => {
       ).toThrow(PeableSignatureVerificationError);
     },
   );
-});
-
-test('rejects signed malformed recurring wake-ups rather than treating them as paid evidence', () => {
-  const timestamp = Math.floor(Date.now() / 1000);
-  for (const mutation of [
-    { revision: 0 },
-    { revision: 1.5 },
-    { resource_kind: 'payer' },
-    { resource_id: '' },
-    { subscription_id: '' },
-    { subscription_id: 42 },
-    { subscription_id: 'sub_unsafe/path' },
-    { observed_at: '2026-10-01T00:00:00Z' },
-    { observed_at: 1.5 },
-    { amount_paid: '2999' },
-    { resourceKind: 'invoice' },
-    // A wake-up must name the same mode as its envelope (ADR 0017).
-    { livemode: true },
-    { livemode: undefined },
-  ]) {
-    const raw = JSON.stringify({
-      id: 'evt_fixture',
-      object: 'event',
-      livemode: false,
-      type: 'billing.observation.updated',
-      created: EVENT.created,
-      data: { object: { ...payloads['billing.observation.updated'], ...mutation } },
-    });
-    expect(() =>
-      new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET),
-    ).toThrow(PeableSignatureVerificationError);
-  }
-});
-
-test('accepts an optional signed subscription hint without requiring it on older deliveries', () => {
-  const timestamp = Math.floor(Date.now() / 1000);
-  for (const hint of [undefined, 'sub_owned']) {
-    const raw = JSON.stringify({
-      ...EVENT,
-      type: 'billing.observation.updated',
-      data: {
-        object: {
-          ...payloads['billing.observation.updated'],
-          ...(hint ? { subscription_id: hint } : {}),
-        },
-      },
-    });
-    const event = new WebhooksResource().constructEvent(
-      raw,
-      signWebhook(SECRET, raw, timestamp),
-      SECRET,
-    );
-    expect(event.data.object).toMatchObject(payloads['billing.observation.updated']);
-  }
 });

@@ -14,7 +14,6 @@
     "db:migrate": "bun src/db/migrate.ts",
     "db:check-locks": "oxy-db-check-migration-locks --migrations=src/db/migrations --after=34 --hot-tables=checkout_sessions,connected_accounts,merchants,payment_intents,provider_events,social_receive_cursors,webhook_deliveries",
     "oxy-files:reconcile": "bun src/services/oxyFiles/reconcileCli.ts",
-    "billing:migrate-proxy": "bun src/services/billing/proxyMigrationCli.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -30,7 +29,7 @@
     "socket.io": "^4.8.1",
     "stripe": "22.4.0",
     "zod": "^4.6.7",
-    "@peable.to/contracts": "workspace:2.0.0",
+    "@peable.to/contracts": "workspace:3.0.0",
     "@aws-sdk/credential-provider-node": "3.972.84"
   },
   "devDependencies": {

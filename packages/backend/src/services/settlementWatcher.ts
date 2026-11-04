@@ -4,7 +4,7 @@ import { findWatchableIntents } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import { toBaseUnits } from '../lib/money';
 import { applyEvent } from './intentState';
-import { recordVerifiedChainPayment, transitionIntent } from './intentTransition';
+import { transitionIntent } from './intentTransition';
 import { verifyPayment } from './explorer';
 
 /**
@@ -85,10 +85,8 @@ export async function applyChainObservation(
   const { paid, confirmations } = observation;
   const next = nextStatusFor(paid, confirmations, intent.requiredConfirmations);
   if (next === 'processing') {
-    // Still confirming. The payment is PROVEN, which accepts its billing
-    // invoice (idempotently), and a new confirmation count is written so the
-    // wire's `faircoin.confirmations` is live — no status change, no event.
-    await recordVerifiedChainPayment(intent);
+    // Still confirming: a new confirmation count is written so the wire's
+    // `faircoin.confirmations` is live — no status change, no event.
     if (confirmations === intent.confirmations) return null;
   }
 
@@ -99,7 +97,6 @@ export async function applyChainObservation(
     ...(next === 'canceled'
       ? { cancellationReason: 'underpaid' as const, lastPaymentError: UNDERPAID_ERROR }
       : {}),
-    chainVerified: paid,
   });
   return result.kind === 'updated' ? result.row : null;
 }

@@ -164,19 +164,20 @@ describe('migration deploy phases', () => {
 
   /**
    * The same rule said forwards, so the failure message names what to do
-   * rather than what went wrong: if the new migration has to be `post`, it has
-   * to be last, and anything that must run before the rollout has to land in
-   * an earlier release.
+   * rather than what went wrong: if the new migration has to be `post`, it and
+   * everything after it are `post` — the release's tail — and anything that
+   * must run before the rollout has to land in an earlier release. Several
+   * `post` files in a row are one post phase (a drop, then its validation,
+   * then a hot table's DDL on its own).
    */
-  test('a post migration is the last entry in the journal', () => {
+  test('unshipped post migrations are the tail of the journal', () => {
     const migrations = readMigrations();
-    const unshipped = migrations.filter(
+    const first = migrations.findIndex(
       (migration) => migration.phase === 'post' && !(migration.tag in SHIPPED_BEFORE),
     );
-    const last = migrations.at(-1)?.tag ?? '';
-
-    for (const migration of unshipped) {
-      expect(migration.tag, 'a post migration must be the last one in the journal').toBe(last);
+    if (first === -1) return;
+    for (const migration of migrations.slice(first)) {
+      expect(migration.phase, `${migration.tag} follows an unshipped post migration`).toBe('post');
     }
   });
 });

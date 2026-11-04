@@ -87,7 +87,6 @@ export {
   TARGETED_WEBHOOK_EVENT_TYPES,
   WEBHOOK_EVENT_OBJECTS,
   WEBHOOK_EVENT_TYPES,
-  type BillingObservation,
   type ListEventsParams,
   type RetrieveEventParams,
   type StreamEventsParams,
@@ -448,48 +447,6 @@ export {
   type EnrichRequest,
   type EnrichResponse,
 } from './social';
-export {
-  BILLING_SUBSCRIPTION_STATUSES,
-  type BillingSubscriptionStatus,
-  type CreateBillingTaxQuoteParams,
-  type BillingTaxQuote,
-  type BillingInvoiceAuthoritySource,
-  type BillingFinalInvoice,
-  type BillingFinalInvoiceAuthority,
-  type BillingFaircoinRenewalChoice,
-  type BillingFaircoinRenewalConsent,
-  type BillingFaircoinRenewalRevocation,
-  type BillingCheckoutSession,
-  type BillingEmbeddedCheckoutSession,
-  type BillingEmbeddedCheckoutConfiguration,
-  type BillingEmbeddedCheckoutBinding,
-  type BillingEmbeddedCheckoutAction,
-  type BillingEmbeddedCheckoutScope,
-  type BillingCheckoutObservation,
-  type RetrieveBillingCheckoutOperationParams,
-  type BillingCheckoutOperationSource,
-  type BillingCheckoutOperationRecovery,
-  type BillingPaidInvoice,
-  type BillingInvoiceState,
-  type BillingCustomer,
-  type BillingRail,
-  type BillingRailSettlement,
-  type BillingRailOffer,
-  type BillingRailOption,
-  type BillingRailList,
-  type EnsureBillingCustomerParams,
-  type CreateBillingCheckoutParams,
-  type CreateBillingPortalParams,
-  type BillingHostedSession,
-  type BillingSubscription,
-} from './billing';
-export {
-  canonicalBillingAuthority,
-  canonicalBillingTaxQuote,
-  PEABLE_BILLING_AUTHORITY_KEYS,
-} from './billing-authority';
-
-export type { BillingFaircoinFxQuote } from './billing';
 // Peable Tax (ADR 0011) and its business compliance (ADR 0020).
 export * from './tax';
 

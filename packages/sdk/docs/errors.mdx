@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-121 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+107 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -78,14 +78,6 @@ The tax settings cannot be approved yet: a legal name and head office are requir
 ### `approval_requires_provider`
 
 Registered sales need a tax provider, and this application has none: the approval would leave covered sales unpriceable.
-
-### `billing_not_enabled`
-
-Billing is not enabled for this merchant.
-
-### `billing_provider_unavailable`
-
-The billing provider could not be reached; retry.
 
 ### `card_declined`
 
@@ -175,10 +167,6 @@ The uploaded file is larger than its purpose allows.
 
 The file exists but its contents cannot be served right now.
 
-### `idempotency_conflict`
-
-The same operation key was used for a different billing request.
-
 ### `idempotency_error`
 
 The `Idempotency-Key` was used with a different request, or its first request is still running.
@@ -187,10 +175,6 @@ The `Idempotency-Key` was used with a different request, or its first request is
 
 The `Idempotency-Key` header is not a valid key.
 
-### `identity_conflict`
-
-The billing identity already belongs to another customer or subscription.
-
 ### `in_progress`
 
 The same operation is still running; retry with the same key.
@@ -198,14 +182,6 @@ The same operation is still running; retry with the same key.
 ### `insufficient_scope`
 
 The credential is valid but was not granted the Oxy scope this route requires (`payments:read`, `payments:write`, …); `message` names it.
-
-### `invalid_billing_request`
-
-The billing request is not valid for this subscription or offer.
-
-### `invalid_provider_response`
-
-The provider answered with something Peable cannot trust; the operation was not applied.
 
 ### `invalid_registration`
 
@@ -262,22 +238,6 @@ The link does not exist or is no longer active.
 ### `live_payments_gated`
 
 Live payments are not enabled for this application yet.
-
-### `local_test_configuration_unavailable`
-
-The local test checkout has no provider configuration.
-
-### `local_test_request_required`
-
-This test helper only answers a local test request.
-
-### `local_test_subscription_unavailable`
-
-The local test subscription cannot be read.
-
-### `local_test_unavailable`
-
-The local test checkout is not available.
 
 ### `lookup_key_taken`
 
@@ -399,10 +359,6 @@ The purchase is below the promotion code minimum amount.
 
 Another active promotion code already uses this `code`.
 
-### `provider_unavailable`
-
-The payment provider could not be reached; retry.
-
 ### `rail_mismatch`
 
 The operation does not apply to the rail this payment uses.
@@ -414,10 +370,6 @@ The payment rail this request needs is not available.
 ### `rate_limited`
 
 Too many requests; back off and retry.
-
-### `reconciliation_required`
-
-The billing operation has an unknown outcome at the provider and is being reconciled.
 
 ### `refund_not_cancelable`
 
@@ -439,10 +391,6 @@ The object changed under this request; read it again and retry.
 
 The object does not exist, or this credential cannot read it.
 
-### `result_expired`
-
-The stored result of this operation has expired.
-
 ### `review_item_not_open`
 
 The review item is already resolved or dismissed.
@@ -462,10 +410,6 @@ The SetupIntent is in a status that does not allow this operation.
 ### `subscription_line_invalid`
 
 A subscription line item is not valid for Checkout.
-
-### `subscription_migrated`
-
-This billing customer or subscription moved to Orbit subscriptions; use `/v1/subscriptions` and the active entitlements instead.
 
 ### `subscription_unexpected_state`
 

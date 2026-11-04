@@ -13,7 +13,6 @@ export {
   type WebhookEventType,
 } from '@peable.to/contracts/vocabulary';
 export type {
-  BillingObservation,
   ListEventsParams,
   RetrieveEventParams,
   StreamEventsParams,

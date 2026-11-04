@@ -115,28 +115,3 @@ test('a succeeded payment offers no link of its own', async () => {
   expect(await screen.findByText(/payment complete/i)).toBeDefined();
   expect(screen.queryByRole('link', { name: /continue/i })).toBeNull();
 });
-
-test('an expired frozen subscription quote shows canonical amounts and no payment action', () => {
-  const quote = {
-    id: 'fx_expired',
-    currency: 'USD' as const,
-    gross_minor_units: '100',
-    amount_base_units: '333333334',
-    usd_per_fair: '0.3',
-    source: 'official',
-    observed_at: Math.floor((Date.now() - 120_000) / 1000),
-    quoted_at: Math.floor((Date.now() - 120_000) / 1000),
-    expires_at: Math.floor((Date.now() - 1_000) / 1000),
-    rounding: 'ceil_to_base_unit' as const,
-  };
-  render(
-    <CheckoutView
-      intent={makeIntent({ status: 'requires_action', amount: '333333334' }, {})}
-      billingQuote={quote}
-    />,
-  );
-  expect(screen.getByText('Catalogue total: $1.00')).toBeTruthy();
-  expect(screen.getByText('Payment quote: 3.33333334 FAIR')).toBeTruthy();
-  expect(screen.getByRole('alert').textContent).toContain('expired');
-  expect(screen.queryByText('Scan with the Peable app')).toBeNull();
-});

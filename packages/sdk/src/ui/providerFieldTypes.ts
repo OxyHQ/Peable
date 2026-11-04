@@ -1,11 +1,8 @@
-import type { CheckoutSessionAction } from './preparedCheckoutSession';
 import type { ProviderCardPreparation } from './preparedCard';
 import type { PeableClientAction } from '../browser/payerClient';
 export type ProviderConfirmation = { accepted: true } | { accepted: false; error: string };
 export interface PeableProviderFieldsProps {
   action?: PeableClientAction;
-  /** A subscription Checkout Session is distinct from a PaymentIntent secret. Never pass both. */
-  checkoutSession?: CheckoutSessionAction;
   /** Read-only configuration can mount secure fields before payment authority exists. */
   cardConfiguration?: { readonly publishableKey: string };
   /** Billing details already collected and bound by the host's authoritative quote. */

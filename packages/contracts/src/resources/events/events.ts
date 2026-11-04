@@ -20,45 +20,6 @@ import {
  */
 
 /**
- * The payload of `billing.observation.updated`: a wake-up, never paid or grant
- * authority. Re-read the owner-bound resource it names.
- */
-export const billingObservationSchema = defineObject(
-  'billing_observation',
-  'BillingObservation',
-  z
-    .object({
-      object: z.literal('billing_observation'),
-      livemode: livemode.describe('The mode of the billing cohort observed (ADR 0017).'),
-      resource_kind: z.enum(['subscription', 'invoice']),
-      resource_id: z.string().describe('The provider subscription or invoice observed.'),
-      subscription_id: z
-        .string()
-        .optional()
-        .describe(
-          'Owner-scoped wake-up hint only; re-read the subscription before resolving a payer.',
-        ),
-      revision: z.number().int().describe('The observation revision; later revisions are newer.'),
-      observed_at: unixSeconds,
-    })
-    .strict(),
-  {
-    examples: [
-      {
-        object: 'billing_observation',
-        livemode: false,
-        resource_kind: 'subscription',
-        resource_id: 'sub_1Q2w3E4r5T6y7U8i',
-        subscription_id: 'sub_1Q2w3E4r5T6y7U8i',
-        revision: 3,
-        observed_at: 1793750400,
-      },
-    ],
-  },
-);
-export type BillingObservation = z.output<typeof billingObservationSchema>;
-
-/**
  * What caused an event, when an API request did (Stripe's `event.request`).
  * Both `null` for an event caused by something else — the chain watcher, the
  * expiry sweeper, a provider's own notification.
@@ -242,7 +203,6 @@ export type WebhookEvent<K extends WebhookEventType = WebhookEventType> = {
 
 declare module '../../common/objects' {
   interface ObjectMap {
-    billing_observation: BillingObservation;
     event: WebhookEvent;
   }
 }
@@ -360,8 +320,6 @@ export const WEBHOOK_EVENT_DESCRIPTIONS: Readonly<Record<WebhookEventType, strin
   'setup_intent.succeeded': 'A SetupIntent succeeded: its PaymentMethod is saved.',
   'setup_intent.setup_failed': 'A SetupIntent attempt failed.',
   'setup_intent.canceled': 'A SetupIntent was canceled.',
-  'billing.observation.updated':
-    'A recurring billing resource was observed to change. A wake-up only: re-read the resource.',
   'connected_account.updated': "A seller's connected account changed — its readiness, in practice.",
   'product.created': 'A Product was created.',
   'product.updated': 'A Product was updated; `previous_attributes` names what moved.',

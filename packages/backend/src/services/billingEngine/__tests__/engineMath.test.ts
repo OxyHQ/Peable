@@ -182,14 +182,8 @@ describe('state machines and schedule', () => {
       cancelAtPeriodEnd: false,
       pauseResumesAt: null,
       createdAt: at('2027-01-01T00:00:00Z'),
-      providerHandoffPending: false,
     };
     expect(nextActionAt(base)?.toISOString()).toBe('2027-01-29T00:00:00.000Z');
-    // Held for the previous provider's release (ADR 0018 §7): nothing is due,
-    // not even a scheduled cancellation — the release recomputes it.
-    expect(
-      nextActionAt({ ...base, providerHandoffPending: true, cancelAt: at('2027-01-10T00:00:00Z') }),
-    ).toBeNull();
     expect(
       nextActionAt({ ...base, upcomingNoticeSentAt: at('2027-01-29T00:00:00Z') })?.toISOString(),
     ).toBe('2027-02-01T00:00:00.000Z');

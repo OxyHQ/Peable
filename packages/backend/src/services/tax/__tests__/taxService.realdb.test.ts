@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { generateKeyPairSync } from 'node:crypto';
 import { exclusiveTaxOf, inclusiveTaxOf } from '../../../__tests__/helpers/fakeTax';
 import { must } from '../../../__tests__/helpers/must';
 import {
@@ -7,8 +6,6 @@ import {
   seedMerchant,
   useGatewayDatabase,
 } from '../../../__tests__/helpers/gatewayTestDatabase';
-import { createVerifiedBillingTaxQuote, verifyBillingTaxQuote } from '../../billing/tax-quote';
-import { createPeableTaxQuoteCalculator, invoiceTaxLines } from '../billingTaxQuotes';
 import { TaxProviderUnavailableError, type TaxProvider } from '../provider';
 import { commitTaxTransaction, createTaxService, TaxError } from '../taxService';
 import { createStripeTaxProvider, type StripeTaxApi } from '../stripeTaxProvider';
@@ -287,82 +284,31 @@ describe('Peable Tax', () => {
     );
   });
 
-  it('signs a billing quote from a calculation, and commits it to the report', async () => {
+  it('commits a FairCoin sale to the report and nets its reversals', async () => {
     const { provider } = fakeProvider();
     const { merchant, tax } = await approvedMerchant(provider);
-    const keys = generateKeyPairSync('ed25519');
-    const owner = {
-      merchantId: merchant.id,
-      oxyAppId: merchant.oxyAppId,
-      environment: merchant.environment,
-    };
-    const calculator = createPeableTaxQuoteCalculator({
-      db: gatewayDb(),
-      tax,
-      offers: () => [
-        {
-          planId: 'one_monthly',
-          providerPriceId: 'price_one',
-          currency: 'USD',
-          grossMinorUnits: 1000,
-          taxTreatment: 'exclusive',
-        },
-      ],
-      signingKey: keys.privateKey,
-      keyId: 'test-key',
-    });
-    const evidence = await tax.recordEvidence(merchant, {
-      ...euEvidence('NL'),
-      customer_ref: 'store_1',
-    });
-    const quote = await createVerifiedBillingTaxQuote(calculator, owner, merchant.publicId, {
-      store_id: 'store_1',
-      plan_id: 'one_monthly',
-      customer_location_evidence_id: evidence.id,
-    });
+    const evidence = await tax.recordEvidence(merchant, euEvidence('NL'));
     // Exclusive: the listed price is the net; the payer pays price plus tax.
-    expect(quote.schema_version).toBe(3);
-    expect(quote.quote).toMatchObject({
-      net_minor_units: '1000',
-      tax_minor_units: '200',
-      gross_minor_units: '1200',
-      tax_treatment: 'exclusive',
-      country: 'NL',
-      tax_service_ref: 'peable_tax',
-    });
-    expect(quote.quote.expires_at).toBeGreaterThan(quote.quote.quoted_at);
-    expect(quote.quote.tax_rate_evidence_id).toMatch(/^taxcalc_/);
-    expect(quote.quote.coverage_evidence_id).toMatch(/^taxreg_/);
-    // A tampered amount does not verify.
-    const product = must(
-      (await calculator.resolveProduct(owner, 'one_monthly')) as Parameters<
-        typeof verifyBillingTaxQuote
-      >[1]['product'],
+    const calculation = await tax.calculate(
+      merchant,
+      {
+        currency: 'USD',
+        customer_location_evidence_id: evidence.id,
+        line_items: [{ reference: 'one_monthly', amount: '1000', tax_behavior: 'exclusive' }],
+      },
+      { requireActive: true },
     );
-    const location = (await calculator.readCustomerLocation(owner, evidence.id)) as Parameters<
-      typeof verifyBillingTaxQuote
-    >[1]['location'];
-    const tampered = structuredClone(quote);
-    tampered.quote.tax_minor_units = '100';
-    tampered.quote.gross_minor_units = '1100';
-    expect(() =>
-      verifyBillingTaxQuote(
-        tampered,
-        { source: quote.source, product, location },
-        calculator.verificationKeys,
-        new Date(),
-      ),
-    ).toThrow();
+    expect(calculation).toMatchObject({ amount_net: '1000', amount_total: '1200' });
 
     await commitTaxTransaction(gatewayDb(), {
-      calculationPublicId: quote.quote.tax_rate_evidence_id,
+      calculationPublicId: calculation.id,
       reference: 'in_fair_1',
       rail: 'faircoin',
       committedAt: new Date(),
     });
     // Idempotent: the same payment observed twice is one transaction.
     await commitTaxTransaction(gatewayDb(), {
-      calculationPublicId: quote.quote.tax_rate_evidence_id,
+      calculationPublicId: calculation.id,
       reference: 'in_fair_1',
       rail: 'faircoin',
       committedAt: new Date(),
@@ -386,13 +332,6 @@ describe('Peable Tax', () => {
         tax_amount: '200',
       }),
     ]);
-    const lines = must(
-      await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.tax_rate_evidence_id),
-    );
-    expect(lines.map((line) => [line.taxable_minor_units, line.tax_minor_units])).toEqual([
-      ['1000', '200'],
-    ]);
-
     // A FairCoin refund from the seller's wallet: reversed in part, by its
     // reference once, then the rest; the report nets both.
     const sale = must(list.data[0]);

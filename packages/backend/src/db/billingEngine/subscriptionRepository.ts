@@ -64,10 +64,6 @@ export interface SubscriptionRow {
   readonly latestInvoiceId: string | null;
   readonly latestInvoicePublicId: string | null;
   readonly metadata: Record<string, string>;
-  /** Adopted from the previous provider: it billed the current period through here. */
-  readonly providerBilledUntil: Date | null;
-  /** The previous provider still renews it; the engine must not (ADR 0018 §7). */
-  readonly providerHandoffPending: boolean;
   readonly nextActionAt: Date | null;
   readonly createdAt: Date;
 }
@@ -116,8 +112,6 @@ const COLUMNS = {
   latestInvoiceId: subscriptions.latestInvoiceId,
   latestInvoicePublicId: publicIdOf('invoices', S, 'latest_invoice_id'),
   metadata: subscriptions.metadata,
-  providerBilledUntil: subscriptions.providerBilledUntil,
-  providerHandoffPending: subscriptions.providerHandoffPending,
   nextActionAt: subscriptions.nextActionAt,
   createdAt: subscriptions.createdAt,
 } as const;
@@ -150,9 +144,6 @@ export interface InsertSubscriptionParams {
   readonly discountStart: Date | null;
   readonly discountEnd: Date | null;
   readonly metadata: Record<string, string>;
-  /** Only an adoption names these (`services/billingEngine/adoption.ts`). */
-  readonly providerBilledUntil?: Date | null;
-  readonly providerHandoffPending?: boolean;
   readonly nextActionAt: Date | null;
 }
 
@@ -246,9 +237,6 @@ export interface SubscriptionPatch {
   readonly discountStart?: Date | null;
   readonly discountEnd?: Date | null;
   readonly latestInvoiceId?: string | null;
-  /** Adoption only: a held period realigned to the provider's, then released. */
-  readonly providerBilledUntil?: Date | null;
-  readonly providerHandoffPending?: boolean;
   readonly nextActionAt?: Date | null;
   readonly metadata?: MetadataPatch;
 }

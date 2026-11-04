@@ -30,7 +30,6 @@ type Schedulable = Pick<
   | 'cancelAtPeriodEnd'
   | 'pauseResumesAt'
   | 'createdAt'
-  | 'providerHandoffPending'
 >;
 
 export function nextActionAt(
@@ -38,9 +37,6 @@ export function nextActionAt(
   options: { readonly incompleteExpiresAt?: Date | null } = {},
 ): Date | null {
   if (subscriptionIsTerminal(row.status)) return null;
-  // An adopted subscription the previous provider still renews is inert: the
-  // release recomputes this from the row, so nothing is lost while it waits.
-  if (row.providerHandoffPending) return null;
   const candidates: Date[] = [];
   if (row.cancelAt) candidates.push(row.cancelAt);
   if (row.pauseResumesAt) candidates.push(row.pauseResumesAt);

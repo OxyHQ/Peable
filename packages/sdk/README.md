@@ -163,11 +163,6 @@ key is a request-retry layer, not a business identity: refunds, transfers and
 reversals still take `external_ref`, which is durable and decides whether money
 moves twice.
 
-Signed billing documents (tax quotes and final invoice authorities) carry
-`schema_version: 3`: instants are Unix seconds and every amount is a base-unit
-string (`gross_minor_units: "2999"`). The verifiers accept no other version, and
-check that net and tax add up to the gross exactly.
-
 ### Lists, auto-pagination, `expand` and metadata
 
 Every `list()` takes `limit` (1–100, default 10), `starting_after` or
@@ -594,8 +589,7 @@ never passed to CSS or the provider.
 Orbit runs its own billing: subscriptions and invoices are Orbit objects with
 Orbit ids, priced from the catalog, taxed by Peable Tax before an invoice
 finalizes, and collected with a PaymentIntent — off-session against a saved
-card, or by the payer from their wallet on FairCoin (never a debit). It sits
-beside `billing.*` (the Stripe-Billing proxy), which is unchanged.
+card, or by the payer from their wallet on FairCoin (never a debit).
 
 ```ts
 const sub = await peable.subscriptions.create({

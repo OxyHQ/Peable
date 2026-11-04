@@ -47,5 +47,3 @@ export type {
 } from './orderRewards';
 
 export type { PreparedCardAuthorization, ProviderCardPreparation } from './preparedCard';
-
-export type { CheckoutSessionAction } from './preparedCheckoutSession';

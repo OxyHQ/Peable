@@ -29,7 +29,7 @@ of any of these.
 |---|---|---|---|
 | Peable | Tax settings, registrations, owner approval (`billing:manage`), Stripe Tax provider, fail-closed calculation | implemented, deployed | `services/tax/taxService.ts`, `routes/tax.ts`, ADR 0011 |
 | Peable | Location evidence rules (no language, currency or timezone) | implemented, deployed | `services/tax/evidence.ts` |
-| Peable | Signed FairCoin and card quotes; renewal repricing; reversals | implemented, deployed | `services/tax/billingTaxQuotes.ts`, `services/billing/stripeInvoiceTax.ts`, ADR 0012–0013 |
+| Peable | Invoice tax before finalize (billing engine); reversals | implemented, deployed | `services/billingEngine/invoiceTax.ts`, `services/tax/taxService.ts` (`reverseTaxTransaction`), ADR 0018 |
 | Peable | `automatic_tax` at Checkout v2 through Peable Tax | implemented, deployed (#202, `1f247b9`) | `docs/orbit/stripe-parity.md` |
 | Peable | Summary report and CSV per jurisdiction and rate | implemented | `TaxService.report`; it is not a return |
 | Peable | Orbit Tax screen (settings, registrations, approval, report) | implemented | `packages/orbit/app/(orbit)/tax.tsx` before this change |

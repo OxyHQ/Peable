@@ -87,29 +87,6 @@ export async function findLiveCustomerForMerchant(
   return (row as CustomerRow | undefined) ?? null;
 }
 
-/**
- * The customer a provider customer is bound to, deleted or not — the binding
- * is unique per provider object, so there is at most one. The Stripe-Billing
- * migration's find-or-create (ADR 0018 §7) starts here.
- */
-export async function findCustomerByProviderBinding(
-  db: DatabaseOrTransaction,
-  provider: ProviderId,
-  providerObjectId: string,
-): Promise<CustomerRow | null> {
-  const [row] = await db
-    .select(CUSTOMER_COLUMNS)
-    .from(customers)
-    .innerJoin(customerProviderBindings, eq(customerProviderBindings.customerId, customers.id))
-    .where(
-      and(
-        eq(customerProviderBindings.provider, provider),
-        eq(customerProviderBindings.providerObjectId, providerObjectId),
-      ),
-    );
-  return (row as CustomerRow | undefined) ?? null;
-}
-
 /** The provider customer bound to this customer, or `null` before the first attach. */
 export async function findCustomerBinding(
   db: DatabaseOrTransaction,

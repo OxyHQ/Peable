@@ -61,9 +61,6 @@ export type {
   UpdateTaxSettingsParams,
 } from '@peable.to/contracts';
 
-/** One tax line on a signed final invoice — the billing surface's contract. */
-export type { BillingInvoiceTaxLine } from '@peable.to/contracts';
-
 // Business compliance (ADR 0020) travels with the `/tax` subpath, so a browser
 // bundle reaches it without the root barrel's node:crypto signer.
 export * from './taxCompliance';

@@ -156,10 +156,3 @@ the object when one arrives rather than trusting the order of delivery.
 In test mode a test clock moves time for the customers on it, so trials,
 renewals and dunning run in seconds — see
 [Testing](/testing#test-clocks).
-
-## The Stripe Billing rail
-
-`peable.billing.*` (checkout sessions, embedded checkout, portal sessions on
-the provider's own billing) keeps serving the subscribers it already has until
-they move onto the objects above; new integrations use the native engine.
-Its Peable Tax quotes are in [Tax](/tax#the-stripe-billing-rail).

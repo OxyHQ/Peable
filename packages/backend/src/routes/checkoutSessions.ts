@@ -1,15 +1,3 @@
-/**
- * Checkout Sessions (Orbit Phase 3).
- *
- * The merchant routes are DATA (`checkoutSessionRoutes`), mounted on the
- * service-authed `/v1/checkout_sessions` surface here and on Orbit's dashboard
- * from the same list (`catalogRoutes.ts`), so the two cannot answer
- * differently. The payer routes — `…/public`, `…/public/confirm` — are
- * UNAUTHENTICATED and rate-limited, authorized by possession of the session's
- * `client_secret` (or, for a session wrapping a payment, that payment's), sent
- * in the `X-Peable-Client-Secret` header and never in a URL.
- */
-import { eq } from 'drizzle-orm';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { verifySecret } from '@oxy.so/core/server';
@@ -42,7 +30,6 @@ import {
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import { findLinkForMerchant } from '../db/payments/paymentLinkRepository';
 import { getDb } from '../db/postgres';
-import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { answerList, dashboardQuery, parseQuery, resolveListReference } from '../lib/list';
@@ -290,14 +277,7 @@ async function payerSession(
     sendError(res, 404, 'invalid_request_error', 'checkout session not found');
     return null;
   }
-  let authorized = session.clientSecret !== null && verifySecret(secret, session.clientSecret);
-  if (!authorized && session.paymentIntentId !== null) {
-    // A session around a payment also opens with that payment's secret, which
-    // already authorizes paying it — the FairCoin billing invoice's link.
-    const intent = await findIntentById(db, session.paymentIntentId);
-    authorized = intent !== null && verifySecret(secret, intent.clientSecret);
-  }
-  if (!authorized) {
+  if (session.clientSecret === null || !verifySecret(secret, session.clientSecret)) {
     sendError(res, 403, 'permission_error', 'invalid client_secret');
     return null;
   }
@@ -342,12 +322,6 @@ export async function publicSessionDTO(
     setupClientSecretOf(session),
     discountView(session),
   ]);
-  const [billing] = session.paymentIntentId
-    ? await db
-        .select({ fxQuote: faircoinBillingInvoices.fxQuote })
-        .from(faircoinBillingInvoices)
-        .where(eq(faircoinBillingInvoices.paymentIntentId, session.paymentIntentId))
-    : [];
   return toCheckoutSessionPublicDTO({
     session,
     lines,
@@ -358,7 +332,6 @@ export async function publicSessionDTO(
     discount,
     termsOfServiceUrl: brandingRow.termsOfServiceUrl,
     publishableKey: publishableKeyFor(session),
-    ...(billing ? { billingQuote: billing.fxQuote } : {}),
   });
 }
 

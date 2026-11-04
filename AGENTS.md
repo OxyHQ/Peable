@@ -80,9 +80,8 @@ change the contract and regenerate. It imports the contracts as TYPES only — t
 SDK never constructs a schema at runtime (`ui-isolation.test.ts` walks the
 runtime graph), and `__tests__/generated/types.test.ts` proves every generated
 signature equals what the contract's `BodyOf` / `QueryOf` / `ResponseOf` derive. There is no
-hand-written resource: the only hand-written behaviour is `webhooks` and
-`src/overlays/billingAuthority.ts` (pinned-key verification of the signed tax
-quote and invoice authority, wrapping the generated methods with the same types).
+hand-written resource: the only hand-written behaviour is `webhooks` (local
+signature verification) and the `files.create` JSON form's widened signature.
 
 `bunfig.toml` sets `linker = "hoisted"`. Expo, Metro and Babel resolve transitive
 deps through the standard `node_modules` chain, and the default isolated linker
@@ -273,8 +272,7 @@ Only FairCoin `processing` intents carrying a payer-reported txid are watchable
 (`submit_tx` moves `requires_action → processing` with the txid in one write);
 `requires_action` and the terminal statuses are never polled. While a paid
 transaction confirms it writes the live `confirmations` count (same status, no
-event) and accepts the payment's billing invoice (`recordVerifiedChainPayment`);
-at the merchant's threshold it is `succeeded`, and a transaction that pays LESS
+event); at the merchant's threshold it is `succeeded`, and a transaction that pays LESS
 is `canceled` with `cancellation_reason: 'underpaid'`. Its timer is
 `.unref()`-ed so it cannot hold a test run or the event loop open.
 
@@ -445,9 +443,8 @@ rules, each of which is easy to undo:
   `updated_at` and "no payment yet", completion and expiry on `status`.
 - **Payer routes are anonymous** (`…/public`, `…/public/confirm`, `GET
   /v1/payment_links/:id/public`, `POST /v1/payment_links/:id/checkout_sessions`):
-  authorized by the session's `client_secret` in `X-Peable-Client-Secret` (or
-  the wrapped payment's, for the FairCoin billing invoice's session), never an
-  Oxy session, never a URL. A checkout event is merchant-scoped and carries no
+  authorized by the session's `client_secret` in `X-Peable-Client-Secret`,
+  never an Oxy session, never a URL. A checkout event is merchant-scoped and carries no
   `payment_intent_id` (`events_intent_event_has_intent_check`).
 - **`mode: 'subscription'`** is validated and refused with 400 `param: mode`
   until the billing engine calls `registerSubscriptionCheckoutFulfiller`.
@@ -470,9 +467,11 @@ rules, each of which is easy to undo:
 Native subscriptions, invoices, credit notes, customer balances, test clocks,
 dunning settings, meters, entitlements and the customer portal
 (`services/billingEngine/*`, routes in `routes/billingEngine/*`, mounted on the
-API and the dashboard from one list) — BESIDE the Stripe-Billing proxy
-(`/v1/billing/*`, `services/billing/*`), which stays until its subscriptions
-are migrated (ADR 0018 "as built" has the plan). Invariants:
+API and the dashboard from one list). It is Orbit's only recurring billing:
+the Stripe-Billing proxy (`/v1/billing/*` beyond meters, `services/billing/*`,
+the FX-quoted FairCoin rail, signed tax quotes and invoice authorities) was
+retired at the root with nothing to migrate (ADR 0018 "as built"); never
+rebuild a provider-billed subscription beside it. Invariants:
 
 - **Every status change is `transitionSubscription` / `transitionInvoice`**
   (`transitions.ts`): state machine, CAS on the status read, event and
@@ -488,18 +487,6 @@ are migrated (ADR 0018 "as built" has the plan). Invariants:
   customer's clock (a test clock's frozen time in test mode).
 - **FairCoin is never debited**: FAIR subscriptions and invoices are
   `send_invoice` (CHECKed) and paid by the payer on the hosted invoice page.
-- **An adopted subscription is held until its old provider stops renewing**
-  (`adoption.ts`, ADR 0018 §7): `provider_handoff_pending` makes it inert —
-  no renewal, no trial end, merchant writes 409 — and only
-  `releaseProviderHandoff` hands renewal to the engine. Never clear it any
-  other way: two systems would bill the next period.
-- **The proxy's subscriptions move with `billing:migrate-proxy`**
-  (`services/billing/proxyMigration.ts`, ADR 0018 §7 as built): dry run by
-  default (read-only transaction, read-only provider); adopt natively, THEN
-  release Stripe (`cancel_at_period_end` + collection voided + marker), THEN
-  the hold — every run resumes before it migrates. A migrated customer's proxy
-  writes answer 409 `subscription_migrated`. A live `--execute` names one
-  cohort twice (`--cohort`, `--confirm-live`); the owner runs it.
 - **Entitlements are the access answer**: features attached to products,
   active while a granting product is on a `trialing`/`active`/`past_due`
   subscription — Mention Plus through Plus OR Oxy One is one entitlement.
@@ -562,10 +549,8 @@ cannot price fails closed, never zero; an uncovered one is zero and recorded as
 `not_registered`. Only the owner's dashboard approval activates registrations,
 and only official Oxy applications calculate on the platform's Stripe Tax
 account. Location evidence never includes language, currency or timezone.
-A quoted card subscription's renewal is HELD as a draft until Peable has
-repriced it (ADR 0013) — never release a draft whose Stripe totals are not
-the fresh quote — and refunds are reversals netted into the same report rows,
-never deletions of the original transaction.
+Refunds are reversals netted into the same report rows, never deletions of the
+original transaction.
 
 **Business compliance (ADR 0020) records and assesses; it never activates.**
 `services/tax/compliance/*` holds onboarding facts, declared registration
@@ -864,8 +849,7 @@ on the same two paths for both modes: the mode whose secret verifies a delivery
 is its mode, an event whose `livemode` disagrees with that secret (or whose mode
 has no key) is refused 400, and the drain refuses an event of a key-less mode or
 one naming an object of the other mode. Tax holds one Stripe Tax provider per
-configured mode; a billing cohort uses the key of the mode its `deployment`
-names. Every merchant-scoped DTO and the event envelope carry `livemode`.
+configured mode. Every merchant-scoped DTO and the event envelope carry `livemode`.
 Peable holds the provider credentials and merchants supply none — ADR 0009,
 which supersedes ADR 0001 D3 and leaves the merchant-of-record decision
 explicitly open.
@@ -1058,7 +1042,7 @@ service on `oxy-cluster`. AWS SSM SecureString is the sole source of truth for b
 Deployments never synchronize credentials from GitHub. Peable uses its own
 `/oxy/peable/*` references; another app's processor key must never configure it.
 Provision and rotate real values in AWS, then review their task-definition
-references with the matching provider account, mode and merchant cohort.
+references with the matching provider account and mode.
 
 It and the three Pages deploys (`deploy-frontend.yml`, `deploy-checkout.yml`,
 `deploy-orbit.yml` → Pages project `peable-orbit`, orbit.peable.to)
