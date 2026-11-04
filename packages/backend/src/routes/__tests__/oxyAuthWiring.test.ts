@@ -4,14 +4,15 @@ import type { Server } from 'node:http';
 import express from 'express';
 import { createEnrichRouter } from '../enrich';
 import { createSocialRouter } from '../social';
+import { requireOxyUser } from '../../lib/http';
 
 /**
  * `createEnrichRouter` / `createSocialRouter` both accept an injectable
  * `requireOxyUser` so the rest of the suite can stub it with a fixed
  * `req.userId`. That stub is never exercised here — this file wires BOTH
- * routers with NO `deps` at all, so each falls back to its real production
- * default (`createOxyAuthMiddleware(oxy)`; see `enrich.ts` / `social.ts`),
- * proving the default itself actually rejects an unauthenticated caller
+ * routers with the process's real `requireOxyUser` (`lib/http.ts`, the one
+ * `server.ts` hands every user-authenticated router), proving it actually
+ * rejects an unauthenticated caller
  * rather than the test's own stub silently standing in for it. Mirrors
  * `serviceAuthWiring.test.ts`'s approach for the merchant/service-auth path.
  *
@@ -27,8 +28,8 @@ let baseUrl: string;
 beforeAll(() => {
   const app = express();
   app.use(express.json());
-  app.use(createEnrichRouter());
-  app.use(createSocialRouter());
+  app.use(createEnrichRouter({ requireOxyUser }));
+  app.use(createSocialRouter({ requireOxyUser }));
   server = app.listen(0);
   const address = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${address.port}`;

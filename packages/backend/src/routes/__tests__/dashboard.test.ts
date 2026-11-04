@@ -11,7 +11,8 @@ import { uuidv7 } from '@oxy.so/db';
 import type { OxyAuthRequest, SafeFetchResult } from '@oxy.so/core/server';
 import { merchants } from '../../db/schema';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
-import type { AppMembershipResult } from '../../services/appMembership';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
+import { requireOxyUser } from '../../lib/http';
 import {
   gatewayDb,
   seedDelivery,
@@ -49,8 +50,8 @@ const OUTSIDER_USER_ID = 'user_outsider';
  * Stub `requireOxyUser`: bypasses a real Oxy bearer by populating
  * `req.userId`/`req.accessToken` directly from a test header — mirrors
  * `routes/__tests__/social.test.ts`'s `X-Test-User-Id` convention. The
- * "bearer" value only needs to exist (it's forwarded to the stubbed
- * `assertAppMembership` below, never a real oxy-api call).
+ * "bearer" value only needs to exist (the stubbed Oxy access below never
+ * makes a real oxy-api call).
  */
 const stubRequireOxyUser: RequestHandler = (req, _res, next) => {
   const userId = req.header('X-Test-User-Id') ?? MEMBER_USER_ID;
@@ -60,10 +61,9 @@ const stubRequireOxyUser: RequestHandler = (req, _res, next) => {
 };
 
 /**
- * Stub `assertAppMembership`: allowed iff the caller is `MEMBER_USER_ID` —
- * proves the router's 403 gate without a real oxy-api round trip (Proxy-
- * wrapped-real-client isn't applicable here since `assertAppMembership` is
- * itself an injected router dependency, not `@oxy.so/core`).
+ * Stub Oxy access: an owner iff the caller is `MEMBER_USER_ID` — proves the
+ * router's gate without a real oxy-api round trip (the real module is covered
+ * by `services/__tests__/oxyAccess.test.ts`).
  */
 const OWNER_ACCOUNT_ID = 'acct_dashboard_owner';
 
@@ -72,14 +72,16 @@ const OXY_DOWN_USER_ID = 'user_oxy_down';
 /** A caller whose bearer oxy-api itself refused (401). */
 const STALE_SESSION_USER_ID = 'user_stale_session';
 
-const stubAssertAppMembership = async (userId: string): Promise<AppMembershipResult> =>
-  userId === MEMBER_USER_ID
-    ? { allowed: true, ownerAccountId: OWNER_ACCOUNT_ID }
-    : userId === OXY_DOWN_USER_ID
-      ? { allowed: false, unavailable: true }
-      : userId === STALE_SESSION_USER_ID
-        ? { allowed: false, unauthenticated: true }
-        : { allowed: false };
+const access = stubOxyAccess({
+  application: (userId) =>
+    userId === MEMBER_USER_ID
+      ? { ownerAccountId: OWNER_ACCOUNT_ID }
+      : userId === OXY_DOWN_USER_ID
+        ? 'unavailable'
+        : userId === STALE_SESSION_USER_ID
+          ? 'session_required'
+          : undefined,
+});
 
 const files = createFakeOxyFiles([
   { id: 'file_member', ownerUserId: MEMBER_USER_ID },
@@ -158,7 +160,7 @@ beforeAll(async () => {
   app.use(
     createDashboardRouter({
       requireOxyUser: stubRequireOxyUser,
-      assertAppMembership: stubAssertAppMembership,
+      access,
       safeFetch: fakeSafeFetch,
       files,
     }),
@@ -265,7 +267,7 @@ describe('GET /v1/dashboard/applications/:applicationId/merchant', () => {
 
 describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
   // Each test below registers against its OWN dedicated application id
-  // (the stubbed `assertAppMembership` allows any applicationId for
+  // (the stubbed Oxy access allows any applicationId for
   // `MEMBER_USER_ID`, so this costs nothing) — Merchant docs are looked up by
   // `(oxyAppId, environment)`, so sharing one id across tests would make
   // outcomes depend on execution order (`bun test --randomize`). Never share
@@ -665,7 +667,7 @@ describe('no service app credentials at all', () => {
   test('real requireOxyUser default rejects an unauthenticated caller (401)', async () => {
     const app = express();
     app.use(express.json());
-    app.use(createDashboardRouter());
+    app.use(createDashboardRouter({ requireOxyUser }));
     const noAuthServer = app.listen(0);
     const noAuthAddress = noAuthServer.address() as AddressInfo;
     try {

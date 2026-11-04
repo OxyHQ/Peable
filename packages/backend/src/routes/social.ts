@@ -3,7 +3,7 @@ import type { Request, RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { isNotFoundError } from '@oxy.so/core';
 import { oxy } from '../oxy';
-import { createOxyAuthMiddleware, getRequiredOxyUserId } from '@oxy.so/core/server';
+import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
   type SocialNextAddressResponse,
   type SocialPayment,
@@ -18,7 +18,7 @@ import { reserveNextSocialAddress, getReservedThrough } from '../services/social
 import { getDb } from '../db/postgres';
 import { insertSendAttribution, listAttributionsForViewer } from '../db/social/sendAttribution';
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
-import { sendError, sendValidationError, wrap, oxyGuard } from '../lib/http';
+import { sendError, sendValidationError, wrap } from '../lib/http';
 import { toSocialPaymentSource } from '../lib/serialize';
 import { toUnix } from '../lib/time';
 
@@ -50,14 +50,13 @@ interface PairRateLimitedRequest extends Request {
  * Build the social-send REST router (spec §4.4 step 3, §4.5, §4.8 bullets
  * 2-3).
  *
- * `requireOxyUser` is injectable so tests can bypass a real Oxy bearer token
- * with a stub that populates `req.userId`; production defaults to
- * `createOxyAuthMiddleware(oxy)` — the PAYER's own signed-in Oxy
+ * `requireOxyUser` is handed in (`server.ts` passes the process's one, from
+ * `lib/http.ts`) so tests can bypass a real Oxy bearer token with a stub that
+ * populates `req.userId`; in production it is the PAYER's own signed-in Oxy
  * session, distinct from the merchant service-auth `paymentIntents.ts` uses.
  */
-export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
-  const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? oxyGuard(createOxyAuthMiddleware(oxy));
+export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Router {
+  const { requireOxyUser } = deps;
   const router = Router();
 
   // Built once per router (so tests building a fresh router via

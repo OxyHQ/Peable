@@ -10,6 +10,8 @@ import type { DashboardScope } from '../api/dashboard';
 import { describeError } from '../api/transport';
 import { allowedExtensions, fileRefusal, ORBIT_FILE_POLICIES } from '../disputes/evidence';
 import { t } from '../i18n';
+import { FILE_UPLOAD_ACTION } from '@peable.to/contracts/vocabulary';
+import { useDashboardPermissions } from '../scope/useDashboardPermissions';
 
 /**
  * Upload one file for one purpose and hand back its `file_…`.
@@ -18,6 +20,9 @@ import { t } from '../i18n';
  * refusal before a round trip; the gateway recognises the format from the
  * bytes and is the authority. The bytes go straight from the picker to the
  * gateway: they are never read into state, logged or cached.
+ *
+ * Disabled when the person lacks what the purpose's USE needs
+ * (`FILE_UPLOAD_ACTION`); the page's `PermissionNotice` says why.
  *
  * Web only for now: a native build has no document picker wired, and says so
  * rather than offering a drop zone that cannot open.
@@ -36,6 +41,8 @@ export function FileUploadField({
   disabled?: boolean;
   onUploaded: (file: FileObject) => void;
 }) {
+  const { can } = useDashboardPermissions();
+  const allowed = can(FILE_UPLOAD_ACTION[purpose]);
   const [picked, setPicked] = useState<FileUploadFile | null>(null);
   const [progress, setProgress] = useState(0);
 
@@ -71,7 +78,7 @@ export function FileUploadField({
         accessibilityLabel={label}
         allowedExtensions={allowedExtensions(purpose)}
         maxBytes={policy.max_bytes}
-        disabled={disabled || upload.isPending}
+        disabled={disabled || !allowed || upload.isPending}
         file={picked}
         progress={progress}
         onFileSelected={(file) => {

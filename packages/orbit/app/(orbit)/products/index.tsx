@@ -30,11 +30,12 @@ import {
 } from '@/catalog/productForm';
 import { catalogKeys, type ProductFilter, useProductPages } from '@/catalog/useCatalog';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, ListFooter, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PermissionNotice, ListEmpty, PageSkeleton } from '@/ui/states';
 import { RowLink, Timestamp } from '@/ui/data';
-import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const filterOptions = () => [
   { value: 'active', label: t('products.filter.active') },
@@ -222,6 +223,7 @@ function ProductList({
   onAdd: () => void;
 }) {
   const pages = useProductPages(scope, filter);
+  const { can } = useDashboardPermissions();
   if (pages.isPending) {
     return <PageSkeleton variant="table" accessibilityLabel={t('products.title')} />;
   }
@@ -230,7 +232,8 @@ function ProductList({
   const products = pages.data.pages.flatMap((page) => page.data);
   return (
     <View className="gap-6">
-      {adding ? <AddProduct scope={scope} /> : null}
+      <PermissionNotice action="configure" />
+      {adding && can('configure') ? <AddProduct scope={scope} /> : null}
       <View className="gap-4">
         <ProductsTable
           products={products}
@@ -239,7 +242,9 @@ function ProductList({
               <ListEmpty
                 title={t('products.empty.firstTitle')}
                 description={t('products.empty.firstBody')}
-                action={{ label: t('products.add'), onPress: onAdd }}
+                {...(can('configure')
+                  ? { action: { label: t('products.add'), onPress: onAdd } }
+                  : {})}
                 docs="catalog"
               />
             ) : (
@@ -260,6 +265,7 @@ function ProductList({
 export default function ProductsScreen() {
   const [filter, setFilter] = useState<ProductFilter>(true);
   const [adding, setAdding] = useState(false);
+  const { can } = useDashboardPermissions();
   return (
     <OrbitScreen
       title={t('products.title')}
@@ -269,6 +275,7 @@ export default function ProductsScreen() {
           appearance={adding ? 'outline' : 'solid'}
           tone={adding ? undefined : 'accent'}
           size="sm"
+          disabled={!can('configure')}
           onPress={() => setAdding((open) => !open)}
         >
           {adding ? t('action.cancel') : t('products.add')}

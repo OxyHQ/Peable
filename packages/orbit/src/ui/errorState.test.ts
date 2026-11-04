@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { OrbitApiError } from '../api/transport';
-import { errorState, isFailure } from './errorState';
+import { errorState, isFailure, permissionCopy, permissionStateFor } from './errorState';
 
 const api = (init: ConstructorParameters<typeof OrbitApiError>[0]) => new OrbitApiError(init);
 
@@ -17,16 +17,6 @@ describe('errorState — what a screen shows for a thrown value', () => {
         }),
       ),
     ).toEqual({ kind: 'merchant_missing' });
-    // A gateway from before the code still says the same sentence.
-    expect(
-      errorState(
-        api({
-          status: 404,
-          type: 'invalid_request_error',
-          message: 'no merchant registered for this application in this environment',
-        }),
-      ).kind,
-    ).toBe('merchant_missing');
   });
 
   it('a 404 for one object is "not found", never the first-run state', () => {
@@ -71,11 +61,12 @@ describe('errorState — what a screen shows for a thrown value', () => {
       kind: 'permission',
       permission: 'billing:manage',
       membership: false,
+      readOnly: false,
       requestId: 'req_3',
     });
   });
 
-  it('a 403 from an older gateway still names the permission from its sentence', () => {
+  it('the permission comes only from the structured fields, never from the sentence', () => {
     const state = errorState(
       api({
         status: 403,
@@ -83,23 +74,17 @@ describe('errorState — what a screen shows for a thrown value', () => {
         message: 'billing:read is required for tax compliance',
       }),
     );
-    expect(state).toMatchObject({ kind: 'permission', permission: 'billing:read' });
+    expect(state).toMatchObject({ kind: 'permission', permission: null, membership: false });
   });
 
-  it('not being a member of the application is its own permission state', () => {
-    for (const error of [
-      api({
+  it('not being a member of the application or account is its own permission state', () => {
+    for (const code of ['application_membership_required', 'account_membership_required']) {
+      const error = api({
         status: 403,
         type: 'permission_error',
-        code: 'application_membership_required',
+        code,
         message: 'you are not a member of this application',
-      }),
-      api({
-        status: 403,
-        type: 'permission_error',
-        message: 'you are not a member of this application',
-      }),
-    ]) {
+      });
       expect(errorState(error)).toMatchObject({
         kind: 'permission',
         membership: true,
@@ -173,5 +158,47 @@ describe('errorState — what a screen shows for a thrown value', () => {
     expect(isFailure(errorState(new TypeError('x')))).toBe(true);
     expect(isFailure({ kind: 'merchant_missing' })).toBe(false);
     expect(isFailure({ kind: 'invalid', message: '', requestId: null })).toBe(false);
+  });
+});
+
+describe('one permission state, refused or known up front', () => {
+  it('an action the person lacks is the same state a refusal is, naming the same permission', () => {
+    const refused = errorState(
+      api({
+        status: 403,
+        type: 'permission_error',
+        code: 'permission_required',
+        param: 'billing:manage',
+        message: 'this action needs the billing:manage permission on the application',
+      }),
+    );
+    expect(permissionStateFor('money')).toEqual({
+      kind: 'permission',
+      permission: 'billing:manage',
+      membership: false,
+      readOnly: true,
+      requestId: null,
+    });
+    expect(refused).toMatchObject({ kind: 'permission', permission: 'billing:manage' });
+  });
+
+  it('a write on a readable page is "view, not change"; a read is "cannot see"', () => {
+    expect(permissionCopy(permissionStateFor('configure'))).toEqual({
+      title: 'state.permission.readOnlyTitle',
+      body: 'state.permission.body',
+    });
+    expect(permissionCopy(permissionStateFor('taxRead'))).toEqual({
+      title: 'state.permission.title',
+      body: 'state.permission.body',
+    });
+  });
+
+  it('a non-member and an unnamed permission keep their own wording', () => {
+    const base = permissionStateFor('read');
+    expect(permissionCopy({ ...base, membership: true, permission: null })).toEqual({
+      title: 'state.permission.membershipTitle',
+      body: 'state.permission.bodyMembership',
+    });
+    expect(permissionCopy({ ...base, permission: null }).body).toBe('state.permission.bodyGeneric');
   });
 });

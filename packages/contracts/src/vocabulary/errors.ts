@@ -195,10 +195,12 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'The application has no merchant in this environment yet; register one (Orbit shows "Set up payments").',
   application_membership_required:
     'The signed-in Oxy account is not a member of the account that owns this application.',
+  account_membership_required:
+    "The signed-in Oxy account is not a member of the Oxy account the path names (a contribution route's organization).",
   permission_required:
-    'The member lacks an Oxy permission this needs; `param` names it (`billing:read`, `billing:manage`). An owner grants it in Oxy Console.',
+    'The member lacks the Oxy permission this action needs; `param` names it (`app:update`, `webhooks:update`, `billing:read`, `billing:manage`). An owner grants it in Oxy Console.',
   membership_unavailable:
-    'Oxy could not be asked whether the signed-in person is a member of this application; retry.',
+    'Oxy could not be asked what the signed-in person may do on this application or account; retry.',
   session_invalid: 'Oxy no longer accepts the signed-in session; sign in again.',
 } as const satisfies Record<string, string>;
 

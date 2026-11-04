@@ -9,7 +9,7 @@ import { PaymentsTable } from '@/payments/PaymentsTable';
 import { ORBIT_PAYMENT_STATUSES, paymentStatusLabel } from '@/payments/status';
 import { usePaymentPages } from '@/payments/usePayments';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, SetupPayments, OrbitScreen } from '@/ui/OrbitScreen';
 import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
@@ -50,7 +50,7 @@ function PaymentList({
   if (pages.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('payments.title')} />;
   if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const payments = pages.data.pages.flatMap((page) => page.data);

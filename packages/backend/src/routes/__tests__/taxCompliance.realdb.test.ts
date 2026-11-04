@@ -14,7 +14,8 @@ import express, { type RequestHandler } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 import { createGateway, type Gateway } from '../../server';
 import { requestIdMiddleware } from '../../lib/requestId';
-import type { AppMembershipResult } from '../../services/appMembership';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
+import type { ApplicationAnswer } from '../../__tests__/helpers/oxyAccessStub';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { insertFile } from '../../db/files/fileRepository';
 import { files, taxSettings, taxTransactions } from '../../db/schema';
@@ -36,15 +37,11 @@ type Json = Record<string, unknown>;
 const APP_A = 'app_compliance_a';
 const APP_B = 'app_compliance_b';
 /** What oxy-api would answer for each (user, application). */
-const MEMBERS: Record<string, Record<string, AppMembershipResult>> = {
-  owner_a: {
-    [APP_A]: { allowed: true, permissions: ['app:read', 'billing:read', 'billing:manage'] },
-  },
-  viewer_a: { [APP_A]: { allowed: true, permissions: ['app:read', 'billing:read'] } },
-  developer_a: { [APP_A]: { allowed: true, permissions: ['app:read'] } },
-  owner_b: {
-    [APP_B]: { allowed: true, permissions: ['app:read', 'billing:read', 'billing:manage'] },
-  },
+const MEMBERS: Record<string, Record<string, ApplicationAnswer>> = {
+  owner_a: { [APP_A]: { permissions: ['app:read', 'billing:read', 'billing:manage'] } },
+  viewer_a: { [APP_A]: { permissions: ['app:read', 'billing:read'] } },
+  developer_a: { [APP_A]: { permissions: ['app:read'] } },
+  owner_b: { [APP_B]: { permissions: ['app:read', 'billing:read', 'billing:manage'] } },
 };
 
 let gateway: Gateway | undefined;
@@ -218,8 +215,9 @@ beforeAll(() => {
         (req as OxyAuthRequest).accessToken = `token-for-${userId}`;
         next();
       },
-      assertAppMembership: async (userId: string, applicationId: string) =>
-        MEMBERS[userId]?.[applicationId] ?? { allowed: false },
+      access: stubOxyAccess({
+        application: (userId, applicationId) => MEMBERS[userId]?.[applicationId],
+      }),
     }),
   );
   dashboardServer = app.listen(0);

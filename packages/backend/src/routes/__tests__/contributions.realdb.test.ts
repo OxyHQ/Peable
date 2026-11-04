@@ -16,18 +16,26 @@ import {
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { paymentLinks } from '../../db/schema';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
+import { type ApplicationAnswer, stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 const { createContributionsRouter } = await import('../contributions');
 const { createPaymentLinksRouter } = await import('../paymentLinks');
 const { createCheckoutSessionsRouter } = await import('../checkoutSessions');
 useGatewayDatabase();
 let server: Server, base: string;
-let allowed = true;
-let authorityCalls = 0;
+/** What Oxy answers about the two applications; a test may swap it. */
+let application: ApplicationAnswer | undefined = { ownerAccountId: 'organization' };
+const access = stubOxyAccess({
+  application: (_userId, applicationId) =>
+    ['contrib-app', 'other-app'].includes(applicationId) ? application : undefined,
+  account: (_userId, accountId) =>
+    accountId === 'personal' ? { kind: 'personal' } : { kind: 'organization' },
+});
 const auth: RequestHandler = (req, res, next) => {
   if (req.header('Authorization') !== 'Bearer human') {
     res.sendStatus(401);
     return;
   }
+  (req as OxyAuthRequest).userId = 'user_human';
   (req as OxyAuthRequest).accessToken = 'human';
   next();
 };
@@ -36,17 +44,7 @@ beforeAll(async () => {
   await seedMerchant({ oxyAppId: 'other-app', environment: 'development' });
   const app = express();
   app.use(express.json());
-  app.use(
-    createContributionsRouter({
-      requireOxyUser: auth,
-      authorize: async (_token, org, application) => {
-        authorityCalls++;
-        return (
-          allowed && org === 'organization' && ['contrib-app', 'other-app'].includes(application)
-        );
-      },
-    }),
-  );
+  app.use(createContributionsRouter({ requireOxyUser: auth, access }));
   app.use(
     createPaymentLinksRouter({
       requireMerchant: auth,
@@ -148,12 +146,12 @@ test('concurrent creation and lost-response replay return one immutable link', a
 });
 test('authority checked afresh and foreign organizations/applications cannot see records', async () => {
   await make();
-  const before = authorityCalls;
+  const before = access.asked.length;
   expect((await request(`${root}?environment=development`)).status).toBe(200);
-  allowed = false;
+  application = undefined;
   expect((await request(`${root}?environment=development`)).status).toBe(403);
-  allowed = true;
-  expect(authorityCalls).toBeGreaterThan(before);
+  application = { ownerAccountId: 'organization' };
+  expect(access.asked.length).toBeGreaterThan(before);
   expect(
     (
       await request(
@@ -338,4 +336,59 @@ test('disabled links recover a previously minted attempt but refuse a new operat
   expect(replay.status).toBe(201);
   expect(((await replay.json()) as { id: string }).id).toBe(first.id);
   expect((await contribute(path, {}, crypto.randomUUID())).status).toBe(400);
+});
+
+test('a write needs app:update; reading needs only membership', async () => {
+  const link = await make();
+  application = { ownerAccountId: 'organization', permissions: ['app:read'] };
+  try {
+    expect((await request(`${root}?environment=development`)).status).toBe(200);
+    const create = await request(
+      `${root}?environment=development`,
+      'POST',
+      { purpose: 'Roof', amount_mode: 'free', currency: 'FAIR' },
+      crypto.randomUUID(),
+    );
+    expect(create.status).toBe(403);
+    expect(((await create.json()) as { error: { code: string } }).error.code).toBe(
+      'permission_required',
+    );
+    const withdraw = await request(`${root}/${link.id}?environment=development`, 'POST', {
+      active: false,
+    });
+    expect(withdraw.status).toBe(403);
+  } finally {
+    application = { ownerAccountId: 'organization' };
+  }
+  // A write asks Oxy afresh; a read may reuse an answer.
+  const asked = access.asked.filter((q) => q.kind === 'application');
+  expect(asked.some((q) => q.fresh)).toBe(true);
+});
+test('only an active application of the organization that owns it, and only an organization', async () => {
+  application = { ownerAccountId: 'organization', active: false };
+  try {
+    expect((await request(`${root}?environment=development`)).status).toBe(403);
+  } finally {
+    application = { ownerAccountId: 'organization' };
+  }
+  application = { ownerAccountId: 'personal' };
+  try {
+    const personal = root.replace('organization/applications', 'personal/applications');
+    expect((await request(`${personal}?environment=development`)).status).toBe(403);
+  } finally {
+    application = { ownerAccountId: 'organization' };
+  }
+});
+test('Oxy unavailable is a 503, a refused session a 401 — never a "no"', async () => {
+  for (const [answer, status] of [
+    ['unavailable', 503],
+    ['session_required', 401],
+  ] as const) {
+    application = answer;
+    try {
+      expect((await request(`${root}?environment=development`)).status).toBe(status);
+    } finally {
+      application = { ownerAccountId: 'organization' };
+    }
+  }
 });

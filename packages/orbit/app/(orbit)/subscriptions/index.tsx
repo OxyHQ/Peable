@@ -9,7 +9,7 @@ import { ORBIT_SUBSCRIPTION_STATUSES, subscriptionStatusLabel } from '@/billing/
 import { useSubscriptionPages } from '@/billing/useBilling';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, SetupPayments, OrbitScreen } from '@/ui/OrbitScreen';
 import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 type Filter = SubscriptionStatus | 'all' | null;
@@ -30,7 +30,7 @@ function SubscriptionList({ scope, filter }: { scope: DashboardScope; filter: Fi
   if (pages.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('subscriptions.title')} />;
   if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const rows = pages.data.pages.flatMap((page) => page.data);

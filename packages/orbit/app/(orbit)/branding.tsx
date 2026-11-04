@@ -30,9 +30,10 @@ import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
+import { ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { Toggle } from '@/ui/Toggle';
-import { PageSkeleton } from '@/ui/states';
 import { merchantQueryKey } from '@/merchant/useMerchant';
 
 const DEFAULT = 'default';
@@ -65,6 +66,7 @@ function BrandingEditor({
   merchantName: string;
 }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const [form, setForm] = useState<BrandingForm>(() => brandingFormOf(branding));
   const [invalid, setInvalid] = useState<BrandingFormError[]>([]);
   const save = useMutation({
@@ -90,7 +92,7 @@ function BrandingEditor({
     }
     save.mutate(result.body);
   };
-  const busy = save.isPending;
+  const busy = save.isPending || !can('configure');
   const preview = brandingPreview(form);
   return (
     <Section title={t('branding.title')} description={t('branding.intro')}>
@@ -219,7 +221,13 @@ function BrandingEditor({
         </View>
       </View>
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={save.isPending} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={busy}
+          onPress={submit}
+        >
           {t('action.save')}
         </Button>
       </View>
@@ -235,6 +243,7 @@ function EmailSettingsEditor({
   settings: MerchantEmailSettings;
 }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const [form, setForm] = useState<EmailSettingsForm>(() => emailSettingsFormOf(settings));
   const [invalid, setInvalid] = useState(false);
   const save = useMutation({
@@ -261,7 +270,7 @@ function EmailSettingsEditor({
     }
     save.mutate(body);
   };
-  const busy = save.isPending;
+  const busy = save.isPending || !can('configure');
   return (
     <Section title={t('emails.title')} description={t('emails.intro')}>
       <Toggle
@@ -295,7 +304,13 @@ function EmailSettingsEditor({
         disabled={busy}
       />
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={busy} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={busy}
+          onPress={submit}
+        >
           {t('action.save')}
         </Button>
       </View>
@@ -322,7 +337,7 @@ function Settings({ scope }: { scope: DashboardScope }) {
   const error = merchant.error ?? branding.error ?? emails.error;
   if (error || merchant.data === null) {
     if (merchant.data === null || isMerchantMissing(error)) {
-      return <MerchantMissing environment={scope.environment} />;
+      return <SetupPayments environment={scope.environment} />;
     }
     return (
       <ErrorNotice
@@ -338,6 +353,7 @@ function Settings({ scope }: { scope: DashboardScope }) {
   if (!merchant.data || !branding.data || !emails.data) return null;
   return (
     <View className="gap-6">
+      <PermissionNotice action="configure" />
       <BrandingEditor
         key={branding.data.updated_at ?? 'unset'}
         scope={scope}

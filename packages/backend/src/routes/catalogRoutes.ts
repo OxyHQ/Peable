@@ -11,6 +11,8 @@ import { idempotent } from '../lib/idempotency';
 import type { QuerySurface } from '../lib/list';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { resolveMerchant } from './paymentIntents';
+import type { DashboardAction } from '@peable.to/contracts/vocabulary';
+import type { DashboardGate } from './dashboardAccess';
 
 /**
  * The catalog's routes (ADR 0018) as DATA: each resource file lists its
@@ -112,24 +114,23 @@ export function createCatalogApiRouter(
 }
 
 /**
- * Mount on Orbit's dashboard router: `asMember` is the dashboard's access gate
- * (membership of the application, then its merchant in the environment);
- * every write opens the request context.
+ * Mount on Orbit's dashboard router behind its gate: a GET needs `read`, every
+ * other method the list's `write` action (`DASHBOARD_PERMISSIONS`). Every
+ * write opens the request context.
  */
 export function mountCatalogDashboardRoutes(
   router: Router,
   routes: readonly CatalogRoute[],
   deps: {
-    base: string;
-    requireOxyUser: RequestHandler;
-    asMember: (
-      core: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
-    ) => RequestHandler;
+    readonly base: string;
+    readonly requireOxyUser: RequestHandler;
+    readonly gate: DashboardGate;
+    readonly write: DashboardAction;
   },
 ): void {
   for (const route of routes) {
     const path = `${deps.base}${route.path}`;
-    const handler = deps.asMember((req, res, merchant) =>
+    const handler = deps.gate(route.method === 'get' ? 'read' : deps.write, (req, res, merchant) =>
       run(route.core, req, res, merchant, 'dashboard'),
     );
     if (route.method === 'get') router.get(path, deps.requireOxyUser, handler);

@@ -23,6 +23,7 @@ import {
   seedMerchant,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 import { createDashboardTaxRouter } from '../tax';
 
 type Json = Record<string, unknown>;
@@ -91,9 +92,8 @@ beforeAll(() => {
         (req as OxyAuthRequest).accessToken = 'token-for-owner';
         next();
       },
-      assertAppMembership: async () => ({
-        allowed: true,
-        permissions: ['app:read', 'billing:read', 'billing:manage'],
+      access: stubOxyAccess({
+        application: () => ({ permissions: ['app:read', 'billing:read', 'billing:manage'] }),
       }),
     }),
   );

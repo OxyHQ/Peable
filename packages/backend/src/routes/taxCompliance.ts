@@ -28,10 +28,8 @@ import {
   listTaxSalesDestinationsQuery,
   type TaxReviewItemStatus,
 } from '@peable.to/contracts';
-import { createOxyAuthMiddleware } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
-import { oxy } from '../oxy';
 import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { idempotent, runIdempotent } from '../lib/idempotency';
 import { parseExpand, type ExpandableType } from '../lib/expand';
@@ -43,7 +41,7 @@ import {
   type QuerySurface,
 } from '../lib/list';
 import { requestContextMiddleware } from '../lib/requestContext';
-import { assertAppMembership as realAssertAppMembership } from '../services/appMembership';
+import { type OxyAccess, oxyAccess } from '../services/oxyAccess';
 import {
   createTaxComplianceService,
   TaxComplianceError,
@@ -51,8 +49,8 @@ import {
   type TaxComplianceCursor,
   type TaxComplianceService,
 } from '../services/tax/compliance/complianceService';
-import { resolveDashboardAccess } from './dashboard';
-import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
+import { dashboardGate } from './dashboardAccess';
+import { resolveMerchant } from './paymentIntents';
 
 /** `read` — both surfaces; `assess` — API write and owner; `manage` — owner only. */
 type Access = 'read' | 'assess' | 'manage';
@@ -431,47 +429,29 @@ export function createTaxComplianceRouter(deps: {
   return router;
 }
 
-/** Orbit's surface: `billing:read` to look, `billing:manage` for everything else. */
+/** Orbit's surface: `taxRead` (`billing:read`) to look, `money` (`billing:manage`) for everything else. */
 export function createDashboardTaxComplianceRouter(deps: {
-  requireOxyUser?: RequestHandler;
-  assertAppMembership?: typeof realAssertAppMembership;
+  requireOxyUser: RequestHandler;
+  access?: OxyAccess;
   service?: TaxComplianceService;
 }): Router {
   const router = Router();
-  const requireOxyUser = deps.requireOxyUser ?? createOxyAuthMiddleware(oxy);
-  const assertAppMembership = deps.assertAppMembership ?? realAssertAppMembership;
+  const { requireOxyUser } = deps;
+  const gate = dashboardGate(deps.access ?? oxyAccess);
   for (const route of TAX_COMPLIANCE_ROUTES) {
-    const permission = route.access === 'read' ? 'billing:read' : 'billing:manage';
-    const handler = wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-      const permissions = access.membership.permissions ?? [];
-      // `billing:manage` implies reading.
-      if (
-        !permissions.includes(permission) &&
-        !(permission === 'billing:read' && permissions.includes('billing:manage'))
-      ) {
-        sendError(
-          res,
-          403,
-          'permission_error',
-          `${permission} is required for tax compliance`,
-          'permission_required',
-          permission,
-        );
-        return;
-      }
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-      const ctx: ComplianceContext = {
-        service: deps.service ?? defaultService(),
-        surface: 'dashboard',
-        actor: { type: 'user', id: access.userId },
-      };
-      if (route.method === 'post')
-        await runIdempotent(req, res, merchant.id, () => run(route, req, res, merchant, ctx));
-      else await run(route, req, res, merchant, ctx);
-    });
+    const handler = gate(
+      route.access === 'read' ? 'taxRead' : 'money',
+      async (req, res, merchant, access) => {
+        const ctx: ComplianceContext = {
+          service: deps.service ?? defaultService(),
+          surface: 'dashboard',
+          actor: { type: 'user', id: access.userId },
+        };
+        if (route.method === 'post')
+          await runIdempotent(req, res, merchant.id, () => run(route, req, res, merchant, ctx));
+        else await run(route, req, res, merchant, ctx);
+      },
+    );
     const path = `/v1/dashboard/applications/:applicationId/tax${route.path}`;
     if (route.method === 'get') router.get(path, requireOxyUser, handler);
     else router.post(path, requireOxyUser, requestContextMiddleware, handler);

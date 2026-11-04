@@ -16,7 +16,7 @@ import { REPORT_TYPE_IDS, REPORT_TYPE_LAYOUTS } from '@peable.to/shared-types';
 import { createGateway, type Gateway } from '../../server';
 import { createDashboardRouter } from '../dashboard';
 import { requestIdMiddleware } from '../../lib/requestId';
-import type { AppMembershipResult } from '../../services/appMembership';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 import { type MerchantRow, syncMerchantFirstParty } from '../../db/merchants/merchantRepository';
 import { insertBalanceTransaction } from '../../db/money/ledgerRepository';
 import { insertRefund } from '../../db/refunds/refundRepository';
@@ -158,8 +158,9 @@ beforeAll(() => {
         (req as OxyAuthRequest).accessToken = `token-for-${userId}`;
         next();
       },
-      assertAppMembership: async (userId: string): Promise<AppMembershipResult> =>
-        userId === MEMBER ? { allowed: true, ownerAccountId: 'owner' } : { allowed: false },
+      access: stubOxyAccess({
+        application: (userId) => (userId === MEMBER ? { ownerAccountId: 'owner' } : undefined),
+      }),
       files: {
         ...files,
         linkedDownloadUrls: (ids) => files.linkedDownloadUrls(ids),

@@ -71,6 +71,7 @@ import {
 } from '../services/reporting/reports';
 import { kickReportRunWorker } from '../services/reporting/reportRunWorker';
 import { resolveMerchant } from './paymentIntents';
+import type { DashboardGate } from './dashboardAccess';
 
 /** When the current layouts (`.1`) were defined — `ReportType.updated`. */
 const LAYOUTS_UPDATED = Date.UTC(2026, 10, 3) / 1000;
@@ -370,20 +371,21 @@ export function createReportingRouter(deps: { requireMerchant: RequestHandler })
   return router;
 }
 
-/** The same cores under Orbit's dashboard, behind its membership gate. */
+/**
+ * The same cores under Orbit's dashboard, all `read`: a run materialises the
+ * same rows a download streams, so keeping one needs no more than reading it.
+ */
 export function mountReportingDashboardRoutes(
   router: Router,
   deps: {
     readonly base: string;
     readonly requireOxyUser: RequestHandler;
-    readonly asMember: (
-      core: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
-    ) => RequestHandler;
+    readonly gate: DashboardGate;
   },
 ): void {
-  const { base, requireOxyUser, asMember } = deps;
+  const { base, requireOxyUser, gate } = deps;
   const dashboard = (core: Core) =>
-    asMember((req, res, merchant) => core(req, res, merchant, 'dashboard'));
+    gate('read', (req, res, merchant) => core(req, res, merchant, 'dashboard'));
   router.get(`${base}/reporting/report_types`, requireOxyUser, dashboard(answerReportTypeList));
   router.get(`${base}/reporting/report_types/:id`, requireOxyUser, dashboard(retrieveReportType));
   router.get(`${base}/reporting/report_types/:id/csv`, requireOxyUser, dashboard(downloadReport));
@@ -391,7 +393,7 @@ export function mountReportingDashboardRoutes(
     `${base}/reporting/report_runs`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember((req, res, merchant) =>
+    gate('read', (req, res, merchant) =>
       runIdempotent(req, res, merchant.id, () => createReportRun(req, res, merchant)),
     ),
   );

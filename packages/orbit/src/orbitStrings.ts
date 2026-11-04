@@ -207,7 +207,7 @@ export const ORBIT_EN: Readonly<Record<string, string>> = {
   'team.noApplication': 'Choose an application to see its team.',
   'team.permissions': 'What each permission allows',
   'team.permission.orbit':
-    'Orbit: every screen here — payments, payouts, Connect, reports, webhooks, settings. Granted by apps:read.',
+    'Orbit: see every screen here — payments, payouts, Connect, reports, webhooks, settings. Granted by apps:read. Changing a screen needs its own permission on the application (app:update, webhooks:update or billing:manage).',
   'team.permission.taxRead':
     'View Peable Tax: settings, registrations and filing reports. billing:read.',
   'team.permission.taxManage':
@@ -432,7 +432,7 @@ export const ORBIT_ES: Readonly<Record<string, string>> = {
   'team.noApplication': 'Elige una aplicación para ver su equipo.',
   'team.permissions': 'Qué permite cada permiso',
   'team.permission.orbit':
-    'Orbit: todas las pantallas — pagos, transferencias, Connect, informes, webhooks, ajustes. Lo concede apps:read.',
+    'Orbit: ver todas las pantallas — pagos, transferencias, Connect, informes, webhooks, ajustes. Lo concede apps:read. Cambiar una pantalla requiere su propio permiso en la aplicación (app:update, webhooks:update o billing:manage).',
   'team.permission.taxRead':
     'Ver Peable Tax: ajustes, registros e informes de declaración. billing:read.',
   'team.permission.taxManage':

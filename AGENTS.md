@@ -891,7 +891,11 @@ sweep's `expireIntentNow` — never a status write of their own.
 ## Auth
 
 Backend uses `@oxy.so/core/server`: the one `OxyServer` is `src/oxy.ts`
-(`oxy`), with `createOxyAuthMiddleware(oxy)` on routes, `getRequiredOxyUserId`
+(`oxy`, with `serviceIdentity: 'when-anonymous'` and Peable's `applicationId`,
+from which `PEABLE_SERVICE_AUDIENCE` is derived), and the one end-user auth
+middleware is `requireOxyUser` in `lib/http.ts` (in the one error envelope),
+which `server.ts` hands every
+user-authenticated router (none builds its own). `getRequiredOxyUserId`
 to read the caller, `oxy.middleware.service()` / `.requireScope()` for merchant
 service tokens (EdDSA plus live authority; canonical own audience, bounded external legacy audience), `oxy.middleware.socket()`
 for Socket.IO, plus `createOxyCors` and `createOxyRateLimit` in `server.ts`. There is no
@@ -900,6 +904,44 @@ from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
 
 The hosted checkout is deliberately **anonymous**: a payer has no Oxy session, so
 do not add an Oxy auth requirement to a payer-facing route.
+
+### What a signed-in person may do: one module, one map
+
+**`services/oxyAccess.ts` is the ONLY place Peable asks Oxy what a person may
+do**, for every user-authorised surface: Orbit's dashboard, Peable Tax and the
+tax workspace, Orbit uploads and the contribution routes. `application(req, A)`
+is `apps.get(A)` with the caller's own bearer (`callerMembership.permissions`,
+oxy-api's application vocabulary; never `appPermissionsFor`, which answers a
+different question); `account(req, X)` is `accounts.get(X)`. Outcomes are
+translated once: 401 or a service credential → 401 `session_invalid`; 403/404
+or no membership → 403 `application_membership_required`; anything else → 503
+`membership_unavailable`, never cached as "no". Only answers that let someone in
+are cached (30 s, per user and session), and every non-GET asks again (`fresh`).
+`services/__tests__/oxyAccessIsTheOnlyPath.test.ts` fails on a second
+`apps.get` / `accounts.get` / `callerMembership` / per-user `OxyServices`, a
+second `createOxyAuthMiddleware`, or a permission string spelled out in the
+gateway. When `@oxy.so/core` ships `applicationAccessFor` / `accountAccessFor`,
+`createOxyAccess`'s two methods become those calls and `callerClient`, the
+schemas and the cache are deleted; nothing else changes.
+
+**Each action needs one permission, defined once** in
+`@peable.to/contracts/vocabulary` (`DASHBOARD_PERMISSIONS`,
+`allowsDashboardAction`, `FILE_UPLOAD_ACTION`). The gateway's gate
+(`routes/dashboardAccess.ts`, `dashboardGate(access)(action, core)`) and Orbit
+(`useDashboardPermissions().can(action)`) read the SAME map:
+
+| Action | Oxy permission | What |
+|---|---|---|
+| `read` | `app:read` | every GET, search, a report run (membership itself) |
+| `configure` | `app:update` | branding and customer emails, catalog, checkout sessions, payment links, contribution links, payment methods and wallet domains, a `business_logo` upload |
+| `webhooks` | `webhooks:update` | webhook endpoints, secrets, test events, redelivery |
+| `money` | `billing:manage` | the merchant (its watch-only key, confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, evidence/identity/tax uploads |
+| `taxRead` | `billing:read` | Peable Tax reads and previews (`billing:manage` contains it) |
+
+A new route names its action; `routes/__tests__/dashboardPermissions.realdb.test.ts`
+walks the real gateway and fails on a route the table above does not cover or
+whose gate disagrees with it. Contributions additionally require the path's
+account to be an organization that owns the active application.
 
 ## The web build is read-only, not unsupported
 

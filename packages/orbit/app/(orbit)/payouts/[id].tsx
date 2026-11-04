@@ -16,6 +16,7 @@ import { t } from '@/i18n';
 import { BalanceTransactionsTable } from '@/money/BalanceTransactionsTable';
 import { moneyKeys, usePayout, usePayoutReconciliation } from '@/money/useMoney';
 import { canCancelPayout } from '@/money/vocabulary';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import {
   AccountMissing,
   DetailLayout,
@@ -25,8 +26,8 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import { PayoutStatusBadge } from '@/ui/StatusBadge';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function Reconciliation({ scope, payout }: { scope: DashboardScope; payout: Payout }) {
   const pages = usePayoutReconciliation(scope, payout.id);
@@ -79,6 +80,7 @@ function Reconciliation({ scope, payout }: { scope: DashboardScope; payout: Payo
 
 function PayoutDetail({ scope, payout }: { scope: DashboardScope; payout: Payout }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const cancel = useMutation({
     mutationFn: () => dashboardApi.payouts.cancel(scope, payout.id),
     onSuccess: (canceled) => {
@@ -89,19 +91,22 @@ function PayoutDetail({ scope, payout }: { scope: DashboardScope; payout: Payout
     onError: (error) => toast.error(describeError(error, t('error.generic'))),
   });
   const notSet = t('account.notSet');
+  const cancellable = canCancelPayout(payout.status);
   return (
     <View className="gap-6">
+      {cancellable ? <PermissionNotice action="money" /> : null}
       <View className="flex-row flex-wrap items-center gap-3">
         <Text variant="title-1-bold" selectable>
           {formatSignedAmount(payout.amount, payout.currency)}
         </Text>
         <PayoutStatusBadge status={payout.status} />
-        {canCancelPayout(payout.status) ? (
+        {cancellable ? (
           <Button
             appearance="outline"
             tone="danger"
             size="sm"
             loading={cancel.isPending}
+            disabled={!can('money')}
             onPress={() => cancel.mutate()}
           >
             {t('payout.cancel')}

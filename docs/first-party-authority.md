@@ -63,20 +63,30 @@ tests passed against the published dependencies. The tax UI consumes complete
 Peable list envelopes through shared authenticated raw transport. Workload
 binding/environment registration must already be active before deployment.
 
-## Orbit's membership check (`/v1/dashboard/*`)
+## What a signed-in person may do (`/v1/dashboard/*`, contributions)
 
-`services/appMembership.ts` asks Oxy for the application with the signed-in
-user's OWN bearer, through a short-lived `OxyServices` client per check (the
-pattern Mercaria's account-graph reads use) — `apps.get`, whose
-`callerMembership` is the whole decision. It is not `OxyServer.appPermissionsFor`:
-that reads the application's own declared roles (`/roles/me`), not membership of
-the account that owns it.
+`services/oxyAccess.ts` is the ONE place Peable asks Oxy what a signed-in
+person may do, for every user-authorised surface (Orbit's dashboard, Peable
+Tax and the tax workspace, Orbit uploads, the contribution routes). It asks
+with the user's OWN bearer, through a short-lived, uncached `OxyServices`
+client per check that is disposed after it: `apps.get(A)` for application A,
+whose `callerMembership.permissions` (oxy-api's application-lane vocabulary)
+are the whole answer, and `accounts.get(X)` for account X. It is not
+`OxyServer.appPermissionsFor`: that reads the application's own declared roles
+(`/roles/me`), not membership of the account that owns it. Each route then
+needs the permission its action names in `DASHBOARD_PERMISSIONS`
+(`@peable.to/contracts/vocabulary`; the table is in `AGENTS.md`),
+and Orbit hides or disables what the person lacks from the same map.
 
 Never route this, or any call to Oxy, through `safeFetch`. That is the SSRF
 guard for merchant-supplied URLs (webhook endpoints) and refuses private
 addresses; inside the Oxy VPC `api.oxy.so` is split-horizon and resolves to the
 internal load balancer, so the guard refused every check and every owner was
-told "you are not a member of this application". Outcomes: 403/404 or no
-membership → 403 `application_membership_required` (cached 45 s); Oxy 401 →
-401 `session_invalid`; anything else → logged with the request id, 503
-`membership_unavailable`, never cached.
+told "you are not a member of this application". Outcomes: an answer is
+cached 30 s for reads (per user and session; a write always asks again); 403/404
+or no membership → 403 `application_membership_required`, never cached; a member
+without the action's permission → 403 `permission_required`; Oxy 401, or a
+service credential → 401 `session_invalid`; anything else → logged with the
+request id, 503 `membership_unavailable`, never cached. When `@oxy.so/core`
+ships `oxy.applicationAccessFor` / `oxy.accountAccessFor`, `createOxyAccess`
+becomes those two calls and its client, schemas and cache are deleted.

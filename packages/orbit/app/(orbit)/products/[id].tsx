@@ -32,7 +32,9 @@ import { billingKeys, useFeatures, useProductFeatures } from '@/billing/useBilli
 import { Choice } from '@/ui/Choice';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import {
   DetailLayout,
   ErrorNotice,
@@ -41,7 +43,6 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 /** A reference as its id, whether or not the read expanded it. */
 function idOf(reference: string | { id: string } | null): string | null {
@@ -57,6 +58,8 @@ const fail = (error: unknown) => toast.error(describeError(error, t('error.gener
 
 function EditProduct({ scope, product }: { scope: DashboardScope; product: Product }) {
   const refresh = useRefresh(scope);
+  const { can } = useDashboardPermissions();
+  const locked = !can('configure');
   const [form, setForm] = useState<ProductForm>(() => productFormOf(product));
   const [invalid, setInvalid] = useState(false);
   const set = (field: keyof ProductForm) => (value: string) =>
@@ -91,7 +94,7 @@ function EditProduct({ scope, product }: { scope: DashboardScope; product: Produ
         autoCapitalize="sentences"
         invalid={invalid}
         {...(invalid ? { hint: t('product.invalidName') } : {})}
-        disabled={save.isPending}
+        disabled={save.isPending || locked}
       />
       <FormField
         label={t('product.field.description')}
@@ -99,7 +102,7 @@ function EditProduct({ scope, product }: { scope: DashboardScope; product: Produ
         onChange={set('description')}
         autoCapitalize="sentences"
         multiline
-        disabled={save.isPending}
+        disabled={save.isPending || locked}
       />
       <View className="flex-row flex-wrap gap-4">
         <View className="flex-1 min-w-48">
@@ -108,7 +111,7 @@ function EditProduct({ scope, product }: { scope: DashboardScope; product: Produ
             value={form.unitLabel}
             onChange={set('unitLabel')}
             hint={t('product.field.unitLabelHelp')}
-            disabled={save.isPending}
+            disabled={save.isPending || locked}
           />
         </View>
         <View className="flex-1 min-w-48">
@@ -118,12 +121,18 @@ function EditProduct({ scope, product }: { scope: DashboardScope; product: Produ
             onChange={set('statementDescriptor')}
             autoCapitalize="characters"
             hint={t('product.field.statementDescriptorHelp')}
-            disabled={save.isPending}
+            disabled={save.isPending || locked}
           />
         </View>
       </View>
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={save.isPending} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={locked}
+          onPress={submit}
+        >
           {t('product.save')}
         </Button>
       </View>
@@ -134,6 +143,8 @@ function EditProduct({ scope, product }: { scope: DashboardScope; product: Produ
 function ProductActions({ scope, product }: { scope: DashboardScope; product: Product }) {
   const refresh = useRefresh(scope);
   const router = useRouter();
+  const { can } = useDashboardPermissions();
+  const locked = !can('configure');
   const archive = useMutation({
     mutationFn: () => dashboardApi.products.update(scope, product.id, { active: !product.active }),
     onSuccess: (updated) => {
@@ -159,6 +170,7 @@ function ProductActions({ scope, product }: { scope: DashboardScope; product: Pr
           appearance="outline"
           size="sm"
           loading={archive.isPending}
+          disabled={locked}
           onPress={() => archive.mutate()}
         >
           {product.active ? t('product.archive') : t('product.unarchive')}
@@ -168,6 +180,7 @@ function ProductActions({ scope, product }: { scope: DashboardScope; product: Pr
           tone="danger"
           size="sm"
           loading={remove.isPending}
+          disabled={locked}
           onPress={() => remove.mutate()}
         >
           {t('product.delete')}
@@ -190,6 +203,8 @@ function PriceRow({
   price: Price;
 }) {
   const refresh = useRefresh(scope);
+  const { can } = useDashboardPermissions();
+  const locked = !can('configure');
   const isDefault = idOf(product.default_price) === price.id;
   const update = useMutation({
     mutationFn: (body: UpdatePriceParams) => dashboardApi.prices.update(scope, price.id, body),
@@ -250,6 +265,7 @@ function PriceRow({
             appearance="outline"
             size="sm"
             loading={makeDefault.isPending}
+            disabled={locked}
             onPress={() => makeDefault.mutate()}
           >
             {t('product.price.makeDefault')}
@@ -259,6 +275,7 @@ function PriceRow({
           appearance="outline"
           size="sm"
           loading={update.isPending}
+          disabled={locked}
           onPress={() => update.mutate({ active: !price.active })}
         >
           {price.active ? t('product.price.archive') : t('product.price.unarchive')}
@@ -301,6 +318,7 @@ function AddPrice({ scope, product }: { scope: DashboardScope; product: Product 
 
 function Prices({ scope, product }: { scope: DashboardScope; product: Product }) {
   const pages = useProductPrices(scope, product.id);
+  const { can } = useDashboardPermissions();
   let body: React.ReactNode;
   if (pages.isPending)
     body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('product.prices')} />;
@@ -328,7 +346,7 @@ function Prices({ scope, product }: { scope: DashboardScope; product: Product })
   return (
     <Section title={t('product.prices')} description={t('product.pricesIntro')}>
       {body}
-      <AddPrice scope={scope} product={product} />
+      {can('configure') ? <AddPrice scope={scope} product={product} /> : null}
     </Section>
   );
 }
@@ -336,6 +354,8 @@ function Prices({ scope, product }: { scope: DashboardScope; product: Product })
 /** The features this product grants (ADR 0018 §6): what an app checks to grant access. */
 function ProductFeatures({ scope, product }: { scope: DashboardScope; product: Product }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
+  const allowed = can('money');
   const attached = useProductFeatures(scope, product.id);
   const features = useFeatures(scope);
   const [choice, setChoice] = useState<string | null>(null);
@@ -374,6 +394,7 @@ function ProductFeatures({ scope, product }: { scope: DashboardScope; product: P
     .map((feature) => ({ value: feature.id, label: `${feature.name} (${feature.lookup_key})` }));
   return (
     <Section title={t('product.features')} description={t('product.featuresIntro')}>
+      <PermissionNotice action="money" />
       {attached.data.data.length ? (
         attached.data.data.map((row) => (
           <View
@@ -393,6 +414,7 @@ function ProductFeatures({ scope, product }: { scope: DashboardScope; product: P
               appearance="outline"
               size="sm"
               loading={detach.isPending && detach.variables === row.id}
+              disabled={!allowed}
               onPress={() => detach.mutate(row.id)}
             >
               {t('product.features.detach')}
@@ -404,7 +426,7 @@ function ProductFeatures({ scope, product }: { scope: DashboardScope; product: P
           {t('product.features.none')}
         </Text>
       )}
-      {options.length ? (
+      {options.length && allowed ? (
         <View className="flex-row flex-wrap items-end gap-2 pt-2">
           <View className="flex-1 min-w-48">
             <Choice
@@ -444,6 +466,7 @@ function ProductDetail({ scope, product }: { scope: DashboardScope; product: Pro
           content={product.active ? t('products.active') : t('products.archived')}
         />
       </View>
+      <PermissionNotice action="configure" />
       <ProductActions scope={scope} product={product} />
       {/* Keyed by `updated`, so a save elsewhere re-seeds the form from the stored product. */}
       <DetailLayout aside={<EditProduct key={product.updated} scope={scope} product={product} />}>

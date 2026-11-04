@@ -5,14 +5,12 @@
  * objects, and this file decides nothing about the wire's shape.
  */
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import { createOxyAuthMiddleware } from '@oxy.so/core/server';
 import {
   listTaxTransactionsQuery,
   TAX_CODES,
   type TaxReport,
   taxReportQuery,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { fromUnix } from '../lib/time';
@@ -24,15 +22,15 @@ import {
   type QuerySurface,
 } from '../lib/list';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
-import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
-import { resolveDashboardAccess, type DashboardAccess } from './dashboard';
-import { assertAppMembership as realAssertAppMembership } from '../services/appMembership';
+import { resolveMerchant } from './paymentIntents';
+import { type DashboardAccess, dashboardGate } from './dashboardAccess';
+import { type OxyAccess, oxyAccess } from '../services/oxyAccess';
 import { parseTaxRequest, TaxError, type TaxService } from '../services/tax/taxService';
 
 /**
  * Each query, per surface: the API validates with the contract's schema; the
  * dashboard's copy also carries `environment` (the Test/Live toggle),
- * validated by `resolveDashboardAccess` before the core runs.
+ * validated by the dashboard's gate before the core runs.
  */
 const TRANSACTIONS_QUERY = {
   api: listTaxTransactionsQuery,
@@ -272,22 +270,23 @@ export function createTaxRouter(deps: {
 
 /**
  * The owner's surface (`/v1/dashboard/applications/:applicationId/tax/*`):
- * a signed-in Oxy member of the application. Reading needs `billing:read`;
- * changing settings or registrations, and approving, need `billing:manage` —
- * oxy-api's own permission vocabulary, never re-implemented here.
+ * a signed-in Oxy member of the application, behind the dashboard's gate.
+ * Reading and previewing is `taxRead` (`billing:read`); changing settings or
+ * registrations, and approving, is `money` (`billing:manage`) —
+ * `DASHBOARD_PERMISSIONS`, oxy-api's own vocabulary.
  */
 export function createDashboardTaxRouter(deps: {
+  requireOxyUser: RequestHandler;
   tax?: TaxService;
-  requireOxyUser?: RequestHandler;
-  assertAppMembership?: typeof realAssertAppMembership;
+  access?: OxyAccess;
 }): Router {
   const router = Router();
-  const requireOxyUser = deps.requireOxyUser ?? createOxyAuthMiddleware(oxy);
-  const assertAppMembership = deps.assertAppMembership ?? realAssertAppMembership;
+  const { requireOxyUser } = deps;
+  const gate = dashboardGate(deps.access ?? oxyAccess);
   const base = '/v1/dashboard/applications/:applicationId/tax';
   const route = (
-    permission: 'billing:read' | 'billing:manage',
-    action: (
+    action: 'taxRead' | 'money',
+    run: (
       tax: TaxService,
       merchant: MerchantRow,
       req: Request,
@@ -296,27 +295,7 @@ export function createDashboardTaxRouter(deps: {
     ) => Promise<unknown>,
     status = 200,
   ) =>
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-      const permissions = access.membership.permissions ?? [];
-      // `billing:manage` implies reading.
-      if (
-        !permissions.includes(permission) &&
-        !(permission === 'billing:read' && permissions.includes('billing:manage'))
-      ) {
-        sendError(
-          res,
-          403,
-          'permission_error',
-          `${permission} is required for tax settings`,
-          'permission_required',
-          permission,
-        );
-        return;
-      }
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
+    gate(action, async (req, res, merchant, access) => {
       const tax = deps.tax;
       if (!tax) {
         sendError(
@@ -329,68 +308,62 @@ export function createDashboardTaxRouter(deps: {
         return;
       }
       if (status === -1) {
-        await action(tax, merchant, req, access, res);
+        await run(tax, merchant, req, access, res);
         return;
       }
-      await answer(res, () => action(tax, merchant, req, access, res), status);
+      await answer(res, () => run(tax, merchant, req, access, res), status);
     });
 
   router.get(
     `${base}/codes`,
     requireOxyUser,
-    route('billing:read', async (_tax, _merchant, req) => completeList(req, TAX_CODES)),
+    route('taxRead', async (_tax, _merchant, req) => completeList(req, TAX_CODES)),
   );
   router.get(
     `${base}/settings`,
     requireOxyUser,
-    route('billing:read', (tax, merchant) => tax.getSettings(merchant)),
+    route('taxRead', (tax, merchant) => tax.getSettings(merchant)),
   );
   router.patch(
     `${base}/settings`,
     requireOxyUser,
-    route('billing:manage', (tax, merchant, req) => tax.updateSettings(merchant, req.body)),
+    route('money', (tax, merchant, req) => tax.updateSettings(merchant, req.body)),
   );
   router.get(
     `${base}/registrations`,
     requireOxyUser,
-    route('billing:read', async (tax, merchant, req) =>
+    route('taxRead', async (tax, merchant, req) =>
       completeList(req, await tax.listRegistrations(merchant)),
     ),
   );
   router.post(
     `${base}/registrations`,
     requireOxyUser,
-    route(
-      'billing:manage',
-      (tax, merchant, req) => tax.createRegistration(merchant, req.body),
-      201,
-    ),
+    route('money', (tax, merchant, req) => tax.createRegistration(merchant, req.body), 201),
   );
   router.delete(
     `${base}/registrations/:id`,
     requireOxyUser,
-    route('billing:manage', (tax, merchant, req) =>
-      tax.deleteRegistration(merchant, req.params.id ?? ''),
-    ),
+    route('money', (tax, merchant, req) => tax.deleteRegistration(merchant, req.params.id ?? '')),
   );
   router.post(
     `${base}/registrations/:id/end`,
     requireOxyUser,
-    route('billing:manage', (tax, merchant, req) =>
+    route('money', (tax, merchant, req) =>
       tax.endRegistration(merchant, req.params.id ?? '', req.body),
     ),
   );
   router.get(
     `${base}/products`,
     requireOxyUser,
-    route('billing:read', async (tax, merchant, req) =>
+    route('taxRead', async (tax, merchant, req) =>
       completeList(req, await tax.listProductCodes(merchant)),
     ),
   );
   router.put(
     `${base}/products/:productRef`,
     requireOxyUser,
-    route('billing:manage', (tax, merchant, req) =>
+    route('money', (tax, merchant, req) =>
       tax.setProductCode(merchant, req.params.productRef ?? '', req.body),
     ),
   );
@@ -399,10 +372,10 @@ export function createDashboardTaxRouter(deps: {
   router.post(
     `${base}/approve`,
     requireOxyUser,
-    route('billing:manage', (tax, merchant, _req, access) =>
+    route('money', (tax, merchant, _req, access) =>
       tax.approve(merchant, {
         userId: access.userId,
-        officialApplication: access.membership.official === true,
+        officialApplication: access.application.official,
       }),
     ),
   );
@@ -411,13 +384,13 @@ export function createDashboardTaxRouter(deps: {
   router.post(
     `${base}/location_evidence`,
     requireOxyUser,
-    route('billing:read', (tax, merchant, req) => tax.recordEvidence(merchant, req.body), 201),
+    route('taxRead', (tax, merchant, req) => tax.recordEvidence(merchant, req.body), 201),
   );
   router.post(
     `${base}/calculations`,
     requireOxyUser,
     route(
-      'billing:read',
+      'taxRead',
       (tax, merchant, req) => tax.calculate(merchant, req.body, { requireActive: false }),
       201,
     ),
@@ -426,7 +399,7 @@ export function createDashboardTaxRouter(deps: {
     `${base}/transactions`,
     requireOxyUser,
     route(
-      'billing:read',
+      'taxRead',
       (tax, merchant, req, _access, res) =>
         answerTaxTransactionList(req, res, tax, merchant, 'dashboard'),
       -1,
@@ -436,7 +409,7 @@ export function createDashboardTaxRouter(deps: {
     `${base}/reports/summary`,
     requireOxyUser,
     route(
-      'billing:read',
+      'taxRead',
       (tax, merchant, req, _access, res) => sendReport(req, res, tax, merchant, 'dashboard'),
       -1,
     ),

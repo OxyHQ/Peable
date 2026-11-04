@@ -41,10 +41,11 @@ import { Transfers } from '@/connect/Transfers';
 import { connectKeys, useSellerPages } from '@/connect/useConnect';
 import { railLabel, readinessLabel, readinessTone } from '@/connect/vocabulary';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { ToneBadge } from '@/ui/StatusBadge';
-import { PageSkeleton } from '@/ui/states';
 import { RowLink, Timestamp } from '@/ui/data';
 
 const SELLER_ERRORS: Record<SellerFormError, string> = {
@@ -240,16 +241,17 @@ function SellersTable({ sellers }: { sellers: readonly ConnectedAccount[] }) {
 
 function Sellers({ scope }: { scope: DashboardScope }) {
   const pages = useSellerPages(scope);
+  const { can } = useDashboardPermissions();
   if (pages.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('connect.sellers')} />;
   if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const sellers = pages.data.pages.flatMap((page) => page.data);
   return (
     <Section title={t('connect.sellers')} description={t('connect.sellersIntro')}>
-      <AddSeller scope={scope} />
+      {can('money') ? <AddSeller scope={scope} /> : <PermissionNotice action="money" />}
       {sellers.length ? (
         <SellersTable sellers={sellers} />
       ) : (

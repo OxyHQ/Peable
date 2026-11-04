@@ -31,6 +31,7 @@ import {
 } from '@/money/forms';
 import { PayoutsTable } from '@/money/PayoutsTable';
 import { moneyKeys, useAccount, useBalance, usePayoutPages } from '@/money/useMoney';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import {
   ORBIT_PAYOUT_INTERVALS,
   ORBIT_PAYOUT_STATUSES,
@@ -42,16 +43,16 @@ import {
 } from '@/money/vocabulary';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import {
   AccountMissing,
   ErrorNotice,
   Field,
   ListFooter,
-  MerchantMissing,
+  SetupPayments,
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
 const statusOptions = () => [
@@ -77,6 +78,7 @@ const SCHEDULE_ERRORS: Record<ScheduleFormError, string> = {
 
 function PayoutSchedule({ scope, account }: { scope: DashboardScope; account: Account }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const schedule = account.settings.payouts.schedule;
   const [form, setForm] = useState<ScheduleForm>(formFromSchedule(schedule));
   const [invalid, setInvalid] = useState<ScheduleFormError | null>(null);
@@ -102,7 +104,7 @@ function PayoutSchedule({ scope, account }: { scope: DashboardScope; account: Ac
     setInvalid(result.ok ? null : result.error);
     if (result.ok) save.mutate(result.body);
   };
-  const busy = save.isPending;
+  const busy = save.isPending || !can('money');
 
   return (
     <Section title={t('schedule.title')} description={t('schedule.intro')}>
@@ -158,7 +160,13 @@ function PayoutSchedule({ scope, account }: { scope: DashboardScope; account: Ac
         disabled={busy}
       />
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={busy} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={busy}
+          onPress={submit}
+        >
           {t('schedule.save')}
         </Button>
       </View>
@@ -366,18 +374,19 @@ function PayoutList({ scope }: { scope: DashboardScope }) {
 
 function Payouts({ scope }: { scope: DashboardScope }) {
   const account = useAccount(scope);
+  const { can } = useDashboardPermissions();
   if (account.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('payouts.title')} />;
   if (account.isError) {
-    if (isMerchantMissing(account.error))
-      return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(account.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={account.error} onRetry={() => void account.refetch()} />;
   }
   if (account.data === null) return <AccountMissing environment={scope.environment} />;
   const manual = account.data.settings.payouts.schedule?.interval === 'manual';
   return (
     <View className="gap-6">
-      {manual ? <ManualPayout scope={scope} /> : null}
+      <PermissionNotice action="money" />
+      {manual && can('money') ? <ManualPayout scope={scope} /> : null}
       <PayoutList scope={scope} />
       <PayoutSchedule scope={scope} account={account.data} />
     </View>

@@ -289,7 +289,6 @@ export {
   ErrorNotice,
   FailureBanner,
   ListEmpty,
-  MerchantMissing,
   PageSkeleton,
   PermissionNotice,
   SetupPayments,

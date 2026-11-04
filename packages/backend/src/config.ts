@@ -19,8 +19,8 @@ const DEFAULT_CHECKOUT_BASE_URL = 'https://checkout.peable.to';
 const DEFAULT_CONNECT_ONBOARDING_BASE_URL = 'https://peable.to/connect';
 // This gateway's own public origin — the host a merchant's credential calls.
 const DEFAULT_API_BASE_URL = 'https://api.peable.to';
-// Oxy's API. The `oxy` client (`src/oxy.ts`) is built from `config.oxyApiUrl`,
-// so it and the direct fetches in `services/appMembership.ts` never drift.
+// Oxy's API. The `oxy` client (`src/oxy.ts`) and the per-caller clients of
+// `services/oxyAccess.ts` are both built from `config.oxyApiUrl`, so they never drift.
 const DEFAULT_OXY_API_URL = 'https://api.oxy.so';
 
 export interface AppConfig {
@@ -85,11 +85,10 @@ export interface AppConfig {
    */
   apiBaseUrl: string;
   /**
-   * Base URL of oxy-api (no trailing slash) — `services/appMembership.ts`
-   * forwards the dashboard caller's Oxy bearer here (`GET
-   * /applications/:applicationId`) to delegate `/v1/dashboard/*` authorization
-   * to oxy-api's own Application RBAC (zero RBAC duplication). The `oxy`
-   * client (`src/oxy.ts`) is constructed from this same value.
+   * Base URL of oxy-api (no trailing slash) — `services/oxyAccess.ts` asks it,
+   * with the signed-in caller's own bearer, what they may do on an application
+   * or account (zero RBAC duplication). The `oxy` client (`src/oxy.ts`) is
+   * constructed from this same value.
    */
   oxyApiUrl: string;
   /**

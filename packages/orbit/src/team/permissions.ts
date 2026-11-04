@@ -1,4 +1,5 @@
 import type { AccountMember, AccountRole } from '@oxy.so/core';
+import { allowsDashboardAction } from '@peable.to/contracts/vocabulary';
 
 /**
  * What a member of the application's owning Oxy account may do in Orbit —
@@ -8,9 +9,13 @@ import type { AccountMember, AccountRole } from '@oxy.so/core';
  * - **Orbit**: every `/v1/dashboard/*` route asks oxy-api for the caller's
  *   membership of the application, which oxy-api grants on `app:read` — the
  *   application side of the account's `apps:read`. A member without it gets
- *   403 on every Orbit screen.
+ *   403 on every Orbit screen. What the CALLER may change is judged per action
+ *   on the application lane (`src/scope/permissions.ts`, the gateway's
+ *   `DASHBOARD_PERMISSIONS`); this page reads the account side of each member.
  * - **Peable Tax**: `billing:read` to look, `billing:manage` to change
- *   settings, registrations and approve (`routes/tax.ts`; manage implies read).
+ *   settings, registrations and approve. The account and application lanes
+ *   spell these two the same, so they are judged by the gateway's own
+ *   `allowsDashboardAction` (`taxRead`, `money`), containment included.
  *
  * Only an `active` membership counts: an invitation not yet accepted grants
  * nothing. Changes are made in Oxy Console, never here.
@@ -25,9 +30,11 @@ export function peableAccessOf(
   member: Pick<AccountMember, 'permissions' | 'status'>,
 ): PeableAccess {
   if (member.status !== 'active') return { orbit: false, taxRead: false, taxManage: false };
-  const has = (permission: string) => member.permissions.includes(permission);
-  const taxManage = has('billing:manage');
-  return { orbit: has('apps:read'), taxRead: taxManage || has('billing:read'), taxManage };
+  return {
+    orbit: member.permissions.includes('apps:read'),
+    taxRead: allowsDashboardAction(member.permissions, 'taxRead'),
+    taxManage: allowsDashboardAction(member.permissions, 'money'),
+  };
 }
 
 /** The role order Oxy itself lists members in: most powerful first. */

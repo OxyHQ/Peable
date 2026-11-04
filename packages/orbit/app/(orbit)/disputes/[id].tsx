@@ -34,6 +34,7 @@ import { disputeKeys, useDispute } from '@/disputes/useDisputes';
 import { formatAmount } from '@/format/money';
 import { formatInstant, nowSeconds } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
@@ -45,8 +46,8 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function idOf(reference: string | { id: string } | null): string | null {
   if (reference === null) return null;
@@ -160,7 +161,9 @@ function EvidenceEditor({ scope, dispute }: { scope: DashboardScope; dispute: Di
   const [attachTo, setAttachTo] = useState<DisputeFileEvidenceField>('receipt');
   const [confirming, setConfirming] = useState<Pending>(null);
   const now = nowSeconds();
-  const locked = evidenceLocked(dispute, now);
+  // Evidence and acceptance are money (`billing:manage`): without it the form is read-only.
+  const permitted = useDashboardPermissions().can('money');
+  const locked = !permitted || evidenceLocked(dispute, now);
   const why = lockedReason(dispute, now);
 
   // A fresh read (after a save or a refetch) is what the form edits next.
@@ -209,6 +212,8 @@ function EvidenceEditor({ scope, dispute }: { scope: DashboardScope; dispute: Di
         <Admonition type="info">
           <AdmonitionText>{why}</AdmonitionText>
         </Admonition>
+      ) : !permitted ? (
+        <PermissionNotice action="money" />
       ) : (
         <Admonition type="warning">
           <AdmonitionText>{t('dispute.evidence.oneShot')}</AdmonitionText>

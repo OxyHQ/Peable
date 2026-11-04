@@ -16,6 +16,7 @@ import { formatAmount, normalizeCurrency } from '../format/money';
 import { formatInstant } from '../format/time';
 import { t } from '../i18n';
 import { amountDecimals, payoutOutcomeUnknown } from '../money/forms';
+import { useDashboardPermissions } from '../scope/useDashboardPermissions';
 import { FormField } from '../ui/FormField';
 import { ErrorNotice } from '../ui/OrbitScreen';
 import { ToneBadge } from '../ui/StatusBadge';
@@ -218,6 +219,7 @@ export function TransferRow({
   showSeller: boolean;
 }) {
   const router = useRouter();
+  const { can } = useDashboardPermissions();
   const [open, setOpen] = useState(false);
   const currency = normalizeCurrency(transfer.currency);
   const seller = idOf(transfer.connected_account);
@@ -276,7 +278,10 @@ export function TransferRow({
         <View className="gap-4 rounded-xl border border-border p-4">
           <Text variant="body-2-semibold">{t('connect.reversals')}</Text>
           <Reversals scope={scope} transfer={transfer} />
-          {canReverse(transfer) ? <Reverse scope={scope} transfer={transfer} /> : null}
+          {/* Reversing moves money (`billing:manage`); the page's notice says why it is absent. */}
+          {canReverse(transfer) && can('money') ? (
+            <Reverse scope={scope} transfer={transfer} />
+          ) : null}
         </View>
       ) : null}
     </View>

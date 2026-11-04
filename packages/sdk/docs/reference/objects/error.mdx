@@ -15,7 +15,7 @@ Every non-2xx answer. The HTTP status and `error.type` identify the failure.
 | --- | --- | --- |
 | `error` | object |  |
 | `error.type` | string | The broad class a caller branches on first. One of `api_error`, `authentication_error`, `card_error`, `idempotency_error`, `invalid_request_error`, `permission_error`, `rate_limit_error`. |
-| `error.code` | string | The machine-readable reason (one of 119 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`). |
+| `error.code` | string | The machine-readable reason (one of 120 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`). |
 | `error.decline_code` | string | A card issuer's decline reason, on a `card_error`. |
 | `error.param` | string | The offending request field, in bracket notation (`metadata[order_id]`). |
 | `error.message` | string | A human-readable message, for a developer. |

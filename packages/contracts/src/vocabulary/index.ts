@@ -4,6 +4,7 @@
 // package root, which constructs every schema at load.
 export * from './billingPortal';
 export * from './connect';
+export * from './dashboard';
 export * from './catalog';
 export * from './errors';
 export * from './invoices';

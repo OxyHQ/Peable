@@ -16,10 +16,9 @@
  */
 import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
-import { createOxyAuthMiddleware, getRequiredOxyUserId } from '@oxy.so/core/server';
+import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import { type ConnectOnboardingComplete, registerFaircoinKeyParams } from '@peable.to/contracts';
 import { type ErrorCode, errorDocUrl } from '@peable.to/contracts/vocabulary';
-import { oxy } from '../oxy';
 import {
   describeOnboarding,
   OnboardingRefusedError,
@@ -63,12 +62,13 @@ function readToken(token: string | undefined, res: Response): string | null {
 }
 
 /**
- * `requireOxyUser` is injectable so tests can stand in for a real Oxy bearer
- * with a stub that sets the user; production uses the seller's own session via
- * `createOxyAuthMiddleware(oxy)`, exactly as the social routes do for a payer.
+ * `requireOxyUser` is handed in (`server.ts` passes the process's one, from
+ * `lib/http.ts`) so tests can stand in for a real Oxy bearer with a stub that sets
+ * the user; production uses the seller's own session, exactly as the social
+ * routes do for a payer.
  */
-export function createConnectRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
-  const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
+export function createConnectRouter(deps: { requireOxyUser: RequestHandler }): Router {
+  const { requireOxyUser } = deps;
   const router = Router();
 
   /** What the seller is being asked to do. Looking consumes nothing. */

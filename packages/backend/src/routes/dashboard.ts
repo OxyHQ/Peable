@@ -1,23 +1,12 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
 import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
-import {
-  createOxyAuthMiddleware,
-  getRequiredOxyUserId,
-  OXY_SERVICE_ENVIRONMENTS,
-} from '@oxy.so/core/server';
-import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
-import {
-  assertAppMembership as realAssertAppMembership,
-  type AppMembershipResult,
-} from '../services/appMembership';
+import { type OxyAccess, oxyAccess } from '../services/oxyAccess';
+import { dashboardGate, resolveDashboardAccess } from './dashboardAccess';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { registerMerchant, applyMerchantPatch, sendMerchantWriteError } from './merchants';
-import type { FileActor } from '../services/oxyFiles/fileOwnership';
 import {
   answerDisputeList,
   closeDisputeCore,
@@ -28,6 +17,7 @@ import {
   answerFileContents,
   answerFileList,
   createFile,
+  fileUploadAction,
   parseFileUpload,
   retrieveFile,
 } from './files';
@@ -44,7 +34,7 @@ import {
 } from './paymentMethodConfigurations';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
 import { listPaymentIntentsQuery } from '@peable.to/contracts';
-import { answerPaymentIntentList, resolveMerchantByApp } from './paymentIntents';
+import { answerPaymentIntentList } from './paymentIntents';
 import { answerWebhookDeliveryList, redeliverWebhookDelivery } from './webhookDeliveries';
 import {
   answerWebhookEndpointList,
@@ -86,7 +76,6 @@ import {
 } from './transfers';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
-import { requestIdOf } from '../lib/requestId';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { dashboardQuery, parseQuery, type QuerySurface } from '../lib/list';
@@ -114,193 +103,57 @@ type MoneyCore = (
 ) => Promise<void>;
 
 /**
- * Every `/v1/dashboard/*` route is scoped to one `(applicationId, environment)`
- * pair — the Test/Live toggle in the dashboard UI selects `environment`, which
- * determines which `Merchant` document (and therefore which PaymentIntents/
- * WebhookDeliveries) the request can see (F2.0 task 1b's test/live isolation,
- * extended to the human-auth path).
- */
-const environmentQuerySchema = z.object({
-  environment: z.enum(OXY_SERVICE_ENVIRONMENTS),
-});
-
-function resolveEnvironment(req: Request, res: Response): OxyServiceEnvironment | null {
-  const parsed = environmentQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    sendError(
-      res,
-      400,
-      'invalid_request_error',
-      'a valid environment query parameter is required (development | staging | production)',
-    );
-    return null;
-  }
-  return parsed.data.environment;
-}
-
-export interface DashboardAccess {
-  applicationId: string;
-  environment: OxyServiceEnvironment;
-  userId: string;
-  membership: AppMembershipResult;
-  /**
-   * Who may own an Oxy file this caller makes the merchant's (an avatar, an
-   * imported File): the
-   * application itself, the signed-in user, and the account that owns the
-   * application — which oxy-api just confirmed the user is a member of.
-   */
-  avatarActor: FileActor;
-}
-
-/**
- * The full `/v1/dashboard/*` authorization gate: resolve+validate
- * `?environment=`, then delegate membership to oxy-api via
- * `assertAppMembership` (spec §8 — the gateway NEVER re-implements RBAC).
- * Writes the appropriate error response and returns `null` on any failure, so
- * every handler below just does `if (!access) return`.
- */
-export async function resolveDashboardAccess(
-  req: Request,
-  res: Response,
-  deps: { assertAppMembership: typeof realAssertAppMembership },
-): Promise<DashboardAccess | null> {
-  const environment = resolveEnvironment(req, res);
-  if (!environment) return null;
-
-  const userId = getRequiredOxyUserId(req);
-  const accessToken = (req as OxyAuthRequest).accessToken;
-  if (!accessToken) {
-    // Unreachable in production once `requireOxyUser` (`createOxyAuthMiddleware`)
-    // has run — a real bearer always leaves `req.accessToken` set alongside
-    // `req.userId` (`OxyServices.utility.ts`). Guarded so a future change to
-    // that contract (or a misconfigured test stub) fails closed instead of
-    // forwarding an empty `Authorization` header to oxy-api.
-    sendError(res, 401, 'authentication_error', 'missing bearer token');
-    return null;
-  }
-
-  // `noUncheckedIndexedAccess` types every `req.params` read as possibly
-  // `undefined` even though Express guarantees `:applicationId` is present on
-  // any request that matched one of these routes — mirrors the same guard
-  // `routes/social.ts` uses for `:username`.
-  const { applicationId } = req.params;
-  if (!applicationId) {
-    sendError(res, 400, 'invalid_request_error', 'applicationId is required');
-    return null;
-  }
-
-  const membership: AppMembershipResult = await deps.assertAppMembership(
-    userId,
-    applicationId,
-    accessToken,
-    { requestId: requestIdOf(res) },
-  );
-  if (membership.unavailable) {
-    // Fail closed, but say what happened: an outage is not a refusal, and a
-    // member must not be told they are not one while Oxy cannot be asked.
-    sendError(
-      res,
-      503,
-      'api_error',
-      'could not verify your membership of this application with Oxy; try again',
-      'membership_unavailable',
-    );
-    return null;
-  }
-  if (membership.unauthenticated) {
-    sendError(
-      res,
-      401,
-      'authentication_error',
-      'your Oxy session is no longer valid; sign in again',
-      'session_invalid',
-    );
-    return null;
-  }
-  if (!membership.allowed) {
-    sendError(
-      res,
-      403,
-      'permission_error',
-      'you are not a member of this application',
-      'application_membership_required',
-    );
-    return null;
-  }
-
-  return {
-    applicationId,
-    environment,
-    userId,
-    membership,
-    avatarActor: { applicationId, accountIds: [userId, membership.ownerAccountId] },
-  };
-}
-
-/**
  * The dashboard's payment-intent list is the contract's (`listPaymentIntentsQuery`)
- * plus `environment` (the Test/Live toggle), validated by `resolveDashboardAccess`.
+ * plus `environment` (the Test/Live toggle), validated by the dashboard's gate.
  */
 const paymentIntentsListQuery = dashboardQuery(listPaymentIntentsQuery);
 
 /**
- * Build the `/v1/dashboard/*` router (F2.5 Phase 0 Task 2) — a human Oxy
- * user managing a merchant's Peable integration through
- * `dashboard.peable.to`. Kept as a SEPARATE route family from
- * `/v1/payment_intents/*`/`/v1/merchants/*`/etc (service-auth/payer only) —
- * a single handler never accepts both auth strategies (plan's global
- * constraint). Every route: `requireOxyUser` (human bearer) →
- * `resolveDashboardAccess` (environment + oxy-api membership delegation) →
- * `resolveMerchantByApp` → reuse the EXACT SAME models/serializers/list &
- * redeliver cores the service-authed routers use.
+ * Build the `/v1/dashboard/*` router — a human Oxy user managing a merchant's
+ * Peable integration through Orbit. Kept as a SEPARATE route family from the
+ * service-authed `/v1/*` routes — a single handler never accepts both auth
+ * strategies. Every route: `requireOxyUser` (human bearer) → the gate for the
+ * route's ACTION (`dashboardAccess.ts`: environment, then the permission
+ * `DASHBOARD_PERMISSIONS` names for it, asked of Oxy through `oxyAccess`) →
+ * the application's merchant → the EXACT SAME cores the service-authed routers
+ * run. Every GET is `read`; every write names the action it is.
  */
-export function createDashboardRouter(deps?: {
-  requireOxyUser?: RequestHandler;
-  assertAppMembership?: typeof realAssertAppMembership;
+export function createDashboardRouter(deps: {
+  requireOxyUser: RequestHandler;
+  /** What Oxy lets the caller do (default the real `oxyAccess`). */
+  access?: OxyAccess;
   safeFetch?: SafeFetchFn;
   /** Oxy Files, for the avatar ownership check. Default: the real client. */
   files?: OxyFilesClient;
   /** Peable Tax for checkout sessions and links created from Orbit. */
   checkout?: CheckoutDeps;
 }): Router {
-  const files = deps?.files ?? oxyFilesClient;
-  const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
-  const assertAppMembership = deps?.assertAppMembership ?? realAssertAppMembership;
-  const safeFetch = deps?.safeFetch;
+  const files = deps.files ?? oxyFilesClient;
+  const { requireOxyUser } = deps;
+  const access = deps.access ?? oxyAccess;
+  const gate = dashboardGate(access);
+  const safeFetch = deps.safeFetch;
   const router = Router();
 
-  type MerchantCore = (req: Request, res: Response, merchant: MerchantRow) => Promise<void>;
-  const asMember = (core: MerchantCore) =>
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-      await core(req, res, merchant);
-    });
   const base = '/v1/dashboard/applications/:applicationId';
   // Search first: `…/products/search` must not reach `…/products/:id`.
-  mountSearchDashboardRoutes(router, { base, requireOxyUser, asMember });
+  mountSearchDashboardRoutes(router, { base, requireOxyUser, gate });
 
   router.get(
-    '/v1/dashboard/applications/:applicationId/merchant',
+    `${base}/merchant`,
     requireOxyUser,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
+    gate('read', async (_req, res, merchant) => {
       res.status(200).json(toMerchantDTO(merchant));
     }),
   );
 
+  // Registering names the watch-only key payments are derived from: money.
   router.post(
-    '/v1/dashboard/applications/:applicationId/merchant',
+    `${base}/merchant`,
     requireOxyUser,
     wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
+      const granted = await resolveDashboardAccess(req, res, 'money', access);
+      if (!granted) return;
 
       const parsed = registerMerchantParams.safeParse(req.body);
       if (!parsed.success) {
@@ -308,10 +161,12 @@ export function createDashboardRouter(deps?: {
         return;
       }
 
-      const result = await registerMerchant(access.applicationId, access.environment, parsed.data, {
-        actor: access.avatarActor,
-        files,
-      });
+      const result = await registerMerchant(
+        granted.applicationId,
+        granted.environment,
+        parsed.data,
+        { actor: granted.avatarActor, files },
+      );
       if (!result.ok) {
         sendMerchantWriteError(res, result);
         return;
@@ -321,22 +176,16 @@ export function createDashboardRouter(deps?: {
   );
 
   router.patch(
-    '/v1/dashboard/applications/:applicationId/merchant',
+    `${base}/merchant`,
     requireOxyUser,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-
+    gate('money', async (req, res, merchant, granted) => {
       const parsed = updateMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
       }
       const result = await applyMerchantPatch(merchant, parsed.data, {
-        actor: access.avatarActor,
+        actor: granted.avatarActor,
         files,
       });
       if (!result.ok) {
@@ -348,15 +197,9 @@ export function createDashboardRouter(deps?: {
   );
 
   router.get(
-    '/v1/dashboard/applications/:applicationId/payment_intents',
+    `${base}/payment_intents`,
     requireOxyUser,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-
+    gate('read', async (req, res, merchant) => {
       const query = parseQuery(req, res, paymentIntentsListQuery);
       if (!query) return;
       await answerPaymentIntentList(req, res, merchant.id, query);
@@ -364,25 +207,16 @@ export function createDashboardRouter(deps?: {
   );
 
   router.get(
-    '/v1/dashboard/applications/:applicationId/payment_intents/:id',
+    `${base}/payment_intents/:id`,
     requireOxyUser,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-
+    gate('read', async (req, res, merchant) => {
       // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
+      // `undefined` even though Express guarantees `:id` is present here.
       const { id } = req.params;
       if (!id) {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-
       const intent = await findIntentForMerchant(getDb(), id, merchant.id);
       if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
@@ -395,226 +229,232 @@ export function createDashboardRouter(deps?: {
   /**
    * Orbit's webhooks surface: endpoints, events and the delivery log, through
    * the SAME cores the service-authed routes run (`routes/webhookEndpoints.ts`,
-   * `routes/events.ts`, `routes/webhookDeliveries.ts`). Every one passes the
-   * dashboard's access gate first, then resolves the merchant of the
-   * (application, environment) — so a member of one application can never
-   * reach another's endpoints. The writes open the request context, so an event
-   * they cause records this request.
+   * `routes/events.ts`, `routes/webhookDeliveries.ts`). The merchant is the
+   * (application, environment)'s, so a member of one application can never
+   * reach another's endpoints. The writes open the request context, so an
+   * event they cause records this request.
    */
-
   router.get(
     `${base}/webhook_endpoints`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerWebhookEndpointList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) =>
+      answerWebhookEndpointList(req, res, merchant, 'dashboard'),
+    ),
   );
   router.post(
     `${base}/webhook_endpoints`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(createWebhookEndpoint),
+    gate('webhooks', createWebhookEndpoint),
   );
   router.get(
     `${base}/webhook_endpoints/:id`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveWebhookEndpoint(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveWebhookEndpoint(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/webhook_endpoints/:id`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(updateWebhookEndpoint),
+    gate('webhooks', updateWebhookEndpoint),
   );
   router.delete(
     `${base}/webhook_endpoints/:id`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(deleteWebhookEndpoint),
+    gate('webhooks', deleteWebhookEndpoint),
   );
   router.post(
     `${base}/webhook_endpoints/:id/roll_secret`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(rollWebhookEndpointSecret),
+    gate('webhooks', rollWebhookEndpointSecret),
   );
   router.post(
     `${base}/webhook_endpoints/:id/test`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember((req, res, merchant) => sendWebhookEndpointTest(req, res, merchant, { safeFetch })),
+    gate('webhooks', (req, res, merchant) =>
+      sendWebhookEndpointTest(req, res, merchant, { safeFetch }),
+    ),
   );
 
   /** Orbit's catalog: products, prices, coupons and promotion codes. */
-  mountCatalogDashboardRoutes(router, CATALOG_ROUTES, { base, requireOxyUser, asMember });
+  mountCatalogDashboardRoutes(router, CATALOG_ROUTES, {
+    base,
+    requireOxyUser,
+    gate,
+    write: 'configure',
+  });
   // Checkout (Orbit Phase 3): the same session and payment-link cores as the API.
   mountCatalogDashboardRoutes(
     router,
-    [...checkoutSessionRoutes(deps?.checkout ?? {}), ...paymentLinkRoutes(deps?.checkout ?? {})],
-    { base, requireOxyUser, asMember },
+    [...checkoutSessionRoutes(deps.checkout ?? {}), ...paymentLinkRoutes(deps.checkout ?? {})],
+    { base, requireOxyUser, gate, write: 'configure' },
   );
   // Branding and customer emails — the same cores as `/v1/merchants/me/*`.
   router.get(
     `${base}/branding`,
     requireOxyUser,
-    asMember((_req, res, merchant) => answerBranding(res, merchant)),
+    gate('read', (_req, res, merchant) => answerBranding(res, merchant)),
   );
   // The logo is written through the merchant writer, with the caller's file authority.
   router.post(
     `${base}/branding`,
     requireOxyUser,
     requestContextMiddleware,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-      await updateBrandingCore(req, res, merchant, { actor: access.avatarActor, files });
-    }),
+    gate('configure', (req, res, merchant, granted) =>
+      updateBrandingCore(req, res, merchant, { actor: granted.avatarActor, files }),
+    ),
   );
   router.get(
     `${base}/email_settings`,
     requireOxyUser,
-    asMember((_req, res, merchant) => answerEmailSettings(res, merchant)),
+    gate('read', (_req, res, merchant) => answerEmailSettings(res, merchant)),
   );
   router.post(
     `${base}/email_settings`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(updateEmailSettingsCore),
+    gate('configure', updateEmailSettingsCore),
   );
   // Disputes, Files and payment methods — the same cores as the merchant API.
   router.get(
     `${base}/disputes`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerDisputeList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerDisputeList(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/disputes/:disputeId`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveDispute(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveDispute(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/disputes/:disputeId`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember((req, res, merchant) => updateDisputeCore(req, res, merchant, files)),
+    gate('money', (req, res, merchant) => updateDisputeCore(req, res, merchant, files)),
   );
   router.post(
     `${base}/disputes/:disputeId/close`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(closeDisputeCore),
+    gate('money', closeDisputeCore),
   );
+  // An upload needs what its purpose is used for (`FILE_UPLOAD_ACTION`).
   router.post(
     `${base}/files`,
     requireOxyUser,
     requestContextMiddleware,
     parseFileUpload,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-      await createFile(req, res, merchant, { files, actor: access.avatarActor });
-    }),
+    gate(fileUploadAction, (req, res, merchant, granted) =>
+      createFile(req, res, merchant, { files, actor: granted.avatarActor }),
+    ),
   );
   router.get(
     `${base}/files`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerFileList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerFileList(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/files/:id`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveFile(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveFile(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/files/:id/contents`,
     requireOxyUser,
-    asMember((req, res, merchant) =>
+    gate('read', (req, res, merchant) =>
       answerFileContents(req, res, merchant, { files, surface: 'dashboard' }),
     ),
   );
   // Reporting: report types, runs, and the run's CSV through `…/files/:id/contents`.
-  mountReportingDashboardRoutes(router, { base, requireOxyUser, asMember });
+  mountReportingDashboardRoutes(router, { base, requireOxyUser, gate });
   router.get(
     `${base}/payment_method_configurations`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerConfigurationList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerConfigurationList(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/payment_method_configurations`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(createConfiguration),
+    gate('configure', createConfiguration),
   );
   router.get(
     `${base}/payment_method_configurations/:id`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveConfiguration(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveConfiguration(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/payment_method_configurations/:id`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(updateConfigurationCore),
+    gate('configure', updateConfigurationCore),
   );
   router.get(
     `${base}/payment_method_domains`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerDomainList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerDomainList(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/payment_method_domains`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(createDomain),
+    gate('configure', createDomain),
   );
   router.get(
     `${base}/payment_method_domains/:id`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveDomain(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveDomain(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/payment_method_domains/:id`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(updateDomain),
+    gate('configure', updateDomain),
   );
   router.post(
     `${base}/payment_method_domains/:id/validate`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(validateDomain),
+    gate('configure', validateDomain),
   );
   // The native billing engine (ADR 0018), and the customers its screens read.
-  mountCatalogDashboardRoutes(router, BILLING_ENGINE_ROUTES, { base, requireOxyUser, asMember });
+  mountCatalogDashboardRoutes(router, BILLING_ENGINE_ROUTES, {
+    base,
+    requireOxyUser,
+    gate,
+    write: 'money',
+  });
   mountCatalogDashboardRoutes(router, DASHBOARD_CUSTOMER_ROUTES, {
     base,
     requireOxyUser,
-    asMember,
+    gate,
+    write: 'money',
   });
 
   router.get(
     `${base}/events`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerEventList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerEventList(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/events/:id`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveEvent(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveEvent(req, res, merchant, 'dashboard')),
   );
 
   // Orbit's Developers › Logs: the merchant's own API requests (`req_…`).
   router.get(
     `${base}/request_logs`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerRequestLogList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerRequestLogList(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/request_logs/:id`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveRequestLog(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveRequestLog(req, res, merchant, 'dashboard')),
   );
   /**
    * Orbit's money surface (ADR 0015) through the SAME cores as the service
@@ -623,56 +463,56 @@ export function createDashboardRouter(deps?: {
    * idempotency layer (`runIdempotent`) once the merchant is resolved, so a
    * retried payout instruction with the same `Idempotency-Key` is one payout.
    */
-  const dashboard = (core: MoneyCore) =>
-    asMember((req, res, merchant) => core(req, res, merchant, 'dashboard'));
-  const dashboardWrite = (core: MoneyCore) =>
-    asMember((req, res, merchant) =>
+  const moneyRead = (core: MoneyCore) =>
+    gate('read', (req, res, merchant) => core(req, res, merchant, 'dashboard'));
+  const moneyWrite = (core: MoneyCore) =>
+    gate('money', (req, res, merchant) =>
       runIdempotent(req, res, merchant.id, () => core(req, res, merchant, 'dashboard')),
     );
-  router.get(`${base}/account`, requireOxyUser, dashboard(retrieveAccount));
+  router.get(`${base}/account`, requireOxyUser, moneyRead(retrieveAccount));
   router.post(
     `${base}/account`,
     requireOxyUser,
     requestContextMiddleware,
-    dashboardWrite(updateAccount),
+    moneyWrite(updateAccount),
   );
   router.post(
     `${base}/account_links`,
     requireOxyUser,
     requestContextMiddleware,
-    dashboardWrite(createAccountOnboardingLink),
+    moneyWrite(createAccountOnboardingLink),
   );
-  router.get(`${base}/balance`, requireOxyUser, dashboard(retrieveBalance));
+  router.get(`${base}/balance`, requireOxyUser, moneyRead(retrieveBalance));
   router.get(
     `${base}/balance_transactions`,
     requireOxyUser,
-    dashboard(answerBalanceTransactionList),
+    moneyRead(answerBalanceTransactionList),
   );
   router.get(
     `${base}/balance_transactions/:id`,
     requireOxyUser,
-    dashboard(retrieveBalanceTransaction),
+    moneyRead(retrieveBalanceTransaction),
   );
-  router.get(`${base}/payouts`, requireOxyUser, dashboard(answerPayoutList));
+  router.get(`${base}/payouts`, requireOxyUser, moneyRead(answerPayoutList));
   router.post(
     `${base}/payouts`,
     requireOxyUser,
     requestContextMiddleware,
-    dashboardWrite(createPayoutCore),
+    moneyWrite(createPayoutCore),
   );
-  router.get(`${base}/payouts/:id`, requireOxyUser, dashboard(retrievePayout));
+  router.get(`${base}/payouts/:id`, requireOxyUser, moneyRead(retrievePayout));
   router.post(
     `${base}/payouts/:id/cancel`,
     requireOxyUser,
     requestContextMiddleware,
-    dashboardWrite(cancelPayoutCore),
+    moneyWrite(cancelPayoutCore),
   );
   router.get(
     `${base}/reports/payout_reconciliation`,
     requireOxyUser,
-    dashboard(answerPayoutReconciliation),
+    moneyRead(answerPayoutReconciliation),
   );
-  router.get(`${base}/reconciliation_mismatches`, requireOxyUser, dashboard(answerMismatchList));
+  router.get(`${base}/reconciliation_mismatches`, requireOxyUser, moneyRead(answerMismatchList));
 
   /**
    * Orbit's Connect screen: the marketplace's sellers (`role = 'seller'`; the
@@ -682,71 +522,78 @@ export function createDashboardRouter(deps?: {
    * retried reversal with the same `Idempotency-Key` is one reversal (its own
    * `external_ref` already is).
    */
-  const asMemberWrite = (core: MerchantCore) =>
-    asMember((req, res, merchant) =>
+  type ConnectCore = (req: Request, res: Response, merchant: MerchantRow) => Promise<void>;
+  const connectWrite = (core: ConnectCore) =>
+    gate('money', (req, res, merchant) =>
       runIdempotent(req, res, merchant.id, () => core(req, res, merchant)),
     );
   router.get(
     `${base}/connected_accounts`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerConnectedAccountList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) =>
+      answerConnectedAccountList(req, res, merchant, 'dashboard'),
+    ),
   );
   router.post(
     `${base}/connected_accounts`,
     requireOxyUser,
     requestContextMiddleware,
-    asMemberWrite(createConnectedAccountCore),
+    connectWrite(createConnectedAccountCore),
   );
   router.get(
     `${base}/connected_accounts/:accountId`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveConnectedAccount(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveConnectedAccount(req, res, merchant, 'dashboard')),
   );
   router.post(
     `${base}/connected_accounts/:accountId/refresh`,
     requireOxyUser,
     requestContextMiddleware,
-    asMemberWrite(refreshConnectedAccountCore),
+    connectWrite(refreshConnectedAccountCore),
   );
   router.post(
     `${base}/connected_accounts/:accountId/account_links`,
     requireOxyUser,
     requestContextMiddleware,
-    asMemberWrite(createConnectedAccountLinkCore),
+    connectWrite(createConnectedAccountLinkCore),
   );
   router.get(
     `${base}/transfers`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerTransferList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => answerTransferList(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/transfers/:transferId`,
     requireOxyUser,
-    asMember((req, res, merchant) => retrieveTransferCore(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) => retrieveTransferCore(req, res, merchant, 'dashboard')),
   );
   router.get(
     `${base}/transfers/:transferId/reversals`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerTransferReversalList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) =>
+      answerTransferReversalList(req, res, merchant, 'dashboard'),
+    ),
   );
   router.post(
     `${base}/transfers/:transferId/reversals`,
     requireOxyUser,
     requestContextMiddleware,
-    asMemberWrite(reverseTransferCore),
+    connectWrite(reverseTransferCore),
   );
 
   router.get(
     `${base}/webhook_deliveries`,
     requireOxyUser,
-    asMember((req, res, merchant) => answerWebhookDeliveryList(req, res, merchant, 'dashboard')),
+    gate('read', (req, res, merchant) =>
+      answerWebhookDeliveryList(req, res, merchant, 'dashboard'),
+    ),
   );
 
   router.post(
     `${base}/webhook_deliveries/:id/redeliver`,
     requireOxyUser,
     requestContextMiddleware,
-    asMember(async (req, res, merchant) => {
+    gate('webhooks', async (req, res, merchant) => {
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
         sendError(res, 400, 'invalid_request_error', 'id is required');

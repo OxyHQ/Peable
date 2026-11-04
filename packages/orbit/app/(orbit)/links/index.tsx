@@ -18,10 +18,11 @@ import type { DashboardScope } from '@/api/dashboard';
 import { t } from '@/i18n';
 import { linkSummary } from '@/links/linkForm';
 import { type LinkFilter, useLinkPages } from '@/links/useLinks';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { ErrorNotice, ListFooter, OrbitScreen } from '@/ui/OrbitScreen';
+import { PermissionNotice, ListEmpty, PageSkeleton } from '@/ui/states';
 import { RowLink, Timestamp } from '@/ui/data';
-import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const filterOptions = () => [
   { value: 'active', label: t('links.filter.active') },
@@ -106,6 +107,7 @@ function LinksTable({ links, empty }: { links: PaymentLink[]; empty: ReactNode }
 function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter }) {
   const router = useRouter();
   const pages = useLinkPages(scope, filter);
+  const { can } = useDashboardPermissions();
   if (pages.isPending) {
     return <PageSkeleton variant="table" accessibilityLabel={t('links.title')} />;
   }
@@ -114,6 +116,7 @@ function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter
   const links = pages.data.pages.flatMap((page) => page.data);
   return (
     <View className="gap-4">
+      <PermissionNotice action="configure" />
       <LinksTable
         links={links}
         empty={
@@ -121,7 +124,9 @@ function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter
             <ListEmpty
               title={t('links.empty.firstTitle')}
               description={t('links.empty.firstBody')}
-              action={{ label: t('links.new'), onPress: () => router.push('/links/new') }}
+              {...(can('configure')
+                ? { action: { label: t('links.new'), onPress: () => router.push('/links/new') } }
+                : {})}
               docs="links"
             />
           ) : (
@@ -140,13 +145,19 @@ function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter
 
 export default function PaymentLinksScreen() {
   const router = useRouter();
+  const { can } = useDashboardPermissions();
   const [filter, setFilter] = useState<LinkFilter>(true);
   return (
     <OrbitScreen
       title={t('links.title')}
       description={t('links.description')}
       actions={
-        <Button appearance="solid" tone="accent" onPress={() => router.push('/links/new')}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          disabled={!can('configure')}
+          onPress={() => router.push('/links/new')}
+        >
           {t('links.new')}
         </Button>
       }

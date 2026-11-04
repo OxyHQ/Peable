@@ -26,9 +26,10 @@ import { contributionsApi } from '@/api/client';
 import { describeError } from '@/api/transport';
 import { utcDay } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { PageSkeleton } from '@/ui/states';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 
 type Pending = { key: string; body: CreateContribution };
 const NO_COLLECTIONS: ContributionCollectionList = {
@@ -77,6 +78,7 @@ function ContributionsWorkspace({ scope }: { scope: ContributionScope }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const generation = useRef(0);
+  const configurable = useDashboardPermissions().can('configure');
   const scopeKey = `orbit:contribution-create:${scope.organizationId}:${scope.applicationId}:${scope.environment}`;
 
   useEffect(() => {
@@ -148,74 +150,78 @@ function ContributionsWorkspace({ scope }: { scope: ContributionScope }) {
           <AdmonitionText>{error}</AdmonitionText>
         </Admonition>
       ) : null}
-      <Section
-        title={t('contributions.create')}
-        description={
-          scope.environment === 'production'
-            ? t('contributions.productionHelp')
-            : t('contributions.testHelp')
-        }
-      >
-        <FormField
-          label={t('contributions.purpose')}
-          value={purpose}
-          onChange={setPurpose}
-          autoCapitalize="sentences"
-          disabled={!!pending || busy}
-        />
-        <View className="gap-1.5">
-          <Text variant="caption-1-medium" className="text-muted-foreground">
-            {t('contributions.amountMode')}
-          </Text>
-          <SegmentedControl<'fixed' | 'free'>
-            label={t('contributions.amountMode')}
-            type="radio"
-            size="sm"
-            value={amountMode}
-            disabled={!!pending || busy}
-            onValueChange={setAmountMode}
-          >
-            <SegmentedControlItem value="fixed">
-              <SegmentedControlItemText>{t('contributions.fixed')}</SegmentedControlItemText>
-            </SegmentedControlItem>
-            <SegmentedControlItem value="free">
-              <SegmentedControlItemText>{t('contributions.free')}</SegmentedControlItemText>
-            </SegmentedControlItem>
-          </SegmentedControl>
-        </View>
-        {amountMode === 'fixed' ? (
+      {configurable ? (
+        <Section
+          title={t('contributions.create')}
+          description={
+            scope.environment === 'production'
+              ? t('contributions.productionHelp')
+              : t('contributions.testHelp')
+          }
+        >
           <FormField
-            label={t('contributions.amount')}
-            value={amount}
-            onChange={setAmount}
-            keyboardType="decimal-pad"
+            label={t('contributions.purpose')}
+            value={purpose}
+            onChange={setPurpose}
+            autoCapitalize="sentences"
             disabled={!!pending || busy}
           />
-        ) : null}
-        <FormField
-          label={t('contributions.expiry')}
-          value={expiry}
-          onChange={setExpiry}
-          placeholder="2026-12-31"
-          disabled={!!pending || busy}
-        />
-        {pending ? (
-          <Text variant="body-2-regular" className="text-muted-foreground">
-            {t('contributions.retryHelp')}
-          </Text>
-        ) : null}
-        <View className="flex-row justify-end">
-          <Button
-            appearance="solid"
-            tone="accent"
-            loading={busy}
-            disabled={!purpose.trim()}
-            onPress={() => void create()}
-          >
-            {pending ? t('contributions.retry') : t('contributions.create')}
-          </Button>
-        </View>
-      </Section>
+          <View className="gap-1.5">
+            <Text variant="caption-1-medium" className="text-muted-foreground">
+              {t('contributions.amountMode')}
+            </Text>
+            <SegmentedControl<'fixed' | 'free'>
+              label={t('contributions.amountMode')}
+              type="radio"
+              size="sm"
+              value={amountMode}
+              disabled={!!pending || busy}
+              onValueChange={setAmountMode}
+            >
+              <SegmentedControlItem value="fixed">
+                <SegmentedControlItemText>{t('contributions.fixed')}</SegmentedControlItemText>
+              </SegmentedControlItem>
+              <SegmentedControlItem value="free">
+                <SegmentedControlItemText>{t('contributions.free')}</SegmentedControlItemText>
+              </SegmentedControlItem>
+            </SegmentedControl>
+          </View>
+          {amountMode === 'fixed' ? (
+            <FormField
+              label={t('contributions.amount')}
+              value={amount}
+              onChange={setAmount}
+              keyboardType="decimal-pad"
+              disabled={!!pending || busy}
+            />
+          ) : null}
+          <FormField
+            label={t('contributions.expiry')}
+            value={expiry}
+            onChange={setExpiry}
+            placeholder="2026-12-31"
+            disabled={!!pending || busy}
+          />
+          {pending ? (
+            <Text variant="body-2-regular" className="text-muted-foreground">
+              {t('contributions.retryHelp')}
+            </Text>
+          ) : null}
+          <View className="flex-row justify-end">
+            <Button
+              appearance="solid"
+              tone="accent"
+              loading={busy}
+              disabled={!purpose.trim()}
+              onPress={() => void create()}
+            >
+              {pending ? t('contributions.retry') : t('contributions.create')}
+            </Button>
+          </View>
+        </Section>
+      ) : (
+        <PermissionNotice action="configure" />
+      )}
 
       <Section title={t('contributions.links')}>
         {!links.length ? (
@@ -260,7 +266,7 @@ function ContributionsWorkspace({ scope }: { scope: ContributionScope }) {
               <Button
                 appearance="outline"
                 size="sm"
-                disabled={busy}
+                disabled={busy || !configurable}
                 onPress={() =>
                   void run(async () => {
                     const updated = await contributionsApi.setActive(scope, link.id, !link.active);

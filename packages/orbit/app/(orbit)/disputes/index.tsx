@@ -18,7 +18,7 @@ import { useDisputePages } from '@/disputes/useDisputes';
 import { formatAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, SetupPayments, OrbitScreen } from '@/ui/OrbitScreen';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
 import { PageSkeleton } from '@/ui/states';
 import { RowLink } from '@/ui/data';
@@ -116,7 +116,7 @@ function DisputeList({ scope }: { scope: DashboardScope }) {
   if (pages.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('disputes.title')} />;
   if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const disputes = pages.data.pages.flatMap((page) => page.data);

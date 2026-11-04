@@ -28,10 +28,11 @@ import {
 } from '@/billing/settingsForm';
 import { billingKeys, useBillingSettings, useFeatures } from '@/billing/useBilling';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { PageSkeleton } from '@/ui/states';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
+import { ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -39,15 +40,22 @@ function Toggle({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string;
   value: boolean;
   onChange: (next: boolean) => void;
+  disabled: boolean;
 }) {
   return (
     <View className="flex-row flex-wrap items-center justify-between gap-2 py-2 border-b border-border">
       <Text variant="body-2-regular">{label}</Text>
-      <Button appearance={value ? 'solid' : 'outline'} size="sm" onPress={() => onChange(!value)}>
+      <Button
+        appearance={value ? 'solid' : 'outline'}
+        size="sm"
+        disabled={disabled}
+        onPress={() => onChange(!value)}
+      >
         {value ? t('billing.on') : t('billing.off')}
       </Button>
     </View>
@@ -56,6 +64,8 @@ function Toggle({
 
 function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: BillingSettings }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
+  const locked = !can('money');
   const [form, setForm] = useState<SettingsForm>(() => settingsFormOf(settings));
   const [invalid, setInvalid] = useState<SettingsFormError | null>(null);
   const set =
@@ -94,7 +104,7 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
             autoCapitalize="characters"
             invalid={invalid === 'invoicePrefix'}
             hint={t('billing.invoicePrefixHelp', { next: settings.next_invoice_sequence })}
-            disabled={save.isPending}
+            disabled={save.isPending || locked}
           />
         </View>
         <View className="flex-1 min-w-48">
@@ -105,7 +115,7 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
             keyboardType="number-pad"
             invalid={invalid === 'defaultDaysUntilDue'}
             hint={t('billing.daysUntilDueHelp')}
-            disabled={save.isPending}
+            disabled={save.isPending || locked}
           />
         </View>
       </View>
@@ -123,7 +133,7 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
                 days: scheduleWindowDays(schedule),
               })
         }
-        disabled={save.isPending}
+        disabled={save.isPending || locked}
       />
       <View className="flex-row flex-wrap gap-4">
         <View className="flex-1 min-w-48">
@@ -135,7 +145,7 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
               label: t(`billing.finalAction.${value}`),
             }))}
             onChange={(value) => set('finalAction')(value as DunningFinalAction)}
-            disabled={save.isPending}
+            disabled={save.isPending || locked}
           />
         </View>
         <View className="flex-1 min-w-48">
@@ -147,7 +157,7 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
               label: t(`billing.invoiceAction.${value}`),
             }))}
             onChange={(value) => set('invoiceAction')(value as DunningInvoiceAction)}
-            disabled={save.isPending}
+            disabled={save.isPending || locked}
           />
         </View>
       </View>
@@ -156,14 +166,22 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
         label={t('billing.emailInvoiceFinalized')}
         value={form.emailInvoiceFinalized}
         onChange={set('emailInvoiceFinalized')}
+        disabled={save.isPending || locked}
       />
       <Toggle
         label={t('billing.emailPaymentFailed')}
         value={form.emailPaymentFailed}
         onChange={set('emailPaymentFailed')}
+        disabled={save.isPending || locked}
       />
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={save.isPending} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={locked}
+          onPress={submit}
+        >
           {t('action.save')}
         </Button>
       </View>
@@ -173,6 +191,7 @@ function SettingsEditor({ scope, settings }: { scope: DashboardScope; settings: 
 
 function FeatureRow({ scope, feature }: { scope: DashboardScope; feature: EntitlementFeature }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const archive = useMutation({
     mutationFn: () => dashboardApi.features.update(scope, feature.id, { active: !feature.active }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: billingKeys.features(scope) }),
@@ -195,6 +214,7 @@ function FeatureRow({ scope, feature }: { scope: DashboardScope; feature: Entitl
         appearance="outline"
         size="sm"
         loading={archive.isPending}
+        disabled={!can('money')}
         onPress={() => archive.mutate()}
       >
         {feature.active ? t('product.archive') : t('product.unarchive')}
@@ -205,6 +225,7 @@ function FeatureRow({ scope, feature }: { scope: DashboardScope; feature: Entitl
 
 function Features({ scope }: { scope: DashboardScope }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const features = useFeatures(scope);
   const [form, setForm] = useState({ lookupKey: '', name: '' });
   const [invalid, setInvalid] = useState<'lookupKey' | 'name' | null>(null);
@@ -243,33 +264,37 @@ function Features({ scope }: { scope: DashboardScope }) {
   return (
     <Section title={t('features.title')} description={t('features.intro')}>
       {list}
-      <View className="flex-row flex-wrap gap-4 pt-2">
-        <View className="flex-1 min-w-48">
-          <FormField
-            label={t('features.lookupKey')}
-            value={form.lookupKey}
-            onChange={(lookupKey) => setForm((prior) => ({ ...prior, lookupKey }))}
-            invalid={invalid === 'lookupKey'}
-            hint={t('features.lookupKeyHelp')}
-            disabled={create.isPending}
-          />
-        </View>
-        <View className="flex-1 min-w-48">
-          <FormField
-            label={t('features.name')}
-            value={form.name}
-            onChange={(name) => setForm((prior) => ({ ...prior, name }))}
-            autoCapitalize="sentences"
-            invalid={invalid === 'name'}
-            disabled={create.isPending}
-          />
-        </View>
-      </View>
-      <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={create.isPending} onPress={submit}>
-          {t('features.add')}
-        </Button>
-      </View>
+      {can('money') ? (
+        <>
+          <View className="flex-row flex-wrap gap-4 pt-2">
+            <View className="flex-1 min-w-48">
+              <FormField
+                label={t('features.lookupKey')}
+                value={form.lookupKey}
+                onChange={(lookupKey) => setForm((prior) => ({ ...prior, lookupKey }))}
+                invalid={invalid === 'lookupKey'}
+                hint={t('features.lookupKeyHelp')}
+                disabled={create.isPending}
+              />
+            </View>
+            <View className="flex-1 min-w-48">
+              <FormField
+                label={t('features.name')}
+                value={form.name}
+                onChange={(name) => setForm((prior) => ({ ...prior, name }))}
+                autoCapitalize="sentences"
+                invalid={invalid === 'name'}
+                disabled={create.isPending}
+              />
+            </View>
+          </View>
+          <View className="flex-row justify-end">
+            <Button appearance="solid" tone="accent" loading={create.isPending} onPress={submit}>
+              {t('features.add')}
+            </Button>
+          </View>
+        </>
+      ) : null}
     </Section>
   );
 }
@@ -279,12 +304,12 @@ function BillingBody({ scope }: { scope: DashboardScope }) {
   if (settings.isPending)
     return <PageSkeleton variant="form" accessibilityLabel={t('billing.title')} />;
   if (settings.isError) {
-    if (isMerchantMissing(settings.error))
-      return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(settings.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} />;
   }
   return (
     <View className="gap-6">
+      <PermissionNotice action="money" />
       {/* Keyed by `updated`, so a save re-seeds the form from what was stored. */}
       <SettingsEditor key={settings.data.updated} scope={scope} settings={settings.data} />
       <Features scope={scope} />

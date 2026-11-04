@@ -19,6 +19,7 @@ export const STATES_EN: Record<string, string> = {
   'state.setup.useTest': 'Use test mode',
   'state.setup.docs': 'Read the integration guide',
   'state.permission.title': 'You need permission to see this',
+  'state.permission.readOnlyTitle': 'You can view this, but not change it',
   'state.permission.membershipTitle': 'You are not a member of this application',
   'state.permission.body':
     'This needs the {permission} permission on the Oxy account that owns this application. An owner or admin of that account can grant it in Oxy Console.',
@@ -63,6 +64,7 @@ export const STATES_ES: Record<string, string> = {
   'state.setup.useTest': 'Usar el modo de prueba',
   'state.setup.docs': 'Leer la guía de integración',
   'state.permission.title': 'Necesitas permiso para ver esto',
+  'state.permission.readOnlyTitle': 'Puedes ver esto, pero no cambiarlo',
   'state.permission.membershipTitle': 'No eres miembro de esta aplicación',
   'state.permission.body':
     'Esto requiere el permiso {permission} en la cuenta de Oxy propietaria de esta aplicación. Una persona propietaria o administradora de esa cuenta puede concedértelo en Oxy Console.',
