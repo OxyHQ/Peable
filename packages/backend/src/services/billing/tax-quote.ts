@@ -142,9 +142,8 @@ export function verifyBillingTaxQuote(
     quote.currency !== product.currency ||
     // The product's price is what the payer pays when tax is included, and
     // what tax is added to when it is not.
-    (product.taxTreatment === 'inclusive'
-      ? quote.gross_minor_units !== product.grossMinorUnits
-      : quote.net_minor_units !== product.grossMinorUnits) ||
+    (product.taxTreatment === 'inclusive' ? quote.gross_minor_units : quote.net_minor_units) !==
+      String(product.grossMinorUnits) ||
     quote.tax_treatment !== product.taxTreatment ||
     quote.seller_id !== product.sellerId ||
     quote.invoice_issuer_id !== product.invoiceIssuerId ||
@@ -154,8 +153,8 @@ export function verifyBillingTaxQuote(
     (product.coverageEvidenceId !== undefined &&
       quote.coverage_evidence_id !== product.coverageEvidenceId) ||
     quote.customer_location_evidence_id !== location.id ||
-    !Number.isSafeInteger(quote.net_minor_units + quote.tax_minor_units) ||
-    quote.net_minor_units + quote.tax_minor_units !== quote.gross_minor_units ||
+    BigInt(quote.net_minor_units) + BigInt(quote.tax_minor_units) !==
+      BigInt(quote.gross_minor_units) ||
     quote.quoted_at > toUnix(completion) ||
     quote.expires_at <= toUnix(completion) ||
     quote.expires_at > toUnix(new Date(location.expiresAt)) ||

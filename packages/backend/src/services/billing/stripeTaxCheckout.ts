@@ -29,7 +29,7 @@ import {
 } from '@peable.to/shared-types';
 import type { Database } from '../../db/postgres';
 import { invoiceTaxLines } from '../tax/billingTaxQuotes';
-import { BillingError, type BillingOwner } from './contracts';
+import { BillingError, providerAmountOf, type BillingOwner } from './contracts';
 import {
   billingTaxCheckoutSnapshotSchema,
   type billingTaxOfferSchema,
@@ -114,7 +114,7 @@ export async function createFrozenTaxRate(
   key: string,
 ): Promise<string | undefined> {
   const { db, client, owner, quote } = input;
-  if (quote.tax_minor_units <= 0) return undefined;
+  if (quote.tax_minor_units === '0') return undefined;
   if (!client.createTaxRate) throw new BillingError('not_found', 404);
   const percentage = exactTaxRatePercentage(quote);
   if (percentage === null) throw new BillingError('invalid_provider_response', 502);
@@ -223,8 +223,8 @@ export function createStripePeableTaxCheckout(options: {
         ...(embedded ? { ui_mode: z.enum(['custom', 'elements']) } : {}),
         expires_at: z.literal(expiresAt),
         currency: z.literal(quote.currency.toLowerCase()),
-        amount_total: z.literal(quote.gross_minor_units),
-        total_details: z.object({ amount_tax: z.literal(quote.tax_minor_units) }),
+        amount_total: providerAmountOf(quote.gross_minor_units),
+        total_details: z.object({ amount_tax: providerAmountOf(quote.tax_minor_units) }),
         automatic_tax: z.object({ enabled: z.literal(false) }),
       })
       .safeParse(raw);
@@ -307,7 +307,7 @@ export function createPeableCardInvoiceAuthority(options: {
       const mode = paid.livemode ? ('live' as const) : ('test' as const);
       const issuedAt = now();
       const authority: BillingFinalInvoiceAuthority = {
-        schema_version: 2,
+        schema_version: 3,
         method: 'card',
         source: {
           invoice_id: paid.invoice_id,
@@ -327,7 +327,7 @@ export function createPeableCardInvoiceAuthority(options: {
           gross_minor_units: tax.gross_minor_units,
           net_minor_units: tax.net_minor_units,
           tax_minor_units: tax.tax_minor_units,
-          merchant_fee_minor_units: 0,
+          merchant_fee_minor_units: '0',
           tax_treatment: tax.tax_treatment,
           seller_id: tax.seller_id,
           invoice_issuer_id: tax.invoice_issuer_id,

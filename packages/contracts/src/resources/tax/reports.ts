@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { defineComponent, defineObject, type Expand } from '../../common/objects';
 import { queryUnixSeconds } from '../../common/params';
-import { nullableString, unixSeconds } from '../../common/primitives';
+import { nullableString, signedAmount, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import { TAX_COLLECTIONS, TAX_REGISTRATION_SCHEMES } from '../../vocabulary/tax';
-import { taxCountry, taxMinorAmount, taxState } from './shared';
+import { taxCountry, taxState } from './shared';
 
 /**
  * The Peable Tax summary report: totals per jurisdiction, registration, tax
@@ -27,8 +27,8 @@ export const taxReportRowSchema = defineComponent(
       currency: z.string().describe('Uppercase ISO 4217.'),
       transactions: z.number().int().nonnegative(),
       reversals: z.number().int().nonnegative().describe('Reversals netted into this row.'),
-      taxable_amount: taxMinorAmount,
-      tax_amount: taxMinorAmount,
+      taxable_amount: signedAmount,
+      tax_amount: signedAmount,
     })
     .strict(),
 );
@@ -63,8 +63,8 @@ export const taxReportSchema = defineObject(
             currency: 'EUR',
             transactions: 42,
             reversals: 1,
-            taxable_amount: 41000,
-            tax_amount: 7790,
+            taxable_amount: '41000',
+            tax_amount: '7790',
           },
         ],
       },

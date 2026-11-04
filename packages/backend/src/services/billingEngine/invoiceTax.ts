@@ -64,17 +64,6 @@ export class InvoiceTaxError extends BillingEngineError {
   }
 }
 
-function toSafeNumber(value: bigint): number {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < -BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new InvoiceTaxError(
-      'failed',
-      'tax_calculation_unavailable',
-      'an amount is too large to tax',
-    );
-  }
-  return Number(value);
-}
-
 /** Round `value × part / whole` half away from zero. */
 function share(value: bigint, part: bigint, whole: bigint): bigint {
   if (whole === 0n) return 0n;
@@ -227,7 +216,7 @@ export async function taxInvoiceLines(
           const product = productOfPrice(input.catalog, line.priceId);
           return {
             reference: line.publicId,
-            amount: toSafeNumber(nets[index] ?? 0n),
+            amount: (nets[index] ?? 0n).toString(),
             ...(line.quantity && line.quantity > 0
               ? { quantity: Math.min(line.quantity, 1_000_000) }
               : {}),
@@ -257,7 +246,7 @@ export async function taxInvoiceLines(
     const inclusive = answer.tax_behavior === 'inclusive';
     result.taxAmounts[index] = [
       {
-        amount: String(answer.amount_tax),
+        amount: answer.amount_tax,
         inclusive,
         tax_calculation: calculation.id,
         taxability_reason: answer.breakdown[0]?.taxability_reason ?? null,

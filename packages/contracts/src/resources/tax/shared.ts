@@ -5,11 +5,12 @@ import { unixSecondsParam } from '../../common/params';
 /**
  * Building blocks every Peable Tax resource shares.
  *
- * Tax AMOUNTS (calculations, transactions, the report) are integer JSON
- * numbers in the currency's minor unit, as Peable Tax has always answered
- * them: unlike a FAIR amount, a tax amount is denominated in a fiat currency
- * and is bounded by the safe-integer checks the calculator applies. Business
- * compliance (ADR 0020) amounts are base-unit strings, as ADR 0014 D1 has it.
+ * Every tax amount — a calculation's, a transaction's, a reversal's, a report
+ * row's, a compliance measure's — is a base-unit integer STRING of its
+ * `currency`, as ADR 0014 D1 has it for every amount on the wire: `amount`
+ * where it cannot be negative, `signedAmount` where a reversal makes it so
+ * (a line item and its breakdown carry a reversal's negative share, and a
+ * report row nets them in).
  */
 
 /** ISO 3166-1 alpha-2, as returned. */
@@ -20,12 +21,6 @@ export const taxState = z
   .string()
   .nullable()
   .describe('ISO 3166-2 subdivision without the country prefix (`CA`, `QC`).');
-
-/** A minor-unit integer amount (cents), signed: a reversal's amounts are negative. */
-export const taxMinorAmount = z
-  .number()
-  .int()
-  .describe('Minor units of `currency` (cents), as an integer.');
 
 /** A Peable-side reference: a product, a customer, a refund. */
 export const taxReferenceParam = z

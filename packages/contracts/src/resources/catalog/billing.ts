@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineComponent } from '../../common/objects';
+import { amount } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import {
   BILLING_RAIL_RENEWALS,
@@ -59,9 +60,6 @@ export const billingReturnUrl = z
 /** An instant in signed billing evidence: integer Unix seconds that stay a safe integer. */
 export const billingInstant = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
-/** A whole number of minor units (cents) in signed billing evidence. */
-const minorUnits = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-
 /** A billing customer reference (`cus_…`). */
 export const billingCustomerRef = z
   .string()
@@ -100,7 +98,7 @@ export const billingRailOfferSchema = defineComponent(
       plan_id: z.string(),
       interval: billingInterval,
       currency: z.string(),
-      gross_minor_units: z.number().int(),
+      gross_minor_units: amount,
       tax_treatment: taxTreatment,
     })
     .strict(),
@@ -186,12 +184,12 @@ export const createBillingTaxQuoteParams = z
   .strict();
 export type CreateBillingTaxQuoteParams = z.input<typeof createBillingTaxQuoteParams>;
 
-/** A signed, immutable, single-use Peable Tax quote (schema version 2). */
+/** A signed, immutable, single-use Peable Tax quote (schema version 3). */
 export const billingTaxQuoteSchema = defineComponent(
   'BillingTaxQuote',
   z
     .object({
-      schema_version: z.literal(2),
+      schema_version: z.literal(3),
       source: z
         .object({
           merchant_id: billingReference,
@@ -206,9 +204,9 @@ export const billingTaxQuoteSchema = defineComponent(
         .object({
           id: billingReference,
           currency: z.string().regex(/^[A-Z]{3}$/),
-          gross_minor_units: minorUnits,
-          net_minor_units: minorUnits,
-          tax_minor_units: minorUnits,
+          gross_minor_units: amount,
+          net_minor_units: amount,
+          tax_minor_units: amount,
           tax_treatment: taxTreatment,
           seller_id: billingReference,
           invoice_issuer_id: billingReference,
@@ -316,7 +314,7 @@ export const billingEmbeddedCheckoutActionSchema = defineComponent(
       session_id: z.string(),
       client_secret: z.string(),
       publishable_key: z.string(),
-      amount_minor_units: z.number().int(),
+      amount_minor_units: amount,
       currency: z.string(),
     })
     .strict(),
@@ -489,10 +487,9 @@ export const billingPaidInvoiceSchema = defineComponent(
       plan_id: z.string(),
       livemode: z.boolean(),
       currency: z.string(),
-      amount_paid: z.string(),
-      net_amount: z.string().nullable(),
-      tax_amount: z
-        .string()
+      amount_paid: amount,
+      net_amount: amount.nullable(),
+      tax_amount: amount
         .nullable()
         .describe('A provider observation, not a tax quote or seller configuration.'),
       period_start: z.number().int(),
@@ -509,7 +506,7 @@ export const billingInvoiceStateSchema = defineComponent(
   billingPaidInvoiceSchema
     .extend({
       charge_id: z.string(),
-      amount_refunded: z.string(),
+      amount_refunded: amount,
       state: z.enum(['paid', 'fully_refunded', 'partially_refunded']),
     })
     .strict(),
@@ -526,8 +523,8 @@ export const billingInvoiceTaxLineSchema = defineComponent(
       state: z.string().nullable(),
       tax_type: z.string().nullable(),
       rate_percentage: z.string().nullable(),
-      taxable_minor_units: minorUnits,
-      tax_minor_units: minorUnits,
+      taxable_minor_units: amount,
+      tax_minor_units: amount,
       inclusive: z.boolean(),
       taxability_reason: z.string().min(1),
     })
@@ -565,10 +562,10 @@ export const billingFinalInvoiceSchema = defineComponent(
     .object({
       platform: z.literal('peable'),
       currency: z.string().regex(/^[A-Z]{3}$/),
-      gross_minor_units: minorUnits,
-      net_minor_units: minorUnits,
-      tax_minor_units: minorUnits,
-      merchant_fee_minor_units: minorUnits,
+      gross_minor_units: amount,
+      net_minor_units: amount,
+      tax_minor_units: amount,
+      merchant_fee_minor_units: amount,
       tax_treatment: taxTreatment,
       seller_id: billingReference,
       invoice_issuer_id: billingReference,
@@ -616,12 +613,12 @@ export const billingFinalInvoiceSchema = defineComponent(
 );
 export type BillingFinalInvoice = z.output<typeof billingFinalInvoiceSchema>;
 
-/** A signed final invoice authority (schema version 2). Verify it against the pinned keys. */
+/** A signed final invoice authority (schema version 3). Verify it against the pinned keys. */
 export const billingFinalInvoiceAuthoritySchema = defineComponent(
   'BillingFinalInvoiceAuthority',
   z
     .object({
-      schema_version: z.literal(2),
+      schema_version: z.literal(3),
       source: billingInvoiceAuthoritySourceSchema,
       invoice: billingFinalInvoiceSchema,
       method: z.enum(['card', 'faircoin']),
@@ -718,7 +715,7 @@ export const billingFaircoinFxQuoteSchema = defineComponent(
     .object({
       id: z.string(),
       currency: z.literal('USD'),
-      gross_minor_units: z.number().int(),
+      gross_minor_units: amount,
       amount_base_units: z.string(),
       usd_per_fair: z.string(),
       source: z.string(),

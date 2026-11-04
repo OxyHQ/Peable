@@ -142,7 +142,7 @@ export function createPeableTaxQuoteCalculator(options: {
             line_items: [
               {
                 reference: product.planId,
-                amount: product.grossMinorUnits,
+                amount: String(product.grossMinorUnits),
                 tax_behavior: product.taxTreatment,
               },
             ],
@@ -167,7 +167,9 @@ export function createPeableTaxQuoteCalculator(options: {
         currency: calculation.currency,
         gross_minor_units: calculation.amount_total,
         net_minor_units: calculation.amount_net,
-        tax_minor_units: calculation.amount_total - calculation.amount_net,
+        tax_minor_units: (
+          BigInt(calculation.amount_total) - BigInt(calculation.amount_net)
+        ).toString(),
         tax_treatment: product.taxTreatment,
         seller_id: product.sellerId,
         invoice_issuer_id: product.invoiceIssuerId,
@@ -181,7 +183,7 @@ export function createPeableTaxQuoteCalculator(options: {
         expires_at: expiresAt,
       };
       const result: BillingTaxQuote = {
-        schema_version: 2,
+        schema_version: 3,
         source,
         quote: {
           id: `tax_${createHash('sha256').update(JSON.stringify({ source, quote })).digest('hex')}`,

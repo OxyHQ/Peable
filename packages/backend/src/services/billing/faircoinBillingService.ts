@@ -100,7 +100,7 @@ export function createFaircoinBillingService(options: {
   configuration: FaircoinBillingConfiguration;
   taxQuoteCalculator: BillingTaxQuoteCalculator;
   invoiceSigningKey: string | KeyObject;
-  quote?: (grossMinorUnits: number) => Promise<FaircoinFxQuote>;
+  quote?: (grossMinorUnits: string) => Promise<FaircoinFxQuote>;
   now?: () => Date;
 }): BillingService & {
   renew(
@@ -269,9 +269,9 @@ export function createFaircoinBillingService(options: {
       plan_id: subscription.planRef,
       livemode: subscription.environment === 'production',
       currency: 'USD',
-      amount_paid: String(tax.gross_minor_units),
-      net_amount: String(tax.net_minor_units),
-      tax_amount: String(tax.tax_minor_units),
+      amount_paid: tax.gross_minor_units,
+      net_amount: tax.net_minor_units,
+      tax_amount: tax.tax_minor_units,
       period_start: toUnix(invoice.periodStart),
       period_end: toUnix(invoice.periodEnd),
       paid_at: toUnix(invoice.acceptedAt),
@@ -673,7 +673,7 @@ export function createFaircoinBillingService(options: {
       const tax = invoice.taxSnapshot.taxQuote.quote;
       const fx = invoice.fxQuote;
       const authority: BillingFinalInvoiceAuthority = {
-        schema_version: 2,
+        schema_version: 3,
         method: 'faircoin',
         source: {
           invoice_id: invoiceId,
@@ -693,7 +693,7 @@ export function createFaircoinBillingService(options: {
           gross_minor_units: tax.gross_minor_units,
           net_minor_units: tax.net_minor_units,
           tax_minor_units: tax.tax_minor_units,
-          merchant_fee_minor_units: 0,
+          merchant_fee_minor_units: '0',
           tax_treatment: tax.tax_treatment,
           seller_id: tax.seller_id,
           invoice_issuer_id: tax.invoice_issuer_id,

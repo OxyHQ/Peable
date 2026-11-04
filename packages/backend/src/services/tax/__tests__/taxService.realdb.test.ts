@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { generateKeyPairSync } from 'node:crypto';
+import { exclusiveTaxOf, inclusiveTaxOf } from '../../../__tests__/helpers/fakeTax';
 import { must } from '../../../__tests__/helpers/must';
 import {
   gatewayDb,
@@ -39,10 +40,10 @@ function fakeProvider(answer: 'standard_rated' | 'not_collecting' | 'down' = 'st
         lineItems: input.lineItems.map((line) => {
           const amountTax =
             answer === 'not_collecting'
-              ? 0
+              ? 0n
               : line.taxBehavior === 'inclusive'
-                ? line.amount - Math.round(line.amount / 1.2)
-                : Math.round(line.amount * 0.2);
+                ? inclusiveTaxOf(line.amount, 20n)
+                : exclusiveTaxOf(line.amount, 20n);
           return {
             reference: line.reference,
             amount: line.amount,
@@ -56,8 +57,10 @@ function fakeProvider(answer: 'standard_rated' | 'not_collecting' | 'down' = 'st
                 display_name: 'VAT',
                 tax_type: 'vat',
                 rate_percentage: answer === 'not_collecting' ? null : '20.0',
-                taxable_amount: line.amount - (line.taxBehavior === 'inclusive' ? amountTax : 0),
-                amount: amountTax,
+                taxable_amount: (
+                  line.amount - (line.taxBehavior === 'inclusive' ? amountTax : 0n)
+                ).toString(),
+                amount: amountTax.toString(),
                 inclusive: line.taxBehavior === 'inclusive',
                 taxability_reason: answer,
               },
@@ -121,26 +124,31 @@ describe('Peable Tax', () => {
       {
         currency: 'usd',
         customer_location_evidence_id: de.id,
-        line_items: [{ reference: 'one_monthly', amount: 2999, tax_behavior: 'inclusive' }],
+        line_items: [{ reference: 'one_monthly', amount: '2999', tax_behavior: 'inclusive' }],
       },
       { requireActive: true },
     );
     expect(inclusive).toMatchObject({
       collection: 'collect',
-      amount_total: 2999,
-      tax_amount_inclusive: 2999 - 2499,
-      amount_net: 2499,
+      amount_total: '2999',
+      tax_amount_inclusive: '500',
+      amount_net: '2499',
     });
     expect(inclusive.line_items[0]).toMatchObject({
       tax_code: 'txcd_10103000',
       tax_behavior: 'inclusive',
-      amount_tax: 500,
-      amount_net: 2499,
+      amount: '2999',
+      amount_tax: '500',
+      amount_net: '2499',
+    });
+    expect(inclusive.line_items[0]?.breakdown[0]).toMatchObject({
+      taxable_amount: '2499',
+      amount: '500',
     });
     expect(inclusive.line_items[0]).not.toHaveProperty('taxCode');
     expect(typeof inclusive.created).toBe('number');
     expect(typeof inclusive.expires_at).toBe('number');
-    expect(calls[0]?.lineItems[0]?.taxCode).toBe('txcd_10103000');
+    expect(calls[0]?.lineItems[0]).toMatchObject({ taxCode: 'txcd_10103000', amount: 2999n });
     expect(await tax.retrieveCalculation(merchant, inclusive.id)).toEqual(inclusive);
 
     const exclusive = await tax.calculate(
@@ -148,14 +156,15 @@ describe('Peable Tax', () => {
       {
         currency: 'USD',
         customer_location_evidence_id: de.id,
-        line_items: [{ reference: 'seat', amount: 1000, tax_behavior: 'exclusive' }],
+        line_items: [{ reference: 'seat', amount: '1000', tax_behavior: 'exclusive' }],
       },
       { requireActive: true },
     );
     expect(exclusive).toMatchObject({
-      amount_total: 1200,
-      amount_net: 1000,
-      tax_amount_exclusive: 200,
+      amount_total: '1200',
+      amount_net: '1000',
+      tax_amount_exclusive: '200',
+      tax_amount_inclusive: '0',
     });
 
     const jp = await tax.recordEvidence(merchant, {
@@ -168,18 +177,73 @@ describe('Peable Tax', () => {
       {
         currency: 'USD',
         customer_location_evidence_id: jp.id,
-        line_items: [{ reference: 'one_monthly', amount: 2999, tax_behavior: 'inclusive' }],
+        line_items: [{ reference: 'one_monthly', amount: '2999', tax_behavior: 'inclusive' }],
       },
       { requireActive: true },
     );
     expect(calls.length).toBe(before);
     expect(unregistered).toMatchObject({
       collection: 'not_registered',
-      amount_total: 2999,
-      amount_net: 2999,
+      amount_total: '2999',
+      amount_net: '2999',
       registration_id: null,
     });
-    expect(unregistered.line_items[0]?.breakdown[0]?.taxability_reason).toBe('not_registered');
+    expect(unregistered.line_items[0]?.breakdown[0]).toMatchObject({
+      taxability_reason: 'not_registered',
+      taxable_amount: '0',
+      amount: '0',
+    });
+  });
+
+  it('totals and reverses exactly past the largest JS-safe integer', async () => {
+    const { provider } = fakeProvider();
+    const { merchant, tax } = await approvedMerchant(provider);
+    const jp = await tax.recordEvidence(merchant, {
+      customer_ref: 'acct_payer',
+      evidence: [{ type: 'billing_address', address: { country: 'JP' } }],
+    });
+    const largest = String(Number.MAX_SAFE_INTEGER);
+    const request = {
+      currency: 'USD',
+      customer_location_evidence_id: jp.id,
+      line_items: [
+        { reference: 'a', amount: largest },
+        { reference: 'b', amount: largest },
+      ],
+    };
+    const calculation = await tax.calculate(merchant, request, { requireActive: true });
+    // 2 × (2^53 − 1): a float would answer 18014398509481980.
+    expect(calculation.amount_total).toBe('18014398509481982');
+    expect(calculation.amount_net).toBe('18014398509481982');
+    // One line past what a provider prices is refused, not rounded.
+    await expect(
+      tax.calculate(
+        merchant,
+        { ...request, line_items: [{ reference: 'a', amount: '9007199254740992' }] },
+        { requireActive: true },
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_tax_request' });
+    await commitTaxTransaction(gatewayDb(), {
+      calculationPublicId: calculation.id,
+      reference: 'in_large',
+      rail: 'faircoin',
+      committedAt: new Date(),
+    });
+    const sale = must((await tax.listTransactions(merchant, { limit: 1 })).data[0]);
+    const reversal = await tax.createReversal(merchant, sale.id, {
+      reference: 'refund_large',
+      amount: '9007199254740992',
+    });
+    // 2^53, half of it per line: a float could not tell it from 2^53 + 1.
+    expect(reversal.reversal).toMatchObject({
+      amount_total: '-9007199254740992',
+      amount_net: '-9007199254740992',
+      tax_amount: '0',
+    });
+    expect(reversal.reversal?.line_items.map((line) => line.amount)).toEqual([
+      '-4503599627370496',
+      '-4503599627370496',
+    ]);
   });
 
   it('fails closed when the provider is down or disagrees about the registration', async () => {
@@ -195,7 +259,7 @@ describe('Peable Tax', () => {
           {
             currency: 'USD',
             customer_location_evidence_id: evidence.id,
-            line_items: [{ reference: 'p', amount: 500 }],
+            line_items: [{ reference: 'p', amount: '500' }],
           },
           { requireActive: true },
         ),
@@ -213,7 +277,7 @@ describe('Peable Tax', () => {
     const request = {
       currency: 'USD',
       customer_location_evidence_id: one.id,
-      line_items: [{ reference: 'p', amount: 500 }],
+      line_items: [{ reference: 'p', amount: '500' }],
     };
     await expect(tax.calculate(merchant, request, { requireActive: true })).rejects.toMatchObject({
       code: 'tax_settings_not_active',
@@ -257,11 +321,11 @@ describe('Peable Tax', () => {
       customer_location_evidence_id: evidence.id,
     });
     // Exclusive: the listed price is the net; the payer pays price plus tax.
-    expect(quote.schema_version).toBe(2);
+    expect(quote.schema_version).toBe(3);
     expect(quote.quote).toMatchObject({
-      net_minor_units: 1000,
-      tax_minor_units: 200,
-      gross_minor_units: 1200,
+      net_minor_units: '1000',
+      tax_minor_units: '200',
+      gross_minor_units: '1200',
       tax_treatment: 'exclusive',
       country: 'NL',
       tax_service_ref: 'peable_tax',
@@ -279,8 +343,8 @@ describe('Peable Tax', () => {
       typeof verifyBillingTaxQuote
     >[1]['location'];
     const tampered = structuredClone(quote);
-    tampered.quote.tax_minor_units = 100;
-    tampered.quote.gross_minor_units = 1100;
+    tampered.quote.tax_minor_units = '100';
+    tampered.quote.gross_minor_units = '1100';
     expect(() =>
       verifyBillingTaxQuote(
         tampered,
@@ -318,40 +382,47 @@ describe('Peable Tax', () => {
         collection: 'collect',
         rate_percentage: '20.0',
         transactions: 1,
-        taxable_amount: 1000,
-        tax_amount: 200,
+        taxable_amount: '1000',
+        tax_amount: '200',
       }),
     ]);
     const lines = must(
       await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.tax_rate_evidence_id),
     );
-    expect(lines.reduce((sum, line) => sum + line.tax_minor_units, 0)).toBe(200);
+    expect(lines.map((line) => [line.taxable_minor_units, line.tax_minor_units])).toEqual([
+      ['1000', '200'],
+    ]);
 
     // A FairCoin refund from the seller's wallet: reversed in part, by its
     // reference once, then the rest; the report nets both.
     const sale = must(list.data[0]);
     const half = await tax.createReversal(merchant, sale.id, {
       reference: 'refund_1',
-      amount: 600,
+      amount: '600',
     });
     expect(half).toMatchObject({
       type: 'reversal',
       reversal_of: sale.id,
-      reversal: { amount_total: -600, tax_amount: -100 },
+      reversal: { amount_total: '-600', amount_net: '-500', tax_amount: '-100' },
     });
     // The reversal's lines are the wire's own shape, scaled: no unscaled
     // original amounts and no second spelling beside them.
     const reversedLine = must(half.reversal?.line_items[0]);
-    expect(reversedLine).toMatchObject({ amount_tax: -100, amount_net: -500 });
+    expect(reversedLine).toMatchObject({ amount: '-500', amount_tax: '-100', amount_net: '-500' });
     expect(reversedLine).not.toHaveProperty('amountTax');
-    expect(reversedLine.breakdown[0]).toMatchObject({ taxable_amount: -500, amount: -100 });
+    expect(reversedLine.breakdown[0]).toMatchObject({ taxable_amount: '-500', amount: '-100' });
     expect(reversedLine.breakdown[0]).not.toHaveProperty('taxableAmount');
     expect(
-      await tax.createReversal(merchant, sale.id, { reference: 'refund_1', amount: 600 }),
+      await tax.createReversal(merchant, sale.id, { reference: 'refund_1', amount: '600' }),
     ).toMatchObject({ id: half.id });
     await tax.createReversal(merchant, sale.id, { reference: 'refund_2' });
     expect((await tax.report(merchant, window)).rows).toEqual([
-      expect.objectContaining({ transactions: 1, reversals: 2, taxable_amount: 0, tax_amount: 0 }),
+      expect.objectContaining({
+        transactions: 1,
+        reversals: 2,
+        taxable_amount: '0',
+        tax_amount: '0',
+      }),
     ]);
   });
 });
@@ -407,7 +478,7 @@ describe('Stripe Tax provider', () => {
       lineItems: [
         {
           reference: 'p',
-          amount: 1000,
+          amount: 1000n,
           quantity: 1,
           taxCode: 'txcd_10103000',
           taxBehavior: 'exclusive',
@@ -424,8 +495,17 @@ describe('Stripe Tax provider', () => {
       line_items: [{ amount: 1000, tax_code: 'txcd_10103000', tax_behavior: 'exclusive' }],
     });
     expect(result.lineItems[0]).toMatchObject({
-      amountTax: 89,
-      breakdown: [{ state: 'NY', rate_percentage: '8.875', taxability_reason: 'standard_rated' }],
+      amount: 1000n,
+      amountTax: 89n,
+      breakdown: [
+        {
+          state: 'NY',
+          rate_percentage: '8.875',
+          taxable_amount: '1000',
+          amount: '89',
+          taxability_reason: 'standard_rated',
+        },
+      ],
     });
   });
 });

@@ -128,13 +128,18 @@ As built (`@peable.to/contracts` 1.0): one `defineRoute` per public route in
 backend importing the very schema objects it validates with, a test preload
 checking every route-test answer against its contract, and a coverage test proving
 the mounted routes and the contracts are one set. `docs/openapi.json` (OpenAPI 3.1,
-with the webhook payloads) is gated by `check:openapi`; `@peable.to/sdk` 1.0's
+with the webhook payloads) is gated by `check:openapi`; `@peable.to/sdk`'s
 methods are generated from the routes' `sdk` paths (`check:sdk-resources`); the
 API reference and the errors page of the developer docs are generated from the
 document and from the error vocabulary (`check:api-docs`), and every `doc_url`
-points at that page. Dashboard routes are not contracts. One exception to D1
-remains: Peable Tax calculation, transaction and report amounts are still integer
-minor units, and their contracts say so.
+points at that page. Dashboard routes are not contracts.
+
+D1 holds without exception: Peable Tax calculations, transactions, reversals and
+the report, and the signed billing documents (tax quotes and final invoice
+authorities, `schema_version: 3`), answer base-unit strings like every other
+amount. Their last JSON numbers were cut at the root in one release
+(`@peable.to/contracts`, `@peable.to/shared-types` and `@peable.to/sdk` 2.0;
+migrations `0075`–`0076` rewrote the stored objects).
 
 ## Consequences
 

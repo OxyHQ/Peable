@@ -38,7 +38,7 @@ function fixture() {
     observed_at: t,
   };
   const authority: BillingFinalInvoiceAuthority = {
-    schema_version: 2,
+    schema_version: 3,
     source: {
       invoice_id: paid.invoice_id,
       payment_intent_id: paid.payment_intent_id,
@@ -54,10 +54,10 @@ function fixture() {
     invoice: {
       platform: 'peable',
       currency: 'USD',
-      gross_minor_units: 2999,
-      net_minor_units: 2499,
-      tax_minor_units: 500,
-      merchant_fee_minor_units: 0,
+      gross_minor_units: '2999',
+      net_minor_units: '2499',
+      tax_minor_units: '500',
+      merchant_fee_minor_units: '0',
       tax_treatment: 'inclusive',
       seller_id: 'seller_fixture',
       invoice_issuer_id: 'issuer_fixture',
@@ -108,6 +108,22 @@ describe('signed final invoice authority', () => {
     };
     expect(canonicalBillingAuthority(reordered)).toBe(canonicalBillingAuthority(authority));
   });
+  it('refuses a schema 2 authority (number amounts), even when signed', () => {
+    const { authority, expected, now } = fixture();
+    const legacy = authority as unknown as {
+      schema_version: number;
+      invoice: Record<string, unknown>;
+    };
+    legacy.schema_version = 2;
+    Object.assign(legacy.invoice, {
+      gross_minor_units: 2999,
+      net_minor_units: 2499,
+      tax_minor_units: 500,
+      merchant_fee_minor_units: 0,
+    });
+    resign(authority);
+    expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow();
+  });
   it('rejects unknown keys, tampering, cross-owner and stale evidence', () => {
     const { authority, expected, now } = fixture();
     expect(() => verifyFinalInvoiceAuthority(authority, expected, {}, now)).toThrow(
@@ -131,14 +147,14 @@ describe('signed final invoice authority', () => {
   });
   it('rejects signed totals differing from paid tax observations and unsafe Faircoin quotes', () => {
     const { authority, expected, now, t } = fixture();
-    authority.invoice.net_minor_units++;
-    authority.invoice.tax_minor_units--;
+    authority.invoice.net_minor_units = '2500';
+    authority.invoice.tax_minor_units = '499';
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.invoice.net_minor_units--;
-    authority.invoice.tax_minor_units++;
+    authority.invoice.net_minor_units = '2499';
+    authority.invoice.tax_minor_units = '500';
     authority.method = 'faircoin';
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(

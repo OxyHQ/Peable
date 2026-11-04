@@ -371,14 +371,14 @@ async function initialize(input: {
     },
     async calculate({ source }) {
       const quote: BillingTaxQuote = {
-        schema_version: 2,
+        schema_version: 3,
         source,
         quote: {
           id: `quote_${randomUUID()}`,
           currency: 'USD',
-          gross_minor_units: 2999,
-          net_minor_units: 2500,
-          tax_minor_units: 499,
+          gross_minor_units: '2999',
+          net_minor_units: '2500',
+          tax_minor_units: '499',
           tax_treatment: 'inclusive',
           seller_id: 'synthetic-seller',
           invoice_issuer_id: 'synthetic-issuer',
@@ -448,7 +448,7 @@ async function initialize(input: {
           throw new Error('Fiscal fixture requires persisted signed quote');
         const clock = observedClock();
         const authority: BillingFinalInvoiceAuthority = {
-          schema_version: 2,
+          schema_version: 3,
           source: {
             invoice_id: paid.invoice_id,
             payment_intent_id: paid.payment_intent_id,
@@ -464,10 +464,10 @@ async function initialize(input: {
           invoice: {
             platform: 'peable',
             currency: 'USD',
-            gross_minor_units: 2999,
-            net_minor_units: 2500,
-            tax_minor_units: 499,
-            merchant_fee_minor_units: 0,
+            gross_minor_units: '2999',
+            net_minor_units: '2500',
+            tax_minor_units: '499',
+            merchant_fee_minor_units: '0',
             tax_treatment: 'inclusive',
             seller_id: 'synthetic-seller',
             invoice_issuer_id: 'synthetic-issuer',

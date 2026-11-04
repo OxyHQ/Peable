@@ -55,14 +55,14 @@ function fixture() {
     async calculate({ source }) {
       calls++;
       const result: BillingTaxQuote = tamper({
-        schema_version: 2,
+        schema_version: 3,
         source,
         quote: {
           id: 'quote_fixture',
           currency: product.currency,
-          gross_minor_units: product.grossMinorUnits,
-          net_minor_units: 2500,
-          tax_minor_units: 499,
+          gross_minor_units: String(product.grossMinorUnits),
+          net_minor_units: '2500',
+          tax_minor_units: '499',
           tax_treatment: product.taxTreatment,
           seller_id: product.sellerId,
           invoice_issuer_id: product.invoiceIssuerId,
@@ -110,9 +110,9 @@ describe('provider-neutral Peable tax quote gate', () => {
         () => value.now,
       ),
     ).toMatchObject({
-      schema_version: 2,
+      schema_version: 3,
       source: { merchant_id: 'merch_fixture', store_id: 'payer_fixture' },
-      quote: { gross_minor_units: 2999, tax_minor_units: 499, country: 'RO' },
+      quote: { gross_minor_units: '2999', tax_minor_units: '499', country: 'RO' },
     });
     expect(value.calls()).toBe(1);
   });
@@ -183,7 +183,7 @@ describe('provider-neutral Peable tax quote gate', () => {
         return result;
       },
       (result: BillingTaxQuote) => {
-        result.quote.net_minor_units++;
+        result.quote.net_minor_units = '2501';
         return result;
       },
       (result: BillingTaxQuote) => {

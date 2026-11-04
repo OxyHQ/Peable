@@ -153,7 +153,7 @@ async function sale(
     {
       currency,
       customer_location_evidence_id: evidence.id,
-      line_items: [{ reference: 'plan_synthetic', amount }],
+      line_items: [{ reference: 'plan_synthetic', amount: String(amount) }],
     },
     { requireActive: false },
   );
@@ -510,12 +510,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('tax compliance', () => {
       one,
       {
         reference: 'refund_synthetic',
-        amount: 5_000,
+        amount: '5000',
       },
     );
     // A refund NOW falls in the month in progress, outside the preceding
     // twelve calendar months, and is not counted yet.
-    await tax().createReversal(merchantA, one, { reference: 'refund_today', amount: 1_000 });
+    await tax().createReversal(merchantA, one, { reference: 'refund_today', amount: '1000' });
     const assessment = await owner('POST', '/assessments', {});
     const tx = (assessment.results as Json[]).find((r) => r.rule === 'us_tx_sales_tax');
     const measured = (tx?.measured ?? {}) as Json;
@@ -527,8 +527,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('tax compliance', () => {
       .select({ reversal: taxTransactions.reversal })
       .from(taxTransactions)
       .where(eq(taxTransactions.merchantId, merchantA.id));
-    const reversed = rows.reduce((sum, row) => sum + (row.reversal?.amount_net ?? 0), 0);
-    expect(50_000 + reversed).toBe(44_000);
+    const reversed = rows.reduce((sum, row) => sum + BigInt(row.reversal?.amount_net ?? '0'), 0n);
+    expect(50_000n + reversed).toBe(44_000n);
   });
 
   test('an ended registration with later sales, and an ambiguous pending application, go to the queue', async () => {
@@ -631,7 +631,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('tax compliance', () => {
       {
         currency: 'USD',
         customer_location_evidence_id: evidence.id,
-        line_items: [{ reference: 'p', amount: 100 }],
+        line_items: [{ reference: 'p', amount: '100' }],
       },
       { requireActive: false },
     );

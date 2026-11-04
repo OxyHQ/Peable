@@ -365,7 +365,7 @@ const en: Record<string, string> = {
   'tax.to': 'To, inclusive (YYYY-MM-DD)',
   'tax.runReport': 'Show report',
   'tax.reportEmpty': 'No paid sales in this period.',
-  'tax.reportAmounts': 'Taxable {taxable} · tax {tax} {currency}',
+  'tax.reportAmounts': 'Taxable {taxable} · tax {tax}',
 
   'contributions.heading': 'One-time contribution links',
   'contributions.intro':
@@ -1352,7 +1352,7 @@ const es: Record<string, string> = {
   'tax.to': 'Hasta, inclusive (AAAA-MM-DD)',
   'tax.runReport': 'Mostrar informe',
   'tax.reportEmpty': 'No hay ventas pagadas en este periodo.',
-  'tax.reportAmounts': 'Base imponible {taxable} · impuesto {tax} {currency}',
+  'tax.reportAmounts': 'Base imponible {taxable} · impuesto {tax}',
 
   'contributions.heading': 'Enlaces de contribución única',
   'contributions.intro':

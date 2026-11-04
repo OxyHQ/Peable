@@ -51,12 +51,13 @@ export interface ProviderEmbeddedSession {
 }
 export interface ProviderEmbeddedAction {
   status: 'open' | 'complete' | 'expired';
-  amountMinorUnits: number;
+  /** Base units of `currency`. */
+  amountMinorUnits: string;
   currency: string;
   action: BillingEmbeddedCheckoutAction | null;
   providerCustomerId: string;
   providerPriceId: string;
   livemode: boolean;
   expiresAt: number;
-  taxMinorUnits: number;
+  taxMinorUnits: string;
 }

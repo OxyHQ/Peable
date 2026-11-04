@@ -136,6 +136,7 @@ const { gatewayDb, seedMerchant, storedEvents, useGatewayDatabase } = await impo
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { must } = await import('../../__tests__/helpers/must');
+const { exclusiveTaxOf, inclusiveTaxOf } = await import('../../__tests__/helpers/fakeTax');
 const { registerPaymentMethod } = await import('../../db/customers/paymentMethodRepository');
 const { findCustomerForMerchant } = await import('../../db/customers/customerRepository');
 const { createTaxService } = await import('../../services/tax/taxService');
@@ -175,8 +176,8 @@ const taxProvider: TaxProvider = {
       lineItems: input.lineItems.map((line) => {
         const amountTax =
           line.taxBehavior === 'inclusive'
-            ? line.amount - Math.round(line.amount / 1.2)
-            : Math.round(line.amount * 0.2);
+            ? inclusiveTaxOf(line.amount, 20n)
+            : exclusiveTaxOf(line.amount, 20n);
         return {
           reference: line.reference,
           amount: line.amount,
@@ -190,8 +191,8 @@ const taxProvider: TaxProvider = {
               display_name: 'VAT',
               tax_type: 'vat',
               rate_percentage: '20.0',
-              taxable_amount: line.amount,
-              amount: amountTax,
+              taxable_amount: line.amount.toString(),
+              amount: amountTax.toString(),
               inclusive: line.taxBehavior === 'inclusive',
               taxability_reason: 'standard_rated',
             },
@@ -773,7 +774,7 @@ describe('invoices', () => {
     const byReference = Object.fromEntries(
       rows.map((row) => [row.reference, row.reversal?.amount_total ?? null]),
     );
-    expect(byReference).toEqual({ [invoice.id]: null, [note.id]: -600 });
+    expect(byReference).toEqual({ [invoice.id]: null, [note.id]: '-600' });
   });
 
   test('tax before finalize: uncovered is not_registered (zero); a covered sale fails closed', async () => {

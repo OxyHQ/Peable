@@ -155,8 +155,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the Peable Tax merchant API', () => {
     const body = {
       currency: 'eur',
       customer_location_evidence_id: evidenceId,
-      line_items: [{ reference: 'plan_pro', amount: 1000 }],
+      line_items: [{ reference: 'plan_pro', amount: '1000' }],
     };
+    // An amount is a base-unit string (ADR 0014 D1); a JSON number is refused.
+    const numeric = await api('POST', '/calculations', {
+      ...body,
+      line_items: [{ reference: 'plan_pro', amount: 1000 }],
+    });
+    expect([numeric.status, errorOf(numeric).code, errorOf(numeric).param]).toEqual([
+      400,
+      'invalid_tax_request',
+      'line_items[0][amount]',
+    ]);
     const unapproved = await api('POST', '/calculations', body);
     expect([unapproved.status, errorOf(unapproved).code]).toEqual([409, 'tax_settings_not_active']);
 
@@ -172,7 +182,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the Peable Tax merchant API', () => {
       object: 'tax.calculation',
       currency: 'EUR',
       collection: 'not_registered',
-      amount_total: 1000,
+      amount_total: '1000',
+      amount_net: '1000',
+      tax_amount_exclusive: '0',
+      tax_amount_inclusive: '0',
     });
     const calculationId = String(calculation.json.id);
     expect((await api('GET', `/calculations/${calculationId}`)).json.id).toBe(calculationId);
@@ -197,13 +210,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the Peable Tax merchant API', () => {
 
     const reversal = await api('POST', `/transactions/${String(sale?.id)}/reversals`, {
       reference: 'refund_synthetic',
-      amount: 400,
+      amount: '400',
     });
     expect(reversal.status).toBe(201);
     expect(reversal.json).toMatchObject({
       type: 'reversal',
       reversal_of: sale?.id,
-      reversal: { amount_total: -400 },
+      reversal: { amount_total: '-400', amount_net: '-400', tax_amount: '0' },
     });
 
     const now = Math.floor(Date.now() / 1000);
@@ -216,6 +229,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the Peable Tax merchant API', () => {
       collection: 'not_registered',
       transactions: 1,
       reversals: 1,
+      taxable_amount: '0',
+      tax_amount: '0',
     });
 
     const csv = await api('GET', `/reports/summary?${window}&format=csv`);

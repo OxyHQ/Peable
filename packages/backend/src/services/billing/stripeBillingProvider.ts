@@ -3,7 +3,12 @@ import type Stripe from 'stripe';
 import { z } from 'zod';
 import { BILLING_SUBSCRIPTION_STATUSES } from '@peable.to/shared-types';
 import { STRIPE_API_VERSION } from '../providers/stripe/client';
-import { BillingError, billingDeploymentSchema, type BillingDeployment } from './contracts';
+import {
+  BillingError,
+  billingDeploymentSchema,
+  providerAmount,
+  type BillingDeployment,
+} from './contracts';
 import type { BillingProvider, ProviderBillingSubscription } from './provider';
 import { toUnix } from '../../lib/time';
 
@@ -189,9 +194,9 @@ export function createStripeBillingProvider(
           client_secret: z.string().min(1).nullable(),
           customer: ref('cus_'),
           expires_at: seconds,
-          amount_total: z.number().int().positive().safe(),
+          amount_total: providerAmount,
           currency: z.string().regex(/^[a-z]{3}$/),
-          total_details: z.object({ amount_tax: z.number().int().nonnegative().safe() }),
+          total_details: z.object({ amount_tax: providerAmount }),
           automatic_tax: z.object({ enabled: z.literal(false) }),
           line_items: z.object({
             has_more: z.literal(false),

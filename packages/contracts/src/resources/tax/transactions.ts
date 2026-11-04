@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { type List, listOf } from '../../common/envelopes';
 import { defineComponent, defineObject, type Expand } from '../../common/objects';
 import { listQuery } from '../../common/params';
-import { nullableString, unixSeconds } from '../../common/primitives';
+import { nullableString, signedAmount, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import { TAX_TRANSACTION_TYPES } from '../../vocabulary/tax';
+import { baseUnitAmountParam } from '../catalog/shared';
 import { taxCalculationLineItemSchema, taxCalculationSchema } from './calculations';
-import { taxMinorAmount } from './shared';
 
 /**
  * A tax transaction (`taxtxn_…`, ADR 0011/0013): a calculation that was paid,
@@ -25,9 +25,9 @@ export const taxTransactionReversalSchema = defineComponent(
   'TaxTransactionReversal',
   z
     .object({
-      amount_total: taxMinorAmount,
-      amount_net: taxMinorAmount,
-      tax_amount: taxMinorAmount,
+      amount_total: signedAmount,
+      amount_net: signedAmount,
+      tax_amount: signedAmount,
       line_items: z.array(taxCalculationLineItemSchema),
     })
     .strict(),
@@ -79,14 +79,11 @@ export const createTaxReversalParams = z
       .max(200)
       .regex(/^[A-Za-z0-9_.:-]+$/)
       .describe("The refund's own reference; a repeated reference returns the same reversal."),
-    amount: z
-      .number()
-      .int()
-      .positive()
-      .safe()
+    amount: baseUnitAmountParam
+      .refine((value) => value !== '0', 'must be positive')
       .optional()
       .describe(
-        'Gross minor units refunded (what the payer got back). Omitted: everything not yet reversed.',
+        'Gross base units refunded (what the payer got back). Omitted: everything not yet reversed.',
       ),
   })
   .strict();

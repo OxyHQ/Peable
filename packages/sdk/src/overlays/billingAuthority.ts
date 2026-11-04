@@ -10,6 +10,7 @@ import {
   type BillingTaxQuote,
   canonicalBillingAuthority,
   canonicalBillingTaxQuote,
+  isBaseUnitString,
 } from '@peable.to/shared-types';
 import type { BillingResource } from '../generated/resources';
 
@@ -19,9 +20,14 @@ export interface BillingAuthorityKeys {
   readonly taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
 }
 
-/** Signed instants are integer Unix seconds (ADR 0014 D1, schema version 2). */
+/** Signed instants are integer Unix seconds (ADR 0014 D1). */
 function isUnixSeconds(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Signed amounts are base-unit integer strings (ADR 0014 D1, schema version 3). */
+function isAmount(value: unknown): value is string {
+  return typeof value === 'string' && isBaseUnitString(value);
 }
 
 function nowSeconds(): number {
@@ -50,12 +56,17 @@ function assertTaxQuote(
   const pinned = keys[result.signature.key_id];
   if (
     !pinned ||
-    result.schema_version !== 2 ||
+    result.schema_version !== 3 ||
     result.signature.algorithm !== 'Ed25519' ||
     !/^[A-Za-z0-9_-]{86}$/.test(result.signature.value) ||
     result.source.store_id !== params.store_id ||
     result.source.plan_id !== params.plan_id ||
     result.quote.customer_location_evidence_id !== params.customer_location_evidence_id ||
+    !isAmount(result.quote.gross_minor_units) ||
+    !isAmount(result.quote.net_minor_units) ||
+    !isAmount(result.quote.tax_minor_units) ||
+    BigInt(result.quote.net_minor_units) + BigInt(result.quote.tax_minor_units) !==
+      BigInt(result.quote.gross_minor_units) ||
     !isUnixSeconds(result.quote.quoted_at) ||
     result.quote.quoted_at > nowSeconds() ||
     !isUnixSeconds(result.quote.expires_at) ||
@@ -75,7 +86,7 @@ function assertAuthority(
 ): void {
   const pinnedKey = keys[authority.signature.key_id];
   if (
-    authority.schema_version !== 2 ||
+    authority.schema_version !== 3 ||
     !pinnedKey ||
     authority.signature.algorithm !== 'Ed25519' ||
     !/^[A-Za-z0-9_-]{86}$/.test(authority.signature.value) ||
@@ -87,11 +98,21 @@ function assertAuthority(
     authority.invoice.issued_at > nowSeconds() ||
     !isUnixSeconds(authority.invoice.expires_at) ||
     authority.invoice.expires_at <= nowSeconds() ||
+    // Amounts are base-unit strings (schema version 3): net and tax add up to
+    // the gross, exactly.
+    !isAmount(authority.invoice.gross_minor_units) ||
+    !isAmount(authority.invoice.net_minor_units) ||
+    !isAmount(authority.invoice.tax_minor_units) ||
+    BigInt(authority.invoice.net_minor_units) + BigInt(authority.invoice.tax_minor_units) !==
+      BigInt(authority.invoice.gross_minor_units) ||
     // Lines are present exactly when asked for, and add up to the tax.
     withTaxLines !== Array.isArray(authority.invoice.tax_lines) ||
     (authority.invoice.tax_lines !== undefined &&
-      authority.invoice.tax_lines.reduce((sum, line) => sum + line.tax_minor_units, 0) !==
-        authority.invoice.tax_minor_units)
+      (!authority.invoice.tax_lines.every((line) => isAmount(line.tax_minor_units)) ||
+        authority.invoice.tax_lines.reduce(
+          (sum, line) => sum + BigInt(line.tax_minor_units),
+          0n,
+        ) !== BigInt(authority.invoice.tax_minor_units)))
   )
     throw new Error('Invalid authority');
   if (authority.method === 'faircoin') {

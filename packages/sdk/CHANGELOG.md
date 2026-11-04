@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.0.0 — every amount is a base-unit string (ADR 0014 D1)
+
+Requires `@peable.to/contracts` 2.0.0 and `@peable.to/shared-types` 2.0.0. A
+major: the last JSON-number amounts on the wire are base-unit integer strings
+now, changed at the root — no number is accepted or answered beside them.
+
+Breaking:
+
+- **Peable Tax.** `TaxCalculation` (`amount_total`, `amount_net`,
+  `tax_amount_exclusive`, `tax_amount_inclusive`), each line item (`amount`,
+  `amount_tax`, `amount_net`) and breakdown entry (`taxable_amount`, `amount`),
+  `TaxTransactionReversal` (`amount_total`, `amount_net`, `tax_amount`) and
+  `TaxReportRow` (`taxable_amount`, `tax_amount`) are strings; a reversal's are
+  signed (`"-600"`). Requests too: `tax.calculations.create`'s
+  `line_items[].amount` and `tax.transactions.createReversal`'s `amount` take a
+  string (`"2999"`); a number is a 400 `invalid_tax_request`.
+- **Signed billing documents are `schema_version: 3`.** `BillingTaxQuote`
+  (`quote.gross_minor_units`, `net_minor_units`, `tax_minor_units`) and
+  `BillingFinalInvoiceAuthority` (`invoice.gross_minor_units`,
+  `net_minor_units`, `tax_minor_units`, `merchant_fee_minor_units`, each
+  `tax_lines[]` `taxable_minor_units` / `tax_minor_units`) carry strings, and
+  the signature covers that encoding. `billing.createTaxQuote` and
+  `billing.retrieveFinalInvoiceAuthority` accept version 3 only, and refuse a
+  document whose net and tax do not add up to its gross exactly (`bigint`).
+- **Billing.** `BillingRailOffer.gross_minor_units`,
+  `BillingFaircoinFxQuote.gross_minor_units` and
+  `BillingEmbeddedCheckoutAction.amount_minor_units` are strings;
+  `BillingPaidInvoice` / `BillingInvoiceState` amounts (already strings) are
+  validated as canonical base-unit strings.
+- The UI's prepared Checkout Session compares the provider's JS-number total
+  with the action's string exactly (`String(total) === amount_minor_units`).
+
 ## 1.0.2
 
 Requires `@peable.to/contracts` 1.2.0 and `@peable.to/shared-types` 1.0.1.

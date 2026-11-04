@@ -24,7 +24,7 @@ function fixture() {
     customer_location_evidence_id: 'location_fixture',
   };
   const result: BillingTaxQuote = {
-    schema_version: 2,
+    schema_version: 3,
     source: {
       merchant_id: 'merch_fixture',
       app_id: 'app_fixture',
@@ -36,9 +36,9 @@ function fixture() {
     quote: {
       id: 'quote_fixture',
       currency: 'USD',
-      gross_minor_units: 2999,
-      net_minor_units: 2500,
-      tax_minor_units: 499,
+      gross_minor_units: '2999',
+      net_minor_units: '2500',
+      tax_minor_units: '499',
       tax_treatment: 'inclusive',
       seller_id: 'seller_fixture',
       invoice_issuer_id: 'issuer_fixture',
@@ -101,11 +101,24 @@ describe('pinned SDK tax quote authority', () => {
     value.result.quote.expires_at = Math.floor(Date.now() / 1000) - 1;
     value.resign();
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
-    // Only schema version 2 (Unix-second instants) is accepted, even when signed.
     value.result.quote.expires_at = Math.floor(Date.now() / 1000) + 60;
     value.resign();
     expect(await resource.createTaxQuote(value.request)).toEqual(value.result);
-    (value.result as { schema_version: number }).schema_version = 1;
+    // Net and tax must add up to the gross, exactly, even when signed.
+    value.result.quote.tax_minor_units = '500';
+    value.resign();
+    await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
+    value.result.quote.tax_minor_units = '499';
+    // Only schema version 3 (base-unit string amounts) is accepted, even when
+    // signed: a version 2 quote's number amounts are refused.
+    const legacy = value.result as unknown as {
+      schema_version: number;
+      quote: Record<string, unknown>;
+    };
+    legacy.schema_version = 2;
+    legacy.quote.gross_minor_units = 2999;
+    legacy.quote.net_minor_units = 2500;
+    legacy.quote.tax_minor_units = 499;
     value.resign();
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
   });

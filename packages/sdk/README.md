@@ -164,8 +164,9 @@ reversals still take `external_ref`, which is durable and decides whether money
 moves twice.
 
 Signed billing documents (tax quotes and final invoice authorities) carry
-`schema_version: 2`, whose instants are Unix seconds; the verifiers accept no
-other version.
+`schema_version: 3`: instants are Unix seconds and every amount is a base-unit
+string (`gross_minor_units: "2999"`). The verifiers accept no other version, and
+check that net and tax add up to the gross exactly.
 
 ### Lists, auto-pagination, `expand` and metadata
 

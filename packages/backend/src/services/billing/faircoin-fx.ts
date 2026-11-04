@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import { EXPLORER_BASE_URL } from '@fairco.in/core';
+import { type BillingFaircoinFxQuote, isBaseUnitString } from '@peable.to/shared-types';
 import { BillingError } from './contracts';
 import { toUnix } from '../../lib/time';
 
-import type { BillingFaircoinFxQuote } from '@peable.to/shared-types';
 export type FaircoinFxQuote = BillingFaircoinFxQuote;
 
 /** Decimal parsing and ceil arithmetic are exact. No binary float multiplication
  * or assumed parity between USD and FAIR enters the settlement amount. */
-export function faircoinBaseUnitsForUsd(grossMinorUnits: number, usdPerFair: string): string {
-  if (!Number.isSafeInteger(grossMinorUnits) || grossMinorUnits <= 0)
+export function faircoinBaseUnitsForUsd(grossMinorUnits: string, usdPerFair: string): string {
+  if (!isBaseUnitString(grossMinorUnits) || grossMinorUnits === '0')
     throw new Error('Invalid USD amount');
   const match = /^(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:e([+-]?[0-9]+))?$/i.exec(usdPerFair);
   if (!match || usdPerFair.length > 80) throw new Error('Invalid FAIR rate');
@@ -29,7 +29,7 @@ export function faircoinBaseUnitsForUsd(grossMinorUnits: number, usdPerFair: str
  * commerce reader never falls back to stale data, redirects, or a guessed rate.
  * Deployment must explicitly approve using that indexed price for its quotes. */
 export async function createExplorerFaircoinQuote(
-  grossMinorUnits: number,
+  grossMinorUnits: string,
   options: { now?: Date; fetch?: typeof fetch; lifetimeMs?: number } = {},
 ): Promise<FaircoinFxQuote> {
   const lifetimeMs = options.lifetimeMs ?? 10 * 60_000;

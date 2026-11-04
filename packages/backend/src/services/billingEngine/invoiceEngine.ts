@@ -413,7 +413,7 @@ async function commitInvoiceTax(tx: Transaction, invoice: InvoiceRow, now: Date)
       originalId: transaction.id,
       reference: `${invoice.publicId}:${credit.publicId}`,
       reversedAt: now,
-      target: (reversed, total) => Math.min(total, reversed + Number(gross)),
+      target: (reversed, total) => (reversed + gross < total ? reversed + gross : total),
     });
   }
 }

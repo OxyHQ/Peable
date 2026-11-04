@@ -47,7 +47,7 @@ Calculate and freeze. Refused with `tax_settings_not_active` until the owner app
 | `customer_location_evidence_id` **required** | string | Sufficient, unexpired evidence (`taxloc_…`). 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
 | `line_items` **required** | array of object | At most 100 items. At least 1 item. |
 | `line_items[][reference]` **required** | string | 1–200 characters. |
-| `line_items[][amount]` **required** | integer | Unit amount × quantity, minor units. Includes tax when inclusive. |
+| `line_items[][amount]` **required** | string | Unit amount × quantity, base units. Includes tax when inclusive. |
 | `line_items[][quantity]` | integer | At most 1000000. |
 | `line_items[][tax_code]` | string | Defaults to the product's tax code, then the merchant's default. |
 | `line_items[][tax_behavior]` | string | Defaults to the merchant's default tax behavior. One of `inclusive`, `exclusive`. |
@@ -68,19 +68,19 @@ Returns [TaxCalculation](/reference/objects/tax-calculation).
   "customer_location_evidence_id": "taxloc_0193b8f2c1a87d3e9f4a",
   "country": "DE",
   "state": null,
-  "amount_total": 1190,
-  "amount_net": 1000,
-  "tax_amount_exclusive": 190,
-  "tax_amount_inclusive": 0,
+  "amount_total": "1190",
+  "amount_net": "1000",
+  "tax_amount_exclusive": "190",
+  "tax_amount_inclusive": "0",
   "line_items": [
     {
       "reference": "plan_pro_monthly",
       "quantity": 1,
       "tax_code": "txcd_10103001",
       "tax_behavior": "exclusive",
-      "amount": 1000,
-      "amount_tax": 190,
-      "amount_net": 1000,
+      "amount": "1000",
+      "amount_tax": "190",
+      "amount_net": "1000",
       "breakdown": [
         {
           "country": "DE",
@@ -89,8 +89,8 @@ Returns [TaxCalculation](/reference/objects/tax-calculation).
           "display_name": "VAT",
           "tax_type": "vat",
           "rate_percentage": "19.0",
-          "taxable_amount": 1000,
-          "amount": 190,
+          "taxable_amount": "1000",
+          "amount": "190",
           "inclusive": false,
           "taxability_reason": "standard_rated"
         }
@@ -137,19 +137,19 @@ Returns [TaxCalculation](/reference/objects/tax-calculation).
   "customer_location_evidence_id": "taxloc_0193b8f2c1a87d3e9f4a",
   "country": "DE",
   "state": null,
-  "amount_total": 1190,
-  "amount_net": 1000,
-  "tax_amount_exclusive": 190,
-  "tax_amount_inclusive": 0,
+  "amount_total": "1190",
+  "amount_net": "1000",
+  "tax_amount_exclusive": "190",
+  "tax_amount_inclusive": "0",
   "line_items": [
     {
       "reference": "plan_pro_monthly",
       "quantity": 1,
       "tax_code": "txcd_10103001",
       "tax_behavior": "exclusive",
-      "amount": 1000,
-      "amount_tax": 190,
-      "amount_net": 1000,
+      "amount": "1000",
+      "amount_tax": "190",
+      "amount_net": "1000",
       "breakdown": [
         {
           "country": "DE",
@@ -158,8 +158,8 @@ Returns [TaxCalculation](/reference/objects/tax-calculation).
           "display_name": "VAT",
           "tax_type": "vat",
           "rate_percentage": "19.0",
-          "taxable_amount": 1000,
-          "amount": 190,
+          "taxable_amount": "1000",
+          "amount": "190",
           "inclusive": false,
           "taxability_reason": "standard_rated"
         }
@@ -500,8 +500,8 @@ Returns [TaxReport](/reference/objects/tax-report).
       "currency": "EUR",
       "transactions": 42,
       "reversals": 1,
-      "taxable_amount": 41000,
-      "tax_amount": 7790
+      "taxable_amount": "41000",
+      "tax_amount": "7790"
     }
   ]
 }
@@ -614,7 +614,7 @@ For a refund the rail cannot report itself (FairCoin). Card refunds and credit n
 | Field | Type | Description |
 | --- | --- | --- |
 | `reference` **required** | string | The refund's own reference; a repeated reference returns the same reversal. 1–200 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
-| `amount` | integer | Gross minor units refunded (what the payer got back). Omitted: everything not yet reversed. |
+| `amount` | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
 
 **Response `201`**
 

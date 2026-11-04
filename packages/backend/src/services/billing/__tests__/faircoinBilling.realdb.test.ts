@@ -71,14 +71,14 @@ async function fixture() {
     }),
     calculate: async ({ source }) => {
       const quote: BillingTaxQuote = {
-        schema_version: 2,
+        schema_version: 3,
         source,
         quote: {
           id: `tax_${randomUUID()}`,
           currency: 'USD',
-          gross_minor_units: 2999,
-          net_minor_units: 2500,
-          tax_minor_units: 499,
+          gross_minor_units: '2999',
+          net_minor_units: '2500',
+          tax_minor_units: '499',
           tax_treatment: 'inclusive',
           seller_id: 'seller',
           invoice_issuer_id: 'issuer',
@@ -115,7 +115,7 @@ async function fixture() {
     quote: async () => ({
       id: `fx_${randomUUID()}`,
       currency: 'USD',
-      gross_minor_units: 2999,
+      gross_minor_units: '2999',
       amount_base_units: '2999000000',
       usd_per_fair: '1',
       source: 'synthetic_test_quote',

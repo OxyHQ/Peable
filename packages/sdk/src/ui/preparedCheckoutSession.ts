@@ -22,13 +22,13 @@ export function matchingCheckoutSessionAction(
     action.session_id.startsWith(
       action.publishable_key.startsWith('pk_live_') ? 'cs_live_' : 'cs_test_',
     ) &&
-    Number.isSafeInteger(action.amount_minor_units) &&
-    action.amount_minor_units > 0 &&
+    /^[1-9][0-9]*$/.test(action.amount_minor_units) &&
     /^[A-Z]{3}$/.test(action.currency)
     ? action
     : undefined;
 }
-/** Read every provider amount field required by Checkout before accepting the exact server quote. */
+/** Read every provider amount field required by Checkout before accepting the exact server quote.
+ * The provider counts in a JS number; it must spell exactly the quote's base-unit string. */
 export function checkoutSessionMatchesQuote(
   session: ProviderCheckoutSession,
   action: CheckoutSessionAction,
@@ -44,7 +44,8 @@ export function checkoutSessionMatchesQuote(
     session.id === action.session_id &&
     session.livemode === action.publishable_key.startsWith('pk_live_') &&
     currency.toUpperCase() === action.currency &&
-    amount === action.amount_minor_units &&
+    Number.isSafeInteger(amount) &&
+    String(amount) === action.amount_minor_units &&
     digits !== undefined &&
     divisor === 10 ** digits
   );

@@ -34,6 +34,12 @@ function behavior(value: string): 'inclusive' | 'exclusive' {
   throw new TaxProviderUnavailableError('unknown_tax_behavior');
 }
 
+/** A Stripe amount, which is an integer the JS number holds exactly. */
+function baseUnits(value: number): bigint {
+  if (!Number.isSafeInteger(value)) throw new TaxProviderUnavailableError('invalid_amount');
+  return BigInt(value);
+}
+
 function unavailable(error: unknown): never {
   const code = (error as { code?: unknown })?.code;
   if (code === 'customer_tax_location_invalid') throw new TaxCustomerLocationInvalidError();
@@ -61,7 +67,8 @@ export function createStripeTaxProvider(api: StripeTaxApi, livemode: boolean): T
             currency: input.currency.toLowerCase(),
             customer_details: { address: address(input.customer), address_source: 'billing' },
             line_items: input.lineItems.map((line) => ({
-              amount: line.amount,
+              // Bounded by `createTaxCalculationParams`, so the number is exact.
+              amount: Number(line.amount),
               quantity: line.quantity,
               reference: line.reference,
               tax_code: line.taxCode,
@@ -86,8 +93,8 @@ export function createStripeTaxProvider(api: StripeTaxApi, livemode: boolean): T
         expiresAt: result.expires_at ? new Date(result.expires_at * 1000) : null,
         lineItems: lines.map((line) => ({
           reference: line.reference,
-          amount: line.amount,
-          amountTax: line.amount_tax,
+          amount: baseUnits(line.amount),
+          amountTax: baseUnits(line.amount_tax),
           taxBehavior: behavior(line.tax_behavior),
           breakdown: (line.tax_breakdown ?? []).map(
             (entry): TaxBreakdownEntry => ({
@@ -97,8 +104,8 @@ export function createStripeTaxProvider(api: StripeTaxApi, livemode: boolean): T
               display_name: entry.jurisdiction.display_name ?? null,
               tax_type: entry.tax_rate_details?.tax_type ?? null,
               rate_percentage: entry.tax_rate_details?.percentage_decimal ?? null,
-              taxable_amount: entry.taxable_amount,
-              amount: entry.amount,
+              taxable_amount: baseUnits(entry.taxable_amount).toString(),
+              amount: baseUnits(entry.amount).toString(),
               inclusive: line.tax_behavior === 'inclusive',
               taxability_reason: entry.taxability_reason,
             }),

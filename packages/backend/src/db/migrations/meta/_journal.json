@@ -526,6 +526,20 @@
       "when": 1793737394605,
       "tag": "0074_tax_compliance_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793759093450,
+      "tag": "0075_tax_amounts_strings",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793759095271,
+      "tag": "0076_tax_amounts_strings_settle",
+      "breakpoints": true
     }
   ]
 }

@@ -1,9 +1,16 @@
 import { z } from 'zod';
 import { defineComponent, defineObject, type Expand } from '../../common/objects';
-import { livemode, nullableString, unixSeconds } from '../../common/primitives';
+import {
+  amount,
+  livemode,
+  nullableString,
+  signedAmount,
+  unixSeconds,
+} from '../../common/primitives';
 import { defineRoute } from '../../route';
 import { TAX_BEHAVIORS, TAX_COLLECTIONS } from '../../vocabulary/tax';
-import { taxCountry, taxMinorAmount, taxReferenceParam, taxState } from './shared';
+import { baseUnitAmountParam } from '../catalog/shared';
+import { taxCountry, taxReferenceParam, taxState } from './shared';
 
 /**
  * A tax calculation (`taxcalc_…`, ADR 0011): a frozen answer. Peable decides
@@ -24,8 +31,8 @@ export const taxBreakdownEntrySchema = defineComponent(
       rate_percentage: nullableString.describe(
         'Decimal string, e.g. `"20.0"`; `null` when no tax is imposed.',
       ),
-      taxable_amount: taxMinorAmount,
-      amount: taxMinorAmount,
+      taxable_amount: signedAmount,
+      amount: signedAmount,
       inclusive: z.boolean(),
       taxability_reason: z
         .string()
@@ -45,9 +52,9 @@ export const taxCalculationLineItemSchema = defineComponent(
       quantity: z.number().int(),
       tax_code: z.string(),
       tax_behavior: z.enum(TAX_BEHAVIORS),
-      amount: taxMinorAmount.describe('As given: includes tax when inclusive.'),
-      amount_tax: taxMinorAmount,
-      amount_net: taxMinorAmount.describe('Excluding tax.'),
+      amount: signedAmount.describe('As given: includes tax when inclusive.'),
+      amount_tax: signedAmount,
+      amount_net: signedAmount.describe('Excluding tax.'),
       breakdown: z.array(taxBreakdownEntrySchema),
     })
     .strict(),
@@ -73,10 +80,10 @@ export const taxCalculationSchema = defineObject(
       customer_location_evidence_id: z.string().describe('`taxloc_…`.'),
       country: taxCountry,
       state: taxState,
-      amount_total: taxMinorAmount.describe('What the customer pays.'),
-      amount_net: taxMinorAmount,
-      tax_amount_exclusive: taxMinorAmount,
-      tax_amount_inclusive: taxMinorAmount,
+      amount_total: amount.describe('What the customer pays.'),
+      amount_net: amount,
+      tax_amount_exclusive: amount,
+      tax_amount_inclusive: amount,
       line_items: z.array(taxCalculationLineItemSchema),
       tax_date: unixSeconds,
       created: unixSeconds,
@@ -97,19 +104,19 @@ export const taxCalculationSchema = defineObject(
         customer_location_evidence_id: 'taxloc_0193b8f2c1a87d3e9f4a',
         country: 'DE',
         state: null,
-        amount_total: 1190,
-        amount_net: 1000,
-        tax_amount_exclusive: 190,
-        tax_amount_inclusive: 0,
+        amount_total: '1190',
+        amount_net: '1000',
+        tax_amount_exclusive: '190',
+        tax_amount_inclusive: '0',
         line_items: [
           {
             reference: 'plan_pro_monthly',
             quantity: 1,
             tax_code: 'txcd_10103001',
             tax_behavior: 'exclusive',
-            amount: 1000,
-            amount_tax: 190,
-            amount_net: 1000,
+            amount: '1000',
+            amount_tax: '190',
+            amount_net: '1000',
             breakdown: [
               {
                 country: 'DE',
@@ -118,8 +125,8 @@ export const taxCalculationSchema = defineObject(
                 display_name: 'VAT',
                 tax_type: 'vat',
                 rate_percentage: '19.0',
-                taxable_amount: 1000,
-                amount: 190,
+                taxable_amount: '1000',
+                amount: '190',
                 inclusive: false,
                 taxability_reason: 'standard_rated',
               },
@@ -142,15 +149,21 @@ declare module '../../common/objects' {
   }
 }
 
+/**
+ * The largest line a tax provider is asked to price: the provider's own API
+ * counts amounts in integers that stay exact in a JS number (Stripe Tax).
+ */
+const TAX_LINE_AMOUNT_MAX = BigInt(Number.MAX_SAFE_INTEGER);
+
 export const taxLineItemParams = z
   .object({
     reference: z.string().min(1).max(200),
-    amount: z
-      .number()
-      .int()
-      .nonnegative()
-      .safe()
-      .describe('Unit amount × quantity, minor units. Includes tax when inclusive.'),
+    amount: baseUnitAmountParam
+      .refine(
+        (value) => BigInt(value) <= TAX_LINE_AMOUNT_MAX,
+        'exceeds the largest amount a tax provider prices',
+      )
+      .describe('Unit amount × quantity, base units. Includes tax when inclusive.'),
     quantity: z.number().int().positive().max(1_000_000).optional(),
     tax_code: z
       .string()
