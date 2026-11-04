@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Linking, Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Account } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
+import { openHref } from '@oxy.so/bloom/hooks';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -39,15 +40,6 @@ import { CapabilityBadge, EnabledBadge } from '@/ui/StatusBadge';
 
 const modeLabel = (scope: DashboardScope) =>
   t(modeForEnvironment(scope.environment) === 'live' ? 'scope.live' : 'scope.test');
-
-/** The hosted page replaces Orbit in a browser; elsewhere it opens in the system browser. */
-async function openOnboarding(url: string): Promise<void> {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.location.assign(url);
-    return;
-  }
-  await Linking.openURL(url);
-}
 
 function CreateAccount({ scope }: { scope: DashboardScope }) {
   const queryClient = useQueryClient();
@@ -128,7 +120,8 @@ function Onboarding({ scope, account }: { scope: DashboardScope; account: Accoun
   const link = useMutation({
     // Minted on the click and opened at once: a stored link is one that expired.
     mutationFn: () => dashboardApi.account.createLink(scope, onboardingLinkBody(orbitOrigin())),
-    onSuccess: (created) => openOnboarding(created.url),
+    // The hosted page replaces Orbit in a browser; elsewhere it opens in the system browser.
+    onSuccess: (created) => openHref(created.url),
     onError: (error) => toast.error(describeError(error, t('error.generic'))),
   });
   return (
