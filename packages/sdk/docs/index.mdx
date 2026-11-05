@@ -10,11 +10,17 @@ Peable is the payments platform of the Oxy ecosystem: one API, one SDK
 (`@peable.to/sdk`) and a hosted checkout for accepting payments on two rails.
 
 - **FairCoin, non-custodially.** The payer pays from their own wallet straight
-  to an address derived from your **watch-only** key. Peable watches the chain
-  and never holds the coins — it cannot spend, refund or move them.
+  into the **Peable wallet of the Oxy account that owns your application**.
+  Peable derives each address from that account's public identity key, watches
+  the chain and never holds the coins — it cannot spend, refund or move them.
 - **Cards**, through Peable's payment provider: card data is collected by the
   provider's own fields in the payer's browser and never reaches Peable or
   your server. Peable holds the provider credentials; you supply none.
+
+Every order a payer completes on Peable (a Checkout Session, a Payment Link or a
+hosted invoice) offers FairCoin beside the fiat methods you turn on, and
+nothing turns it off. A fiat order paid in FairCoin is quoted in FAIR
+([FairCoin on every order](/faircoin)).
 
 Peable accepts FairCoin as a payment method. It never buys, sells or exchanges
 FairCoin.
@@ -33,7 +39,7 @@ FairCoin.
 
 | Area | Guides |
 |---|---|
-| Payments | [Accept a payment](/accept-a-payment) · [Checkout](/checkout) · [Payment Links](/payment-links) · [Elements](/elements) · [Refunds and disputes](/refunds-and-disputes) |
+| Payments | [Accept a payment](/accept-a-payment) · [Checkout](/checkout) · [FairCoin on every order](/faircoin) · [Payment Links](/payment-links) · [Elements](/elements) · [Refunds and disputes](/refunds-and-disputes) |
 | Billing | [Products and prices](/catalog) · [Subscriptions and invoices](/billing) · [Tax](/tax) |
 | Connect and money | [Connect and money](/connect) · [FairCoin sellers](/connect-faircoin) · [Reporting](/reporting) · [Contribution links](/contributions) |
 | Events | [Webhooks and events](/webhooks) |

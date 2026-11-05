@@ -7,15 +7,18 @@ order: 17
 # Going live
 
 The same code runs live: what changes is the credential, and on the FairCoin
-rail the network.
+rail the network (`mainnet`), which follows from it.
 
 1. **A production credential.** Issue a service credential on your Oxy
    application in its `production` environment, with the same scopes
    (`payments:read`, `payments:write`). Its token selects live mode; nothing
    in your requests changes ([Testing](/testing#test-mode-and-live-mode)).
 2. **A live merchant.** Your production credential resolves to its own
-   merchant: register it as you did in test mode, with a **`mainnet`**
-   watch-only key to accept FairCoin.
+   merchant: register it as you did in test mode. Its network is `mainnet`,
+   and its FairCoin goes to the Peable wallet of the account that owns your
+   application, the same as in test mode. No key is registered. While a
+   deployment has not opened mainnet FairCoin, a live order offers FairCoin
+   as unavailable (`faircoin_network_closed`), and cards keep working.
 3. **A live webhook endpoint.** Endpoints, events and secrets belong to a
    mode. Create the endpoint with the production credential, store its new
    `whsec_…`, and keep `https` — plain `http` is refused in live mode.
@@ -32,7 +35,8 @@ rail the network.
       and never on `payment_intent.payment_failed` alone.
 - [ ] Errors are handled by `type` and `code`, and the `request_id` is logged.
 - [ ] Refunds and transfers read `status` and expect a later event to move it.
-- [ ] The whole flow passed in test mode on testnet, card and FairCoin.
+- [ ] The whole flow passed in test mode on testnet, card and FairCoin,
+      including FairCoin chosen on a fiat order.
 
 > **Live payments for third parties**
 >

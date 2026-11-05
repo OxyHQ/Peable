@@ -59,7 +59,9 @@ await peable.reports.payoutReconciliation({ payout: 'po_…' }); // the transact
   transactions are the provider's own, verbatim; amounts are signed strings.
 - **FairCoin is informational.** A succeeded FairCoin payment is recorded
   under `informational` — it is in the receiving wallet already. It is never
-  payable, and no payout draws on it.
+  payable, and no payout draws on it. A FairCoin payment of a fiat order also
+  carries `faircoin_quote` on its balance transaction: the fiat price it was
+  quoted at, for your books ([FairCoin on every order](/faircoin#the-quote)).
 - Payouts are scheduled by the provider, or instructed by you on a manual
   schedule.
 

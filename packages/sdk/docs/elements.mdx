@@ -71,6 +71,11 @@ const result = await elements.confirmPayment({
 });
 ```
 
+Elements over a card PaymentIntent offer card methods only: a PaymentIntent
+is one payment on one rail. To offer FairCoin beside the card, use an
+[embedded Checkout Session](/checkout#embedded-checkout) instead
+([FairCoin on every order](/faircoin)).
+
 `confirmPayment` (and `confirmSetup` for a SetupIntent) confirms with the
 provider and then **waits for the gateway's status** — over the socket, with a
 poll fallback — so it resolves from Peable's word, never from the provider's
