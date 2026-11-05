@@ -1,5 +1,46 @@
 # Changelog
 
+## 4.0.0 — FairCoin is always offered, into the owner's Peable wallet
+
+Requires `@peable.to/contracts` 4.0.0 and `@peable.to/shared-types` 4.0.0.
+ADR 0021: FairCoin is offered on every order surface beside the merchant's fiat
+methods, nothing turns it off, and it is received into the Peable wallet of the
+Oxy account that owns the merchant (or the seller's own) — no key is ever
+registered.
+
+Breaking:
+
+- **A Checkout Session's `payment_method_types` must include `faircoin`.**
+  `['card']` on a fiat order is 400 `payment_method_locked`; omit the field (or
+  send `['card', 'faircoin']`). A fiat session's `payment_method_types` is now
+  `['card', 'faircoin']`, and its `network` is the merchant's FairCoin network.
+- **No FairCoin key anywhere (ADR 0021 D5).** `Merchant.xpub` is removed and
+  `Merchant.owner_account` (the owning Oxy account) added; `Merchant.network` is
+  never `null` (the environment's). Registration takes no `network`/`xpub`. The
+  seller onboarding confirm (`POST /v1/connect/onboarding/{token}/faircoin`)
+  takes an empty body. Errors `watch_only_violation` and `key_in_use` are gone.
+- **`PAYMENT_METHOD_CONFIGURATION_TYPES` gains `faircoin`**, an always-on,
+  `locked: true` entry (`PaymentMethodConfigurationEntry.locked` is new);
+  `faircoin.display_preference.preference: 'off'` is 400 `payment_method_locked`.
+- **`PaymentIntent.faircoin.quote`** (`FaircoinQuote | null`) and
+  **`BalanceTransaction.faircoin_quote`** are new required properties of those
+  wire types: a fixture that builds one needs them (`null`).
+
+Added:
+
+- `createPeableCheckout().confirmCheckoutSession(id, secret, { payment_method_type })`
+  — the payer's choice. FairCoin on a fiat order quotes the total in FAIR for
+  10 minutes (`payment_intent.faircoin.quote`: currency, fiat amount, rate, the
+  Explorer and ECB sources, `expires_at`); confirming again with the other
+  method replaces a payment that has not moved money.
+- `CheckoutSessionPublic.payment_method_types` and `.faircoin`
+  (`{ available, unavailable_reason }`, reasons `faircoin_wallet_missing`,
+  `faircoin_network_closed`, `price_unavailable`, `temporarily_unavailable`);
+  `PublicInvoice.faircoin`; hosted invoice `/pay` takes `payment_method_type`.
+- Errors `payment_method_locked`, `faircoin_price_unavailable`,
+  `faircoin_wallet_missing`, `faircoin_network_closed`; vocabulary
+  `FAIRCOIN_UNAVAILABLE_REASONS`.
+
 ## 3.1.0 — the settlement of a refund and of a dispute
 
 Requires `@peable.to/contracts` 3.1.0 and `@peable.to/shared-types` 3.1.0.
