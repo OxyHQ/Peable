@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
-import { HDKey } from '@scure/bip32';
-import { TESTNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
 import { uuidv7 } from '@oxy.so/db';
 import {
   findEndpointForMerchant,
@@ -9,11 +7,11 @@ import {
   insertEndpoint,
 } from '../webhooks/webhookEndpointRepository';
 import {
-  WatchOnlyViolationError,
   findMerchantByAppEnvironment,
   findMerchantById,
   findMerchantsByIds,
   insertMerchant,
+  syncMerchantAuthority,
   updateMerchantSettings,
 } from '../merchants/merchantRepository';
 import {
@@ -24,21 +22,10 @@ import {
 } from '../testDatabase';
 
 /**
- * The merchant repository, and in particular the ONE guarantee that does not
- * survive the port by itself.
+ * The merchant repository. A merchant holds no key of any kind: its FairCoin
+ * network is its environment's and its FairCoin goes to its owner's Peable
+ * wallet (ADR 0021 D5).
  */
-
-/** The canonical all-"abandon" + "art" testnet vector, as `services/__tests__/derivation.test.ts` uses. */
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-const MNEMONIC =
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
-
-/** The matching PRIVATE extended key — what a merchant must never be able to register. */
-function privateExtendedKey(): string {
-  const root = deriveKeyFromSeed(mnemonicToSeed(MNEMONIC), TESTNET);
-  return root.derive(`m/44'/${TESTNET.bip44CoinType}'/0'`).hdKey.privateExtendedKey;
-}
 
 let suite: SuiteDatabase | undefined;
 
@@ -47,8 +34,6 @@ function registration(overrides: Partial<Parameters<typeof insertMerchant>[1]> =
   return {
     oxyAppId: `app_${unique}`,
     environment: 'development' as const,
-    network: 'testnet' as const,
-    xpub: XPUB,
     publicId: `merch_${unique}`,
     ...overrides,
   };
@@ -82,45 +67,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     expect(found?.id).toBe(must(created).id);
   });
 
-  /**
-   * THE test this file exists for.
-   *
-   * `models/Merchant.ts` enforces the non-custody firewall in a
-   * `pre('validate')` hook that runs on every save. A drizzle schema has no
-   * hooks, and no CHECK constraint can express it — deciding it requires
-   * deriving a secp256k1 child key. So the guarantee moved into
-   * `insertMerchant`, and NOTHING fails if someone removes it there: every
-   * other test in this repository hands in a valid xpub and would stay green.
-   *
-   * Only a test that presents a real PRIVATE extended key can tell the two
-   * apart, which is why this one builds one rather than asserting on a string.
-   */
-  it('refuses a private extended key, and stores nothing', async () => {
-    const xprv = privateExtendedKey();
-
-    // Vacuity guard: prove the fixture really is a private key before using it
-    // to prove anything. A malformed string would be refused too, for a reason
-    // that has nothing to do with the firewall.
-    const parsed = HDKey.fromExtendedKey(xprv, {
-      public: TESTNET.bip32.public,
-      private: TESTNET.bip32.private,
-    });
-    expect(parsed.privateKey).not.toBeNull();
-
-    const params = registration({ xpub: xprv });
-    let raised: unknown;
-    try {
-      await insertMerchant(must(suite).db, params);
-    } catch (error) {
-      raised = error;
-    }
-
-    expect(raised).toBeInstanceOf(WatchOnlyViolationError);
-    // Refused BEFORE the insert — a row would mean the gateway had persisted a
-    // spending key, which is the exact outcome the firewall exists to prevent.
-    expect(
-      await findMerchantByAppEnvironment(must(suite).db, params.oxyAppId, 'development'),
-    ).toBeNull();
+  it('takes its network from its environment and mirrors its owner (ADR 0021 D5)', async () => {
+    const live = must(
+      await insertMerchant(must(suite).db, {
+        ...registration(),
+        environment: 'production',
+        ownerAccountId: 'acct_owner_live',
+      }),
+    );
+    expect(live).toMatchObject({ network: 'mainnet', ownerAccountId: 'acct_owner_live' });
+    const test = must(await insertMerchant(must(suite).db, registration()));
+    expect(test).toMatchObject({ network: 'testnet', ownerAccountId: null });
+    const synced = await syncMerchantAuthority(must(suite).db, test, { ownerAccountId: 'acct_b' });
+    expect(synced.ownerAccountId).toBe('acct_b');
+    // An unknown owner leaves the stored one.
+    expect((await syncMerchantAuthority(must(suite).db, synced, {})).ownerAccountId).toBe('acct_b');
   });
 
   it('converges on the unique index rather than reading first', async () => {
@@ -158,7 +119,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     expect(patched?.displayName).toBe('Merchant Example');
     expect(patched?.requiredConfirmations).toBe(6);
     // Untouched by a patch that did not mention them.
-    expect(patched?.xpub).toBe(XPUB);
     expect(patched?.network).toBe('testnet');
     expect(patched?.environment).toBe('development');
   });

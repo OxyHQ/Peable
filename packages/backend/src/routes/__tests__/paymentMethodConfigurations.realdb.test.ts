@@ -174,7 +174,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
         appName: 't',
         scopes: ['payments:read', 'payments:write'],
         credentialId: 'c',
-        ownerAccountId: 'owner',
+        ownerAccountId: as.ownerAccountId ?? 'owner',
         environment: 'development',
         tier: 'external',
       };
@@ -458,7 +458,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
     });
     expect(taken.status).toBe(409);
   });
-  test('FairCoin is an always-on, locked entry, available once the merchant has a key', async () => {
+  test('FairCoin is an always-on, locked entry, available once the owner Peable wallet can receive', async () => {
     const config = await defaultConfiguration();
     expect(config.faircoin).toEqual({
       available: true,
@@ -486,13 +486,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
       expect([type, (config[type] as Entry).locked]).toEqual([type, false]);
     }
 
-    // A merchant without a FairCoin key: still listed and locked on, but not available.
+    // A merchant whose owning account has no Peable wallet (no identity key):
+    // still listed and locked on, but not available, and it says why.
     const id = crypto.randomUUID();
     const keyless = must(
       await insertMerchant(gatewayDb(), {
         publicId: `merch_${id}`,
         oxyAppId: `app_${id}`,
         environment: 'development',
+        ownerAccountId: `keyless_${id}`,
       }),
     );
     actingAs = () => keyless;
@@ -501,7 +503,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
       available: false,
       display_preference: { preference: 'on', value: 'on' },
       locked: true,
-      unavailable_reason: 'faircoin_account_missing',
+      unavailable_reason: 'faircoin_wallet_missing',
     });
     expect((keylessConfig.card as Entry).available).toBe(true);
   });

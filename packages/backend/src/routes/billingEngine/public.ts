@@ -36,7 +36,7 @@ import { invoicePdfUrl } from '../../lib/serializeBilling';
 import { toUnix, toUnixOrNull } from '../../lib/time';
 import { resolveMerchantDisplay } from '../../services/merchantDisplay';
 import { payerIntentForInvoice, railOf } from '../../services/billingEngine/collect';
-import { faircoinAvailability } from '../../services/faircoin/quote';
+import { faircoinAvailability, faircoinRecipientOf } from '../../services/faircoin/recipient';
 import { invoicePdf } from '../../services/billingEngine/invoicePdf';
 import {
   portalCancel,
@@ -105,7 +105,11 @@ async function publicInvoice(invoice: InvoiceRow): Promise<PublicInvoice> {
     // FairCoin is always offered (ADR 0021 D1); a fiat invoice also takes a card.
     payment_method_types:
       railOf(invoice.currency) === 'faircoin' ? ['faircoin'] : ['card', 'faircoin'],
-    faircoin: await faircoinAvailability({ network: merchant.network, currency: invoice.currency }),
+    faircoin: await faircoinAvailability({
+      network: merchant.network,
+      currency: invoice.currency,
+      recipientAccountId: faircoinRecipientOf(merchant),
+    }),
     invoice_pdf: invoicePdfUrl(invoice.hostedToken),
   };
 }

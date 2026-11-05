@@ -16,8 +16,6 @@ import { applyEvent } from '../intentState';
 import { runExpirySweep } from '../expirySweeper';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
 /** Generous: every case here is about WHICH rows are claimed, not batching. */
 const BATCH = 100;
 const PAST = new Date(Date.now() - 60_000);
@@ -31,7 +29,6 @@ async function merchant(publicId: string, oxyAppId: string): Promise<MerchantRow
     oxyAppId,
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
   });
 }
 

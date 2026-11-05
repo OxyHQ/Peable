@@ -28,6 +28,11 @@
  * a method the merchant turned off is never offered by a stale provider copy.
  */
 import {
+  faircoinAvailability,
+  faircoinNetworkOf,
+  faircoinRecipientOf,
+} from '../faircoin/recipient';
+import {
   CARD_RAIL_PAYMENT_METHOD_TYPES,
   PAYMENT_METHOD_CONFIGURATION_TYPES,
   PAYMENT_METHOD_CURRENCIES,
@@ -82,8 +87,33 @@ const CHOOSABLE_TYPES: readonly ChoosablePaymentMethodType[] =
     (type): type is ChoosablePaymentMethodType => type !== 'faircoin',
   );
 
-/** What the `faircoin` entry depends on: whether the merchant registered a FairCoin key. */
-export type FaircoinKeyHolder = Pick<MerchantRow, 'xpub'>;
+/**
+ * What the `faircoin` entry depends on: whether the Peable wallet of the
+ * account that owns the merchant can receive (ADR 0021 D5) — `faircoinWalletOf`.
+ */
+export interface FaircoinWalletState {
+  readonly available: boolean;
+  readonly unavailable_reason:
+    | 'faircoin_wallet_missing'
+    | 'faircoin_network_closed'
+    | 'temporarily_unavailable'
+    | null;
+}
+
+/** The merchant's own FairCoin receiving state: its owner's Peable wallet, on its network. */
+export async function faircoinWalletOf(
+  merchant: Pick<MerchantRow, 'network' | 'environment' | 'ownerAccountId'>,
+): Promise<FaircoinWalletState> {
+  const state = await faircoinAvailability({
+    network: faircoinNetworkOf(merchant),
+    currency: 'FAIR',
+    recipientAccountId: faircoinRecipientOf(merchant),
+  });
+  // A FAIR-denominated check never needs a price.
+  return state.unavailable_reason === 'price_unavailable'
+    ? { available: true, unavailable_reason: null }
+    : (state as FaircoinWalletState);
+}
 
 /** The provider a merchant's card payments go through. One today. */
 const CARD_PROVIDER: ProviderId = 'stripe';
@@ -97,15 +127,15 @@ function preferenceOf(
 
 /**
  * The `faircoin` entry: always on and locked, whatever the row says; available
- * once the merchant has a FairCoin key, `faircoin_account_missing` before.
+ * once the owning account's Peable wallet can receive, and saying why not
+ * before (`faircoin_wallet_missing`, `faircoin_network_closed`).
  */
-export function faircoinEntry(merchant: FaircoinKeyHolder): PaymentMethodConfigurationEntry {
-  const hasKey = merchant.xpub !== null;
+export function faircoinEntry(wallet: FaircoinWalletState): PaymentMethodConfigurationEntry {
   return {
-    available: hasKey,
+    available: wallet.available,
     display_preference: { preference: 'on', value: 'on' },
     locked: true,
-    unavailable_reason: hasKey ? null : 'faircoin_account_missing',
+    unavailable_reason: wallet.available ? null : wallet.unavailable_reason,
     currencies: [...PAYMENT_METHOD_CURRENCIES.faircoin],
   };
 }
@@ -135,12 +165,12 @@ export function entryFor(
 /** `row` as the wire shows it; `merchant` (its owner) decides the `faircoin` entry. */
 export function toPaymentMethodConfigurationDTO(
   row: PaymentMethodConfigurationRow,
-  merchant: FaircoinKeyHolder,
+  wallet: FaircoinWalletState,
 ): PaymentMethodConfiguration {
   const entries = Object.fromEntries(
     PAYMENT_METHOD_CONFIGURATION_TYPES.map((type) => [
       type,
-      type === 'faircoin' ? faircoinEntry(merchant) : entryFor(row, type),
+      type === 'faircoin' ? faircoinEntry(wallet) : entryFor(row, type),
     ]),
   ) as Record<PaymentMethodConfigurationType, PaymentMethodConfigurationEntry>;
   return {

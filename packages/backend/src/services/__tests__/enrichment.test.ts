@@ -13,9 +13,6 @@ import {
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-
 function userProfile(id: string, username: string, displayName: string): User {
   return {
     id,
@@ -66,7 +63,6 @@ test("a merchant PaymentIntent address resolves to kind: merchant with the Merch
     oxyAppId: 'app_shop',
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
   });
   // The three identity columns have no writer at all — no route registers
   // them and `insertMerchant` takes their defaults — so the fixture sets them
@@ -157,7 +153,6 @@ test('a batch mixes merchant, social, and unknown results correctly', async () =
     oxyAppId: 'app_mixed',
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
   });
   await gatewayDb()
     .update(merchants)

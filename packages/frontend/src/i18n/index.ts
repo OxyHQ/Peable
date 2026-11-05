@@ -239,20 +239,11 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'connect.asks': '{platform} wants to pay your sales in FairCoin, straight to your wallet.',
     'connect.network': 'Network',
     'connect.custody':
-      'Peable and {platform} never hold your coins. They go from the buyer to this pocket.',
-    'connect.pocket': 'Receive into pocket',
-    'connect.dedicated':
-      'Use a pocket only for {platform} sales. Payments are matched by address, and a pocket you also use for other payments can mix them up.',
-    'connect.confirmDedicated': 'This pocket is only for {platform}',
-    'connect.managePockets': 'Manage pockets',
-    'connect.register': 'Receive {platform} sales here',
-    'connect.pasteTitle': 'Watch-only account key',
-    'connect.pasteBody':
-      'This device has no {network} wallet. Paste the watch-only account key (xpub) of the wallet that should receive these sales, or open this link on your phone.',
-    'connect.pasteLabel': 'Watch-only account key',
+      'They are paid into the Peable wallet of the Oxy account you are signed in with. Peable and {platform} never hold your coins, and no key leaves this device.',
+    'connect.register': 'Receive {platform} sales in my Peable wallet',
     'connect.doneTitle': "You're set up",
     'connect.doneBody':
-      '{platform} can now take FairCoin payments for your sales. They arrive in this pocket.',
+      '{platform} can now take FairCoin payments for your sales. They arrive in your Peable wallet.',
     'connect.return': 'Back to {platform}',
     'connect.error.notFound': 'This link does not exist.',
     'connect.error.expired':
@@ -260,8 +251,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'connect.error.wrongSeller':
       'This link is for a different Oxy account. Switch to the account that owns the store.',
     'connect.error.conflict':
-      'This store already has a FairCoin key, or this pocket already receives payments elsewhere. Pick another pocket.',
-    'connect.error.invalidKey': 'That is not a watch-only key for this network.',
+      'Your Peable wallet isn’t set up yet, or this store already receives FairCoin. Set up your wallet, then try again.',
     'connect.error.generic': 'Something went wrong. Try again.',
     'pay.title': 'Approve Payment',
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
@@ -1106,20 +1096,11 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'connect.asks': '{platform} quiere pagarte tus ventas en FairCoin, directamente a tu monedero.',
     'connect.network': 'Red',
     'connect.custody':
-      'Ni Peable ni {platform} custodian tus monedas. Van del comprador a este bolsillo.',
-    'connect.pocket': 'Recibir en el bolsillo',
-    'connect.dedicated':
-      'Usa un bolsillo solo para las ventas de {platform}. Los pagos se identifican por dirección, y un bolsillo que también usas para otros pagos puede mezclarlos.',
-    'connect.confirmDedicated': 'Este bolsillo es solo para {platform}',
-    'connect.managePockets': 'Gestionar bolsillos',
-    'connect.register': 'Recibir aquí las ventas de {platform}',
-    'connect.pasteTitle': 'Clave de cuenta de solo lectura',
-    'connect.pasteBody':
-      'Este dispositivo no tiene un monedero de {network}. Pega la clave de cuenta de solo lectura (xpub) del monedero que debe recibir estas ventas, o abre este enlace en tu móvil.',
-    'connect.pasteLabel': 'Clave de cuenta de solo lectura',
+      'Se cobran en el monedero de Peable de la cuenta Oxy con la que has iniciado sesión. Ni Peable ni {platform} custodian tus monedas, y ninguna clave sale de este dispositivo.',
+    'connect.register': 'Recibir las ventas de {platform} en mi monedero de Peable',
     'connect.doneTitle': 'Todo listo',
     'connect.doneBody':
-      '{platform} ya puede cobrar tus ventas en FairCoin. Llegan a este bolsillo.',
+      '{platform} ya puede cobrar tus ventas en FairCoin. Llegan a tu monedero de Peable.',
     'connect.return': 'Volver a {platform}',
     'connect.error.notFound': 'Este enlace no existe.',
     'connect.error.expired':
@@ -1127,8 +1108,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'connect.error.wrongSeller':
       'Este enlace es para otra cuenta Oxy. Cambia a la cuenta propietaria de la tienda.',
     'connect.error.conflict':
-      'Esta tienda ya tiene una clave FairCoin, o este bolsillo ya recibe pagos en otro sitio. Elige otro bolsillo.',
-    'connect.error.invalidKey': 'Esa no es una clave de solo lectura para esta red.',
+      'Tu monedero de Peable aún no está configurado, o esta tienda ya recibe FairCoin. Configura tu monedero e inténtalo de nuevo.',
     'connect.error.generic': 'Algo salió mal. Inténtalo de nuevo.',
     'pay.title': 'Aprobar Pago',
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder

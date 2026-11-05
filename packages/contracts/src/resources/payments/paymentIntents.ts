@@ -143,7 +143,7 @@ export const paymentIntentFaircoinSchema = defineComponent(
       address: z
         .string()
         .describe(
-          "Watch-only receive address derived per intent from the merchant's (or seller's) xpub.",
+          "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5).",
         ),
       txid: nullableString,
       confirmations: z.number().int().nonnegative(),

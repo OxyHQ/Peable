@@ -190,9 +190,13 @@ export function InvoiceRoute() {
           </button>
           {invoice.faircoin.available ? null : (
             <p className="checkout-hint">
-              {invoice.faircoin.unavailable_reason === 'faircoin_account_missing'
-                ? 'This merchant cannot receive FairCoin yet.'
-                : 'FairCoin cannot be priced right now. Try again in a moment.'}
+              {invoice.faircoin.unavailable_reason === 'faircoin_wallet_missing'
+                ? 'This merchant’s Peable wallet isn’t set up yet, so it cannot receive FairCoin.'
+                : invoice.faircoin.unavailable_reason === 'faircoin_network_closed'
+                  ? 'FairCoin payments are not open on this network yet.'
+                  : invoice.faircoin.unavailable_reason === 'temporarily_unavailable'
+                    ? 'FairCoin could not be checked just now. Try again in a moment.'
+                    : 'FairCoin cannot be priced right now. Try again in a moment.'}
             </p>
           )}
         </div>

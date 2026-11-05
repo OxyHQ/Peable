@@ -21,15 +21,14 @@ import { accountLinkSchema, accountRequirementsSchema } from './account';
  * ADR 0001 D3: a merchant integrates against Peable and never learns which
  * acquirer sat behind their seller, because the day that changes should be a
  * Peable deploy and not a merchant migration. No `acct_…`, no provider name —
- * and no seller xpub (ADR 0012 D6): an account xpub reveals every address of
- * that account, so a platform holding it would learn the seller's whole history
- * and balance. Nothing a platform does needs it; each payment carries its own
+ * and no key of any kind: a seller's FairCoin is paid into the Peable wallet
+ * of their own Oxy account (ADR 0021 D5), and each payment carries its own
  * address.
  */
 
 const capabilityStatus = z.enum(ACCOUNT_CAPABILITY_STATUSES);
 
-/** The FairCoin half of a seller's account. The seller's xpub is deliberately ABSENT (ADR 0012 D6). */
+/** The FairCoin half of a seller's account: paid into the Peable wallet of the seller's own Oxy account (ADR 0021 D5). */
 export const connectedAccountFaircoinSchema = defineComponent(
   'ConnectedAccountFaircoin',
   z
@@ -38,14 +37,16 @@ export const connectedAccountFaircoinSchema = defineComponent(
       status: z
         .enum(CONNECTED_ACCOUNT_FAIRCOIN_STATUSES)
         .describe(
-          '`pending`: the seller has not registered a key yet (an on-behalf payment is refused, `account_not_ready`). `active`: payments derive addresses from their key.',
+          '`pending`: the seller has not confirmed yet (an on-behalf payment is refused, `account_not_ready`). `active`: the seller confirmed, and payments go to the Peable wallet of their Oxy account.',
         ),
       oxy_user_id: z
         .string()
-        .describe('The Oxy user who may register the key — and, once `active`, who did.'),
+        .describe(
+          'The seller’s Oxy account — the only one that may confirm, and the one whose Peable wallet receives.',
+        ),
       registered_at: unixSeconds
         .nullable()
-        .describe('When the seller registered their key. `null` while `pending`.'),
+        .describe('When the seller confirmed. `null` while `pending`.'),
     })
     .strict(),
 );
@@ -144,9 +145,9 @@ const OXY_USER_ID_MAX = 128;
  * `POST /v1/connected_accounts`: open (or return) the account for one seller.
  *
  * Two halves, at least one: the CARD half (`country` + `business_type`, both or
- * neither) and the FAIRCOIN half (`faircoin`). There is deliberately no `xpub`
- * here: the key comes from the SELLER's own session, never from the platform
- * (ADR 0012 D3).
+ * neither) and the FAIRCOIN half (`faircoin`). There is no key: the seller's
+ * FairCoin goes to their own account's Peable wallet, confirmed only from the
+ * SELLER's own session (ADR 0012 D3, ADR 0021 D5).
  */
 export const createConnectedAccountParams = z
   .object({
@@ -175,7 +176,9 @@ export const createConnectedAccountParams = z
           .string()
           .min(1)
           .max(OXY_USER_ID_MAX)
-          .describe("The seller's Oxy user id — the only person who may register the key."),
+          .describe(
+            "The seller's Oxy account id — the only one that may confirm, and whose Peable wallet receives.",
+          ),
       })
       .strict()
       .optional()
@@ -207,7 +210,7 @@ export const createConnectedAccountLinkParams = z
       .enum(CONNECTED_ACCOUNT_RAILS)
       .optional()
       .describe(
-        "Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER registers their watch-only key.",
+        "Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER confirms, in their own Oxy session, that their FairCoin is paid into their Peable wallet.",
       ),
   })
   .strict();

@@ -18,7 +18,7 @@ import type { Server } from 'node:http';
 import express from 'express';
 import type { RequestHandler } from 'express';
 import { eq } from 'drizzle-orm';
-import { getNetwork } from '@fairco.in/core';
+import { deriveSocialReceiveAddress, getNetwork } from '@fairco.in/core';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { uuidv7 } from '@oxy.so/db';
 import type { WebhookEventType } from '@peable.to/shared-types';
@@ -29,7 +29,6 @@ import {
   seedMerchant,
   seedWebhookEndpoint,
   storedEvents,
-  testXprvFor,
   testXpubFor,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
@@ -38,7 +37,7 @@ import { connectedAccountLinks, connectedAccounts, idempotencyKeys } from '../..
 import { findAccountByPublicId } from '../../db/accounts/connectedAccountRepository';
 import { createFaircoinAccountLink } from '../../services/accounts/faircoinOnboarding';
 import { config } from '../../config';
-import { deriveIntentAddress } from '../../services/derivation';
+import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import { transitionIntent } from '../../services/intentTransition';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 import { createCheckoutSessionsRouter } from '../checkoutSessions';
@@ -98,11 +97,25 @@ async function seedCardOnlyPlatform(
   return merchant;
 }
 
-/** Open a FairCoin seller, mint a link, and have the seller register `xpub`. */
+/** The Oxy account of seller number `n`: its own Peable wallet (a deterministic test key). */
+function sellerUser(n: number): string {
+  return `user_seller_${String(n)}`;
+}
+
+/** The `index`th address of seller `n`'s own Peable wallet (ADR 0021 D5, ADR 0002). */
+function sellerAddress(n: number, index: number): string {
+  return deriveSocialReceiveAddress(
+    testIdentityPublicKey(sellerUser(n)),
+    index,
+    getNetwork('testnet'),
+  );
+}
+
+/** Open a FairCoin seller, mint a link, and have the seller confirm from their own session. */
 async function onboardSeller(externalRef: string, account: number): Promise<Json> {
   const created = await call('POST', '/v1/connected_accounts', {
     external_ref: externalRef,
-    faircoin: { network: 'testnet', oxy_user_id: SELLER },
+    faircoin: { network: 'testnet', oxy_user_id: sellerUser(account) },
   });
   expect(created.status).toBe(201);
   const link = await call(
@@ -118,8 +131,8 @@ async function onboardSeller(externalRef: string, account: number): Promise<Json
   const registered = await call(
     'POST',
     `/v1/connect/onboarding/${tokenOf(String(link.json.url))}/faircoin`,
-    { xpub: testXpubFor('testnet', account) },
-    asUser(SELLER),
+    {},
+    asUser(sellerUser(account)),
   );
   expect(registered.status).toBe(200);
   return created.json;
@@ -203,11 +216,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
 
   // ── the platform ─────────────────────────────────────────────────────────
 
-  test('a card-only platform reads back a null network and xpub', async () => {
+  test('a platform holds no key: its network is its environment’s (ADR 0021 D5)', async () => {
     const { status, json } = await call('GET', '/v1/merchants/me');
     expect(status).toBe(200);
-    expect(json.network).toBeNull();
-    expect(json.xpub).toBeNull();
+    expect(json.network).toBe('testnet');
+    expect('xpub' in json).toBe(false);
   });
 
   test('opens a FairCoin-only seller: no card half, no key, pending', async () => {
@@ -327,7 +340,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const strangerPost = await call(
       'POST',
       `/v1/connect/onboarding/${token}/faircoin`,
-      { xpub: testXpubFor('testnet', 30) },
+      {},
       asUser(STRANGER),
     );
     expect(strangerPost.status).toBe(403);
@@ -344,23 +357,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(described.json.return_url).toBe('https://platform.example/sell/done');
     expect(typeof (described.json.platform as Json).name).toBe('string');
 
-    // A private key is refused and nothing is stored or consumed.
-    const xprv = await call(
-      'POST',
-      `/v1/connect/onboarding/${token}/faircoin`,
-      { xpub: testXprvFor('testnet', 31) },
-      asUser(SELLER),
-    );
-    expect(xprv.status).toBe(400);
-    expect((xprv.json.error as Json).code).toBe('watch_only_violation');
-
-    const key = testXpubFor('testnet', 32);
-    const done = await call(
-      'POST',
-      `/v1/connect/onboarding/${token}/faircoin`,
-      { xpub: key },
-      asUser(SELLER),
-    );
+    const done = await call('POST', `/v1/connect/onboarding/${token}/faircoin`, {}, asUser(SELLER));
     expect(done.status).toBe(200);
     expect(done.json).toEqual({
       object: 'connect_onboarding',
@@ -373,20 +370,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const replay = await call(
       'POST',
       `/v1/connect/onboarding/${token}/faircoin`,
-      { xpub: testXpubFor('testnet', 33) },
+      {},
       asUser(SELLER),
     );
     expect(replay.status).toBe(410);
     expect((replay.json.error as Json).refresh_url).toBe('https://platform.example/sell/refresh');
 
-    // The platform sees the seller active — and never the key.
+    // The platform sees the seller active.
     const read = await call('GET', `/v1/connected_accounts/${accountId}`);
     expect((read.json.faircoin as Json).status).toBe('active');
-    expect(JSON.stringify(read.json)).not.toContain(key);
-    const listed = await call('GET', '/v1/connected_accounts');
-    expect(JSON.stringify(listed.json)).not.toContain(key);
 
-    // ...and was told, in one transaction with the key, with the seller named.
+    // ...and was told, in one transaction with the confirmation, the seller named.
     const events = await deliveriesFor(platform.id, 'connected_account.updated');
     const event = must(
       events.find((row) => (row.payload.account as string | undefined) === accountId),
@@ -487,10 +481,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect((res.json.error as Json).code).toBe('account_not_ready');
   });
 
-  test("derives the payer's address from the SELLER's key, on the seller's counter", async () => {
+  test("pays the SELLER's own Peable wallet, on the seller's cursor", async () => {
     const seller = await onboardSeller('store_pay', 40);
-    const key = testXpubFor('testnet', 40);
-    const network = getNetwork('testnet');
 
     const first = await call(
       'POST',
@@ -499,12 +491,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     expect(first.status).toBe(201);
-    expect((first.json.faircoin as Json).address).toBe(deriveIntentAddress(key, 0, 0, network));
+    expect((first.json.faircoin as Json).address).toBe(sellerAddress(40, 1));
     expect(first.json.connected_account).toBe(seller.id);
     expect((first.json.faircoin as Json).network).toBe('testnet');
     expect(first.json.can_expire).toBe(true);
 
-    // `rail` omitted: still FairCoin, and the next index on the SAME key.
+    // `rail` omitted: still FairCoin, and the next address of the SAME wallet.
     const second = await call(
       'POST',
       '/v1/payment_intents',
@@ -513,7 +505,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     expect(second.status).toBe(201);
     expect(second.json.rail).toBe('faircoin');
-    expect((second.json.faircoin as Json).address).toBe(deriveIntentAddress(key, 0, 1, network));
+    expect((second.json.faircoin as Json).address).toBe(sellerAddress(40, 2));
 
     // Only this seller's payments, when the platform asks for them.
     const listed = await call('GET', `/v1/payment_intents?connected_account=${String(seller.id)}`);
@@ -634,9 +626,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(confirmed.status).toBe(200);
     const pi = (confirmed.json.payment_intent as { id: string }).id;
     const intent = must(await findIntentByPublicId(gatewayDb(), pi));
-    expect(intent.address).toBe(
-      deriveIntentAddress(testXpubFor('testnet', 44), 0, 0, getNetwork('testnet')),
-    );
+    expect(intent.address).toBe(sellerAddress(44, 1));
   });
 
   test("a FIAT order on behalf of a seller: FairCoin pays the seller's key, quoted (ADR 0021 D5)", async () => {
@@ -674,9 +664,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     // 10.00 USD at the test price of 0.5 USD/FAIR: 20 FAIR, to the SELLER's key.
     expect(intent).toMatchObject({ rail: 'faircoin', currency: 'FAIR', amount: '2000000000' });
     expect(intent.connectedAccountPublicId).toBe(String(seller.id));
-    expect(intent.address).toBe(
-      deriveIntentAddress(testXpubFor('testnet', 60), 0, 0, getNetwork('testnet')),
-    );
+    expect(intent.address).toBe(sellerAddress(60, 1));
     expect(intent.faircoinQuote).toMatchObject({ currency: 'USD', amount: '1000', rate: '0.5' });
   });
 
@@ -723,15 +711,39 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(read.json.can_expire).toBe(false);
   });
 
-  test("the seller's key is stored once and never on the platform's own merchant row", async () => {
+  test('the seller confirms into their own wallet; no key is stored anywhere', async () => {
     const seller = await onboardSeller('store_row', 47);
     const [row] = await gatewayDb()
-      .select({ xpub: connectedAccounts.xpub, next: connectedAccounts.nextDerivationIndex })
+      .select({ confirmed: connectedAccounts.faircoinRegisteredAt })
       .from(connectedAccounts)
       .where(eq(connectedAccounts.publicId, String(seller.id)));
-    expect(row?.xpub).toBe(testXpubFor('testnet', 47));
-    expect(row?.next).toBe(0);
-    const me = await call('GET', '/v1/merchants/me');
-    expect(me.json.xpub).toBeNull();
+    expect(row?.confirmed).toBeInstanceOf(Date);
+    expect((await call('GET', `/v1/connected_accounts/${String(seller.id)}`)).json).toMatchObject({
+      faircoin: { status: 'active', oxy_user_id: sellerUser(47) },
+    });
+  });
+
+  test('a seller whose account has no Peable wallet cannot confirm yet (409)', async () => {
+    const created = await call('POST', '/v1/connected_accounts', {
+      external_ref: 'store_keyless',
+      faircoin: { network: 'testnet', oxy_user_id: 'keyless_seller' },
+    });
+    const link = await call(
+      'POST',
+      `/v1/connected_accounts/${String(created.json.id)}/account_links`,
+      {
+        rail: 'faircoin',
+        return_url: 'https://platform.example/sell/done',
+        refresh_url: 'https://platform.example/sell/refresh',
+      },
+    );
+    const refused = await call(
+      'POST',
+      `/v1/connect/onboarding/${tokenOf(String(link.json.url))}/faircoin`,
+      {},
+      asUser('keyless_seller'),
+    );
+    expect(refused.status).toBe(409);
+    expect((refused.json.error as Json).code).toBe('faircoin_wallet_missing');
   });
 });

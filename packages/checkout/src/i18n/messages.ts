@@ -78,7 +78,10 @@ const en = {
   methodFaircoin: 'FairCoin',
   faircoinUnavailablePrice:
     'FairCoin cannot be priced right now. Try again in a moment, or pay by card.',
-  faircoinUnavailableAccount: 'This merchant cannot receive FairCoin yet.',
+  faircoinUnavailableWallet:
+    'This merchant’s Peable wallet isn’t set up yet, so it cannot receive FairCoin.',
+  faircoinUnavailableNetwork: 'FairCoin payments are not open on this network yet.',
+  faircoinUnavailableTemporary: 'FairCoin could not be checked just now. Try again in a moment.',
   payWithFaircoinInstead: 'Pay with FairCoin instead',
   payByCardInstead: 'Pay by card instead',
   faircoinQuote: 'Priced at {amount} · 1 FAIR = {rate} {currency}',
@@ -202,7 +205,11 @@ const es: Messages = {
   methodFaircoin: 'FairCoin',
   faircoinUnavailablePrice:
     'Ahora no se puede calcular el precio en FairCoin. Inténtalo de nuevo en un momento o paga con tarjeta.',
-  faircoinUnavailableAccount: 'Este comercio aún no puede recibir FairCoin.',
+  faircoinUnavailableWallet:
+    'El monedero de Peable de este comercio aún no está configurado, así que no puede recibir FairCoin.',
+  faircoinUnavailableNetwork: 'Los pagos en FairCoin aún no están abiertos en esta red.',
+  faircoinUnavailableTemporary:
+    'Ahora no se ha podido comprobar FairCoin. Inténtalo de nuevo en un momento.',
   payWithFaircoinInstead: 'Pagar con FairCoin',
   payByCardInstead: 'Pagar con tarjeta',
   faircoinQuote: 'Precio de {amount} · 1 FAIR = {rate} {currency}',
@@ -323,7 +330,10 @@ const fr: Messages = {
   methodFaircoin: 'FairCoin',
   faircoinUnavailablePrice:
     'Le prix en FairCoin n’est pas disponible pour le moment. Réessayez dans un instant ou payez par carte.',
-  faircoinUnavailableAccount: 'Ce marchand ne peut pas encore recevoir de FairCoin.',
+  faircoinUnavailableWallet:
+    'Le portefeuille Peable de ce marchand n’est pas encore configuré : il ne peut pas recevoir de FairCoin.',
+  faircoinUnavailableNetwork: 'Les paiements en FairCoin ne sont pas encore ouverts sur ce réseau.',
+  faircoinUnavailableTemporary: 'FairCoin n’a pas pu être vérifié. Réessayez dans un instant.',
   payWithFaircoinInstead: 'Payer en FairCoin',
   payByCardInstead: 'Payer par carte',
   faircoinQuote: 'Prix de {amount} · 1 FAIR = {rate} {currency}',
@@ -445,7 +455,11 @@ const de: Messages = {
   methodFaircoin: 'FairCoin',
   faircoinUnavailablePrice:
     'Der FairCoin-Preis ist gerade nicht verfügbar. Versuche es gleich noch einmal oder zahle mit Karte.',
-  faircoinUnavailableAccount: 'Dieser Händler kann noch keine FairCoin empfangen.',
+  faircoinUnavailableWallet:
+    'Die Peable-Wallet dieses Händlers ist noch nicht eingerichtet, daher kann er keine FairCoin empfangen.',
+  faircoinUnavailableNetwork: 'FairCoin-Zahlungen sind in diesem Netzwerk noch nicht geöffnet.',
+  faircoinUnavailableTemporary:
+    'FairCoin konnte gerade nicht geprüft werden. Versuche es gleich noch einmal.',
   payWithFaircoinInstead: 'Stattdessen mit FairCoin bezahlen',
   payByCardInstead: 'Stattdessen mit Karte bezahlen',
   faircoinQuote: 'Preis {amount} · 1 FAIR = {rate} {currency}',
@@ -567,7 +581,10 @@ const it: Messages = {
   methodFaircoin: 'FairCoin',
   faircoinUnavailablePrice:
     'Il prezzo in FairCoin non è disponibile ora. Riprova tra poco o paga con carta.',
-  faircoinUnavailableAccount: 'Questo esercente non può ancora ricevere FairCoin.',
+  faircoinUnavailableWallet:
+    'Il portafoglio Peable di questo esercente non è ancora configurato, quindi non può ricevere FairCoin.',
+  faircoinUnavailableNetwork: 'I pagamenti in FairCoin non sono ancora aperti su questa rete.',
+  faircoinUnavailableTemporary: 'Non è stato possibile verificare FairCoin. Riprova tra poco.',
   payWithFaircoinInstead: 'Paga con FairCoin',
   payByCardInstead: 'Paga con carta',
   faircoinQuote: 'Prezzo {amount} · 1 FAIR = {rate} {currency}',
@@ -688,7 +705,11 @@ const pt: Messages = {
   methodFaircoin: 'FairCoin',
   faircoinUnavailablePrice:
     'O preço em FairCoin não está disponível agora. Tente de novo daqui a pouco ou pague com cartão.',
-  faircoinUnavailableAccount: 'Este comerciante ainda não pode receber FairCoin.',
+  faircoinUnavailableWallet:
+    'A carteira Peable deste comerciante ainda não está configurada, por isso não pode receber FairCoin.',
+  faircoinUnavailableNetwork: 'Os pagamentos em FairCoin ainda não estão abertos nesta rede.',
+  faircoinUnavailableTemporary:
+    'Não foi possível verificar o FairCoin agora. Tente de novo daqui a pouco.',
   payWithFaircoinInstead: 'Pagar com FairCoin',
   payByCardInstead: 'Pagar com cartão',
   faircoinQuote: 'Preço de {amount} · 1 FAIR = {rate} {currency}',

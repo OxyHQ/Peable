@@ -82,8 +82,6 @@ export const ERROR_CODE_DESCRIPTIONS = {
   test_mode_only: 'This operation exists in test mode only.',
   too_many_streams: 'Too many live streams are open for this merchant.',
   url_invalid: 'The URL is not an allowed https URL.',
-  watch_only_violation:
-    'The extended key carries a private key. Peable only ever accepts watch-only (public) keys.',
   webhook_endpoint_disabled: 'The webhook endpoint is disabled.',
   webhook_endpoint_limit_reached:
     'The merchant already has the maximum number of webhook endpoints.',
@@ -161,8 +159,10 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'A FairCoin invoice cannot be charged automatically: the payer signs every payment.',
   faircoin_price_unavailable:
     'No fresh FairCoin price exists right now, so this order cannot be quoted in FAIR. The other payment methods still work; try FairCoin again shortly.',
-  faircoin_account_required:
-    'This merchant has not registered its FairCoin receiving key, so it cannot be paid in FairCoin yet.',
+  faircoin_wallet_missing:
+    "The Peable wallet that receives this payment (the merchant owner's, or the seller's) isn't set up yet, so it cannot be paid in FairCoin. The other payment methods still work.",
+  faircoin_network_closed:
+    'FairCoin payments on this network are not open on this deployment yet. The other payment methods still work.',
   credit_note_exceeds_invoice:
     "The credit note's amount exceeds what the invoice can still credit.",
   test_clock_unexpected_state: 'The test clock is advancing; wait until it is ready.',
@@ -178,8 +178,7 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'The onboarding link has expired or was already used; `refresh_url` is where the seller gets a fresh one.',
   wrong_seller:
     'The onboarding link names a different Oxy account; sign in as the seller it was minted for.',
-  already_registered: 'The seller already registered a FairCoin key, and it cannot be changed.',
-  key_in_use: 'The key already receives payments for another account.',
+  already_registered: 'The seller already confirmed FairCoin payments into their Peable wallet.',
   no_faircoin_half: 'The connected account has no FairCoin half to register a key for.',
   // The dashboard routes (`/v1/dashboard/*`, Orbit): the signed-in person, not a credential.
   merchant_missing:

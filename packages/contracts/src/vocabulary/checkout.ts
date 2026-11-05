@@ -7,13 +7,18 @@
  * Why FairCoin cannot be paid with on an order right now (ADR 0021). It is
  * still offered — never hidden — and says why:
  *
- *  - `faircoin_account_missing` — the payee has no FairCoin receiving key yet
- *    (test mode only: a live merchant without one cannot take payments at all);
- *  - `price_unavailable` — no fresh FairCoin price exists to quote a fiat order.
+ *  - `faircoin_wallet_missing` — the Peable wallet of the account that receives
+ *    (the merchant's owner, or the seller) isn't set up yet: no identity key;
+ *  - `faircoin_network_closed` — this deployment does not open payments on the
+ *    order's FairCoin network yet (ADR 0002's gate);
+ *  - `price_unavailable` — no fresh FairCoin price exists to quote a fiat order;
+ *  - `temporarily_unavailable` — whether the wallet exists could not be checked.
  */
 export const FAIRCOIN_UNAVAILABLE_REASONS = [
-  'faircoin_account_missing',
+  'faircoin_wallet_missing',
+  'faircoin_network_closed',
   'price_unavailable',
+  'temporarily_unavailable',
 ] as const;
 export type FaircoinUnavailableReason = (typeof FAIRCOIN_UNAVAILABLE_REASONS)[number];
 

@@ -225,8 +225,17 @@ export interface SeedMerchantValues {
   readonly publicId?: string;
   readonly oxyAppId?: string;
   readonly environment?: OxyServiceEnvironment;
+  /**
+   * The merchant's FairCoin network. It follows the environment (ADR 0021 D5),
+   * so `mainnet` seeds a `production` merchant unless one is named.
+   */
   readonly network?: NetworkType;
-  readonly xpub?: string;
+  /**
+   * The Oxy account that owns the application — whose Peable wallet receives
+   * (ADR 0021 D5). Default: a fresh account with a deterministic identity key
+   * (`setup/identityKeys.ts`); `keyless_…` has none; `null` is "not seen yet".
+   */
+  readonly ownerAccountId?: string | null;
   /**
    * A webhook endpoint to create for the merchant (every event, `*`): its URL,
    * and optionally its secret. The merchant row has no webhook fields; this is
@@ -243,20 +252,20 @@ export interface SeedMerchantValues {
  * A merchant. Every field is defaulted, so a caller supplies only what its
  * assertions actually depend on.
  *
- * Goes through `insertMerchant`, NOT a raw insert — which means the non-custody
- * firewall runs on every seeded merchant. A suite that seeds a private extended
- * key is refused here exactly as production would refuse it.
+ * Goes through `insertMerchant`, NOT a raw insert, so the row is exactly what
+ * registration writes.
  */
 export async function seedMerchant(values: SeedMerchantValues = {}): Promise<MerchantRow> {
   const unique = uuidv7();
-  const network = values.network ?? 'testnet';
+  const environment =
+    values.environment ?? (values.network === 'mainnet' ? 'production' : 'development');
   const row = await insertMerchant(gatewayDb(), {
     publicId: values.publicId ?? `merch_${unique}`,
     oxyAppId: values.oxyAppId ?? `app_${unique}`,
-    environment: values.environment ?? 'development',
-    network,
-    // Follows the NETWORK, never a fixed constant — see `testXpubFor`.
-    xpub: values.xpub ?? testXpubFor(network),
+    environment,
+    ...(values.ownerAccountId === null
+      ? {}
+      : { ownerAccountId: values.ownerAccountId ?? `acct_${unique}` }),
     requiredConfirmations: values.requiredConfirmations,
     avatarFileId: values.avatarFileId,
   });

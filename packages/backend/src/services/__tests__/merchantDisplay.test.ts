@@ -2,9 +2,6 @@ import { test, expect } from 'bun:test';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { resolveMerchantDisplay } from '../merchantDisplay';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-
 /**
  * No database here, deliberately.
  *
@@ -23,7 +20,7 @@ function merchantRow(values: Partial<MerchantRow>): MerchantRow {
     oxyAppId: 'app_display',
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
+    ownerAccountId: null,
     requiredConfirmations: 1,
     livemode: false,
     displayName: null,

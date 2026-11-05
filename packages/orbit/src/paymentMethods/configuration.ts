@@ -73,13 +73,17 @@ export function canToggle(entry: PaymentMethodConfigurationEntry): boolean {
 
 /**
  * The notes under a method, in words: why a locked method cannot be changed,
- * and what the merchant can do about an unavailable FairCoin (register its key).
+ * and what the owner can do about an unavailable FairCoin (set up the owning
+ * account's Peable wallet, ADR 0021 D5).
  */
 export function methodNotes(entry: PaymentMethodConfigurationEntry): string[] {
   const notes: string[] = [];
   if (entry.locked) notes.push(t('methods.locked'));
-  if (entry.unavailable_reason === 'faircoin_account_missing') {
-    notes.push(t('methods.faircoinKeyMissing'));
+  if (entry.unavailable_reason === 'faircoin_wallet_missing') {
+    notes.push(t('methods.faircoinWalletMissing'));
+  }
+  if (entry.unavailable_reason === 'faircoin_network_closed') {
+    notes.push(t('methods.faircoinNetworkClosed'));
   }
   return notes;
 }

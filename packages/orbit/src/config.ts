@@ -39,3 +39,10 @@ export const OXY_CONSOLE_URL = process.env.EXPO_PUBLIC_OXY_CONSOLE_URL ?? 'https
 export const PEABLE_DOCS_URL =
   process.env.EXPO_PUBLIC_PEABLE_DOCS_URL ??
   'https://github.com/OxyHQ/Peable/blob/main/docs/integrating-peable.md';
+
+/**
+ * Peable, the wallet: where an owner creates the Peable wallet that receives
+ * the merchant's FairCoin (ADR 0021 D5) — signed in as the owning account, or
+ * acting as the organization.
+ */
+export const PEABLE_WALLET_URL = process.env.EXPO_PUBLIC_PEABLE_WALLET_URL ?? 'https://peable.to';

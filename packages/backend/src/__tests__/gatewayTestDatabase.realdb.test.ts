@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 import { must } from './helpers/must';
 import { eq } from 'drizzle-orm';
 import { merchants, paymentIntents } from '../db/schema';
-import { WatchOnlyViolationError } from '../db/merchants/merchantRepository';
 import { countEndpointsForMerchant } from '../db/webhooks/webhookEndpointRepository';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -121,21 +120,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the gateway test harness', () => {
     const mainnet = await seedMerchant({ environment: 'production', network: 'mainnet' });
     const intent = await seedIntent(mainnet);
     expect(intent.network).toBe('mainnet');
-  });
-
-  /**
-   * The seeds go through the repositories, so the non-custody firewall runs on
-   * seeded data too. A harness that inserted rows directly would let a suite
-   * create a merchant production would refuse.
-   */
-  it('applies the non-custody firewall to seeded merchants', async () => {
-    let raised: unknown;
-    try {
-      await seedMerchant({ xpub: 'not-a-watch-only-key' });
-    } catch (error) {
-      raised = error;
-    }
-    expect(raised).toBeInstanceOf(WatchOnlyViolationError);
   });
 
   it('empties every table on reset', async () => {

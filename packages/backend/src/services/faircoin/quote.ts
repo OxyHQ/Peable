@@ -30,9 +30,7 @@
  */
 import {
   CURRENCY_DECIMALS,
-  type CurrencyCode,
   type FaircoinQuote as FaircoinQuoteDTO,
-  type FaircoinUnavailableReason,
   type FiatCurrencyCode,
   isBaseUnitString,
 } from '@peable.to/shared-types';
@@ -366,24 +364,6 @@ export async function faircoinPriceAvailable(currency: FiatCurrencyCode): Promis
     if (error instanceof FaircoinPriceUnavailableError) return false;
     throw error;
   }
-}
-
-/**
- * Whether a payer can choose FairCoin on an order now (ADR 0021): it is always
- * offered, and says why when it cannot be paid with — the payee has no key
- * (`network` null, test mode), or a fiat order has no fresh price.
- */
-export async function faircoinAvailability(order: {
-  readonly network: string | null;
-  readonly currency: CurrencyCode;
-}): Promise<{ available: boolean; unavailable_reason: FaircoinUnavailableReason | null }> {
-  if (order.network === null) {
-    return { available: false, unavailable_reason: 'faircoin_account_missing' };
-  }
-  if (order.currency === 'FAIR' || (await faircoinPriceAvailable(order.currency))) {
-    return { available: true, unavailable_reason: null };
-  }
-  return { available: false, unavailable_reason: 'price_unavailable' };
 }
 
 /** The FAIR amount a stored quote's sources give — the replay a reviewer can run. */

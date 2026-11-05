@@ -304,10 +304,6 @@ const en: Record<string, string> = {
   'settings.confirmationsHelp': 'FairCoin confirmations before a payment counts as succeeded.',
   'settings.faircoin': 'FairCoin',
   'settings.network': 'Network',
-  'settings.cardOnly': 'Card only',
-  'settings.xpub': 'Watch-only account xpub',
-  'settings.xpubHelp':
-    'A PUBLIC extended key. Peable refuses a private key: it can never spend your funds.',
   'settings.merchantId': 'Merchant ID',
   'settings.environment': 'Environment',
   'settings.created': 'Registered',
@@ -477,8 +473,23 @@ const en: Record<string, string> = {
   'methods.none': 'No payment method configuration yet',
   'methods.noMerchant': 'Register the merchant first.',
   'methods.locked': 'FairCoin is always offered to every payer and cannot be turned off.',
-  'methods.faircoinKeyMissing':
-    'Register your FairCoin receiving key (a watch-only account xpub) in the Merchant settings above so payers can pay you in FairCoin.',
+  'settings.faircoinWallet':
+    'FairCoin is always offered to your payers. It is paid into the Peable wallet of the Oxy account that owns this application — a person or an organization. There is no key to register.',
+  'settings.faircoinRecipient': 'FairCoin received by',
+  'settings.faircoinRecipientUnknown': 'The owning account, once Peable has seen it',
+  'methods.faircoinWalletMissing':
+    'FairCoin can’t be received yet: the Peable wallet of the account that owns this application isn’t set up. Open Peable signed in as that account (or acting as the organization) and create its wallet.',
+  'methods.faircoinNetworkClosed': 'FairCoin payments on this network are not open on Peable yet.',
+  'methods.reason.faircoin_wallet_missing': 'The owner’s Peable wallet isn’t set up yet',
+  'methods.reason.faircoin_network_closed': 'Not open on this network yet',
+  'methods.reason.temporarily_unavailable': 'Couldn’t be checked just now',
+  'faircoinWallet.setupTitle': 'Set up the Peable wallet that receives FairCoin',
+  'faircoinWallet.setupBody':
+    'Every payer can choose FairCoin, and it is paid into the Peable wallet of the account that owns this application. That wallet isn’t set up yet, so FairCoin payments can’t be taken. An owner opens Peable, signed in as that account or acting as the organization, and creates its wallet. Card payments keep working meanwhile.',
+  'faircoinWallet.openPeable': 'Open Peable',
+  'faircoinWallet.networkClosedTitle': 'FairCoin is not open on this network yet',
+  'faircoinWallet.networkClosedBody':
+    'Payers see FairCoin as unavailable until Peable opens payments on this FairCoin network. Card payments keep working.',
 
   'domains.title': 'Wallet domains',
   'domains.intro':
@@ -932,7 +943,6 @@ const en: Record<string, string> = {
   'methods.type.bizum': 'Bizum',
   'methods.reason.provider_unsupported': 'Not offered by the processing provider',
   'methods.reason.requires_card': 'Needs card payments on',
-  'methods.reason.faircoin_account_missing': 'No FairCoin receiving key registered yet',
   'methods.currencies.all': 'All currencies',
   'methods.currencies.only': '{currency} only',
   'methods.preference.default': 'Default ({value})',
@@ -1294,10 +1304,6 @@ const es: Record<string, string> = {
     'Confirmaciones de FairCoin antes de que un pago cuente como completado.',
   'settings.faircoin': 'FairCoin',
   'settings.network': 'Red',
-  'settings.cardOnly': 'Solo tarjeta',
-  'settings.xpub': 'Xpub de cuenta de solo lectura',
-  'settings.xpubHelp':
-    'Una clave extendida PÚBLICA. Peable rechaza una clave privada: nunca puede gastar tus fondos.',
   'settings.merchantId': 'ID del comercio',
   'settings.environment': 'Entorno',
   'settings.created': 'Registrado',
@@ -1472,8 +1478,25 @@ const es: Record<string, string> = {
   'methods.none': 'Aún no hay ninguna configuración de métodos de pago',
   'methods.noMerchant': 'Registra antes el comercio.',
   'methods.locked': 'FairCoin se ofrece siempre a todos los pagadores y no se puede desactivar.',
-  'methods.faircoinKeyMissing':
-    'Registra tu clave de recepción de FairCoin (una xpub de cuenta de solo lectura) en los ajustes del comercio de arriba para que los pagadores puedan pagarte en FairCoin.',
+  'settings.faircoinWallet':
+    'FairCoin se ofrece siempre a tus pagadores. Se cobra en el monedero de Peable de la cuenta de Oxy propietaria de esta aplicación, sea una persona o una organización. No hay ninguna clave que registrar.',
+  'settings.faircoinRecipient': 'FairCoin lo recibe',
+  'settings.faircoinRecipientUnknown': 'La cuenta propietaria, en cuanto Peable la vea',
+  'methods.faircoinWalletMissing':
+    'Aún no se puede recibir FairCoin: el monedero de Peable de la cuenta propietaria de esta aplicación no está configurado. Abre Peable con esa cuenta (o actuando como la organización) y crea su monedero.',
+  'methods.faircoinNetworkClosed':
+    'Los pagos en FairCoin en esta red aún no están abiertos en Peable.',
+  'methods.reason.faircoin_wallet_missing':
+    'El monedero de Peable del propietario aún no está configurado',
+  'methods.reason.faircoin_network_closed': 'Aún no está abierto en esta red',
+  'methods.reason.temporarily_unavailable': 'No se ha podido comprobar ahora',
+  'faircoinWallet.setupTitle': 'Configura el monedero de Peable que recibe FairCoin',
+  'faircoinWallet.setupBody':
+    'Cualquier pagador puede elegir FairCoin, y se cobra en el monedero de Peable de la cuenta propietaria de esta aplicación. Ese monedero aún no está configurado, así que no se pueden cobrar pagos en FairCoin. Un propietario abre Peable con esa cuenta, o actuando como la organización, y crea su monedero. Mientras tanto, los pagos con tarjeta siguen funcionando.',
+  'faircoinWallet.openPeable': 'Abrir Peable',
+  'faircoinWallet.networkClosedTitle': 'FairCoin aún no está abierto en esta red',
+  'faircoinWallet.networkClosedBody':
+    'Los pagadores verán FairCoin como no disponible hasta que Peable abra los pagos en esta red de FairCoin. Los pagos con tarjeta siguen funcionando.',
 
   'domains.title': 'Dominios de monederos',
   'domains.intro':
@@ -1540,8 +1563,6 @@ const es: Record<string, string> = {
   'methods.type.sepa_debit': 'Adeudo directo SEPA',
   'methods.reason.provider_unsupported': 'El proveedor de procesamiento no lo ofrece',
   'methods.reason.requires_card': 'Requiere activar los pagos con tarjeta',
-  'methods.reason.faircoin_account_missing':
-    'Aún no hay ninguna clave de recepción de FairCoin registrada',
   'methods.currencies.all': 'Todas las divisas',
   'methods.currencies.only': 'Solo {currency}',
   'methods.preference.default': 'Predeterminado ({value})',

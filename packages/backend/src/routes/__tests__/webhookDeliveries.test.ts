@@ -18,8 +18,6 @@ import {
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createWebhookDeliveriesRouter } from '../webhookDeliveries';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
 const APP_ID = 'app_redeliver';
 
 const stubRequireMerchant: RequestHandler = (req, _res, next) => {
@@ -69,7 +67,6 @@ beforeAll(async () => {
     oxyAppId: APP_ID,
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
     webhookUrl: 'https://merchant.example/hook',
     webhookSecret: 'whsec_redeliver',
   });
@@ -173,7 +170,6 @@ describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
       oxyAppId: 'app_redeliver_other',
       environment: 'development',
       network: 'testnet',
-      xpub: XPUB,
     });
     const otherIntent = await seedIntent(otherMerchant, {
       publicId: 'pi_0000000000000000000000f2',

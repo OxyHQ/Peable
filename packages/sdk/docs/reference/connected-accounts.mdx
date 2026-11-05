@@ -42,7 +42,7 @@ Opens the account for one seller (201), or answers the one this `external_ref` a
 | `business_type` | string | The card half: with `country`. One of `individual`, `company`. |
 | `faircoin` | object | The FairCoin half (ADR 0012 D2): the chain the seller is paid on, and who they are. |
 | `faircoin[network]` **required** | string | One of `mainnet`, `testnet`. |
-| `faircoin[oxy_user_id]` **required** | string | The seller's Oxy user id — the only person who may register the key. 1–128 characters. |
+| `faircoin[oxy_user_id]` **required** | string | The seller's Oxy account id — the only one that may confirm, and whose Peable wallet receives. 1–128 characters. |
 
 **Response `201`**
 
@@ -249,7 +249,7 @@ Minted on demand and never stored: single-use and short-lived. A visit to `retur
 | --- | --- | --- |
 | `refresh_url` **required** | string (uri) | Where the seller goes when the link has expired. |
 | `return_url` **required** | string (uri) | Where the seller returns when they leave the flow. |
-| `rail` | string | Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER registers their watch-only key. |
+| `rail` | string | Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER confirms, in their own Oxy session, that their FairCoin is paid into their Peable wallet. |
 
 **Response `201`**
 

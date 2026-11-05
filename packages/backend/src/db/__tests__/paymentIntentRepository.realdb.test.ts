@@ -22,9 +22,6 @@ import {
   type SuiteDatabase,
 } from '../testDatabase';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-
 let suite: SuiteDatabase | undefined;
 
 async function makeMerchant(network: 'testnet' | 'mainnet' = 'testnet') {
@@ -35,8 +32,6 @@ async function makeMerchant(network: 'testnet' | 'mainnet' = 'testnet') {
     // lives in the route, but the schema's composite reference still requires
     // the pair to agree, so the fixture must be coherent).
     environment: network === 'mainnet' ? 'production' : 'development',
-    network,
-    xpub: XPUB,
     publicId: `merch_${unique}`,
   });
   return must(merchant);

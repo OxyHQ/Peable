@@ -4,7 +4,6 @@ import type { Server } from 'node:http';
 import express from 'express';
 import type { RequestHandler } from 'express';
 import { eq, sql } from 'drizzle-orm';
-import { MAINNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 import { merchants } from '../../db/schema';
 import {
@@ -21,21 +20,6 @@ import {
   type FakeOxyFiles,
   referenceKey,
 } from '../../__tests__/helpers/fakeOxyFiles';
-
-// Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
-// (m/44'/1'/0' neutered) — public-key-only, cannot spend.
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-
-// The same mnemonic's MAINNET-network account xpub (distinct BIP32 version
-// bytes from XPUB above) — the non-custody derivation firewall inside
-// `insertMerchant` enforces that `xpub`'s encoded network matches `network`,
-// so the "production on mainnet" registration test needs a real mainnet xpub.
-const MNEMONIC =
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
-const MAINNET_XPUB = deriveKeyFromSeed(mnemonicToSeed(MNEMONIC), MAINNET).derive(
-  `m/44'/${MAINNET.bip44CoinType}'/0'`,
-).hdKey.publicExtendedKey;
 
 const DEV_APP_ID = 'app_merch_dev';
 const PROD_APP_ID = 'app_merch_prod';
@@ -65,7 +49,6 @@ interface MerchantResponse {
   oxy_app_id: string;
   environment: string;
   network: string;
-  xpub: string;
   required_confirmations: number;
   display_name?: string;
   avatar_file_id?: string;
@@ -130,7 +113,7 @@ describe('POST /v1/merchants', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'mainnet', xpub: MAINNET_XPUB }),
+        body: JSON.stringify({}),
       });
       expect(res.status).toBe(201);
       const body = await readJson(res);
@@ -144,14 +127,14 @@ describe('POST /v1/merchants', () => {
     }
   });
 
-  test('a development credential CANNOT register a mainnet merchant (400) — test/live firewall', async () => {
+  test('a development credential cannot NAME a network: it is always testnet (400) — test/live firewall', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'mainnet', xpub: XPUB }),
+        body: JSON.stringify({ network: 'mainnet' }),
       });
       expect(res.status).toBe(400);
       const body = await readJson(res);
@@ -170,7 +153,7 @@ describe('POST /v1/merchants', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
       expect(res.status).toBe(201);
       const body = await readJson(res);
@@ -181,23 +164,16 @@ describe('POST /v1/merchants', () => {
     }
   });
 
-  test('a private xprv is rejected by the same non-custody firewall the model enforces (400 or 500-free rejection)', async () => {
+  test('a merchant never registers a key of any kind (ADR 0021 D5): an xpub is refused (400)', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          network: 'testnet',
-          // Malformed extended key — the non-custody firewall inside
-          // `insertMerchant` must reject this before persisting, regardless of
-          // exact string; asserting NOT-201 + NOT-persisted is the load-bearing
-          // check.
-          xpub: 'not-a-real-extended-key',
-        }),
+        body: JSON.stringify({ xpub: 'tpub-anything' }),
       });
-      expect(res.status).not.toBe(201);
+      expect(res.status).toBe(400);
       const count = await countMerchants(DEV_APP_ID);
       expect(count).toBe(0);
     } finally {
@@ -212,14 +188,14 @@ describe('POST /v1/merchants', () => {
       const first = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
       expect(first.status).toBe(201);
 
       const second = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
       expect(second.status).toBe(409);
     } finally {
@@ -236,7 +212,7 @@ describe('POST /v1/merchants', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
       expect(res.status).toBe(401);
     } finally {
@@ -265,7 +241,7 @@ describe('POST /v1/merchants', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
       expect(res.status).toBe(403);
     } finally {
@@ -282,7 +258,7 @@ describe('GET /v1/merchants/me', () => {
       const create = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
       const created = await readJson(create);
 
@@ -328,7 +304,7 @@ describe('PATCH /v1/merchants/me', () => {
       await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
 
       const res = await fetch(`${url}/v1/merchants/me`, {
@@ -366,7 +342,7 @@ describe('PATCH /v1/merchants/me', () => {
       await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
       });
 
       const res = await fetch(`${url}/v1/merchants/me`, {
@@ -379,7 +355,7 @@ describe('PATCH /v1/merchants/me', () => {
         error: { type: 'invalid_request_error', param: 'xpub' },
       });
       const after = await readJson(await fetch(`${url}/v1/merchants/me`));
-      expect(after.xpub).toBe(XPUB);
+      expect('xpub' in after).toBe(false);
       expect(after.required_confirmations).toBe(1);
     } finally {
       s.close();
@@ -417,8 +393,6 @@ describe('merchant branding', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: 'testnet',
-          xpub: XPUB,
           display_name: 'Mercaria',
           avatar_file_id: 'file_mercaria_logo',
           description: 'Fair goods, fairly paid for.',
@@ -442,8 +416,6 @@ describe('merchant branding', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: 'testnet',
-          xpub: XPUB,
           display_name: 'Mercaria',
         }),
       });
@@ -466,7 +438,7 @@ describe('merchant branding', () => {
       await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, display_name: 'Old' }),
+        body: JSON.stringify({ display_name: 'Old' }),
       });
 
       const patched = await fetch(`${url}/v1/merchants/me`, {
@@ -490,7 +462,7 @@ describe('merchant branding', () => {
       await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, display_name: 'Kept' }),
+        body: JSON.stringify({ display_name: 'Kept' }),
       });
 
       // Patching an unrelated field must not blank the name — `null` clears,
@@ -518,8 +490,6 @@ describe('merchant branding', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: 'testnet',
-          xpub: XPUB,
           display_name: 'x'.repeat(200),
         }),
       });
@@ -531,61 +501,25 @@ describe('merchant branding', () => {
 });
 
 /**
- * Registering a merchant that only wants to take CARDS.
- *
- * `network` and `xpub` were required unconditionally, so such a merchant had to
- * supply a watch-only extended key for a chain they had no intention of using —
- * either a real key they then had to custody, or a fixture that silently made
- * their FairCoin receive addresses underivable by their own wallet. Neither is
- * a thing to ask of someone who wants a card form.
+ * Registering takes no FairCoin key (ADR 0021 D5): every merchant's FairCoin
+ * goes to the Peable wallet of the account that owns its application, on its
+ * environment's network.
  */
-describe('card-only registration', () => {
-  test('registers with no network and no xpub (201)', async () => {
-    const { app } = createApp(`${DEV_APP_ID}_cardonly`, 'development');
+describe('keyless registration', () => {
+  test("registers with no key: the environment's network, the credential's owner (201)", async () => {
+    const { app } = createApp(`${DEV_APP_ID}_keyless`, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: 'Cards Only Ltd' }),
+        body: JSON.stringify({ display_name: 'Cards And FairCoin Ltd' }),
       });
-
       expect(res.status).toBe(201);
       const body = await readJson(res);
-      // `null`, not a placeholder: the merchant has no FairCoin account, and a
-      // fabricated one would be a claim about a key nobody holds.
-      expect(body.network).toBeNull();
-      expect(body.xpub).toBeNull();
-      expect(body.display_name).toBe('Cards Only Ltd');
-    } finally {
-      s.close();
-    }
-  });
-
-  /**
-   * HALF a FairCoin account is refused, because the two fields are one
-   * capability: a network with no key derives nothing, and a key with no
-   * network cannot be interpreted — an extended key's version bytes are
-   * network-specific. The failure of a half-registered merchant is a payer
-   * shown an address on the wrong chain, which is unrecoverable.
-   */
-  test('refuses a network with no xpub, and an xpub with no network (400)', async () => {
-    const { app } = createApp(`${DEV_APP_ID}_halfchain`, 'development');
-    const { server: s, baseUrl: url } = await listen(app);
-    try {
-      const networkOnly = await fetch(`${url}/v1/merchants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet' }),
-      });
-      const xpubOnly = await fetch(`${url}/v1/merchants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ xpub: XPUB }),
-      });
-
-      expect(networkOnly.status).toBe(400);
-      expect(xpubOnly.status).toBe(400);
+      expect(body.network).toBe('testnet');
+      expect('xpub' in body).toBe(false);
+      expect(body.display_name).toBe('Cards And FairCoin Ltd');
     } finally {
       s.close();
     }
@@ -618,7 +552,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatar_file_id: avatarFileId }),
+        body: JSON.stringify({ avatar_file_id: avatarFileId }),
       });
       return { status: res.status, body: await readJson(res) };
     } finally {
@@ -724,7 +658,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const created = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatar_file_id: 'file_a' }),
+        body: JSON.stringify({ avatar_file_id: 'file_a' }),
       });
       const merchant = await readJson(created);
       await gatewayDb().delete(oxyFileReferenceSyncs);

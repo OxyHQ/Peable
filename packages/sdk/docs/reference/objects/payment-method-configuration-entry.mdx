@@ -16,7 +16,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `display_preference.preference` | string | One of `on`, `off`, `none`. |
 | `display_preference.value` | string | One of `on`, `off`. |
 | `locked` | boolean | Whether the merchant can change it. Only `faircoin` is locked: it is always on, because every payer can always pay with FairCoin (ADR 0021), and setting it `off` is refused with `payment_method_locked`. |
-| `unavailable_reason` | string \| null | Why it cannot be offered whatever the merchant chooses; `null` when it can. One of `provider_unsupported`, `requires_card`, `faircoin_account_missing`. |
+| `unavailable_reason` | string \| null | Why it cannot be offered whatever the merchant chooses; `null` when it can. One of `provider_unsupported`, `requires_card`, `faircoin_wallet_missing`, `faircoin_network_closed`, `temporarily_unavailable`. |
 | `currencies` | array of string | The payment currencies it is offered on. |
 
 ## Used in

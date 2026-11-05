@@ -6,7 +6,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   FaircoinPriceUnavailableError,
-  faircoinAvailability,
   faircoinBaseUnitsFor,
   parsePositiveDecimal,
   parsePriceBody,
@@ -155,22 +154,5 @@ describe('quoting', () => {
     await expect(quoteFaircoin('USD', '100', { now: NOW })).rejects.toThrow(
       FaircoinPriceUnavailableError,
     );
-  });
-
-  test('availability says why FairCoin cannot be paid with, and never hides it', async () => {
-    sources({ priceDown: true });
-    expect(await faircoinAvailability({ network: null, currency: 'EUR' })).toEqual({
-      available: false,
-      unavailable_reason: 'faircoin_account_missing',
-    });
-    expect(await faircoinAvailability({ network: 'mainnet', currency: 'EUR' })).toEqual({
-      available: false,
-      unavailable_reason: 'price_unavailable',
-    });
-    // A FAIR order needs no price.
-    expect(await faircoinAvailability({ network: 'mainnet', currency: 'FAIR' })).toEqual({
-      available: true,
-      unavailable_reason: null,
-    });
   });
 });

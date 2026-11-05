@@ -8,24 +8,24 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { HDKey } from '@scure/bip32';
-import { getNetwork } from '@fairco.in/core';
+import { deriveSocialReceiveAddress, getNetwork } from '@fairco.in/core';
 import { sqlStateOf, uuidv7 } from '@oxy.so/db';
 import { must } from '../../__tests__/helpers/must';
 import {
   gatewayDb,
   POSTGRES_TESTS_ENABLED,
   seedMerchant,
-  testXprvFor,
-  testXpubFor,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
-import { deriveIntentAddress } from '../../services/derivation';
-import { WatchOnlyViolationError } from '../../services/watchOnly';
-import { reserveNextAccountDerivationIndex } from '../accounts/accountDerivationIndex';
+import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import {
+  FaircoinWalletMissingError,
+  faircoinRecipientOf,
+  reserveFaircoinAddress,
+} from '../../services/faircoin/recipient';
+import {
+  confirmFaircoinHalf,
   insertConnectedAccount,
-  registerFaircoinKey,
   type ConnectedAccountRow,
 } from '../accounts/connectedAccountRepository';
 import { insertMerchant, type MerchantRow } from '../merchants/merchantRepository';
@@ -35,7 +35,7 @@ import { connectedAccounts } from '../schema';
 const FOREIGN_KEY_VIOLATION = '23503';
 const CHECK_VIOLATION = '23514';
 
-/** A CARD-ONLY platform — Mercaria's shape: no network, no xpub. */
+/** A platform with no FairCoin of its own in play — Mercaria's shape. */
 async function seedCardOnlyPlatform(): Promise<MerchantRow> {
   const id = uuidv7();
   return must(
@@ -138,7 +138,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts (database)
       expect(sqlStateOf(error)).toBe(CHECK_VIOLATION);
     });
 
-    it('refuses a key with no network', async () => {
+    it('refuses a confirmation with no FairCoin half', async () => {
       const platform = await seedCardOnlyPlatform();
       const id = uuidv7();
       const error = await caught(() =>
@@ -152,7 +152,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts (database)
             provider: 'stripe',
             providerAccountId: `acct_${id}`,
             country: 'ES',
-            xpub: testXpubFor('testnet', 9),
             faircoinRegisteredAt: new Date(),
           }),
       );
@@ -160,132 +159,61 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts (database)
     });
   });
 
-  describe('registering the key — the single writer', () => {
-    it('stores a watch-only key once, and never replaces it', async () => {
+  describe('the seller confirms — the single writer (ADR 0021 D5)', () => {
+    it('confirms once, stores no key, and never twice', async () => {
       const platform = await seedCardOnlyPlatform();
       const seller = await seedFaircoinSeller(platform.id);
-      const first = await registerFaircoinKey(gatewayDb(), seller.id, testXpubFor('testnet', 1));
+      const first = await confirmFaircoinHalf(gatewayDb(), seller.id);
       expect(first.ok).toBe(true);
-
-      const second = await registerFaircoinKey(gatewayDb(), seller.id, testXpubFor('testnet', 2));
-      expect(second).toEqual({ ok: false, refusal: 'already_registered' });
-
-      const [row] = await gatewayDb()
-        .select({ xpub: connectedAccounts.xpub })
-        .from(connectedAccounts)
-        .where(eq(connectedAccounts.id, seller.id));
-      expect(row?.xpub).toBe(testXpubFor('testnet', 1));
-    });
-
-    /**
-     * THE non-custody firewall for sellers. A real PRIVATE extended key, proven
-     * private, refused and never stored. Deleting the `assertWatchOnly` call in
-     * `registerFaircoinKey` reds exactly this test.
-     */
-    it('refuses a private extended key and stores nothing', async () => {
-      const platform = await seedCardOnlyPlatform();
-      const seller = await seedFaircoinSeller(platform.id);
-      const xprv = testXprvFor('testnet', 3);
-      // Vacuity guard: prove the fixture really IS a private key, so the refusal
-      // below is the firewall's and not a malformed string's.
-      const network = getNetwork('testnet');
-      const parsed = HDKey.fromExtendedKey(xprv, {
-        public: network.bip32.public,
-        private: network.bip32.private,
+      expect(await confirmFaircoinHalf(gatewayDb(), seller.id)).toEqual({
+        ok: false,
+        refusal: 'already_registered',
       });
-      expect(parsed.privateKey).not.toBeNull();
-
-      const error = await caught(() => registerFaircoinKey(gatewayDb(), seller.id, xprv));
-      expect(error).toBeInstanceOf(WatchOnlyViolationError);
-
-      const [row] = await gatewayDb()
-        .select({ xpub: connectedAccounts.xpub })
-        .from(connectedAccounts)
-        .where(eq(connectedAccounts.id, seller.id));
-      expect(row?.xpub).toBeNull();
     });
 
-    it("refuses a key for the other network than the account's", async () => {
+    it('refuses a seller with no FairCoin half', async () => {
       const platform = await seedCardOnlyPlatform();
-      const seller = await seedFaircoinSeller(platform.id, { network: 'testnet' });
-      const error = await caught(() =>
-        registerFaircoinKey(gatewayDb(), seller.id, testXpubFor('mainnet', 1)),
+      const id = uuidv7();
+      const card = must(
+        await insertConnectedAccount(gatewayDb(), {
+          publicId: `ca_${id}`,
+          merchantId: platform.id,
+          externalRef: `store_${id}`,
+          provider: 'stripe',
+          providerAccountId: `acct_${id}`,
+          country: 'ES',
+        }),
       );
-      expect(error).toBeInstanceOf(WatchOnlyViolationError);
-    });
-
-    it("refuses another seller's key — two counters on one key collide", async () => {
-      const platform = await seedCardOnlyPlatform();
-      const a = await seedFaircoinSeller(platform.id);
-      const b = await seedFaircoinSeller(platform.id);
-      const key = testXpubFor('testnet', 4);
-      expect((await registerFaircoinKey(gatewayDb(), a.id, key)).ok).toBe(true);
-      expect(await registerFaircoinKey(gatewayDb(), b.id, key)).toEqual({
+      expect(await confirmFaircoinHalf(gatewayDb(), card.id)).toEqual({
         ok: false,
-        refusal: 'key_in_use',
-      });
-    });
-
-    it("refuses a MERCHANT's key, for the same reason", async () => {
-      const merchant = await seedMerchant({ xpub: testXpubFor('testnet', 5) });
-      const platform = await seedCardOnlyPlatform();
-      const seller = await seedFaircoinSeller(platform.id);
-      expect(await registerFaircoinKey(gatewayDb(), seller.id, must(merchant.xpub))).toEqual({
-        ok: false,
-        refusal: 'key_in_use',
+        refusal: 'no_faircoin_half',
       });
     });
   });
 
-  describe("the seller's reservation", () => {
+  describe("the seller's reservation — the seller's own Peable wallet", () => {
     /**
      * Two CONSECUTIVE reservations, for the reason AGENTS.md gives: one cannot
-     * tell the number 0 from a string that prints the same, and a string makes
-     * `index + 1` concatenation.
+     * tell the number 1 from a string that prints the same, and a string makes
+     * `index + 1` concatenation. On the SELLER's identity cursor (ADR 0002).
      */
-    it('hands out 0 then 1, as numbers, on the SELLER key', async () => {
+    it("hands out two distinct addresses of the seller's own tree", async () => {
       const platform = await seedCardOnlyPlatform();
-      const seller = await seedFaircoinSeller(platform.id);
-      const key = testXpubFor('testnet', 6);
-      expect((await registerFaircoinKey(gatewayDb(), seller.id, key)).ok).toBe(true);
-
-      const first = must(
-        await reserveNextAccountDerivationIndex(gatewayDb(), platform.id, seller.id),
-      );
-      const second = must(
-        await reserveNextAccountDerivationIndex(gatewayDb(), platform.id, seller.id),
-      );
-      expect(first.index).toBe(0);
-      expect(second.index).toBe(1);
-      expect(typeof first.index).toBe('number');
-      expect(first.xpub).toBe(key);
-      expect(first.network).toBe('testnet');
-      expect(deriveIntentAddress(key, 0, second.index, getNetwork('testnet'))).not.toBe(
-        deriveIntentAddress(key, 0, first.index, getNetwork('testnet')),
-      );
+      const seller = await seedFaircoinSeller(platform.id, { oxyUserId: `user_${uuidv7()}` });
+      const recipient = must(faircoinRecipientOf(platform, seller));
+      expect(recipient).toBe(must(seller.faircoinOxyUserId));
+      const first = await reserveFaircoinAddress(recipient, 'testnet');
+      const second = await reserveFaircoinAddress(recipient, 'testnet');
+      const key = testIdentityPublicKey(recipient);
+      const network = getNetwork('testnet');
+      expect(first.address).toBe(deriveSocialReceiveAddress(key, 1, network));
+      expect(second.address).toBe(deriveSocialReceiveAddress(key, 2, network));
+      expect(first.recipientAccountId).toBe(recipient);
     });
 
-    it('reserves nothing for a seller with no key yet', async () => {
-      const platform = await seedCardOnlyPlatform();
-      const seller = await seedFaircoinSeller(platform.id);
-      expect(
-        await reserveNextAccountDerivationIndex(gatewayDb(), platform.id, seller.id),
-      ).toBeNull();
-      const [row] = await gatewayDb()
-        .select({ next: connectedAccounts.nextDerivationIndex })
-        .from(connectedAccounts)
-        .where(eq(connectedAccounts.id, seller.id));
-      expect(row?.next).toBe(0);
-    });
-
-    it("never reserves on another platform's seller", async () => {
-      const platform = await seedCardOnlyPlatform();
-      const other = await seedCardOnlyPlatform();
-      const seller = await seedFaircoinSeller(platform.id);
-      expect(
-        (await registerFaircoinKey(gatewayDb(), seller.id, testXpubFor('testnet', 7))).ok,
-      ).toBe(true);
-      expect(await reserveNextAccountDerivationIndex(gatewayDb(), other.id, seller.id)).toBeNull();
+    it('reserves nothing for a seller whose account has no Peable wallet', async () => {
+      const error = await caught(() => reserveFaircoinAddress('keyless_seller', 'testnet'));
+      expect(error).toBeInstanceOf(FaircoinWalletMissingError);
     });
   });
 
@@ -355,12 +283,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts (database)
       const error = await caught(() =>
         insertPaymentIntent(gatewayDb(), intentValues(merchant.id, { network: 'mainnet' })),
       );
-      expect(sqlStateOf(error)).toBe(FOREIGN_KEY_VIOLATION);
-    });
-
-    it('still refuses a direct FairCoin intent for a card-only merchant', async () => {
-      const platform = await seedCardOnlyPlatform();
-      const error = await caught(() => insertPaymentIntent(gatewayDb(), intentValues(platform.id)));
       expect(sqlStateOf(error)).toBe(FOREIGN_KEY_VIOLATION);
     });
 

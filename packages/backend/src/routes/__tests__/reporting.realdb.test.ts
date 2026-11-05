@@ -17,7 +17,7 @@ import { createGateway, type Gateway } from '../../server';
 import { createDashboardRouter } from '../dashboard';
 import { requestIdMiddleware } from '../../lib/requestId';
 import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
-import { type MerchantRow, syncMerchantFirstParty } from '../../db/merchants/merchantRepository';
+import { type MerchantRow, syncMerchantAuthority } from '../../db/merchants/merchantRepository';
 import { insertBalanceTransaction } from '../../db/money/ledgerRepository';
 import { insertRefund } from '../../db/refunds/refundRepository';
 import { upsertDispute } from '../../db/disputes/disputeRepository';
@@ -348,7 +348,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('report runs', () => {
 
   test('balance.summary.1 for a first-party ledger; an unknown fee is empty, never zero', async () => {
     firstParty = true;
-    merchant = await syncMerchantFirstParty(gatewayDb(), merchant, true);
+    merchant = await syncMerchantAuthority(gatewayDb(), merchant, { firstParty: true });
     const at = (seconds: number) => new Date(seconds * 1000);
     const end = now() - 5;
     const transaction = async (values: {
@@ -583,7 +583,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('report downloads', () => {
 
   test('itemized balance transactions, refunds and disputes; an unreported fee is empty', async () => {
     firstParty = true;
-    merchant = await syncMerchantFirstParty(gatewayDb(), merchant, true);
+    merchant = await syncMerchantAuthority(gatewayDb(), merchant, { firstParty: true });
     const end = now() - 5;
     const base = {
       merchantId: merchant.id,

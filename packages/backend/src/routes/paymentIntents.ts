@@ -6,6 +6,10 @@
  * `paymentIntentRoutes`): this file validates with those objects and decides
  * nothing about the wire's shape.
  */
+import {
+  FaircoinNetworkClosedError,
+  FaircoinWalletMissingError,
+} from '../services/faircoin/recipient';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { verifySecret } from '@oxy.so/core/server';
@@ -28,7 +32,7 @@ import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import {
   findMerchantByAppEnvironment,
-  syncMerchantFirstParty,
+  syncMerchantAuthority,
 } from '../db/merchants/merchantRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -201,9 +205,13 @@ export async function resolveMerchant(req: Request, res: Response): Promise<Merc
     return null;
   }
   // The credential's VERIFIED authority (Oxy ADR 0049) decides whether this is
-  // one of Oxy's own products (ADR 0015 §2); the row mirrors it for the paths
-  // that carry no credential (the dashboard, the event drain).
-  const synced = await syncMerchantFirstParty(getDb(), merchant, serviceApp.firstParty);
+  // one of Oxy's own products (ADR 0015 §2) and which account owns it — whose
+  // Peable wallet receives its FairCoin (ADR 0021 D5); the row mirrors both
+  // for the paths that carry no credential (payers, the dashboard, the drain).
+  const synced = await syncMerchantAuthority(getDb(), merchant, {
+    firstParty: serviceApp.firstParty,
+    ownerAccountId: serviceApp.ownerAccountId,
+  });
   // The request log (`lib/requestLog.ts`) records the request under it.
   res.locals.merchant = synced;
   return synced;
@@ -407,11 +415,11 @@ export function createPaymentIntentsRouter(deps: {
           ...(clientAction ? { client_action: clientAction } : {}),
         });
       } catch (err) {
-        // Data-integrity firewall (F2.0 task 1a): the watch-only address is
-        // derived using the MERCHANT's network (`reserveAddress.ts`), never
-        // the caller's claimed `network` — `createIntent` rejects a mismatch
-        // up front, or the returned intent's `network` label would lie about
-        // the network its `address` actually encodes.
+        // Data-integrity firewall (F2.0 task 1a): the address is derived on
+        // the MERCHANT's network (`faircoin/recipient.ts`), never the caller's
+        // claimed `network` — `createIntent` rejects a mismatch up front, or the
+        // returned intent's `network` label would lie about the network its
+        // `address` actually encodes.
         // `RailMismatchError` rides the same branch: both are a caller
         // describing a payment this gateway cannot make, and neither is a
         // server fault. Which mistake they made is in the message.
@@ -421,6 +429,24 @@ export function createPaymentIntentsRouter(deps: {
         }
         if (err instanceof IntentParameterError) {
           sendError(res, 400, 'invalid_request_error', err.message, err.code, err.param);
+          return;
+        }
+        // The recipient's Peable wallet is not set up, or the deployment does
+        // not open this network yet (ADR 0021 D5): the request is right, the
+        // payee is not ready — never a silent card-only answer.
+        if (err instanceof FaircoinWalletMissingError) {
+          sendError(res, 409, 'invalid_request_error', err.message, 'faircoin_wallet_missing');
+          return;
+        }
+        if (err instanceof FaircoinNetworkClosedError) {
+          sendError(
+            res,
+            409,
+            'invalid_request_error',
+            err.message,
+            'faircoin_network_closed',
+            'network',
+          );
           return;
         }
         if (sendMoneyRefusal(res, err)) return;

@@ -624,6 +624,48 @@
       "when": 1793910588412,
       "tag": "0088_faircoin_offered_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793918236349,
+      "tag": "0089_merchants_owner_account",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793918237406,
+      "tag": "0090_payment_intents_faircoin_recipient",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793918238431,
+      "tag": "0091_connected_accounts_faircoin_wallet",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1793918239423,
+      "tag": "0092_merchants_faircoin_network",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793918291287,
+      "tag": "0093_drop_faircoin_xpub",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1793918292305,
+      "tag": "0094_faircoin_identity_wallet_validate",
+      "breakpoints": true
     }
   ]
 }

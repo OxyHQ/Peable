@@ -148,7 +148,8 @@ export function createDashboardRouter(deps: {
     }),
   );
 
-  // Registering names the watch-only key payments are derived from: money.
+  // Registering a merchant is a money decision: its FairCoin goes to the
+  // owning account's Peable wallet (ADR 0021 D5).
   router.post(
     `${base}/merchant`,
     requireOxyUser,
@@ -167,6 +168,7 @@ export function createDashboardRouter(deps: {
         granted.environment,
         parsed.data,
         { actor: granted.avatarActor, files },
+        granted.application.ownerAccountId,
       );
       if (!result.ok) {
         sendMerchantWriteError(res, result);

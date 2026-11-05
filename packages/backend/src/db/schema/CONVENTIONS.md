@@ -89,17 +89,14 @@ address the recipient cannot spend from, or two payers sharing one address the
 gateway can then attribute to neither. That is the standard every decision in
 this section is held to.
 
-`merchants.next_derivation_index`, `connected_accounts.next_derivation_index`
-(a seller's key, ADR 0012) and `social_receive_cursors.next_derivation_index`
-are `integer`, and that is the domain rather than a size guess: a non-hardened
+`social_receive_cursors.next_derivation_index` — the ONE counter every FairCoin
+address comes from since ADR 0021 D5 (social, merchant and seller payments) —
+is `integer`, and that is the domain rather than a size guess: a non-hardened
 BIP32 child index is bounded by 2^31 − 1, exactly `int4`'s ceiling.
 
 **Verified against both derivation paths, not assumed.** `@fairco.in/core`
 exports `MAX_SOCIAL_RECEIVE_INDEX = HARDENED_OFFSET - 1` and `assertValidIndex`
-refuses anything above it; and `deriveIntentAddress` derives from a public-only
-node — it throws on any extended key carrying a private key — on which
-`@scure/bip32` cannot derive a hardened child at all (`Could not derive hardened
-child key`). Both numbers are `2147483647`. `db/__tests__/derivationIndexBound.test.ts`
+refuses anything above it (`2147483647`). `db/__tests__/derivationIndexBound.test.ts`
 pins the agreement, by CROSSING the boundary rather than by comparing a constant
 against itself, and fails the build if the derivable space ever widens — at
 which point `integer` would silently start refusing legal indices.
@@ -111,8 +108,9 @@ Two consequences, both wanted:
 - The value comes back as a JS `number`. A `bigint` column would make it a
   string, so `index + 1` would be CONCATENATION (`"0" + 1 === "01"`) and derive a
   completely different address. Pinned by two consecutive reservations in
-  `db/__tests__/derivationIndex.realdb.test.ts`; one reservation cannot tell a
-  number from a string that prints the same.
+  `db/__tests__/socialReceiveCursor.realdb.test.ts` (and through the payment
+  path in `connectedAccountFaircoin.realdb.test.ts`); one reservation cannot
+  tell a number from a string that prints the same.
 
 ## Composite foreign keys carry the invariants a CHECK cannot
 
@@ -320,14 +318,10 @@ that predates them writes.
 Each of these exists because a specific defect reached production-shaped code,
 and each was checked against every writer first.
 
-- **`merchants_chain_fields_agree_check`** — `(network IS NULL) = (xpub IS
-  NULL)`. The two are halves of ONE capability: a network with no key derives
-  nothing, and a key with no network cannot be interpreted at all, because an
-  extended key's version bytes are network-specific. They became nullable so a
-  card-only merchant can register without supplying a watch-only key for a chain
-  they never intend to use — and the agreement CHECK is what stops that widening
-  from admitting a half-registered merchant, whose failure mode is a payer shown
-  an address on the wrong chain.
+- **`merchants_network_present_check`** (was `merchants_chain_fields_agree_check`,
+  ADR 0021 D5) — every merchant has a FairCoin network, its environment's,
+  because every order offers FairCoin; there is no key beside it any more (the
+  owner's Peable wallet receives), so the old *network ⇔ xpub* pair is gone.
 - **`refunds_origin_ref_agrees_check`** — `(origin = 'merchant') = (external_ref
   IS NOT NULL)`. A refund created at the acquirer (a dashboard refund, or the
   network resolving a dispute) has no merchant reference and cannot be given
@@ -359,39 +353,25 @@ A drizzle schema has no hooks. A rule that the database cannot express is true
 only of writes that go through one function, and NOTHING fails when it is
 dropped.
 
-The instance here is the one the repository's AGENTS.md calls the legal
-firewall: deriving index 0 from the submitted `xpub` proves it is watch-only, so
-a merchant handing over an `xprv` is refused rather than silently granting this
-gateway the ability to spend their funds. It is not expressible as a CHECK —
-deciding it requires deriving a secp256k1 child key — so it lives in
-`db/merchants/merchantRepository.ts`'s `assertWatchOnly`, and `insertMerchant`
-being the single writer is the only thing keeping it honest.
+The instances here: who RECEIVES a FairCoin payment is decided in ONE module,
+`services/faircoin/recipient.ts` (the owning account's or the seller's Peable
+wallet, ADR 0021 D5), and a seller's FairCoin half is confirmed by ONE writer,
+`confirmFaircoinHalf` (`db/accounts/connectedAccountRepository.ts`), reached
+only from the seller's own Oxy session. Neither is expressible as a CHECK — the
+first needs a DID read, the second a session — so each is a single chokepoint
+with a test that would fail without it (`faircoinConnect.realdb.test.ts`,
+`connectedAccountFaircoin.realdb.test.ts`).
 
-**Measured:** deleting that one call reds exactly ONE test out of 288. Every
-other test hands in a valid xpub and stays green, because telling the two apart
-requires a fixture that is a real PRIVATE extended key — which is why
-`merchantRepository.realdb.test.ts` builds one from the canonical mnemonic
-rather than asserting on a string, and proves it really is private before using
-it to prove anything.
-
-Every such rule is expressed at a single write chokepoint with a test that would
-fail without it.
-
-The SELLER's key (ADR 0012) has its own chokepoint, `registerFaircoinKey` in
-`db/accounts/connectedAccountRepository.ts`, which calls the same
-`assertWatchOnly` (`services/watchOnly.ts`) before it writes and is the only
-statement that sets `connected_accounts.xpub` — its `WHERE xpub IS NULL` is the
-immutability. `connectedAccountFaircoin.realdb.test.ts` hands it a real private
-key; deleting the call reds that test and the wrong-network one, measured.
+The xpub firewall (`assertWatchOnly`) that used to be this section's example is
+retired with the key: no column holds a key of any kind.
 
 ## Protected columns
 
 `db/protectedColumns.ts` withholds `webhook_endpoints.secret` /
-`previous_secret` and `merchants.next_derivation_index` from every ordinary
-read, at the TYPE level.
-`xpub` and `client_secret` are deliberately NOT in the registry: both appear in
-a DTO by design, so listing them would not withhold anything — it would only
-make every read name them explicitly, which is the opposite of a guard.
+`previous_secret` from every ordinary read, at the TYPE level.
+`client_secret` is deliberately NOT in the registry: it appears in a DTO by
+design, so listing it would not withhold anything — it would only make every
+read name it explicitly, which is the opposite of a guard.
 
 ## Timestamps
 

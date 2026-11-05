@@ -272,6 +272,16 @@ describe('id-column classification', () => {
           reason: "the seller's Oxy user id (ADR 0012 D2) — Oxy owns identity",
         },
         {
+          column: 'merchants.owner_account_id',
+          reason:
+            "the Oxy account that owns the merchant's application (ADR 0021 D5) — Oxy owns identity",
+        },
+        {
+          column: 'payment_intents.faircoin_recipient_account_id',
+          reason:
+            'the Oxy account whose Peable wallet the payment pays (ADR 0021 D5) — Oxy owns identity',
+        },
+        {
           column: 'connected_accounts.provider_account_id',
           reason:
             "the provider's own acct_…; a reference is not expressible because the row is at the provider, and uniqueness is held by connected_accounts_provider_account_id_key",

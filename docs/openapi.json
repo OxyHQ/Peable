@@ -7109,12 +7109,12 @@
     },
     "/v1/connect/onboarding/{token}/faircoin": {
       "post": {
-        "operationId": "registerConnectOnboardingFaircoinKey",
+        "operationId": "confirmConnectOnboardingFaircoin",
         "tags": [
           "Connect onboarding"
         ],
-        "summary": "Register the seller's FairCoin key",
-        "description": "The ONLY way a key reaches a connected account: runs the non-custody firewall, consumes the link and tells the platform (`connected_account.updated`), in one transaction. The key is immutable once registered and never appears on any response.",
+        "summary": "Confirm FairCoin payments into the seller’s Peable wallet",
+        "description": "The seller, signed in as the account the link names, confirms that FairCoin paid to them goes to that account’s Peable wallet (ADR 0021 D5) — the only way a FairCoin half becomes payable. No key is sent: addresses derive from the account’s public identity key. 409 `faircoin_wallet_missing` while the account has no Peable wallet yet. Consumes the link and tells the platform (`connected_account.updated`) in one transaction.",
         "security": [
           {
             "oxyUserSession": []
@@ -7148,17 +7148,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {
-                  "xpub": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200,
-                    "description": "A watch-only extended PUBLIC key. A private extended key is refused (`watch_only_violation`) and never stored."
-                  }
-                },
-                "required": [
-                  "xpub"
-                ],
+                "properties": {},
                 "additionalProperties": false
               }
             }
@@ -7296,7 +7286,7 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "description": "The seller's Oxy user id — the only person who may register the key."
+                        "description": "The seller's Oxy account id — the only one that may confirm, and whose Peable wallet receives."
                       }
                     },
                     "required": [
@@ -7729,7 +7719,7 @@
                       "card",
                       "faircoin"
                     ],
-                    "description": "Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER registers their watch-only key."
+                    "description": "Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER confirms, in their own Oxy session, that their FairCoin is paid into their Peable wallet."
                   }
                 },
                 "required": [
@@ -16976,18 +16966,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "network": {
-                    "type": "string",
-                    "enum": [
-                      "mainnet",
-                      "testnet"
-                    ]
-                  },
-                  "xpub": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "A watch-only account xpub. A private extended key is refused."
-                  },
                   "required_confirmations": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
@@ -54632,8 +54610,10 @@
                       {
                         "type": "string",
                         "enum": [
-                          "faircoin_account_missing",
-                          "price_unavailable"
+                          "faircoin_wallet_missing",
+                          "faircoin_network_closed",
+                          "price_unavailable",
+                          "temporarily_unavailable"
                         ]
                       },
                       {
@@ -54994,11 +54974,11 @@
               "pending",
               "active"
             ],
-            "description": "`pending`: the seller has not registered a key yet (an on-behalf payment is refused, `account_not_ready`). `active`: payments derive addresses from their key."
+            "description": "`pending`: the seller has not confirmed yet (an on-behalf payment is refused, `account_not_ready`). `active`: the seller confirmed, and payments go to the Peable wallet of their Oxy account."
           },
           "oxy_user_id": {
             "type": "string",
-            "description": "The Oxy user who may register the key — and, once `active`, who did."
+            "description": "The seller’s Oxy account — the only one that may confirm, and the one whose Peable wallet receives."
           },
           "registered_at": {
             "anyOf": [
@@ -55012,7 +54992,7 @@
                 "type": "null"
               }
             ],
-            "description": "When the seller registered their key. `null` while `pending`."
+            "description": "When the seller confirmed. `null` while `pending`."
           }
         },
         "required": [
@@ -56937,7 +56917,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 110 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 109 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -58664,22 +58644,15 @@
             ]
           },
           "network": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "mainnet",
-                  "testnet"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "mainnet",
+              "testnet"
             ],
-            "description": "The FairCoin chain this merchant accepts on; `null` on a card-only merchant. Nullable together with `xpub`."
+            "description": "The FairCoin network this merchant's payments use — its environment's: `mainnet` live, `testnet` otherwise (ADR 0021 D5)."
           },
-          "xpub": {
-            "description": "The watch-only account key receive addresses derive from; `null` on a card-only merchant.",
+          "owner_account": {
+            "description": "The Oxy account (a person or an organization) that owns the application — its Peable wallet receives the merchant’s FairCoin (ADR 0021 D5). No key is ever registered. `null` until Peable has seen the owner.",
             "type": [
               "string",
               "null"
@@ -58725,7 +58698,7 @@
           "oxy_app_id",
           "environment",
           "network",
-          "xpub",
+          "owner_account",
           "required_confirmations",
           "created",
           "updated_at"
@@ -58739,7 +58712,7 @@
             "oxy_app_id": "app_0193b8f2c1a87d3e9f4b",
             "environment": "development",
             "network": "testnet",
-            "xpub": "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba",
+            "owner_account": "0193b8f2-c1a8-7d3e-9f4a-5b6c7d8e9f01",
             "required_confirmations": 6,
             "display_name": "Jenny’s Plants",
             "created": 1793750400,
@@ -59330,7 +59303,7 @@
           },
           "address": {
             "type": "string",
-            "description": "Watch-only receive address derived per intent from the merchant's (or seller's) xpub."
+            "description": "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5)."
           },
           "txid": {
             "type": [
@@ -60156,7 +60129,9 @@
                 "enum": [
                   "provider_unsupported",
                   "requires_card",
-                  "faircoin_account_missing"
+                  "faircoin_wallet_missing",
+                  "faircoin_network_closed",
+                  "temporarily_unavailable"
                 ]
               },
               {
@@ -61564,8 +61539,10 @@
                   {
                     "type": "string",
                     "enum": [
-                      "faircoin_account_missing",
-                      "price_unavailable"
+                      "faircoin_wallet_missing",
+                      "faircoin_network_closed",
+                      "price_unavailable",
+                      "temporarily_unavailable"
                     ]
                   },
                   {

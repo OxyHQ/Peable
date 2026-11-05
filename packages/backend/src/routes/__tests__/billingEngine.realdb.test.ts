@@ -219,13 +219,16 @@ async function sentKinds(): Promise<string[]> {
 }
 let restoreModes: () => void = () => undefined;
 
+/** The application owner the stub credential names — whose Peable wallet receives. */
+let stubOwner = 'owner';
+
 const stubRequireMerchant: RequestHandler = (req, _res, next) => {
   (req as OxyAuthRequest).serviceApp = {
     appId,
     appName: 'billing',
     scopes: ['payments:read', 'payments:write'],
     credentialId: 'c',
-    ownerAccountId: 'owner',
+    ownerAccountId: stubOwner,
     environment: 'development',
     tier: 'internal',
   };
@@ -1216,6 +1219,33 @@ describe('FairCoin is always offered on fiat orders (ADR 0021)', () => {
     // A fresh quote is a new payment.
     const again = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
     expect(linkedIntent(again.json)).not.toBe(linkedIntent(quoted.json));
+  });
+
+  test("the owner's Peable wallet isn't set up: FairCoin says so, never silently card-only (ADR 0021 D5)", async () => {
+    // The credential names an owner with no identity key — an organization
+    // whose owners have not created its Peable wallet yet.
+    stubOwner = `keyless_org_${String(counter)}`;
+    try {
+      const poster = await oneTimePrice('4200');
+      const cs = await ok('POST', '/v1/checkout_sessions', {
+        success_url: 'https://shop.example/done',
+        customer_email: 'payer@example.test',
+        line_items: [{ price: poster.id, quantity: 1 }],
+      });
+      // The order is created and FairCoin is still offered — with the reason.
+      expect(cs.payment_method_types).toEqual(['card', 'faircoin']);
+      expect((await asPayer(cs, '')).json.faircoin).toEqual({
+        available: false,
+        unavailable_reason: 'faircoin_wallet_missing',
+      });
+      const refused = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
+      expect(refused.status).toBe(409);
+      expect(refused.json.error.code).toBe('faircoin_wallet_missing');
+      const byCard = await asPayer(cs, '/confirm', { payment_method_type: 'card' });
+      expect(byCard.status).toBe(200);
+    } finally {
+      stubOwner = 'owner';
+    }
   });
 
   test('no fresh price: FairCoin says why and fails closed, the card still works', async () => {

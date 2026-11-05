@@ -17,14 +17,16 @@
 import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
 import { getRequiredOxyUserId } from '@oxy.so/core/server';
-import { type ConnectOnboardingComplete, registerFaircoinKeyParams } from '@peable.to/contracts';
+import {
+  type ConnectOnboardingComplete,
+  confirmFaircoinOnboardingParams,
+} from '@peable.to/contracts';
 import { type ErrorCode, errorDocUrl } from '@peable.to/contracts/vocabulary';
 import {
   describeOnboarding,
   OnboardingRefusedError,
-  registerFromOnboarding,
+  confirmFromOnboarding,
 } from '../services/accounts/faircoinOnboarding';
-import { WatchOnlyViolationError } from '../services/watchOnly';
 import { requestIdOf } from '../lib/requestId';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 
@@ -93,9 +95,10 @@ export function createConnectRouter(deps: { requireOxyUser: RequestHandler }): R
   );
 
   /**
-   * Register the seller's watch-only key — the ONLY way a key reaches a
-   * connected account. Runs the non-custody firewall, consumes the link, and
-   * tells the platform, all in one transaction.
+   * The seller confirms FairCoin payments into their own Peable wallet (ADR
+   * 0012 D3, ADR 0021 D5) — the only way a FairCoin half becomes payable. No
+   * key travels: payments derive from the seller account's public identity
+   * key. Consumes the link and tells the platform, in one transaction.
    */
   router.post(
     '/v1/connect/onboarding/:token/faircoin',
@@ -103,16 +106,15 @@ export function createConnectRouter(deps: { requireOxyUser: RequestHandler }): R
     wrap(async (req, res) => {
       const token = readToken(req.params.token, res);
       if (!token) return;
-      const parsed = registerFaircoinKeyParams.safeParse(req.body);
+      const parsed = confirmFaircoinOnboardingParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
       }
       try {
-        const { account, returnUrl } = await registerFromOnboarding({
+        const { account, returnUrl } = await confirmFromOnboarding({
           token,
           oxyUserId: getRequiredOxyUserId(req),
-          xpub: parsed.data.xpub,
         });
         const body: ConnectOnboardingComplete = {
           object: 'connect_onboarding',
@@ -124,12 +126,6 @@ export function createConnectRouter(deps: { requireOxyUser: RequestHandler }): R
       } catch (error) {
         if (error instanceof OnboardingRefusedError) {
           sendRefusal(res, error);
-          return;
-        }
-        // A key that can spend, or one for the other chain. Refused and never
-        // stored — the message says which.
-        if (error instanceof WatchOnlyViolationError) {
-          sendError(res, 400, 'invalid_request_error', error.message, 'watch_only_violation');
           return;
         }
         throw error;

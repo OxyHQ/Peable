@@ -10,7 +10,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | Endpoint | Summary |
 | --- | --- |
 | [`GET /v1/connect/onboarding/{token}`](#retrieve-an-onboarding-link) | Retrieve an onboarding link |
-| [`POST /v1/connect/onboarding/{token}/faircoin`](#register-the-sellers-faircoin-key) | Register the seller's FairCoin key |
+| [`POST /v1/connect/onboarding/{token}/faircoin`](#confirm-faircoin-payments-into-the-sellers-peable-wallet) | Confirm FairCoin payments into the seller’s Peable wallet |
 
 ## Retrieve an onboarding link
 
@@ -33,11 +33,11 @@ Returns [ConnectOnboarding](/reference/objects/connect-onboarding).
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
-## Register the seller's FairCoin key
+## Confirm FairCoin payments into the seller’s Peable wallet
 
 `POST /v1/connect/onboarding/{token}/faircoin`
 
-The ONLY way a key reaches a connected account: runs the non-custody firewall, consumes the link and tells the platform (`connected_account.updated`), in one transaction. The key is immutable once registered and never appears on any response.
+The seller, signed in as the account the link names, confirms that FairCoin paid to them goes to that account’s Peable wallet (ADR 0021 D5) — the only way a FairCoin half becomes payable. No key is sent: addresses derive from the account’s public identity key. 409 `faircoin_wallet_missing` while the account has no Peable wallet yet. Consumes the link and tells the platform (`connected_account.updated`) in one transaction.
 
 - **Authentication:** [Oxy user session](/reference#oxy-user-session)
 
@@ -50,9 +50,7 @@ The ONLY way a key reaches a connected account: runs the non-custody firewall, c
 
 **Request body** (`application/json`)
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `xpub` **required** | string | A watch-only extended PUBLIC key. A private extended key is refused (`watch_only_violation`) and never stored. 1–200 characters. |
+
 
 **Response `200`**
 

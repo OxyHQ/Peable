@@ -10,8 +10,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { assertWatchOnly } from '../../services/watchOnly';
-import { connectedAccounts, merchants } from '../schema';
+import { connectedAccounts } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
@@ -169,8 +168,8 @@ export type InsertConnectedAccountParams = {
  *   is left with one nobody uses.
  *
  * No readiness fields are accepted. They arrive only from `applyAccountSnapshot`.
- * No KEY is accepted either: a seller's xpub arrives only through
- * `registerFaircoinKey`, from the seller's own session (ADR 0012 D3).
+ * No confirmation either: only the seller confirms the FairCoin half, from
+ * their own session (`confirmFaircoinHalf`, ADR 0012 D3).
  */
 export async function insertConnectedAccount(
   db: DatabaseOrTransaction,
@@ -250,88 +249,49 @@ export async function enableFaircoinHalf(
   return row ? toRow(row) : null;
 }
 
-/** Why a seller's key was not stored. Every case is a refusal, never a partial write. */
-export type RegisterKeyRefusal =
+/** Why a seller's FairCoin half was not confirmed. Every case is a refusal, never a partial write. */
+export type ConfirmFaircoinRefusal =
   /** The half was never opened, or the row does not exist. */
   | 'no_faircoin_half'
-  /** A key is already registered; it is immutable (ADR 0012 D4). */
-  | 'already_registered'
-  /** Another seller's account already holds this key. */
-  | 'key_in_use';
+  /** The seller already confirmed it. */
+  | 'already_registered';
 
-export type RegisterKeyResult =
+export type ConfirmFaircoinResult =
   | { readonly ok: true; readonly account: ConnectedAccountRow }
-  | { readonly ok: false; readonly refusal: RegisterKeyRefusal };
+  | { readonly ok: false; readonly refusal: ConfirmFaircoinRefusal };
 
 /**
- * Store the seller's watch-only key. THE single writer of
- * `connected_accounts.xpub` (ADR 0012 D4), and therefore where the non-custody
- * firewall runs for sellers — exactly as `insertMerchant` is for merchants.
- *
- * In order, every one of them a refusal that writes nothing:
- *
- * 1. The row is read `FOR UPDATE` — run this inside the caller's transaction —
- *    and must have an open FairCoin half with no key yet.
- * 2. `assertWatchOnly(xpub, network)`: an extended key that can spend, or one
- *    for the other chain, throws `WatchOnlyViolationError` and is never stored.
- * 3. A MERCHANT's key is refused (`key_in_use`): two derivation counters on one
- *    key hand out the same addresses. A cross-table rule no constraint can
- *    state; a merchant registering this exact key in the same instant is the
- *    residual risk, written down in the ADR.
- * 4. `UPDATE … WHERE xpub IS NULL` is the immutability — there is no other
- *    statement that writes this column, so a registered key is never replaced —
- *    and `connected_accounts_xpub_key` refuses a key another seller holds.
- *
- * @throws {WatchOnlyViolationError} for a private or wrong-network key.
+ * The SELLER confirms their FairCoin half (ADR 0012 D3, ADR 0021 D5): the one
+ * writer of `faircoin_registered_at`. No key is stored — payments go to the
+ * Peable wallet of the seller's own Oxy account (`faircoin_oxy_user_id`),
+ * derived from its public identity key. One conditional UPDATE: a second
+ * confirmation changes nothing.
  */
-export async function registerFaircoinKey(
+export async function confirmFaircoinHalf(
   db: DatabaseOrTransaction,
   accountId: string,
-  xpub: string,
   now: Date = new Date(),
-): Promise<RegisterKeyResult> {
+): Promise<ConfirmFaircoinResult> {
+  const [row] = await db
+    .update(connectedAccounts)
+    .set({ faircoinRegisteredAt: now })
+    .where(
+      and(
+        eq(connectedAccounts.id, accountId),
+        isNull(connectedAccounts.faircoinRegisteredAt),
+        isNotNull(connectedAccounts.network),
+      ),
+    )
+    .returning(ACCOUNT_COLUMNS);
+  if (row) return { ok: true, account: toRow(row) };
   const [current] = await db
-    .select({ network: connectedAccounts.network, xpub: connectedAccounts.xpub })
+    .select({ network: connectedAccounts.network })
     .from(connectedAccounts)
-    .where(eq(connectedAccounts.id, accountId))
-    .for('update');
-  if (!current || current.network === null) return { ok: false, refusal: 'no_faircoin_half' };
-  if (current.xpub !== null) return { ok: false, refusal: 'already_registered' };
-
-  // The legal firewall. Before ANY other read of the key, so a private key is
-  // refused on its own merits rather than reported as "in use".
-  assertWatchOnly(xpub, current.network as NetworkType);
-
-  const [merchantHolding] = await db
-    .select({ id: merchants.id })
-    .from(merchants)
-    .where(eq(merchants.xpub, xpub))
-    .limit(1);
-  if (merchantHolding) return { ok: false, refusal: 'key_in_use' };
-
-  let row: Record<string, unknown> | undefined;
-  try {
-    [row] = await db
-      .update(connectedAccounts)
-      .set({ xpub, faircoinRegisteredAt: now })
-      .where(
-        and(
-          eq(connectedAccounts.id, accountId),
-          isNull(connectedAccounts.xpub),
-          isNotNull(connectedAccounts.network),
-        ),
-      )
-      .returning(ACCOUNT_COLUMNS);
-  } catch (error) {
-    if (isUniqueViolation(error, 'connected_accounts_xpub_key')) {
-      return { ok: false, refusal: 'key_in_use' };
-    }
-    throw error;
-  }
-  // No row: a concurrent registration won between the read and the write
-  // (possible only outside a transaction). Its key stands.
-  if (!row) return { ok: false, refusal: 'already_registered' };
-  return { ok: true, account: toRow(row) };
+    .where(eq(connectedAccounts.id, accountId));
+  return {
+    ok: false,
+    refusal: !current || current.network === null ? 'no_faircoin_half' : 'already_registered',
+  };
 }
 
 /** The merchant's own address for a seller — the lookup every API call makes. */

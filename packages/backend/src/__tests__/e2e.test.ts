@@ -9,6 +9,8 @@
  * webhook signer/dispatcher — runs for real. Also asserts the non-custody
  * invariant: no private-key/seed field is ever persisted.
  */
+import { deriveSocialReceiveAddress, getNetwork } from '@fairco.in/core';
+import { testIdentityPublicKey } from './setup/identityKeys';
 import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { IncomingMessage } from 'node:http';
 import { Socket as NetSocket } from 'node:net';
@@ -35,9 +37,13 @@ import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { intentRoom } from '../realtime/socket';
 import type { ExplorerTx } from '../services/explorer';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-const FIRST_ADDRESS = 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3';
+// The first address of the merchant OWNER's Peable wallet (ADR 0021 D5): its
+// deterministic test identity key, index 1 of its identity cursor (ADR 0002).
+const FIRST_ADDRESS = deriveSocialReceiveAddress(
+  testIdentityPublicKey('owner'),
+  1,
+  getNetwork('testnet'),
+);
 const APP_ID = 'app_e2e';
 const WEBHOOK_SECRET = 'whsec_e2e';
 const AMOUNT = '150000000';
@@ -110,7 +116,6 @@ beforeAll(async () => {
     oxyAppId: APP_ID,
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
     webhookUrl: 'https://merchant.example/peable/webhook',
     webhookSecret: WEBHOOK_SECRET,
     requiredConfirmations: 1,

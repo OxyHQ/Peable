@@ -4,12 +4,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
-import {
-  ChainRegistrationError,
-  insertMerchant,
-  updateMerchantSettings,
-  WatchOnlyViolationError,
-} from '../db/merchants/merchantRepository';
+import { insertMerchant, updateMerchantSettings } from '../db/merchants/merchantRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { newId } from '../lib/ids';
 import { toMerchantDTO } from '../lib/serialize';
@@ -87,30 +82,19 @@ export async function registerMerchant(
   oxyAppId: string,
   environment: OxyServiceEnvironment,
   params: {
-    network?: 'mainnet' | 'testnet';
-    xpub?: string;
     required_confirmations?: number;
     display_name?: string;
     avatar_file_id?: string;
     description?: string;
   },
   avatar: AvatarAuthority,
+  /** The application's VERIFIED owner account — whose Peable wallet receives (ADR 0021 D5). */
+  ownerAccountId?: string,
 ): Promise<RegisterMerchantResult> {
-  // Test/live firewall (F2.0 task 1b): a development/staging caller can only
-  // ever register a testnet merchant — this makes it structurally impossible
-  // for a leaked test credential (or a compromised dashboard session) to move
-  // mainnet funds, not merely a data-labelling convention.
-  if (environment !== 'production' && params.network === 'mainnet') {
-    return {
-      ok: false,
-      status: 400,
-      message: `a '${environment}' environment cannot register a mainnet merchant`,
-    };
-  }
-  // A card-only merchant (no network) passes the firewall above vacuously, and
-  // that is correct: what it guards is the CHAIN. The equivalent guard for the
-  // card rail is `environmentGuard`, which refuses a non-production credential
-  // reaching a live provider key before any call is made.
+  // No FairCoin key is registered (ADR 0021 D5): the merchant's network is its
+  // environment's — so a non-production credential can only ever reach
+  // testnet, the test/live firewall by construction — and its FairCoin is
+  // received into the Peable wallet of the account that owns the application.
 
   // The public id is minted BEFORE the insert because the avatar's Oxy
   // reference names it, and that reference is registered first: Oxy's answer
@@ -126,38 +110,21 @@ export async function registerMerchant(
     if (!accepted.ok) return accepted;
   }
 
-  let merchant: MerchantRow | null;
-  try {
-    // Explicit field whitelist — never spread caller input. The non-custody
-    // firewall runs inside `insertMerchant` on `xpub` regardless of this
-    // function: it refuses any private extended key.
-    merchant = await insertMerchant(getDb(), {
-      publicId,
-      oxyAppId,
-      environment,
-      network: params.network,
-      xpub: params.xpub,
-      requiredConfirmations: params.required_confirmations,
-      displayName: params.display_name,
-      avatarFileId: params.avatar_file_id,
-      description: params.description,
-    });
-  } catch (err) {
+  // Explicit field whitelist — never spread caller input.
+  const merchant: MerchantRow | null = await insertMerchant(getDb(), {
+    publicId,
+    oxyAppId,
+    environment,
+    ownerAccountId,
+    requiredConfirmations: params.required_confirmations,
+    displayName: params.display_name,
+    avatarFileId: params.avatar_file_id,
+    description: params.description,
+  }).catch(async (err: unknown) => {
     if (params.avatar_file_id !== undefined)
       await releaseUnusedAvatar(params.avatar_file_id, publicId);
-    // The non-custody firewall refusing a key the caller sent is a bad
-    // REQUEST, not a server fault. Surfacing it as a 400 says which field is
-    // wrong; letting it escape would answer a spend-capable key with a 500 and
-    // no indication that the key itself was the problem.
-    if (err instanceof WatchOnlyViolationError || err instanceof ChainRegistrationError) {
-      // Both are the caller describing a FairCoin account this gateway will not
-      // accept — a key that can spend, or half a registration. 400 with the
-      // message says which; letting either escape would answer a spend-capable
-      // key with a 500 and no indication the key was the problem.
-      return { ok: false, status: 400, message: err.message };
-    }
     throw err;
-  }
+  });
 
   // `null` is the unique index having refused a second registration for this
   // application and environment — converged on rather than read first, so two
@@ -305,10 +272,13 @@ export function createMerchantsRouter(deps: {
         sendValidationError(res, parsed.error);
         return;
       }
-      const result = await registerMerchant(serviceApp.appId, serviceApp.environment, parsed.data, {
-        actor: serviceFileActor(req, serviceApp.appId),
-        files,
-      });
+      const result = await registerMerchant(
+        serviceApp.appId,
+        serviceApp.environment,
+        parsed.data,
+        { actor: serviceFileActor(req, serviceApp.appId), files },
+        serviceApp.ownerAccountId,
+      );
       if (!result.ok) {
         sendMerchantWriteError(res, result);
         return;

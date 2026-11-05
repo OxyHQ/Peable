@@ -1,4 +1,4 @@
-import { test, expect, beforeEach, mock } from 'bun:test';
+import { test, expect, beforeEach, afterAll, mock } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
 import { oxy as realOxy } from '../../oxy';
 import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
@@ -48,7 +48,14 @@ const {
   reserveNextSocialAddress,
   getReservedThrough,
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
+  useIdentityKeyResolver,
 } = await import('../socialReceive');
+
+// This suite is about the DID read itself: not the preloaded test keys.
+const previousResolver = useIdentityKeyResolver(null);
+afterAll(() => {
+  useIdentityKeyResolver(previousResolver);
+});
 
 useGatewayDatabase();
 

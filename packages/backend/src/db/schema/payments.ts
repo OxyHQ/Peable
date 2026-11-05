@@ -223,6 +223,14 @@ export const paymentIntents = pgTable(
      */
     faircoinQuote: jsonb().$type<FaircoinQuote>(),
     /**
+     * The Oxy account whose Peable wallet this FairCoin payment pays (ADR 0021
+     * D5): the merchant's owner, or the seller's own account. The address was
+     * reserved on that account's cursor from its identity key at creation and
+     * never moves with a later rotation (ADR 0002). NULL on a card payment and
+     * on FairCoin payments made before identity receive (to a registered xpub).
+     */
+    faircoinRecipientAccountId: text(),
+    /**
      * Why the last attempt failed, in Peable's words (ADR 0019). Written in the
      * same statement as the transition that the failure caused; cleared by any
      * other transition.
@@ -475,6 +483,10 @@ export const paymentIntents = pgTable(
     check(
       'payment_intents_shipping_object_check',
       sql`${table.shipping} is null or jsonb_typeof(${table.shipping}) = 'object'`,
+    ),
+    check(
+      'payment_intents_faircoin_recipient_check',
+      sql`${table.faircoinRecipientAccountId} is null or ${table.rail} = 'faircoin'`,
     ),
     /** A quote prices a FairCoin payment; a card payment is charged in its own currency. */
     check(

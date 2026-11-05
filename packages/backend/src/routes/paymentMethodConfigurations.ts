@@ -37,7 +37,10 @@ import {
   type PaymentMethodConfigurationRow,
   type PaymentMethodPreferences,
 } from '../db/paymentMethods/paymentMethodConfigurationRepository';
-import { toPaymentMethodConfigurationDTO } from '../services/paymentMethods/configuration';
+import {
+  faircoinWalletOf,
+  toPaymentMethodConfigurationDTO,
+} from '../services/paymentMethods/configuration';
 import {
   createPaymentMethodDomain,
   DomainParameterError,
@@ -141,6 +144,7 @@ export async function answerConfigurationList(
   if (!query) return;
   const db = getDb();
   await ensureDefaultConfiguration(db, merchant.id);
+  const wallet = await faircoinWalletOf(merchant);
   await answerList(req, res, {
     query,
     type: 'payment_method_configuration',
@@ -148,7 +152,7 @@ export async function answerConfigurationList(
     cursor: async (publicId) =>
       (await findConfigurationByPublicId(db, merchant.id, publicId))?.id ?? null,
     fetch: (page) => listConfigurationsForMerchant(db, { merchantId: merchant.id, page }),
-    serialize: (row) => toPaymentMethodConfigurationDTO(row, merchant),
+    serialize: (row) => toPaymentMethodConfigurationDTO(row, wallet),
   });
 }
 
@@ -182,7 +186,7 @@ export async function retrieveConfiguration(
   if (!parseQuery(req, res, retrieveQuery[surface])) return;
   const row = await loadConfiguration(req, res, merchant);
   if (!row) return;
-  res.status(200).json(toPaymentMethodConfigurationDTO(row, merchant));
+  res.status(200).json(toPaymentMethodConfigurationDTO(row, await faircoinWalletOf(merchant)));
 }
 
 /** `POST /v1/payment_method_configurations` — an additional, non-default configuration. */
@@ -205,7 +209,7 @@ export async function createConfiguration(
     name: parsed.data.name ?? 'Configuration',
     preferences: prefs.set,
   });
-  res.status(200).json(toPaymentMethodConfigurationDTO(row, merchant));
+  res.status(200).json(toPaymentMethodConfigurationDTO(row, await faircoinWalletOf(merchant)));
 }
 
 /** `POST /v1/payment_method_configurations/:id` — methods (merged), name, active. */
@@ -244,7 +248,9 @@ export async function updateConfigurationCore(
     });
     return findConfigurationById(tx, row.id);
   });
-  res.status(200).json(toPaymentMethodConfigurationDTO(updated ?? row, merchant));
+  res
+    .status(200)
+    .json(toPaymentMethodConfigurationDTO(updated ?? row, await faircoinWalletOf(merchant)));
 }
 
 function sendDomainError(res: Response, error: unknown): void {

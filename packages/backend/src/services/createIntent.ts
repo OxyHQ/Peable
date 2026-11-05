@@ -36,7 +36,7 @@ import { ensureProviderCustomer } from './customers/providerCustomer';
 import { applyProviderPaymentResult } from './intentReconciliation';
 import { recordIntentCreated } from './intentTransition';
 import { selectCardProvider, selectStoredProvider } from './providers/environmentGuard';
-import { reserveNextAccountAddress, reserveNextAddress } from './reserveAddress';
+import { faircoinRecipientOf, reserveFaircoinAddress } from './faircoin/recipient';
 import { newId, clientSecretFor } from '../lib/ids';
 
 const DEFAULT_EXPIRY_SECONDS = 15 * 60;
@@ -474,15 +474,6 @@ export function resolveRail(
     if (input.network === undefined) {
       throw new RailMismatchError('the faircoin rail requires a network');
     }
-    if (merchant.network === null) {
-      // A CARD-ONLY merchant. There is no xpub to derive a receive address
-      // from, so this is refused here with a message naming what is missing —
-      // rather than reaching `reserveNextAddress`, which would have burned a
-      // derivation index before discovering the same thing.
-      throw new RailMismatchError(
-        'this merchant has not registered a FairCoin account; register a network and xpub to accept it',
-      );
-    }
     if (input.network !== merchant.network) {
       throw new NetworkMismatchError(input.network, merchant.network);
     }
@@ -825,18 +816,16 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
     }
   }
 
-  // A card payment reserves NO derivation index. Reserving one anyway would
-  // burn an index on a payment that can never receive coins, and every FairCoin
-  // payer after it would be handed a different address than the counter implies.
-  //
-  // An on-behalf payment reserves on the SELLER's counter and derives from the
-  // SELLER's key (ADR 0012 D5): the coins go straight to their wallet.
-  const address =
-    rail !== 'faircoin'
-      ? null
-      : account
-        ? (await reserveNextAccountAddress(merchant.id, account.id)).address
-        : (await reserveNextAddress(merchant.id)).address;
+  // A card payment reserves NO address. A FairCoin one reserves the next
+  // address of the RECIPIENT's Peable wallet (ADR 0021 D5): the merchant
+  // owner's, or — on behalf of a seller — the seller's own, on that account's
+  // one cursor, derived from its public identity key (ADR 0002). The coins go
+  // straight to their wallet.
+  const reserved =
+    rail === 'faircoin' && network !== null
+      ? await reserveFaircoinAddress(faircoinRecipientOf(merchant, account), network)
+      : null;
+  const address = reserved?.address ?? null;
   const publicId = newId('pi');
   const clientSecret = clientSecretFor(publicId);
   const expiresAt = new Date(
@@ -892,6 +881,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       statementDescriptorSuffix: input.statementDescriptorSuffix ?? null,
       shipping: input.shipping ?? null,
       faircoinQuote: input.faircoinQuote ?? null,
+      faircoinRecipientAccountId: reserved?.recipientAccountId ?? null,
       clientSecret,
       idempotencyKey: key,
       metadata: metadata ?? {},

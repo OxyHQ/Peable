@@ -23,9 +23,6 @@ import {
   type SuiteDatabase,
 } from '../testDatabase';
 
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-
 let suite: SuiteDatabase | undefined;
 
 async function makeMerchant(): Promise<MerchantRow> {
@@ -34,8 +31,6 @@ async function makeMerchant(): Promise<MerchantRow> {
     await insertMerchant(must(suite).db, {
       oxyAppId: `app_${unique}`,
       environment: 'development',
-      network: 'testnet',
-      xpub: XPUB,
       publicId: `merch_${unique}`,
     }),
   );

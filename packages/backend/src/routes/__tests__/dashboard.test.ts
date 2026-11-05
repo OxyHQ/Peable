@@ -6,7 +6,6 @@ import { Socket } from 'node:net';
 import { and, eq, sql } from 'drizzle-orm';
 import express from 'express';
 import type { RequestHandler } from 'express';
-import { MAINNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
 import { uuidv7 } from '@oxy.so/db';
 import type { OxyAuthRequest, SafeFetchResult } from '@oxy.so/core/server';
 import { merchants } from '../../db/schema';
@@ -25,21 +24,6 @@ import { createDashboardRouter } from '../dashboard';
 import { requestIdMiddleware } from '../../lib/requestId';
 import { must } from '../../__tests__/helpers/must';
 import { createFakeOxyFiles } from '../../__tests__/helpers/fakeOxyFiles';
-
-// Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
-// (m/44'/1'/0' neutered) — public-key-only, cannot spend. Same fixture used
-// across the rest of the suite.
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-
-// The same mnemonic's MAINNET-network account xpub (distinct BIP32 version
-// bytes) — needed for the "production environment registers a mainnet
-// merchant" case.
-const MNEMONIC =
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
-const MAINNET_XPUB = deriveKeyFromSeed(mnemonicToSeed(MNEMONIC), MAINNET).derive(
-  `m/44'/${MAINNET.bip44CoinType}'/0'`,
-).hdKey.publicExtendedKey;
 
 const APP_ID = 'app_dashboard_test';
 const OTHER_APP_ID = 'app_dashboard_other';
@@ -140,7 +124,6 @@ beforeAll(async () => {
     oxyAppId: APP_ID,
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
     webhookUrl: 'https://merchant.example/hook',
     webhookSecret: 'whsec_dash_test',
   });
@@ -149,7 +132,6 @@ beforeAll(async () => {
     oxyAppId: APP_ID,
     environment: 'production',
     network: 'mainnet',
-    xpub: MAINNET_XPUB,
   });
 
   const app = express();
@@ -273,11 +255,11 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
   // outcomes depend on execution order (`bun test --randomize`). Never share
   // a registration target across tests in this block.
 
-  test('a development session cannot register a mainnet merchant (400) — test/live firewall', async () => {
+  test('a development session cannot name a network: it is always testnet (400)', async () => {
     const appId = 'app_dash_post_firewall';
     const res = await authedFetch(
       `/v1/dashboard/applications/${appId}/merchant?environment=development`,
-      { method: 'POST', body: JSON.stringify({ network: 'mainnet', xpub: MAINNET_XPUB }) },
+      { method: 'POST', body: JSON.stringify({ network: 'mainnet' }) },
     );
     expect(res.status).toBe(400);
     const count = await countMerchantsForApp(appId);
@@ -288,7 +270,7 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
     const appId = 'app_dash_post_register';
     const res = await authedFetch(
       `/v1/dashboard/applications/${appId}/merchant?environment=development`,
-      { method: 'POST', body: JSON.stringify({ network: 'testnet', xpub: XPUB }) },
+      { method: 'POST', body: JSON.stringify({}) },
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as { environment: string; network: string };
@@ -300,13 +282,13 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
     const appId = 'app_dash_post_duplicate';
     const first = await authedFetch(
       `/v1/dashboard/applications/${appId}/merchant?environment=development`,
-      { method: 'POST', body: JSON.stringify({ network: 'testnet', xpub: XPUB }) },
+      { method: 'POST', body: JSON.stringify({}) },
     );
     expect(first.status).toBe(201);
 
     const second = await authedFetch(
       `/v1/dashboard/applications/${appId}/merchant?environment=development`,
-      { method: 'POST', body: JSON.stringify({ network: 'testnet', xpub: XPUB }) },
+      { method: 'POST', body: JSON.stringify({}) },
     );
     expect(second.status).toBe(409);
   });
@@ -317,7 +299,7 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
       `/v1/dashboard/applications/${appId}/merchant?environment=staging`,
       {
         method: 'POST',
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
+        body: JSON.stringify({}),
         userId: OUTSIDER_USER_ID,
       },
     );
@@ -328,7 +310,7 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
 });
 
 describe('PATCH /v1/dashboard/applications/:applicationId/merchant', () => {
-  test('updates display_name and required_confirmations, never xpub', async () => {
+  test('updates display_name and required_confirmations, and holds no key', async () => {
     const res = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/merchant?environment=development`,
       {
@@ -343,11 +325,10 @@ describe('PATCH /v1/dashboard/applications/:applicationId/merchant', () => {
     const body = (await res.json()) as {
       display_name: string;
       required_confirmations: number;
-      xpub: string;
     };
     expect(body.display_name).toBe('Dashboard Shop');
     expect(body.required_confirmations).toBe(4);
-    expect(body.xpub).toBe(XPUB);
+    expect('xpub' in body).toBe(false);
   });
 
   /** Where events go is the webhook_endpoint resource now, not a merchant field. */

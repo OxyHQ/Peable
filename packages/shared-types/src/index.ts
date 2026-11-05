@@ -351,7 +351,7 @@ export type {
   AccountLink,
   ConnectOnboarding,
   ConnectOnboardingComplete,
-  RegisterFaircoinKeyParams,
+  ConfirmFaircoinOnboardingParams,
 } from './connect';
 export {
   PAYMENT_LINK_LIMITS,

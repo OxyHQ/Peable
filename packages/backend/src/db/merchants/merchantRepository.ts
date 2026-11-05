@@ -2,14 +2,6 @@ import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { assertWatchOnly, WatchOnlyViolationError } from '../../services/watchOnly';
-
-/**
- * Re-exported: the firewall moved to `services/watchOnly.ts` so the seller's key
- * (ADR 0012) and the merchant's are refused by ONE implementation. Existing
- * importers keep reading it from here.
- */
-export { WatchOnlyViolationError };
 import { merchantAvatarAudit, merchants } from '../schema';
 import type { MerchantAvatarAuditAction, MerchantAvatarWithheldReason } from '../schema/valueSets';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -25,16 +17,22 @@ import { enqueueReferenceSync } from '../oxyFiles/referenceSyncRepository';
  * one small reviewable change afterwards. Do not delete this as unreferenced.
  */
 
-/** A merchant row as every caller here reads it. `next_derivation_index` is never selected. */
+/** A merchant row as every caller here reads it. */
 export interface MerchantRow {
   readonly id: string;
   readonly publicId: string;
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
-  /** `null` on a CARD-ONLY merchant, which registers no FairCoin account. */
-  readonly network: NetworkType | null;
-  /** `null` on a card-only merchant. Nullable TOGETHER with `network`. */
-  readonly xpub: string | null;
+  /**
+   * The FairCoin network this merchant's payments use — its environment's
+   * (ADR 0021 D5). Every order offers FairCoin.
+   */
+  readonly network: NetworkType;
+  /**
+   * The Oxy account that owns the merchant's application, whose Peable wallet
+   * receives its FairCoin (ADR 0021 D5); `null` until a request mirrored it.
+   */
+  readonly ownerAccountId: string | null;
   readonly requiredConfirmations: number;
   readonly livemode: boolean;
   readonly displayName: string | null;
@@ -56,22 +54,32 @@ export interface MerchantRow {
 }
 
 /**
- * Mirror the verified authority of the credential acting for this merchant
- * (`authority: 'first_party'`, Oxy ADR 0049) onto the row, when it differs.
- * One conditional statement: a steady state writes nothing.
+ * Mirror the verified authority of the credential (or dashboard application
+ * read) acting for this merchant onto the row, when it differs: whether it is
+ * Oxy's own product (`authority: 'first_party'`, Oxy ADR 0049) and which Oxy
+ * account OWNS its application — the account whose Peable wallet receives its
+ * FairCoin (ADR 0021 D5). One conditional statement; a steady state writes
+ * nothing. An unknown owner (`undefined`) leaves the stored one.
  */
-export async function syncMerchantFirstParty(
+export async function syncMerchantAuthority(
   db: DatabaseOrTransaction,
   merchant: MerchantRow,
-  firstParty: boolean,
+  authority: {
+    readonly firstParty?: boolean | undefined;
+    readonly ownerAccountId?: string | undefined;
+  },
 ): Promise<MerchantRow> {
-  if (merchant.firstParty === firstParty) return merchant;
+  const firstParty = authority.firstParty ?? merchant.firstParty;
+  const ownerAccountId = authority.ownerAccountId || merchant.ownerAccountId;
+  if (merchant.firstParty === firstParty && merchant.ownerAccountId === ownerAccountId) {
+    return merchant;
+  }
   const [row] = await db
     .update(merchants)
-    .set({ firstParty })
+    .set({ firstParty, ownerAccountId })
     .where(eq(merchants.id, merchant.id))
     .returning(MERCHANT_COLUMNS);
-  return row ? (row as MerchantRow) : { ...merchant, firstParty };
+  return row ? toMerchantRow(row) : { ...merchant, firstParty, ownerAccountId };
 }
 
 const MERCHANT_COLUMNS = {
@@ -80,7 +88,7 @@ const MERCHANT_COLUMNS = {
   oxyAppId: merchants.oxyAppId,
   environment: merchants.environment,
   network: merchants.network,
-  xpub: merchants.xpub,
+  ownerAccountId: merchants.ownerAccountId,
   requiredConfirmations: merchants.requiredConfirmations,
   livemode: merchants.livemode,
   firstParty: merchants.firstParty,
@@ -101,34 +109,11 @@ const MERCHANT_COLUMNS = {
   updatedAt: merchants.updatedAt,
 } as const;
 
-/**
- * Raised when a registration describes HALF a FairCoin account.
- *
- * Separate from the watch-only violation because it is a different mistake:
- * that one is a merchant handing over a key that can spend, this one is a
- * merchant naming a chain with no key or a key with no chain. Both are 400s and
- * the message is what tells the integrator which they made.
- */
-export class ChainRegistrationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ChainRegistrationError';
-  }
-}
-
 export interface InsertMerchantParams {
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
-  /**
-   * The FairCoin half, and it is OPTIONAL — both fields or neither.
-   *
-   * A card-only merchant registers with neither. They were required, so such a
-   * merchant had to supply a watch-only key for a chain they never intended to
-   * use: either a real key they then had to custody, or a fixture that silently
-   * made their receive addresses underivable by their own wallet.
-   */
-  readonly network?: NetworkType | undefined;
-  readonly xpub?: string | undefined;
+  /** The application's owner account, when the registering caller knows it. */
+  readonly ownerAccountId?: string | undefined;
   readonly publicId: string;
   readonly requiredConfirmations?: number | undefined;
   readonly displayName?: string | undefined;
@@ -142,29 +127,16 @@ export interface InsertMerchantParams {
  * @returns the new row, or `null` when one already exists for this application
  *   and environment — the `23505` the partial unique raises, converged on
  *   rather than read first, so two concurrent registrations cannot both win.
- * @throws {WatchOnlyViolationError} when `xpub` is not a watch-only key.
  */
 export async function insertMerchant(
   db: DatabaseOrTransaction,
   params: InsertMerchantParams,
 ): Promise<MerchantRow | null> {
-  // One capability, two halves. `merchants_chain_fields_agree_check` refuses
-  // the mix in the database; this refuses it with a message that names what is
-  // missing rather than a constraint name.
-  if ((params.network == null) !== (params.xpub == null)) {
-    throw new ChainRegistrationError(
-      'accepting FairCoin needs both a network and a watch-only xpub, or neither',
-    );
-  }
-  if (params.xpub != null && params.network != null) {
-    assertWatchOnly(params.xpub, params.network);
-  }
-
   try {
     return await db.transaction(async (tx) => {
       // Explicit field list, never a spread of caller input.
-      // `next_derivation_index` takes its column default; `xpub`, `network` and
-      // `environment` are immutable afterwards.
+      // `network` follows the environment (ADR 0021 D5) and, like
+      // `environment`, is immutable afterwards.
       //
       // `livemode` is DERIVED from `environment` here rather than defaulted.
       // Until this line existed, every row carried `false` including every
@@ -182,8 +154,8 @@ export async function insertMerchant(
           oxyAppId: params.oxyAppId,
           environment: params.environment,
           livemode: params.environment === 'production',
-          network: params.network ?? null,
-          xpub: params.xpub ?? null,
+          network: params.environment === 'production' ? 'mainnet' : 'testnet',
+          ownerAccountId: params.ownerAccountId ?? null,
           ...(params.requiredConfirmations === undefined
             ? {}
             : { requiredConfirmations: params.requiredConfirmations }),
@@ -278,7 +250,7 @@ export async function findMerchantsByIds(
 export interface MerchantPatch {
   readonly requiredConfirmations?: number | undefined;
   /**
-   * Branding is mutable, unlike `xpub`/`network`/`environment`: it names the
+   * Branding is mutable, unlike `network`/`environment`: it names the
    * merchant to a payer and nothing derives from it. `null` clears the field,
    * absent leaves it alone.
    */
@@ -296,7 +268,7 @@ export interface MerchantPatch {
 /**
  * Apply the MUTABLE merchant fields, and only those.
  *
- * `xpub`, `network`, `environment` and `oxy_app_id` are absent from this
+ * `network`, `environment` and `oxy_app_id` are absent from this
  * function's parameter type rather than filtered out of it: changing the
  * derivation key after intents have already derived addresses from it would
  * make every existing address unattributable, and network and environment ARE
@@ -512,8 +484,9 @@ function toMerchantRow(row: {
     environment: row.environment as OxyServiceEnvironment,
     // `merchants_avatar_withheld_check` keeps it in the closed set.
     avatarWithheld: (row.avatarWithheld ?? null) as MerchantAvatarWithheldReason | null,
-    // `null` for a card-only merchant, and the cast covers only the non-null
-    // case: `merchants_network_check` keeps the text in the closed set.
-    network: row.network as NetworkType | null,
+    // `merchants_network_check` keeps the text in the closed set, and
+    // `merchants_network_present_check` (0092 backfilled) present.
+    network: (row.network ??
+      (row.environment === 'production' ? 'mainnet' : 'testnet')) as NetworkType,
   } as MerchantRow;
 }
