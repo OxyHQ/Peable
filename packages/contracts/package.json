@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/contracts",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "The Peable wire, declared once: Zod contracts of every public route, the OpenAPI 3.1 generator and the closed value sets (ADR 0014 D5).",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
