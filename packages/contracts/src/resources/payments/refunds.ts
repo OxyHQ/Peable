@@ -28,7 +28,8 @@ import {
 } from '../../vocabulary/payments';
 
 /**
- * Refunds (`re_…`) and a payment's settlement figures. The provider's own
+ * Refunds (`re_…`) and the settlement figures of a payment, a refund or a
+ * dispute. The provider's own
  * refund id never appears: a merchant integrates against Peable and never
  * learns which acquirer sat behind it (ADR 0001 D3).
  */
@@ -93,10 +94,21 @@ export const refundSchema = defineObject(
 export type Refund = Expand<z.output<typeof refundSchema>>;
 
 /**
- * What a payment actually came to, as the PROVIDER reports it. Every figure is
- * nullable and that is the contract: "the fee was zero" and "the fee is not
- * known yet" are different facts, and `status` says which produced the nulls.
- * It reports what the provider took; it attributes that cost to nobody.
+ * One movement of the settlement balance, as the PROVIDER reports it: what a
+ * payment brought in (`GET /v1/payment_intents/{intentId}/settlement`), what a
+ * refund took out (`GET /v1/refunds/{id}/settlement`) or what a dispute
+ * withdrew (`GET /v1/disputes/{disputeId}/settlement`). `refund` and `dispute`
+ * say which: both `null` for a payment's.
+ *
+ * Every figure is nullable and that is the contract: "the fee was zero" and
+ * "the fee is not known yet" are different facts, and `status` says which
+ * produced the nulls. It reports what the provider took; it attributes that
+ * cost to nobody.
+ *
+ * The signs: `gross` is the MAGNITUDE of the movement, `fee` the provider's fee
+ * on it (positive when charged, negative when returned), `net` its SIGNED
+ * effect on the balance — so `net = gross − fee` for a payment and
+ * `net = −gross − fee` for a refund or a dispute.
  */
 export const settlementSchema = defineObject(
   'settlement',
@@ -107,18 +119,38 @@ export const settlementSchema = defineObject(
       livemode,
       payment_intent: expandable(
         'payment_intent',
-        'The `pi_…` this describes, or the PaymentIntent with `expand[]=payment_intent`.',
+        'The `pi_…` this describes (the refunded or disputed payment, for a refund or a dispute), or the PaymentIntent with `expand[]=payment_intent`.',
       ),
+      refund: expandable(
+        'refund',
+        'The `re_…` whose movement this is, or the Refund with `expand[]=refund`; `null` unless this is the settlement of a refund.',
+      ).nullable(),
+      dispute: expandable(
+        'dispute',
+        'The `dp_…` whose withdrawal this is, or the Dispute with `expand[]=dispute`; `null` unless this is the settlement of a dispute.',
+      ).nullable(),
       status: z
         .enum(SETTLEMENT_STATUSES)
         .describe(
-          '`available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**.',
+          '`available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**. A dispute inquiry, which moves no money, and a refund that failed or was canceled are `unknown`.',
         ),
-      gross: amount.nullable().describe('Base units of `currency`.'),
-      fee: amount.nullable(),
-      net: signedAmount.nullable(),
+      gross: amount
+        .nullable()
+        .describe(
+          'The MAGNITUDE of the movement, never negative, in base units of `currency`: what the payment brought in, the refund took out or the dispute withdrew.',
+        ),
+      fee: signedAmount
+        .nullable()
+        .describe(
+          "The provider's fee on THIS movement, as the provider signs it: positive when charged to the balance (a payment's processing fee, a dispute fee), negative when returned to it (part of the original fee on some refunds). A refund's is usually `0`.",
+        ),
+      net: signedAmount
+        .nullable()
+        .describe(
+          'The SIGNED effect on the balance: positive for a payment, negative for a refund or a dispute. Always `gross − fee` for a payment and `−gross − fee` for a refund or a dispute.',
+        ),
       currency: nullableString.describe(
-        "The SETTLEMENT currency (uppercase ISO 4217), which may differ from the payment's.",
+        "The SETTLEMENT currency (uppercase ISO 4217) every figure is in, which may differ from the payment's, refund's or dispute's.",
       ),
       available_on: unixSeconds.nullable().describe('When the funds become available.'),
       exchange_rate: z
@@ -299,6 +331,22 @@ export const refundRoutes = [
     query: expandOnlyQuery,
     response: settlementSchema,
     sdk: 'refunds.settlement',
+    expandable: 'settlement',
+  }),
+  defineRoute({
+    operationId: 'retrieveRefundSettlement',
+    method: 'get',
+    path: '/v1/refunds/{id}/settlement',
+    tag: 'Refunds',
+    summary: "Retrieve a refund's settlement",
+    description:
+      'What the refund took off the settlement balance — `gross`, `fee`, a negative `net` — in the settlement currency, read live from the provider. A missing figure is `null` with a `status`, never `0`; a refund that failed or was canceled is `unknown`.',
+    auth: 'service',
+    scope: 'payments:read',
+    params: refundId,
+    query: expandOnlyQuery,
+    response: settlementSchema,
+    sdk: 'refunds.refundSettlement',
     expandable: 'settlement',
   }),
   defineRoute({

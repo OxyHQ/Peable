@@ -4,6 +4,7 @@ import { defineComponent, defineObject, type Expand, expandable } from '../../co
 import { expandOnlyQuery, idParam, listQuery, metadataUpdateParam } from '../../common/params';
 import { amount, currency, livemode, metadata, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
+import { settlementSchema } from './refunds';
 import {
   DISPUTE_EVIDENCE_TEXT_MAX,
   DISPUTE_FILE_EVIDENCE_FIELDS,
@@ -259,5 +260,21 @@ export const disputeRoutes = [
     body: closeDisputeParams,
     response: disputeSchema,
     sdk: 'disputes.close',
+  }),
+  defineRoute({
+    operationId: 'retrieveDisputeSettlement',
+    method: 'get',
+    path: '/v1/disputes/{disputeId}/settlement',
+    tag: 'Disputes',
+    summary: "Retrieve a dispute's settlement",
+    description:
+      'What the dispute WITHDREW from the settlement balance — `gross` the principal, `fee` the dispute fee, a negative `net` — in the settlement currency, read live from the provider. An inquiry moves no money: `unknown`, every figure `null`, never `0`. A reinstatement after a won dispute is not this figure.',
+    auth: 'service',
+    scope: 'payments:read',
+    params: disputeId,
+    query: expandOnlyQuery,
+    response: settlementSchema,
+    sdk: 'disputes.settlement',
+    expandable: 'settlement',
   }),
 ] as const;

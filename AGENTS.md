@@ -774,7 +774,18 @@ is not told twice. `reason` is Stripe's enum on the wire (unknown →
 `services/settlementReport.ts` reads gross/fee/net live from the provider and
 answers `unknown` for every reason a figure can be missing. It reports what the
 provider took and attributes that cost to nobody — which entity bears it is a
-commercial decision that is still open, and no code here makes it.
+commercial decision that is still open, and no code here makes it. Three reads
+answer the ONE `settlement` object, each one movement of the settlement balance:
+a payment's (`GET /v1/payment_intents/{intentId}/settlement`, its charge), a
+refund's (`GET /v1/refunds/{id}/settlement`, `refunds.refundSettlement`; failed
+or canceled is `unknown`) and a dispute's withdrawal (`GET
+/v1/disputes/{disputeId}/settlement`, `disputes.settlement`; an inquiry is
+`unknown`), with `refund` / `dispute` naming whose it is. Signs, for all three:
+`gross` the magnitude, `fee` as the provider signs it (positive charged,
+negative returned), `net` the signed balance effect — `gross − fee` for a
+payment, `−gross − fee` for a refund or dispute — in the SETTLEMENT currency
+(ADR 0015 "as built"). Every read goes through the one never-throwing
+`readSettlement` in the row's own mode, over `SettlementReportingProvider`.
 
 ### Events and webhook endpoints (ADR 0014 D4)
 

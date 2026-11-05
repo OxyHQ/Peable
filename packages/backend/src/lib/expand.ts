@@ -2,6 +2,8 @@ import type { Response } from 'express';
 import { findAccountsByPublicIds } from '../db/accounts/connectedAccountRepository';
 import { findIntentsForMerchantByPublicIds } from '../db/payments/paymentIntentRepository';
 import { findChargesForMerchantByPublicIds } from '../db/payments/chargeRepository';
+import { findRefundsForMerchantByPublicIds } from '../db/refunds/refundRepository';
+import { findDisputesForMerchantByPublicIds } from '../db/disputes/disputeRepository';
 import { findCustomersForMerchantByPublicIds } from '../db/customers/customerRepository';
 import { findPaymentMethodsForMerchantByPublicIds } from '../db/customers/paymentMethodRepository';
 import { findSetupIntentsForMerchantByPublicIds } from '../db/customers/setupIntentRepository';
@@ -18,8 +20,10 @@ import {
   toChargeDTO,
   toCustomerDTO,
   toDeletedCustomerDTO,
+  toDisputeDTO,
   toPaymentIntentDTO,
   toPaymentMethodDTO,
+  toRefundDTO,
   toSetupIntentDTO,
 } from './serialize';
 import { toConnectedAccountDTO } from './serializeSettlement';
@@ -118,7 +122,9 @@ type TargetType =
   | 'coupon'
   | 'setup_intent'
   | 'invoice'
-  | 'subscription';
+  | 'subscription'
+  | 'refund'
+  | 'dispute';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -146,7 +152,8 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   refund: { payment_intent: 'payment_intent' },
   transfer: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
   dispute: { payment_intent: 'payment_intent', charge: 'charge' },
-  settlement: { payment_intent: 'payment_intent' },
+  // A refund's or a dispute's settlement names it beside the payment.
+  settlement: { payment_intent: 'payment_intent', refund: 'refund', dispute: 'dispute' },
   connected_account: {},
   payment_link: {},
   webhook_delivery: {},
@@ -274,6 +281,21 @@ const LOADERS: Record<TargetType, Loader> = {
     const dtos = await renderSubscriptions(getDb(), rows);
     return new Map(dtos.map((dto) => [dto.id, dto]));
   },
+  refund: async (merchantId, ids) =>
+    new Map(
+      (await findRefundsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toRefundDTO(row, row.paymentIntentPublicId),
+      ]),
+    ),
+  // As a list renders it: `evidence` is only ever on the dispute's own read.
+  dispute: async (merchantId, ids) =>
+    new Map(
+      (await findDisputesForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toDisputeDTO(row, row.paymentIntentPublicId),
+      ]),
+    ),
   connected_account: async (merchantId, ids) =>
     new Map(
       (await findAccountsByPublicIds(getDb(), merchantId, ids)).map((row) => [

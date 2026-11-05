@@ -16,6 +16,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | [`GET /v1/refunds/{id}`](#retrieve-a-refund) | Retrieve a refund |
 | [`POST /v1/refunds/{id}`](#update-a-refund) | Update a refund |
 | [`POST /v1/refunds/{id}/cancel`](#cancel-a-refund) | Cancel a refund |
+| [`GET /v1/refunds/{id}/settlement`](#retrieve-a-refunds-settlement) | Retrieve a refund's settlement |
 | [`GET /v1/refunds/search`](#search-refunds) | Search refunds |
 
 ## List a payment's refunds
@@ -111,6 +112,8 @@ Returns [Settlement](/reference/objects/settlement).
 **Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
 
 - `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `refund` → [Refund](/reference/objects/refund)
+- `dispute` → [Dispute](/reference/objects/dispute)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
@@ -373,6 +376,36 @@ Returns [Refund](/reference/objects/refund).
   "updated_at": 1793750460
 }
 ```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a refund's settlement
+
+`GET /v1/refunds/{id}/settlement`
+
+What the refund took off the settlement balance — `gross`, `fee`, a negative `net` — in the settlement currency, read live from the provider. A missing figure is `null` with a `status`, never `0`; a refund that failed or was canceled is `unknown`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.refunds.refundSettlement()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The refund (`re_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Settlement](/reference/objects/settlement).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `refund` → [Refund](/reference/objects/refund)
+- `dispute` → [Dispute](/reference/objects/dispute)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 

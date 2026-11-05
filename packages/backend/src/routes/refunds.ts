@@ -10,7 +10,6 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import {
   METADATA_LIMIT_MESSAGE,
-  type Settlement,
   cancelRefundParams,
   createRefundParams,
   expandOnlyQuery,
@@ -35,7 +34,7 @@ import {
   RefundsUnavailableError,
   remainingRefundable,
 } from '../services/refunds/refundService';
-import { reportSettlement } from '../services/settlementReport';
+import { reportRefundSettlement, reportSettlement } from '../services/settlementReport';
 import { ProviderError } from '../services/providers/provider';
 import {
   requireAuthenticated,
@@ -46,9 +45,8 @@ import {
   requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
-import { toUnixOrNull } from '../lib/time';
 import { expandObjects, parseExpand } from '../lib/expand';
-import { toRefundDTO } from '../lib/serialize';
+import { toRefundDTO, toSettlementDTO } from '../lib/serialize';
 import { answerList, parseQuery, resolveListReference } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
@@ -413,19 +411,59 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         return;
       }
 
-      const settlement = await reportSettlement(intent);
-      const body: Settlement = {
-        object: 'settlement',
+      const body = toSettlementDTO(await reportSettlement(intent), {
         livemode: intent.livemode,
-        payment_intent: intent.publicId,
-        status: settlement.status,
-        gross: settlement.gross,
-        fee: settlement.fee,
-        net: settlement.net,
-        currency: settlement.currency,
-        available_on: toUnixOrNull(settlement.availableOn),
-        exchange_rate: settlement.exchangeRate,
-      };
+        paymentIntentPublicId: intent.publicId,
+      });
+      await expandObjects([body], 'settlement', expand, merchant.id);
+      res.status(200).json(body);
+    }),
+  );
+
+  /**
+   * What this refund took off the settlement balance — `gross`, `fee`, a
+   * negative `net` — in the SETTLEMENT currency, which is the one a
+   * marketplace books the refund in. The same `settlement` object and the same
+   * rules as the payment's above: `null` with a `status`, never `0`, and a
+   * refund that failed or was canceled is `unknown`.
+   */
+  router.get(
+    '/v1/refunds/:id/settlement',
+    requireMerchant,
+    requireAuthenticated,
+    requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const query = parseQuery(req, res, expandOnlyQuery);
+      if (!query) return;
+      const expand = parseExpand(res, 'settlement', query.expand, { list: false });
+      if (!expand) return;
+
+      // ONE 404 for "does not exist" and "is not yours", scoped in the predicate.
+      const db = getDb();
+      const refund = await findRefundByPublicId(db, merchant.id, id);
+      if (!refund) {
+        sendError(res, 404, 'invalid_request_error', 'refund not found');
+        return;
+      }
+      const intent = await findIntentById(db, refund.paymentIntentId);
+      if (!intent) {
+        // `refunds.payment_intent_id` carries a foreign key; stated rather
+        // than asserted away, so loosening it fails loudly.
+        throw new Error(`refund ${refund.publicId} names an intent that cannot be read`);
+      }
+
+      const body = toSettlementDTO(await reportRefundSettlement(refund), {
+        livemode: refund.livemode,
+        paymentIntentPublicId: intent.publicId,
+        refundPublicId: refund.publicId,
+      });
       await expandObjects([body], 'settlement', expand, merchant.id);
       res.status(200).json(body);
     }),

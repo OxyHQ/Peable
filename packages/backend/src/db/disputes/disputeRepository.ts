@@ -215,6 +215,24 @@ export async function findDisputeByPublicId(
   return row ? toRow(row) : null;
 }
 
+/**
+ * Disputes by `dp_…`, SCOPED TO THE MERCHANT, each with its payment's `pi_…` —
+ * the `expand[]` loader's read: one statement for every id on a page.
+ */
+export async function findDisputesForMerchantByPublicIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicIds: readonly string[],
+): Promise<DisputeWithIntentRow[]> {
+  if (publicIds.length === 0) return [];
+  const rows = await db
+    .select({ ...DISPUTE_COLUMNS, paymentIntentPublicId: paymentIntents.publicId })
+    .from(disputes)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, disputes.paymentIntentId))
+    .where(and(eq(disputes.merchantId, merchantId), inArray(disputes.publicId, [...publicIds])));
+  return rows.map((row) => ({ ...toRow(row), paymentIntentPublicId: row.paymentIntentPublicId }));
+}
+
 /** One dispute by the network's own id — the drain's lookup. */
 export async function findDisputeByProviderObject(
   db: DatabaseOrTransaction,

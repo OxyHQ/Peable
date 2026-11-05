@@ -6,7 +6,20 @@
  * total is a second place the same fact lives and the two disagree the first
  * time a write is lost.
  */
-import { and, asc, count, desc, eq, gt, gte, isNull, lt, type SQL, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { paymentIntents, refunds } from '../schema';
@@ -422,6 +435,24 @@ export async function findRefundByPublicId(
     .from(refunds)
     .where(and(eq(refunds.merchantId, merchantId), eq(refunds.publicId, publicId)));
   return row ? toRow(row) : null;
+}
+
+/**
+ * Refunds by `re_…`, SCOPED TO THE MERCHANT, each with its payment's `pi_…` —
+ * the `expand[]` loader's read: one statement for every id on a page.
+ */
+export async function findRefundsForMerchantByPublicIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicIds: readonly string[],
+): Promise<RefundWithIntentRow[]> {
+  if (publicIds.length === 0) return [];
+  const rows = await db
+    .select({ ...REFUND_COLUMNS, paymentIntentPublicId: paymentIntents.publicId })
+    .from(refunds)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, refunds.paymentIntentId))
+    .where(and(eq(refunds.merchantId, merchantId), inArray(refunds.publicId, [...publicIds])));
+  return rows.map((row) => ({ ...toRow(row), paymentIntentPublicId: row.paymentIntentPublicId }));
 }
 
 /** Where an inbound refund event lands. Not merchant-scoped, by design. */

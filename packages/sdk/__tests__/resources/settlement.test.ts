@@ -232,6 +232,8 @@ describe('settlement reporting', () => {
       object: 'settlement',
       livemode: false,
       payment_intent: 'pi_1',
+      refund: null,
+      dispute: null,
       status: 'unknown',
       gross: null,
       fee: null,
@@ -248,6 +250,56 @@ describe('settlement reporting', () => {
     expect(settlement.fee).toBeNull();
     expect(settlement.net).toBeNull();
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/settlement`);
+  });
+
+  /** The same object for a refund: what it took off the balance, `net` negative. */
+  test("reads a refund's settlement", async () => {
+    const { fetch: fetchImpl, requests } = gateway({
+      object: 'settlement',
+      livemode: true,
+      payment_intent: 'pi_1',
+      refund: 're_1',
+      dispute: null,
+      status: 'available',
+      gross: '921',
+      fee: '0',
+      net: '-921',
+      currency: 'EUR',
+      available_on: 1793750400,
+      exchange_rate: 0.921,
+    });
+    const resource = resources(buildTestClient(fetchImpl)).refunds;
+
+    const settlement = await resource.refundSettlement('re_1');
+
+    expect(settlement.refund).toBe('re_1');
+    expect(settlement.net).toBe('-921');
+    expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/refunds/re_1/settlement`);
+  });
+
+  /** And for a dispute: its withdrawal, or `unknown` for an inquiry. */
+  test("reads a dispute's settlement", async () => {
+    const { fetch: fetchImpl, requests } = gateway({
+      object: 'settlement',
+      livemode: true,
+      payment_intent: 'pi_1',
+      refund: null,
+      dispute: 'dp_1',
+      status: 'unknown',
+      gross: null,
+      fee: null,
+      net: null,
+      currency: null,
+      available_on: null,
+      exchange_rate: null,
+    });
+    const resource = resources(buildTestClient(fetchImpl)).disputes;
+
+    const settlement = await resource.settlement('dp_1');
+
+    expect(settlement.dispute).toBe('dp_1');
+    expect(settlement.gross).toBeNull();
+    expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1/settlement`);
   });
 });
 

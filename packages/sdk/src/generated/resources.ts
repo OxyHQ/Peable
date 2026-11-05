@@ -362,6 +362,18 @@ export interface RefundsResource {
     options?: RequestOptions,
   ): Promise<ResponseOf<Op<'retrievePaymentIntentSettlement'>>>;
   /**
+   * Retrieve a refund's settlement.
+   *
+   * What the refund took off the settlement balance — `gross`, `fee`, a negative `net` — in the settlement currency, read live from the provider. A missing figure is `null` with a `status`, never `0`; a refund that failed or was canceled is `unknown`.
+   *
+   * `GET /v1/refunds/{id}/settlement`
+   */
+  refundSettlement(
+    id: string,
+    params?: QueryOf<Op<'retrieveRefundSettlement'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveRefundSettlement'>>>;
+  /**
    * Search refunds.
    *
    * Stripe's query language over `amount`, `currency`, `status`, `reason`, `payment_intent`, `created` and `metadata['key']`.
@@ -433,6 +445,18 @@ export interface DisputesResource {
     params?: BodyOf<Op<'closeDispute'>>,
     options?: RequestOptions & IdempotencyOptions,
   ): Promise<ResponseOf<Op<'closeDispute'>>>;
+  /**
+   * Retrieve a dispute's settlement.
+   *
+   * What the dispute WITHDREW from the settlement balance — `gross` the principal, `fee` the dispute fee, a negative `net` — in the settlement currency, read live from the provider. An inquiry moves no money: `unknown`, every figure `null`, never `0`. A reinstatement after a won dispute is not this figure.
+   *
+   * `GET /v1/disputes/{disputeId}/settlement`
+   */
+  settlement(
+    disputeId: string,
+    params?: QueryOf<Op<'retrieveDisputeSettlement'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveDisputeSettlement'>>>;
 }
 
 /**
@@ -3265,6 +3289,17 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     account: false,
   },
   {
+    sdk: 'refunds.refundSettlement',
+    operationId: 'retrieveRefundSettlement',
+    method: 'GET',
+    path: '/v1/refunds/{id}/settlement',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
     sdk: 'refunds.search',
     operationId: 'searchRefunds',
     method: 'GET',
@@ -3326,6 +3361,17 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     path: '/v1/disputes/{disputeId}/close',
     pathParams: ['disputeId'],
     input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'disputes.settlement',
+    operationId: 'retrieveDisputeSettlement',
+    method: 'GET',
+    path: '/v1/disputes/{disputeId}/settlement',
+    pathParams: ['disputeId'],
+    input: 'query',
     encoding: 'json',
     kind: 'json',
     account: false,

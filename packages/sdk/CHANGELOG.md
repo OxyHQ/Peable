@@ -1,5 +1,43 @@
 # Changelog
 
+## 3.1.0 — the settlement of a refund and of a dispute
+
+Requires `@peable.to/contracts` 3.1.0 and `@peable.to/shared-types` 3.1.0.
+Additive: what a refund took off the settlement balance, and what a dispute
+withdrew from it, read live from the provider like a payment's — so a
+marketplace books them in the currency the money actually moved in.
+
+Added:
+
+- **`refunds.refundSettlement(id)`** — `GET /v1/refunds/{id}/settlement`: the
+  refund's own movement of the settlement balance. A refund the provider never
+  acknowledged, or one that failed or was canceled, is `status: 'unknown'` with
+  every figure `null`.
+- **`disputes.settlement(disputeId)`** — `GET /v1/disputes/{disputeId}/settlement`:
+  the dispute's WITHDRAWAL, `gross` the principal and `fee` the dispute fee. An
+  inquiry moves no money and is `unknown`, never zeros; the reinstatement of a
+  won dispute is not this figure.
+- **`Settlement.refund` and `Settlement.dispute`** — expandable (`re_…` /
+  `dp_…`, or the object with `expand[]`), `null` on a payment's settlement
+  (`refunds.settlement`), which is otherwise unchanged.
+
+The signs, one rule for all three reads: `gross` is the MAGNITUDE of the
+movement, `fee` the provider's fee on it as the provider signs it (positive
+when charged, negative when returned — a refund's is usually `"0"`), `net` the
+SIGNED effect on the balance: `net = gross − fee` for a payment,
+`net = −gross − fee` for a refund or a dispute (refund `"1000"`, fee `"0"` →
+net `"-1000"`; dispute `"5000"`, fee `"1500"` → net `"-6500"`). Every figure is
+in the SETTLEMENT `currency`; `exchange_rate` is present only when a conversion
+happened. `Settlement.fee` is now a signed amount on the wire (a payment's is
+never negative).
+
+Also first published in this release:
+
+- **`url_refused`** in the webhook endpoint `disabled_reason` vocabulary
+  (Peable#227): an endpoint whose stored `url` breaks the registration rules,
+  judged before every delivery, is disabled with it; re-enable it with a `url`
+  that passes.
+
 ## 3.0.0 — the Stripe-Billing proxy is retired (ADR 0018)
 
 Requires `@peable.to/contracts` 3.0.0 and `@peable.to/shared-types` 3.0.0. A
