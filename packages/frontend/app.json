@@ -52,6 +52,10 @@
       ["expo-router", { "asyncRoutes": { "web": false } }],
       "expo-secure-store",
       "@oxy.so/services/plugins/withOxySharedPermissions",
+      [
+        "@oxy.so/app-preset/plugin/withOxyUpdates",
+        { "clientId": "oxy_dk_857cabdaba3f79ec5c931706424f439b67f3bc7b7bc34fca" }
+      ],
       ["expo-build-properties", { "android": { "gifEnabled": false, "webpEnabled": false } }],
       "expo-sqlite",
       "expo-local-authentication",

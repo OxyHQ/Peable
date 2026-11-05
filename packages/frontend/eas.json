@@ -1,0 +1,24 @@
+{
+  "cli": {
+    "version": ">= 15.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_OXY_BASE_URL": "https://api.oxy.so",
+        "EXPO_PUBLIC_GATEWAY_API_URL": "https://api.peable.to",
+        "EXPO_PUBLIC_GATEWAY_SOCKET_URL": "wss://api.peable.to",
+        "EXPO_PUBLIC_OXY_AUTH_REDIRECT_URI": "https://peable.to",
+        "EXPO_PUBLIC_PROFILE_WEB_ORIGIN": "https://peable.to"
+      }
+    },
+    "preview": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}

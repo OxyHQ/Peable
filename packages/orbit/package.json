@@ -17,11 +17,11 @@
   "dependencies": {
     "@expo/app-integrity": "~58.0.2",
     "@expo/vector-icons": "^15.1.1",
-    "@oxy.so/app-preset": "^5.3.0",
+    "@oxy.so/app-preset": "^6.0.0",
     "@oxy.so/bloom": "17.5.0",
     "@oxy.so/contracts": "6.9.0",
     "@oxy.so/core": "7.23.0",
-    "@oxy.so/services": "^14.3.4",
+    "@oxy.so/services": "^14.3.8",
     "@peable.to/contracts": "workspace:3.1.0",
     "@peable.to/shared-types": "*",
     "@react-native-async-storage/async-storage": "^2.2.0",
