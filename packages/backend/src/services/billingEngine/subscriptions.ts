@@ -97,7 +97,6 @@ import {
   toInsertLine,
 } from './drafting';
 import { BillingEngineError, invalid, missing } from './errors';
-import { FAIRCOIN_ACCOUNT_REQUIRED_MESSAGE, merchantCanTakePayments } from '../faircoinAccount';
 import {
   commitFinalization,
   DRAFT_FINALIZATION_DELAY_MS,
@@ -421,16 +420,6 @@ export async function createSubscription(
   merchant: MerchantRow,
   input: CreateSubscriptionInput,
 ): Promise<SubscriptionRow> {
-  // ADR 0021 D5: its first invoice is finalized here, so a live merchant
-  // without its FairCoin key is refused before anything is written.
-  if (!merchantCanTakePayments(merchant)) {
-    throw new BillingEngineError(
-      'faircoin_account_required',
-      FAIRCOIN_ACCOUNT_REQUIRED_MESSAGE,
-      undefined,
-      409,
-    );
-  }
   const db = getDb();
   const customer = await findLiveCustomerForMerchant(db, input.customer, merchant.id);
   if (!customer) throw missing('customer', 'customer');
@@ -1252,17 +1241,7 @@ async function invoicePendingNow(
 
 /** Finalize an engine draft at once and collect it (card: off-session). */
 async function finalizeAndCollect(invoiceId: string): Promise<void> {
-  let invoice: InvoiceRow;
-  try {
-    invoice = await finalizeStoredInvoice(invoiceId, { autoAdvance: true });
-  } catch (error) {
-    // The subscription change already committed; a live merchant without its
-    // FairCoin key leaves this invoice a draft that records why and retries
-    // (ADR 0021 D5). Failing the cancel or update over it would report a
-    // change that did happen as one that did not.
-    if (error instanceof BillingEngineError && error.code === 'faircoin_account_required') return;
-    throw error;
-  }
+  const invoice = await finalizeStoredInvoice(invoiceId, { autoAdvance: true });
   if (invoice.status === 'open' && invoice.collectionMethod === 'charge_automatically') {
     await attemptInvoicePayment(invoice.id, { offSession: true });
   }
@@ -1561,7 +1540,7 @@ export async function runSubscriptionStep(subscriptionId: string): Promise<strin
     if (!progressed) break;
   }
   for (const id of toVoid) {
-    const invoice = await finalizeStoredInvoice(id, { autoAdvance: false, voiding: true });
+    const invoice = await finalizeStoredInvoice(id, { autoAdvance: false });
     if (invoice.status === 'open') {
       await committed(async (tx) => {
         const locked = await lockInvoice(tx, invoice.id);

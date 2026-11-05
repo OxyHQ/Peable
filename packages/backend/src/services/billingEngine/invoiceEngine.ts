@@ -53,7 +53,6 @@ import {
   loadCatalog,
 } from './drafting';
 import { BillingEngineError } from './errors';
-import { FAIRCOIN_ACCOUNT_REQUIRED_MESSAGE, merchantCanTakePayments } from '../faircoinAccount';
 import { applyBalance, invoiceTotals, type Totals } from './invoiceMath';
 import { InvoiceTaxError, type InvoiceTax, taxInvoiceLines } from './invoiceTax';
 import { addDays } from './periods';
@@ -277,15 +276,7 @@ export async function loadDraft(invoice: InvoiceRow): Promise<{
  */
 export async function finalizeStoredInvoice(
   invoiceId: string,
-  options: {
-    readonly autoAdvance?: boolean;
-    readonly manual?: boolean;
-    /**
-     * Finalized only to be voided at once (a canceled subscription's last
-     * draft): it asks no one to pay, so the live FairCoin gate does not apply.
-     */
-    readonly voiding?: boolean;
-  } = {},
+  options: { readonly autoAdvance?: boolean; readonly manual?: boolean } = {},
 ): Promise<InvoiceRow> {
   const db = getDb();
   const invoice = await findInvoiceById(db, invoiceId);
@@ -305,31 +296,6 @@ export async function finalizeStoredInvoice(
     );
   }
   const now = await engineNow(db, invoice.testClockId);
-  // ADR 0021 D5: a live merchant without its FairCoin key asks no one to pay.
-  // Recorded on the draft like a tax failure — the scheduler retries it an
-  // hour later instead of failing every pass, and Orbit shows why.
-  if (!options.voiding && !merchantCanTakePayments(draft.merchant)) {
-    const refusal = new BillingEngineError(
-      'faircoin_account_required',
-      FAIRCOIN_ACCOUNT_REQUIRED_MESSAGE,
-      undefined,
-      409,
-    );
-    await db.transaction(async (tx) => {
-      const locked = await lockInvoice(tx, invoice.id);
-      if (locked?.status !== 'draft') return;
-      await patchInvoice(
-        tx,
-        locked,
-        {
-          lastFinalizationError: { code: refusal.code, message: refusal.message },
-          nextActionAt: locked.autoAdvance ? new Date(now.getTime() + FINALIZATION_RETRY_MS) : null,
-        },
-        { record: false },
-      );
-    });
-    throw refusal;
-  }
   let prepared: PreparedInvoice;
   try {
     prepared = await prepareInvoice({

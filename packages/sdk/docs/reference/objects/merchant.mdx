@@ -18,8 +18,8 @@ Object type: `merchant`.
 | `livemode` | boolean | `true` for a `production` merchant (ADR 0017). |
 | `oxy_app_id` | string | The Oxy application this merchant belongs to. |
 | `environment` | string | One of `development`, `staging`, `production`. |
-| `network` | string \| null | The FairCoin chain this merchant is paid on; `null` until its key is registered. Nullable together with `xpub`. One of `mainnet`, `testnet`. |
-| `xpub` | string \| null | The watch-only account key receive addresses derive from; `null` until it is registered (`POST /v1/merchants/me/faircoin`). A live merchant without one cannot take payments (`faircoin_account_required`, ADR 0021). |
+| `network` | string \| null | The FairCoin chain this merchant accepts on; `null` on a card-only merchant. Nullable together with `xpub`. One of `mainnet`, `testnet`. |
+| `xpub` | string \| null | The watch-only account key receive addresses derive from; `null` on a card-only merchant. |
 | `required_confirmations` | integer |  |
 | `display_name` | string | Payer-facing name. Absent when unset: payer surfaces substitute a fallback. |
 | `avatar_file_id` | string | The square identity image: a bare Oxy file id. Absent again once Oxy reports the file deleted or taken down. |
@@ -51,4 +51,3 @@ Object type: `merchant`.
 - [`POST /v1/merchants`](/reference/merchants#register-the-merchant) — Register the merchant
 - [`GET /v1/merchants/me`](/reference/merchants#retrieve-your-merchant) — Retrieve your merchant
 - [`POST /v1/merchants/me`](/reference/merchants#update-your-merchant) — Update your merchant
-- [`POST /v1/merchants/me/faircoin`](/reference/merchants#register-your-faircoin-receiving-key) — Register your FairCoin receiving key

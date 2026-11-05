@@ -364,16 +364,8 @@ firewall: deriving index 0 from the submitted `xpub` proves it is watch-only, so
 a merchant handing over an `xprv` is refused rather than silently granting this
 gateway the ability to spend their funds. It is not expressible as a CHECK —
 deciding it requires deriving a secp256k1 child key — so it lives in
-`services/watchOnly.ts`'s `assertWatchOnly`, and `insertMerchant` and
-`registerMerchantFaircoinKey` (the one-time registration of a merchant that
-registered without a key, ADR 0021 D5) being the only writers of
-`merchants.xpub` is the only thing keeping it honest. The second writes
-`… WHERE xpub IS NULL` — the immutability — and checks the key against every
-other merchant and every seller under an advisory lock on the key, because
-`merchants.xpub` has no unique index (fixtures share one key across test
-merchants). Writing a key onto a merchant that already has card intents,
-sessions and links is legal: their composite references name a NULL network,
-and a referenced key holding a NULL is referenced by nothing.
+`db/merchants/merchantRepository.ts`'s `assertWatchOnly`, and `insertMerchant`
+being the single writer is the only thing keeping it honest.
 
 **Measured:** deleting that one call reds exactly ONE test out of 288. Every
 other test hands in a valid xpub and stays green, because telling the two apart

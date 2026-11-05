@@ -18,12 +18,6 @@ export type ErrorState =
   | { kind: 'merchant_missing' }
   /** The merchant has no fiat account in this mode: open one. */
   | { kind: 'account_missing' }
-  /**
-   * A live merchant without its FairCoin receiving key cannot take payments
-   * (ADR 0021 D5): register it once in Settings. Not a failure, and not a
-   * request to edit — nothing else in the request was wrong.
-   */
-  | { kind: 'faircoin_account_required'; requestId: string | null }
   /** Peable Tax is not enabled on this deployment. */
   | { kind: 'feature_unavailable'; feature: 'tax' }
   /**
@@ -63,9 +57,6 @@ export function errorState(error: unknown): ErrorState {
       return { kind: 'merchant_missing' };
     }
     if (status === 404 && code === 'account_missing') return { kind: 'account_missing' };
-    if (status === 409 && code === 'faircoin_account_required') {
-      return { kind: 'faircoin_account_required', requestId };
-    }
     if (status === 404 && code === 'tax_not_enabled') {
       return { kind: 'feature_unavailable', feature: 'tax' };
     }

@@ -99,15 +99,14 @@ export type SellerReadiness = 'ready' | 'pending' | 'restricted';
 /**
  * One word for the list: `ready` when every rail it has can be paid,
  * `restricted` when the provider names a reason it cannot, `pending` while
- * onboarding is unfinished. Every seller needs its OWN FairCoin receiving key
- * (ADR 0021 D5): a card-only seller, or one whose key is not registered, is
- * `pending` and is paid nothing. The detail page shows the fields this is read
+ * onboarding is unfinished. The detail page shows the fields this is read
  * from — this is never the authority.
  */
 export function sellerReadiness(account: ConnectedAccount): SellerReadiness {
   if (account.requirements.disabled_reason) return 'restricted';
   const cardReady = !account.rails.includes('card') || account.payable;
-  const faircoinReady = account.faircoin?.status === 'active';
+  const faircoinReady =
+    !account.rails.includes('faircoin') || account.faircoin?.status === 'active';
   return cardReady && faircoinReady ? 'ready' : 'pending';
 }
 

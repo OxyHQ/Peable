@@ -274,12 +274,13 @@ const { createPaymentIntentsRouter } = await import('../paymentIntents');
 const { createRefundsRouter } = await import('../refunds');
 const { createConnectedAccountsRouter } = await import('../connectedAccounts');
 const { createMoneyRouter, refuseMisplacedPeableAccount } = await import('../money');
-const { gatewayDb, seedIntent, seedMerchant, storedEvents, testXpubFor, useGatewayDatabase } =
-  await import('../../__tests__/helpers/gatewayTestDatabase');
+const { gatewayDb, seedIntent, seedMerchant, storedEvents, useGatewayDatabase } = await import(
+  '../../__tests__/helpers/gatewayTestDatabase'
+);
 const { must } = await import('../../__tests__/helpers/must');
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
 const { setFeeSchedule } = await import('../../db/money/feeScheduleRepository');
-const { findMerchantAccount, findAccountByPublicId, registerFaircoinKey } = await import(
+const { findMerchantAccount, findAccountByPublicId } = await import(
   '../../db/accounts/connectedAccountRepository'
 );
 const { findIntentByPublicId, linkProviderCharge, linkProviderObject, updateIntentState } =
@@ -562,30 +563,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("Orbit's money model (ADR 0015)", () =>
         business_type: 'individual',
       });
       expect(seller.status).toBe(201);
-      const onBehalf = {
-        amount: '5000',
-        rail: 'card',
-        currency: 'EUR',
-        application_fee_amount: '250',
-        transfer_data: { destination: seller.json.id },
-        on_behalf_of: seller.json.id,
-      };
-      // ADR 0021 D5: a seller without its own FairCoin key is not payable.
-      const notReady = await call('POST', '/v1/payment_intents', onBehalf);
-      expect(notReady.status).toBe(409);
-      expect(notReady.json.error?.code).toBe('account_not_ready');
-      // The platform opens the FairCoin half; the SELLER registers the key.
-      const both = await call('POST', '/v1/connected_accounts', {
-        external_ref: 'store_9',
-        faircoin: { network: 'testnet', oxy_user_id: 'user_store_9' },
-      });
-      expect(both.status).toBe(200);
       const sellerRow = must(
         await findAccountByPublicId(gatewayDb(), merchant.id, String(seller.json.id)),
       );
-      expect(
-        (await registerFaircoinKey(gatewayDb(), sellerRow.id, testXpubFor('testnet', 9))).ok,
-      ).toBe(true);
       calls.length = 0;
       const routed = await call('POST', '/v1/payment_intents', {
         amount: '5000',

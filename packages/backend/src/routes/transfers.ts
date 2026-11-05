@@ -38,7 +38,6 @@ import {
 } from '../db/transfers/transferRepository';
 import {
   AccountNotPayableError,
-  SellerFaircoinKeyMissingError,
   createTransfer,
   PaymentNotSettledError,
   reverseTransfer,
@@ -422,12 +421,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           .status(created ? 201 : 200)
           .json(await serializeTransfer(merchant.id, transfer, intent, account));
       } catch (error) {
-        // ADR 0021 D5: the seller is not payable until its own FairCoin key is
-        // registered. 409, as an unready seller is everywhere else.
-        if (error instanceof SellerFaircoinKeyMissingError) {
-          sendError(res, 409, 'invalid_request_error', error.message, error.code);
-          return;
-        }
         if (
           error instanceof PaymentNotSettledError ||
           error instanceof AccountNotPayableError ||

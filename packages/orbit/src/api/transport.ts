@@ -1,5 +1,4 @@
 import type { AuthenticatedResponseRequest } from '@oxy.so/core';
-import { t } from '../i18n';
 
 /**
  * The one way Orbit talks to the gateway.
@@ -204,13 +203,7 @@ export function createOrbitTransport(client: RawResponseClient): OrbitTransport 
 /** A user-facing sentence for any thrown value, with the request id when there is one. */
 export function describeError(error: unknown, fallback: string): string {
   if (isOrbitApiError(error)) {
-    // A live merchant without its FairCoin key (ADR 0021 D5): Orbit's own
-    // sentence, which says where to fix it, rather than the gateway's.
-    const message =
-      error.status === 409 && error.code === 'faircoin_account_required'
-        ? `${t('state.faircoinKey.title')}. ${t('state.faircoinKey.where')}`
-        : error.message;
-    return error.requestId ? `${message} (request ${error.requestId})` : message;
+    return error.requestId ? `${error.message} (request ${error.requestId})` : error.message;
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;

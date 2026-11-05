@@ -18,14 +18,6 @@ export const STATES_EN: Record<string, string> = {
   'state.setup.action': 'Set up payments',
   'state.setup.useTest': 'Use test mode',
   'state.setup.docs': 'Read the integration guide',
-  'state.faircoinKey.title': 'You cannot take payments until you register your FairCoin key',
-  'state.faircoinKey.body':
-    'Every order in Orbit can always be paid in FairCoin, straight to your own wallet. In live mode, payments, checkouts, payment links and invoices are refused until you register your watch-only FairCoin receiving key. It takes a minute, once, in Settings.',
-  'state.faircoinKey.action': 'Register your FairCoin key',
-  'state.faircoinKey.where': 'Register it once in Settings › FairCoin receiving key.',
-  'state.faircoinKey.taskTitle': 'Required setup step: register your FairCoin receiving key',
-  'state.faircoinKey.taskBody':
-    'Every order can always be paid in FairCoin, straight to your own wallet. Test orders are created without a key, but FairCoin is shown as unavailable until you register a testnet key — and in live mode nothing can be paid until a key is registered.',
   'state.permission.title': 'You need permission to see this',
   'state.permission.readOnlyTitle': 'You can view this, but not change it',
   'state.permission.membershipTitle': 'You are not a member of this application',
@@ -71,14 +63,6 @@ export const STATES_ES: Record<string, string> = {
   'state.setup.action': 'Configurar pagos',
   'state.setup.useTest': 'Usar el modo de prueba',
   'state.setup.docs': 'Leer la guía de integración',
-  'state.faircoinKey.title': 'No puedes cobrar hasta que registres tu clave de FairCoin',
-  'state.faircoinKey.body':
-    'Todo pedido en Orbit se puede pagar siempre en FairCoin, directamente a tu propio monedero. En modo real, los pagos, los checkouts, los enlaces de pago y las facturas se rechazan hasta que registres tu clave de recepción de FairCoin de solo lectura. Lleva un minuto, una sola vez, en Ajustes.',
-  'state.faircoinKey.action': 'Registrar tu clave de FairCoin',
-  'state.faircoinKey.where': 'Regístrala una vez en Ajustes › Clave de recepción de FairCoin.',
-  'state.faircoinKey.taskTitle': 'Paso obligatorio: registra tu clave de recepción de FairCoin',
-  'state.faircoinKey.taskBody':
-    'Todo pedido se puede pagar siempre en FairCoin, directamente a tu propio monedero. Los pedidos de prueba se crean sin clave, pero FairCoin aparece como no disponible hasta que registres una clave de testnet; y en modo real no se puede cobrar nada hasta que haya una clave registrada.',
   'state.permission.title': 'Necesitas permiso para ver esto',
   'state.permission.readOnlyTitle': 'Puedes ver esto, pero no cambiarlo',
   'state.permission.membershipTitle': 'No eres miembro de esta aplicación',

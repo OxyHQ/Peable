@@ -115,24 +115,9 @@ describe('sellerLinkBody', () => {
 });
 
 describe('sellerReadiness', () => {
-  it('is ready only when every rail it has can be paid, and its own FairCoin key is registered', () => {
-    const active = {
-      network: 'testnet' as const,
-      status: 'active' as const,
-      oxy_user_id: 'u',
-      registered_at: 1,
-    };
-    expect(sellerReadiness(seller({ rails: ['card', 'faircoin'], faircoin: active }))).toBe(
-      'ready',
-    );
-    expect(sellerReadiness(seller({ rails: ['faircoin'], faircoin: active, payable: false }))).toBe(
-      'ready',
-    );
-    // A card-only seller owes its FairCoin key (ADR 0021 D5).
-    expect(sellerReadiness(seller())).toBe('pending');
-    expect(
-      sellerReadiness(seller({ rails: ['card', 'faircoin'], faircoin: active, payable: false })),
-    ).toBe('pending');
+  it('is ready only when every rail it has can be paid', () => {
+    expect(sellerReadiness(seller())).toBe('ready');
+    expect(sellerReadiness(seller({ payable: false }))).toBe('pending');
     expect(
       sellerReadiness(
         seller({

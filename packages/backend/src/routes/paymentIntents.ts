@@ -78,7 +78,6 @@ import {
   requireScope,
 } from '../lib/http';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
-import { assertMerchantCanTakePayments } from '../services/faircoinAccount';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
 import { requestIdOf } from '../lib/requestId';
 import { expandObjects, parseExpand } from '../lib/expand';
@@ -350,9 +349,6 @@ export function createPaymentIntentsRouter(deps: {
       const params = parsed.data;
 
       try {
-        // ADR 0021 D5: a live merchant without its own FairCoin key takes no
-        // payment on any rail. Before the intent, so nothing is reserved.
-        assertMerchantCanTakePayments(merchant);
         const { intent, reused, clientAction } = await createIntent({
           merchant,
           amount: params.amount,

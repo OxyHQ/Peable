@@ -17777,128 +17777,6 @@
         }
       }
     },
-    "/v1/merchants/me/faircoin": {
-      "post": {
-        "operationId": "registerMerchantFaircoinKey",
-        "tags": [
-          "Merchants"
-        ],
-        "summary": "Register your FairCoin receiving key",
-        "description": "Registers the watch-only account xpub FairCoin payments to this merchant derive their addresses from, once, for a merchant that has none (ADR 0021 D5). Immutable once set: a second registration answers 409 `already_registered`. A private extended key, or a key for another network, is refused (`watch_only_violation`) and never stored; a non-production merchant registers `testnet` only; a key that already receives payments for another merchant or seller is refused (`key_in_use`). Until it is registered a live merchant cannot take payments (`faircoin_account_required`).",
-        "security": [
-          {
-            "oxyServiceToken": []
-          }
-        ],
-        "x-peable-scope": "payments:write",
-        "x-peable-sdk": "merchants.faircoin.register",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
-            "schema": {
-              "type": "string",
-              "maxLength": 255
-            }
-          },
-          {
-            "in": "header",
-            "name": "Peable-Version",
-            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "2026-11-03"
-              ]
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "network": {
-                    "type": "string",
-                    "enum": [
-                      "mainnet",
-                      "testnet"
-                    ],
-                    "description": "The chain the key is for. A non-production merchant registers `testnet` only."
-                  },
-                  "xpub": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256,
-                    "description": "A watch-only ACCOUNT xpub of a wallet account (pocket) used for nothing else. A private extended key is refused and never stored."
-                  }
-                },
-                "required": [
-                  "network",
-                  "xpub"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "headers": {
-              "Request-Id": {
-                "description": "Identifies this request to Peable support.",
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "Peable-Version": {
-                "description": "The date of the wire this answer is spelled in.",
-                "schema": {
-                  "type": "string",
-                  "example": "2026-11-03"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Merchant"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
-            "headers": {
-              "Request-Id": {
-                "description": "Identifies this request to Peable support.",
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "Peable-Version": {
-                "description": "The date of the wire this answer is spelled in.",
-                "schema": {
-                  "type": "string",
-                  "example": "2026-11-03"
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/organizations/{organizationId}/applications/{applicationId}/contributions": {
       "post": {
         "operationId": "createContribution",
@@ -54958,7 +54836,7 @@
                 "type": "null"
               }
             ],
-            "description": "The FairCoin half, or `null` when the platform never opened one. A seller is ready only once `faircoin.status === 'active'` (ADR 0021 D5): until then `requirements.currently_due` lists `faircoin.receiving_key` and the seller takes no transfer and no on-behalf payment (`account_not_ready`)."
+            "description": "The FairCoin half, or `null` when the platform never opened one. Readiness for FairCoin is `faircoin.status === 'active'`; `payable` is about the CARD half."
           },
           "country": {
             "description": "ISO 3166-1 alpha-2, upper-case. `null` on a FairCoin-only seller, which has no card half.",
@@ -54975,7 +54853,7 @@
           },
           "payable": {
             "type": "boolean",
-            "description": "Whether this seller can receive a CARD settlement (a transfer) right now: its card half can, and its own FairCoin key is registered (`faircoin.status === 'active'`, ADR 0021 D5). A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller."
+            "description": "Whether this seller can receive a CARD settlement (a transfer) right now. A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller."
           },
           "payouts_enabled": {
             "type": "boolean"
@@ -58798,10 +58676,10 @@
                 "type": "null"
               }
             ],
-            "description": "The FairCoin chain this merchant is paid on; `null` until its key is registered. Nullable together with `xpub`."
+            "description": "The FairCoin chain this merchant accepts on; `null` on a card-only merchant. Nullable together with `xpub`."
           },
           "xpub": {
-            "description": "The watch-only account key receive addresses derive from; `null` until it is registered (`POST /v1/merchants/me/faircoin`). A live merchant without one cannot take payments (`faircoin_account_required`, ADR 0021).",
+            "description": "The watch-only account key receive addresses derive from; `null` on a card-only merchant.",
             "type": [
               "string",
               "null"

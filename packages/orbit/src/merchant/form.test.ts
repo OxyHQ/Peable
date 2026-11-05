@@ -4,7 +4,6 @@ import {
   buildMerchantPatch,
   buildRegisterBody,
   EMPTY_MERCHANT_FORM,
-  emptyMerchantForm,
   formFromMerchant,
 } from './form';
 
@@ -21,15 +20,6 @@ const merchant: Merchant = {
   created: 1,
   updated_at: 2,
 };
-
-describe('emptyMerchantForm', () => {
-  it('starts on the FairCoin key, on the network this mode may register', () => {
-    expect(emptyMerchantForm('development').network).toBe('testnet');
-    expect(emptyMerchantForm('production').network).toBe('mainnet');
-    // Nothing typed yet: still a registration without the key, to add once later.
-    expect(buildRegisterBody(emptyMerchantForm('production'))).toEqual({ ok: true, body: {} });
-  });
-});
 
 describe('buildRegisterBody', () => {
   it('sends nothing for an empty form: a card-only merchant with gateway defaults', () => {

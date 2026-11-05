@@ -17,7 +17,6 @@
  * payers racing for a code's last redemption cannot both get it.
  */
 import { randomUUID } from 'node:crypto';
-import { assertMerchantCanTakePayments } from '../faircoinAccount';
 import type {
   Address,
   AddressParams,
@@ -419,8 +418,6 @@ export async function createCheckoutSession(
   body: CreateSessionBody,
   deps: CheckoutDeps = {},
 ): Promise<CheckoutSessionRow> {
-  // ADR 0021 D5: a live merchant without its FairCoin key takes no payment.
-  assertMerchantCanTakePayments(merchant);
   const now = deps.now?.() ?? new Date();
   const db = getDb();
   const mode = body.mode ?? 'payment';
@@ -589,8 +586,6 @@ export async function createSessionFromLink(
   input: { readonly amount?: string | undefined; readonly operationKey?: string | undefined },
   deps: CheckoutDeps = {},
 ): Promise<CheckoutSessionRow> {
-  // A link shared before the gate existed starts no order either (ADR 0021 D5).
-  assertMerchantCanTakePayments(merchant);
   const db = getDb();
   if (input.operationKey) {
     const existing = await findSessionByLinkOperation(db, link.id, input.operationKey);

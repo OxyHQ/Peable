@@ -16,7 +16,6 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | [`POST /v1/merchants/me/branding`](#update-your-branding) | Update your branding |
 | [`GET /v1/merchants/me/email_settings`](#retrieve-your-customer-email-settings) | Retrieve your customer email settings |
 | [`POST /v1/merchants/me/email_settings`](#update-your-customer-email-settings) | Update your customer email settings |
-| [`POST /v1/merchants/me/faircoin`](#register-your-faircoin-receiving-key) | Register your FairCoin receiving key |
 
 ## Register the merchant
 
@@ -250,51 +249,5 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 **Response `200`**
 
 Returns [EmailSettings](/reference/objects/email-settings).
-
-Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
-
-## Register your FairCoin receiving key
-
-`POST /v1/merchants/me/faircoin`
-
-Registers the watch-only account xpub FairCoin payments to this merchant derive their addresses from, once, for a merchant that has none (ADR 0021 D5). Immutable once set: a second registration answers 409 `already_registered`. A private extended key, or a key for another network, is refused (`watch_only_violation`) and never stored; a non-production merchant registers `testnet` only; a key that already receives payments for another merchant or seller is refused (`key_in_use`). Until it is registered a live merchant cannot take payments (`faircoin_account_required`).
-
-- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
-- **Scope:** `payments:write`
-- **SDK:** `peable.merchants.faircoin.register()`
-
-**Parameters**
-
-| Name | In | Type | Description |
-| --- | --- | --- | --- |
-| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
-| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
-
-**Request body** (`application/json`)
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `network` **required** | string | The chain the key is for. A non-production merchant registers `testnet` only. One of `mainnet`, `testnet`. |
-| `xpub` **required** | string | A watch-only ACCOUNT xpub of a wallet account (pocket) used for nothing else. A private extended key is refused and never stored. 1–256 characters. |
-
-**Response `200`**
-
-Returns [Merchant](/reference/objects/merchant).
-
-```json
-{
-  "id": "merch_0193b8f2c1a87d3e9f4a",
-  "object": "merchant",
-  "livemode": false,
-  "oxy_app_id": "app_0193b8f2c1a87d3e9f4b",
-  "environment": "development",
-  "network": "testnet",
-  "xpub": "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba",
-  "required_confirmations": 6,
-  "display_name": "Jenny’s Plants",
-  "created": 1793750400,
-  "updated_at": 1793750400
-}
-```
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

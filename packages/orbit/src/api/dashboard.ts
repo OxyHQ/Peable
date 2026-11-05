@@ -308,17 +308,6 @@ export interface RegisterMerchantBody {
   description?: string;
 }
 
-/**
- * `POST /merchant/faircoin`: the merchant's FairCoin receiving key, registered
- * ONCE (ADR 0021 D5) — mirrors `registerMerchantFaircoinParams` (strict).
- */
-export interface RegisterFaircoinKeyBody {
-  /** A non-production merchant registers `testnet` only. */
-  network: 'mainnet' | 'testnet';
-  /** A WATCH-ONLY account xpub. The gateway refuses a private extended key and never stores it. */
-  xpub: string;
-}
-
 /** `PATCH /merchant`: mirrors `patchMerchantBodySchema` (strict). `null` clears a field. */
 export interface UpdateMerchantBody {
   required_confirmations?: number;
@@ -395,9 +384,6 @@ export function createDashboardApi(transport: OrbitTransport) {
         transport.request<Merchant>('POST', dashboardPath(scope, '/merchant'), { body }),
       update: (scope: DashboardScope, body: UpdateMerchantBody) =>
         transport.request<Merchant>('PATCH', dashboardPath(scope, '/merchant'), { body }),
-      /** Register the FairCoin receiving key of a merchant that has none. Immutable once set. */
-      registerFaircoinKey: (scope: DashboardScope, body: RegisterFaircoinKeyBody) =>
-        transport.request<Merchant>('POST', dashboardPath(scope, '/merchant/faircoin'), { body }),
     },
 
     /**
