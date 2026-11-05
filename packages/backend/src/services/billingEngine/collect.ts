@@ -29,6 +29,10 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { CurrencyCode } from '@peable.to/shared-types';
+import {
+  findSessionByIntentId,
+  replaceSessionPayment,
+} from '../../db/payments/checkoutSessionRepository';
 import { findCustomerById } from '../../db/customers/customerRepository';
 import {
   findPaymentMethodById,
@@ -54,7 +58,13 @@ import { renderInvoice } from '../../lib/serializeBilling';
 import { cancelCardPaymentAtProvider } from '../cardCancellation';
 import { confirmCardIntent } from '../confirmIntent';
 import { createIntent } from '../createIntent';
-import { announceIntentChange, transitionIntent } from '../intentTransition';
+import { announceIntentChange, transitionIntent, transitionIntentIn } from '../intentTransition';
+import {
+  type FaircoinQuote,
+  FaircoinPriceUnavailableError,
+  quoteFaircoin,
+  toFaircoinQuoteDTO,
+} from '../faircoin/quote';
 import { ProviderError, isRetryableProviderError } from '../providers/provider';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { BillingEngineError } from './errors';
@@ -62,7 +72,12 @@ import { markInvoicePaid, markUncollectibleInTx } from './invoiceEngine';
 import { owePaymentFailedEmail } from './notices';
 import { addDays } from './periods';
 import { engineNow } from './runtime';
-import { patchInvoice, recordBillingEvent, transitionSubscription } from './transitions';
+import {
+  patchInvoice,
+  patchSubscription,
+  recordBillingEvent,
+  transitionSubscription,
+} from './transitions';
 
 /** How long a provider outage defers an automatic attempt (it does not count as one). */
 const PROVIDER_RETRY_MS = 3600_000;
@@ -146,7 +161,9 @@ async function intentFor(
     if (
       linked &&
       linked.status !== 'canceled' &&
-      (linked.amount === amount.toString() ||
+      ((linked.rail === rail &&
+        orderAmountOfIntent(linked) === amount.toString() &&
+        quoteHasTime(linked)) ||
         ['processing', 'succeeded', 'requires_capture'].includes(linked.status))
     ) {
       return linked;
@@ -160,13 +177,87 @@ async function intentFor(
       );
     }
   }
+  const created = await createInvoiceIntent(merchant, invoice, rail, method, amount);
+  // `createIntent` answers the row it inserted; the provider object was linked after.
+  const fresh = (await findIntentById(db, created.id)) ?? created;
+  const linked = await db.transaction(async (tx) => {
+    const locked = await lockInvoice(tx, invoice.id);
+    if (!locked || locked.paymentIntentId !== invoice.paymentIntentId) return false;
+    await patchInvoice(tx, locked, { paymentIntentId: created.id }, { record: false });
+    return true;
+  });
+  if (!linked) {
+    await retireIntent(fresh);
+    throw new BillingEngineError(
+      'invoice_unexpected_state',
+      'another payment of this invoice started at the same time',
+      undefined,
+      409,
+    );
+  }
+  return fresh;
+}
+
+/** The order amount an invoice payment pays: a quoted FairCoin payment's is its quote's. */
+function orderAmountOfIntent(intent: PaymentIntentRow): string {
+  return intent.faircoinQuote?.amount ?? intent.amount;
+}
+
+/** A quote lapsing within this long is not handed to a payer. */
+const QUOTE_MIN_REMAINING_MS = 60_000;
+
+/** Whether a quoted payment's quote still has time on it (an unquoted one always has). */
+function quoteHasTime(intent: PaymentIntentRow): boolean {
+  const quote = intent.faircoinQuote;
+  return quote === null || quote.expires_at * 1000 - Date.now() > QUOTE_MIN_REMAINING_MS;
+}
+
+/**
+ * Create — not link — the payment that collects `amount` of `invoice` on
+ * `rail`. FairCoin on a FIAT invoice is quoted first (ADR 0021 D4): the
+ * payment is for the quoted FAIR amount, carries the quote and expires with it.
+ */
+async function createInvoiceIntent(
+  merchant: MerchantRow,
+  invoice: InvoiceRow,
+  rail: 'card' | 'faircoin',
+  method: PaymentMethodRow | null,
+  amount: bigint,
+): Promise<PaymentIntentRow> {
+  const db = getDb();
   const customer = await findCustomerById(db, invoice.customerId);
   if (!customer) throw new Error('invoice customer vanished');
+  if (rail === 'faircoin' && merchant.network === null) {
+    throw new BillingEngineError(
+      'faircoin_account_required',
+      'this merchant cannot be paid in FairCoin yet: it has not registered its FairCoin receiving key',
+      'payment_method_type',
+      409,
+    );
+  }
+  let quoted: FaircoinQuote | null = null;
+  if (rail === 'faircoin' && invoice.currency !== 'FAIR') {
+    try {
+      quoted = await quoteFaircoin(invoice.currency, amount.toString());
+    } catch (error) {
+      if (!(error instanceof FaircoinPriceUnavailableError)) throw error;
+      throw new BillingEngineError(
+        'faircoin_price_unavailable',
+        'FairCoin cannot be priced right now; pay another way or try FairCoin again shortly',
+        'payment_method_type',
+        503,
+      );
+    }
+  }
+  const quoteSeconds = quoted
+    ? Math.max(60, Math.floor((quoted.expiresAt.getTime() - Date.now()) / 1000))
+    : null;
   const created = await createIntent({
     merchant,
-    amount: amount.toString(),
+    amount: quoted ? quoted.faircoinAmount : amount.toString(),
     rail,
-    currency: invoice.currency,
+    currency: quoted ? 'FAIR' : invoice.currency,
+    ...(quoted ? { faircoinQuote: toFaircoinQuoteDTO(quoted) } : {}),
     ...(rail === 'faircoin' && merchant.network ? { network: merchant.network } : {}),
     customer: customer.publicId,
     ...(rail === 'card' && method ? { paymentMethod: method.publicId } : {}),
@@ -182,26 +273,13 @@ async function intentFor(
     metadata: { invoice: invoice.publicId },
     // A fresh key per replacement: the previous intent was retired.
     idempotencyKey: `invoice:${invoice.publicId}:${randomUUID()}`,
-    ...(rail === 'faircoin' ? { expiresInSeconds: FAIRCOIN_INVOICE_PAYMENT_SECONDS } : {}),
+    ...(quoteSeconds !== null
+      ? { expiresInSeconds: Math.min(quoteSeconds, FAIRCOIN_INVOICE_PAYMENT_SECONDS) }
+      : rail === 'faircoin'
+        ? { expiresInSeconds: FAIRCOIN_INVOICE_PAYMENT_SECONDS }
+        : {}),
   });
-  // `createIntent` answers the row it inserted; the provider object was linked after.
-  const fresh = (await findIntentById(db, created.intent.id)) ?? created.intent;
-  const linked = await db.transaction(async (tx) => {
-    const locked = await lockInvoice(tx, invoice.id);
-    if (!locked || locked.paymentIntentId !== invoice.paymentIntentId) return false;
-    await patchInvoice(tx, locked, { paymentIntentId: created.intent.id }, { record: false });
-    return true;
-  });
-  if (!linked) {
-    await retireIntent(fresh);
-    throw new BillingEngineError(
-      'invoice_unexpected_state',
-      'another payment of this invoice started at the same time',
-      undefined,
-      409,
-    );
-  }
-  return fresh;
+  return created.intent;
 }
 
 export type AttemptOutcome =
@@ -330,19 +408,124 @@ export async function recordMissingPaymentMethod(invoiceId: string): Promise<voi
 }
 
 /**
- * The intent a payer completes for a FairCoin (or card, on-session) invoice
- * on its hosted page.
+ * The intent a payer completes on an invoice's hosted page (or a subscription
+ * checkout), in the method they chose (ADR 0021 D3): the card rail of a fiat
+ * invoice, or FairCoin — always offered, quoted on a fiat invoice. A linked
+ * payment that answers the choice is answered as it is; one in the other
+ * method that has not moved money is REPLACED (`replaceInvoicePayment`).
  */
-export async function payerIntentForInvoice(invoice: InvoiceRow): Promise<PaymentIntentRow> {
+export async function payerIntentForInvoice(
+  invoice: InvoiceRow,
+  paymentMethodType?: 'card' | 'faircoin',
+): Promise<PaymentIntentRow> {
   if (invoice.status !== 'open' && invoice.status !== 'uncollectible') {
     throw new BillingEngineError(
       'invoice_unexpected_state',
       `this invoice is ${invoice.status} and cannot be paid`,
     );
   }
-  const merchant = await findMerchantById(getDb(), invoice.merchantId);
+  const rail = paymentMethodType ?? railOf(invoice.currency);
+  if (rail === 'card' && invoice.currency === 'FAIR') {
+    throw new BillingEngineError(
+      'parameter_invalid',
+      'a FAIR invoice is paid in FairCoin',
+      'payment_method_type',
+    );
+  }
+  const db = getDb();
+  const merchant = await findMerchantById(db, invoice.merchantId);
   if (!merchant) throw new Error('invoice merchant vanished');
-  return intentFor(merchant, invoice, railOf(invoice.currency), null);
+  const linked = invoice.paymentIntentId ? await findIntentById(db, invoice.paymentIntentId) : null;
+  if (
+    linked &&
+    REPLACEABLE.has(linked.status) &&
+    linked.txid === null &&
+    (linked.rail !== rail || !quoteHasTime(linked))
+  ) {
+    return replaceInvoicePayment(merchant, invoice, linked, rail);
+  }
+  return intentFor(merchant, invoice, rail, null);
+}
+
+/** Statuses in which no money has started to move, so a payment can still be replaced. */
+const REPLACEABLE: ReadonlySet<PaymentIntentRow['status']> = new Set([
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+]);
+
+/**
+ * Replace an invoice's unpaid payment with one on `rail` (ADR 0021 D3): the new
+ * payment is created, then ONE transaction links it to the invoice — and to the
+ * checkout session that wrapped the old one, if any — and cancels the old one,
+ * linking first so the old payment's cancellation finds neither. A card is
+ * cancelled at the provider before that transaction; a card that might still be
+ * charged stays the invoice's payment.
+ */
+async function replaceInvoicePayment(
+  merchant: MerchantRow,
+  invoice: InvoiceRow,
+  old: PaymentIntentRow,
+  rail: 'card' | 'faircoin',
+): Promise<PaymentIntentRow> {
+  const db = getDb();
+  if (old.rail === 'card') {
+    const outcome = await cancelCardPaymentAtProvider(
+      old,
+      `invoice-retire:${old.publicId}`,
+      'requested_by_customer',
+    );
+    if (outcome.kind !== 'canceled' && outcome.kind !== 'nothing_to_cancel') {
+      throw new BillingEngineError(
+        'invoice_unexpected_state',
+        'a card payment of this invoice is in flight; wait for it to finish',
+        undefined,
+        409,
+      );
+    }
+  }
+  const fresh = await createInvoiceIntent(merchant, invoice, rail, null, remainingOf(invoice));
+  const replaced = await db
+    .transaction(async (tx) => {
+      const locked = await lockInvoice(tx, invoice.id);
+      if (!locked || locked.paymentIntentId !== old.id) return null;
+      await patchInvoice(tx, locked, { paymentIntentId: fresh.id }, { record: false });
+      const session = await findSessionByIntentId(tx, old.id);
+      if (session && !(await replaceSessionPayment(tx, session.id, old.id, fresh.id))) {
+        throw new ReplacementAbandoned();
+      }
+      const moved = await transitionIntentIn(tx, old.id, {
+        from: old.status,
+        status: 'canceled',
+        cancellationReason: 'requested_by_customer',
+      });
+      if (moved.kind !== 'updated') throw new ReplacementAbandoned();
+      return moved.row;
+    })
+    .catch((error: unknown) => {
+      if (error instanceof ReplacementAbandoned) return null;
+      throw error;
+    });
+  if (!replaced) {
+    await retireIntent(fresh);
+    throw new BillingEngineError(
+      'invoice_unexpected_state',
+      'this invoice changed while its payment was being replaced; try again',
+      undefined,
+      409,
+    );
+  }
+  announceIntentChange(replaced);
+  kickWebhookOutbox();
+  return (await findIntentById(db, fresh.id)) ?? fresh;
+}
+
+/** Rolls a replacement back: something it would have changed moved meanwhile. */
+class ReplacementAbandoned extends Error {
+  constructor() {
+    super('the payment replacement was abandoned');
+    this.name = 'ReplacementAbandoned';
+  }
 }
 
 // ---- The payment hook ---------------------------------------------------------
@@ -361,10 +544,20 @@ export async function onInvoicePaymentTransition(
   const now = await engineNow(tx, invoice.testClockId);
   if (intent.status === 'succeeded') {
     if (invoice.status !== 'open' && invoice.status !== 'uncollectible') return;
+    // A quoted FairCoin payment pays the invoice's fiat amount it was quoted
+    // for (ADR 0021 D3); its own amount is FAIR.
+    const quote = intent.faircoinQuote;
     await markInvoicePaid(tx, invoice, now, {
-      amountPaid: BigInt(intent.amountReceived === '0' ? intent.amount : intent.amountReceived),
+      amountPaid: BigInt(
+        quote !== null
+          ? quote.amount
+          : intent.amountReceived === '0'
+            ? intent.amount
+            : intent.amountReceived,
+      ),
       countAttempt: intent.rail === 'card',
     });
+    if (quote !== null) await invoiceFaircoinSubscription(tx, invoice);
     return;
   }
   if (invoice.status !== 'open') return;
@@ -391,6 +584,24 @@ export async function onInvoicePaymentTransition(
   if (intent.status === 'canceled') {
     await patchInvoice(tx, invoice, { paymentIntentId: null }, { record: false });
   }
+}
+
+/**
+ * FairCoin is never debited (ADR 0018 §3): a fiat subscription whose FIRST
+ * invoice the payer paid in FairCoin is invoiced from then on — every renewal
+ * an invoice the payer pays on its hosted page, by card or FairCoin, at that
+ * period's quote (ADR 0021 D3). A card-started subscription keeps its saved card.
+ */
+async function invoiceFaircoinSubscription(tx: Transaction, invoice: InvoiceRow): Promise<void> {
+  if (!invoice.subscriptionId || invoice.billingReason !== 'subscription_create') return;
+  const subscription = await lockSubscription(tx, invoice.subscriptionId);
+  if (!subscription || subscription.collectionMethod === 'send_invoice') return;
+  const settings = await ensureBillingSettings(tx, subscription.merchantId);
+  await patchSubscription(tx, subscription, {
+    collectionMethod: 'send_invoice',
+    daysUntilDue: settings.defaultDaysUntilDue,
+    defaultPaymentMethodId: null,
+  });
 }
 
 /** A renewal that could not be collected leaves its subscription `past_due`. */

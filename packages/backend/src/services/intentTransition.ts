@@ -24,7 +24,7 @@ import type {
   WebhookEventType,
 } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
-import type { DatabaseOrTransaction } from '../db/postgres';
+import type { DatabaseOrTransaction, Transaction } from '../db/postgres';
 import {
   updateIntentState,
   type IntentStateChange,
@@ -99,26 +99,37 @@ export async function transitionIntent(
   intentId: string,
   change: IntentStateChange,
 ): Promise<IntentStateResult> {
-  return getDb().transaction(async (tx) => {
-    const result = await updateIntentState(tx, intentId, change);
-    if (result.kind !== 'updated') return result;
-    const row = result.row;
-    if (row.rail === 'card' && (row.status === 'requires_capture' || row.status === 'succeeded')) {
-      await ensureChargeForIntent(tx, row);
-    }
-    // ADR 0015 §5: a FairCoin payment that succeeded (or was rewound by a reorg)
-    // is recorded for the merchant's books in the same transaction.
-    if (row.rail === 'faircoin') await recordFaircoinLedger(tx, row, change.from);
-    const moved = change.from !== change.status;
-    const failedAttempt = change.lastPaymentError !== undefined;
-    if (moved || failedAttempt) {
-      await recordIntentEvent(tx, row, change.from);
-      // An invoice this intent collects moves WITH it (ADR 0018 §4): paid,
-      // failed, action required — in this same transaction.
-      await onInvoicePaymentTransition(tx, row, change.from);
-    }
-    return result;
-  });
+  return getDb().transaction((tx) => transitionIntentIn(tx, intentId, change));
+}
+
+/**
+ * {@link transitionIntent} on the caller's transaction, for a caller whose own
+ * write must commit WITH the transition — a checkout replacing the payment it
+ * links (ADR 0021 D3) cancels the old one in the transaction that links the new.
+ */
+export async function transitionIntentIn(
+  tx: Transaction,
+  intentId: string,
+  change: IntentStateChange,
+): Promise<IntentStateResult> {
+  const result = await updateIntentState(tx, intentId, change);
+  if (result.kind !== 'updated') return result;
+  const row = result.row;
+  if (row.rail === 'card' && (row.status === 'requires_capture' || row.status === 'succeeded')) {
+    await ensureChargeForIntent(tx, row);
+  }
+  // ADR 0015 §5: a FairCoin payment that succeeded (or was rewound by a reorg)
+  // is recorded for the merchant's books in the same transaction.
+  if (row.rail === 'faircoin') await recordFaircoinLedger(tx, row, change.from);
+  const moved = change.from !== change.status;
+  const failedAttempt = change.lastPaymentError !== undefined;
+  if (moved || failedAttempt) {
+    await recordIntentEvent(tx, row, change.from);
+    // An invoice this intent collects moves WITH it (ADR 0018 §4): paid,
+    // failed, action required — in this same transaction.
+    await onInvoicePaymentTransition(tx, row, change.from);
+  }
+  return result;
 }
 
 /**

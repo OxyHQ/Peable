@@ -19,6 +19,7 @@ export function intentFixture(
           txid: null,
           confirmations: 0,
           required_confirmations: 6,
+          quote: null,
           ...chain,
         }
       : null;

@@ -460,3 +460,77 @@ test('setup mode saves the card and completes only when the gateway says so', as
   expect(mocks.confirmSetup).toHaveBeenCalledTimes(1);
   expect(await screen.findByText('Your payment details were saved.')).toBeTruthy();
 });
+
+test('FairCoin is always offered beside the card, and the payer’s choice is what confirms (ADR 0021)', async () => {
+  const quoted = intentFixture({ amount: '5000000000' }, {});
+  const fair = {
+    ...quoted,
+    faircoin: {
+      ...(quoted.faircoin as NonNullable<typeof quoted.faircoin>),
+      quote: {
+        currency: 'EUR' as const,
+        amount: '2000',
+        rate: '0.4',
+        price: { source: 'wfair-base' as const, usd_per_fair: '0.5', observed_at: 1_790_000_000 },
+        reference_rates: {
+          source: 'ecb' as const,
+          usd_per_eur: '1.25',
+          currency_per_eur: '1',
+          observed_at: 1_790_000_000,
+        },
+        quoted_at: 1_790_000_000,
+        expires_at: 1_790_000_600,
+      },
+    },
+  };
+  mocks.confirmCheckoutSession.mockImplementation(async () =>
+    sessionFixture({ payment_intent: fair }),
+  );
+  render(
+    <CheckoutPage
+      initialSession={sessionFixture({
+        customer_email_locked: true,
+        customer_details: {
+          email: 'payer@example.com',
+          name: null,
+          phone: null,
+          address: null,
+          tax_ids: [],
+        },
+      })}
+      clientSecret={SECRET}
+    />,
+  );
+  expect((screen.getByLabelText('Card') as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByLabelText('FairCoin'));
+  fireEvent.click(screen.getByRole('button', { name: 'Pay €20.00' }));
+  await screen.findByRole('heading', { name: 'Payment' });
+  expect(mocks.confirmCheckoutSession.mock.calls[0]?.[2]).toEqual({
+    payment_method_type: 'faircoin',
+  });
+  expect(screen.getByText('50 FAIR')).toBeTruthy();
+  expect(screen.getByText(/Priced at €20.00 · 1 FAIR = 0.4 EUR/)).toBeTruthy();
+  // The payer may still go back to the card: the gateway replaces the unpaid payment.
+  mocks.confirmCheckoutSession.mockImplementation(async () =>
+    sessionFixture({ payment_intent: intentFixture({ rail: 'card' }) }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Pay by card instead' }));
+  await waitFor(() => {
+    expect(mocks.confirmCheckoutSession.mock.calls[1]?.[2]).toEqual({
+      payment_method_type: 'card',
+    });
+  });
+});
+
+test('FairCoin that cannot be priced is shown disabled with its reason, never hidden', () => {
+  render(
+    <CheckoutPage
+      initialSession={sessionFixture({
+        faircoin: { available: false, unavailable_reason: 'price_unavailable' },
+      })}
+      clientSecret={SECRET}
+    />,
+  );
+  expect((screen.getByLabelText('FairCoin') as HTMLInputElement).disabled).toBe(true);
+  expect(screen.getByText(/FairCoin cannot be priced right now/)).toBeTruthy();
+});

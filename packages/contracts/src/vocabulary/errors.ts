@@ -159,6 +159,10 @@ export const ERROR_CODE_DESCRIPTIONS = {
   payment_method_missing: 'No payment method is available to charge.',
   faircoin_cannot_debit:
     'A FairCoin invoice cannot be charged automatically: the payer signs every payment.',
+  faircoin_price_unavailable:
+    'No fresh FairCoin price exists right now, so this order cannot be quoted in FAIR. The other payment methods still work; try FairCoin again shortly.',
+  faircoin_account_required:
+    'This merchant has not registered its FairCoin receiving key, so it cannot be paid in FairCoin yet.',
   credit_note_exceeds_invoice:
     "The credit note's amount exceeds what the invoice can still credit.",
   test_clock_unexpected_state: 'The test clock is advancing; wait until it is ready.',

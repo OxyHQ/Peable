@@ -432,6 +432,61 @@ input[readonly] {
   font-size: 13px;
 }
 
+.payment-method-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: none;
+}
+
+.payment-method-choice__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+
+.payment-method-choice__option:has(input:checked) {
+  border-color: var(--primary, var(--oxy-purple));
+}
+
+.payment-method-choice__option--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkout-link-button {
+  margin-top: 12px;
+  padding: 8px 0;
+  border: none;
+  background: none;
+  color: var(--primary, var(--oxy-purple));
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.checkout-link-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.pay-with-peable__quote {
+  text-align: center;
+}
+
+.pay-with-peable__quote p {
+  margin: 0;
+}
+
 .checkout-button {
   width: 100%;
   min-height: 48px;

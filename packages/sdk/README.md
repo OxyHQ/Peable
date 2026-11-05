@@ -464,7 +464,17 @@ const session = await peable.checkout.sessions.create(
   native billing engine fulfils it; nothing is faked.
 - Amounts are base-unit strings: `amount_subtotal`, `amount_total`,
   `total_details.{amount_discount, amount_tax, amount_shipping}`. All line items
-  share one currency, and the currency decides the rail (`FAIR` → FairCoin).
+  share one currency.
+- **FairCoin is always offered (ADR 0021).** A fiat session's
+  `payment_method_types` is `['card', 'faircoin']` (a `FAIR` one's
+  `['faircoin']`); leaving `faircoin` out is 400 `payment_method_locked`. The
+  payer chooses — `createPeableCheckout().confirmCheckoutSession(id, secret,
+  { payment_method_type: 'faircoin' })` — and FairCoin on a fiat order is a
+  FairCoin payment for the total quoted in FAIR for 10 minutes
+  (`payment_intent.faircoin.quote`: currency, fiat amount, rate, sources).
+  Completion is the same `checkout.session.completed`. The public session's
+  `faircoin` says whether FairCoin can be paid with right now, and why not
+  (`price_unavailable`, `faircoin_account_missing`).
 - `status` is `open` → `complete` | `expired`; `payment_status` is `paid`,
   `unpaid` (a manual capture, or a FairCoin payment still confirming —
   `checkout.session.async_payment_succeeded|failed` follows) or

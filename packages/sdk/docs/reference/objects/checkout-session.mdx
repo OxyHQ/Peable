@@ -23,8 +23,9 @@ Object type: `checkout_session`.
 | `locale` | string \| null | The language checkout renders in; `null` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
 | `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
 | `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
-| `rail` | string | One of `faircoin`, `card`. |
-| `network` | string \| null | FairCoin rail only; `null` on a card session. One of `mainnet`, `testnet`. |
+| `rail` | string | The rail that settles the order's currency: `faircoin` for a FAIR order, `card` for a fiat one. FairCoin is offered on every order beside it (`payment_method_types`, ADR 0021). |
+| `network` | string \| null | The FairCoin network a FairCoin payment of this order uses — the merchant’s (or the seller’s); `null` when the payee has no FairCoin key yet (test mode) and in `setup` mode. One of `mainnet`, `testnet`. |
+| `payment_method_types` | array of string | What the payer may choose: `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); `['card']` in `setup` mode. |
 | `amount_subtotal` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `amount_total` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `total_details` | [CheckoutTotalDetails](/reference/objects/checkout-total-details) |  |
@@ -44,7 +45,6 @@ Object type: `checkout_session`.
 | `consent` | object \| null |  |
 | `consent.terms_of_service` | `"accepted"` \| null |  |
 | `expires_at` | integer | Unix seconds. |
-| `payment_method_types` | array of string |  |
 | `discounts` | array of [CheckoutDiscount](/reference/objects/checkout-discount) |  |
 | `customer` | string \| [Customer](/reference/objects/customer) \| null | `cus_…` (expandable) — given on create, or created at completion. Expandable. |
 | `customer_email` | string \| null |  |
@@ -86,9 +86,10 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
   "submit_type": "auto",
   "currency": "EUR",
   "rail": "card",
-  "network": null,
+  "network": "mainnet",
   "payment_method_types": [
-    "card"
+    "card",
+    "faircoin"
   ],
   "amount_subtotal": "1999",
   "amount_total": "1999",

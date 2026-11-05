@@ -15,6 +15,7 @@ import {
 import {
   amount,
   currency,
+  fiatCurrency,
   livemode,
   metadata,
   network,
@@ -90,6 +91,46 @@ export const paymentIntentNextActionSchema = defineComponent(
 export type PaymentIntentNextAction = z.output<typeof paymentIntentNextActionSchema>;
 
 /**
+ * The FairCoin price of a FIAT order (ADR 0021 D4), carried by the FairCoin
+ * payment the payer chose for it. Pricing, never exchange: the payer pays
+ * `amount` FAIR (the intent's) to the payee's own address, and no fiat moves.
+ * `rate` is for display; the FAIR amount is exactly
+ * `ceil(amount ÷ rate)` computed from the sources' own figures.
+ */
+export const faircoinQuoteSchema = defineComponent(
+  'FaircoinQuote',
+  z
+    .object({
+      currency: fiatCurrency.describe("The order's currency."),
+      amount: amount.describe("The order's total in base units of `currency` (tax included)."),
+      rate: z.string().describe('`currency` per 1 FAIR, rounded to 10 significant digits.'),
+      price: z
+        .object({
+          source: z.literal('wfair-base'),
+          usd_per_fair: z.string().describe("The FairCoin Explorer's FAIR/USD price."),
+          observed_at: unixSeconds,
+        })
+        .strict(),
+      reference_rates: z
+        .object({
+          source: z.literal('ecb'),
+          usd_per_eur: z.string(),
+          currency_per_eur: z.string().describe('`1` for EUR.'),
+          observed_at: unixSeconds,
+        })
+        .strict()
+        .nullable()
+        .describe("The European Central Bank's reference rates; `null` for a USD order."),
+      quoted_at: unixSeconds,
+      expires_at: unixSeconds.describe(
+        'The payment expires with its quote unless already broadcast.',
+      ),
+    })
+    .strict(),
+);
+export type FaircoinQuote = z.output<typeof faircoinQuoteSchema>;
+
+/**
  * The chain side of a FairCoin payment. `txid` and `confirmations` describe the
  * transaction the payer reported: `null`/`0` while `requires_action`, the
  * watcher's count against `required_confirmations` while `processing`.
@@ -107,6 +148,11 @@ export const paymentIntentFaircoinSchema = defineComponent(
       txid: nullableString,
       confirmations: z.number().int().nonnegative(),
       required_confirmations: z.number().int().nonnegative(),
+      quote: faircoinQuoteSchema
+        .nullable()
+        .describe(
+          'The fiat order this payment pays, as quoted (ADR 0021); `null` on a FAIR-priced payment.',
+        ),
     })
     .strict(),
 );
@@ -296,6 +342,7 @@ export const paymentIntentSchema = defineObject(
           txid: null,
           confirmations: 0,
           required_confirmations: 6,
+          quote: null,
         },
         merchant_id: 'merch_0193b8f2c1a87d3e9f4a',
         connected_account: null,

@@ -8,7 +8,11 @@
  */
 import { and, asc, desc, eq, gt, gte, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
-import type { BalanceTransactionStatus, BalanceTransactionType } from '@peable.to/shared-types';
+import type {
+  BalanceTransactionStatus,
+  BalanceTransactionType,
+  FaircoinQuote,
+} from '@peable.to/shared-types';
 import { balanceTransactions, connectedAccounts, ledgerEntries, payouts } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -36,6 +40,8 @@ export interface BalanceTransactionRow {
   readonly occurredAt: Date;
   readonly description: string | null;
   readonly exchangeRate: string | null;
+  /** A FairCoin entry of a fiat order: the quote it was priced at (ADR 0021 D7). */
+  readonly faircoinQuote: FaircoinQuote | null;
   readonly feeDetails: readonly { amount: string; currency: string; type: string }[];
   readonly sourceType: string | null;
   readonly sourceId: string | null;
@@ -68,6 +74,7 @@ const BT_COLUMNS = {
   occurredAt: balanceTransactions.occurredAt,
   description: balanceTransactions.description,
   exchangeRate: balanceTransactions.exchangeRate,
+  faircoinQuote: balanceTransactions.faircoinQuote,
   feeDetails: balanceTransactions.feeDetails,
   sourceType: balanceTransactions.sourceType,
   sourceId: balanceTransactions.sourceId,
@@ -101,6 +108,7 @@ export interface InsertBalanceTransactionParams {
   readonly occurredAt: Date;
   readonly description: string | null;
   readonly exchangeRate: string | null;
+  readonly faircoinQuote?: FaircoinQuote | null;
   readonly feeDetails: readonly { amount: string; currency: string; type: string }[];
   readonly sourceType: string | null;
   readonly sourceId: string | null;

@@ -43,7 +43,10 @@ Object type: `public_invoice`.
 | `created` | integer | Unix seconds. |
 | `finalized_at` | integer \| null | Unix seconds. |
 | `paid_at` | integer \| null | Unix seconds. |
-| `payment_method_types` | array of string | Which rail pays it: a card through the provider's fields, FairCoin from the payer's wallet. |
+| `payment_method_types` | array of string | What the payer may choose: `['card', 'faircoin']` on a fiat invoice, `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); on a fiat invoice it is quoted when chosen. |
+| `faircoin` | object | Whether the payer can choose FairCoin now (ADR 0021). |
+| `faircoin.available` | boolean |  |
+| `faircoin.unavailable_reason` | string \| null | Why FairCoin cannot be paid with right now; it is still shown, never hidden. One of `faircoin_account_missing`, `price_unavailable`. |
 | `invoice_pdf` | string |  |
 
 ## Returned by

@@ -16,12 +16,14 @@
  * discount's row lock, checks the reservation and links the payment — so two
  * payers racing for a code's last redemption cannot both get it.
  */
+import { randomUUID } from 'node:crypto';
 import type {
   Address,
   AddressParams,
   CheckoutCustomerDetails,
   CheckoutShippingDetails,
   CurrencyCode,
+  FaircoinUnavailableReason,
 } from '@peable.to/shared-types';
 import { config } from '../../config';
 import {
@@ -55,6 +57,7 @@ import {
   linkSessionObject,
   listLineItems,
   lockSession,
+  replaceSessionPayment,
   writeSessionOrder,
 } from '../../db/payments/checkoutSessionRepository';
 import { findIntentById, type PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
@@ -87,7 +90,14 @@ import {
   announceIntentChange,
   recordCustomerObjectEvent,
   transitionIntent,
+  transitionIntentIn,
 } from '../intentTransition';
+import {
+  FaircoinPriceUnavailableError,
+  faircoinAvailability,
+  quoteFaircoin,
+  toFaircoinQuoteDTO,
+} from '../faircoin/quote';
 import { applyEvent } from '../intentState';
 import type { TaxService } from '../tax/taxService';
 import { kickWebhookOutbox } from '../webhookOutbox';
@@ -221,19 +231,47 @@ interface SessionPlan {
   readonly currency: CurrencyCode;
 }
 
-/** Rail, network and seller for an order in `currency`. */
+/**
+ * Rail, network and seller for an order in `currency` (ADR 0021 D1).
+ *
+ * `rail` is the rail that settles the currency — `faircoin` for FAIR, `card`
+ * for fiat — and FairCoin is offered on every order beside it: a fiat order
+ * carries the payee's FairCoin `network` too, so the payer can choose FairCoin
+ * and be quoted. A seller (`connected_account`) is paid by the FairCoin choice
+ * (an on-behalf payment to the seller's key); a card payment of a fiat order is
+ * the merchant's own charge (ADR 0021 D5). `pays: false` (setup mode) offers
+ * nothing but the card it saves.
+ */
 async function planRail(
   merchant: MerchantRow,
   currency: CurrencyCode,
   body: { payment_method_types?: string[] | undefined; connected_account?: string | undefined },
+  options: { readonly pays: boolean } = { pays: true },
 ) {
   const rail = currency === 'FAIR' ? ('faircoin' as const) : ('card' as const);
-  if (body.payment_method_types && body.payment_method_types[0] !== rail) {
-    throw invalid(
-      'parameter_invalid',
-      `a ${currency} order is paid with '${rail}'`,
-      'payment_method_types',
-    );
+  if (body.payment_method_types && options.pays) {
+    const named = new Set(body.payment_method_types);
+    if (!named.has('faircoin')) {
+      throw invalid(
+        'payment_method_locked',
+        'FairCoin is always offered and cannot be left out of payment_method_types',
+        'payment_method_types',
+      );
+    }
+    if (rail === 'faircoin' && named.has('card')) {
+      throw invalid(
+        'parameter_invalid',
+        'a FAIR order is paid in FairCoin only',
+        'payment_method_types',
+      );
+    }
+    if (rail === 'card' && !named.has('card')) {
+      throw invalid(
+        'parameter_invalid',
+        "a fiat order offers its card methods beside FairCoin: name ['card', 'faircoin'], and choose the card methods in the payment method configuration",
+        'payment_method_types',
+      );
+    }
   }
   try {
     const account =
@@ -241,13 +279,24 @@ async function planRail(
         ? await resolveConnectedAccountForPayment(merchant, body.connected_account)
         : undefined;
     const network = account?.network ?? merchant.network ?? undefined;
-    const resolved = resolveRail(
-      merchant,
-      { rail, currency, ...(rail === 'faircoin' && network ? { network } : {}) },
-      account,
-    );
-    assertRailAvailable(resolved.rail, merchant.environment);
-    return { ...resolved, connectedAccountId: account?.id ?? null };
+    if (rail === 'faircoin') {
+      const resolved = resolveRail(
+        merchant,
+        { rail, currency, ...(network ? { network } : {}) },
+        account,
+      );
+      return { ...resolved, connectedAccountId: account?.id ?? null };
+    }
+    // A fiat order: the card rail settles the currency (a merchant's own
+    // charge), FairCoin is offered beside it on the payee's network.
+    const resolved = resolveRail(merchant, { rail, currency });
+    if (!options.pays) {
+      assertRailAvailable(resolved.rail, merchant.environment);
+      return { ...resolved, network: null, connectedAccountId: null };
+    }
+    // Nothing could pay an order with neither a card rail nor a FairCoin key.
+    if (network === undefined) assertRailAvailable(resolved.rail, merchant.environment);
+    return { ...resolved, network: network ?? null, connectedAccountId: account?.id ?? null };
   } catch (error) {
     if (error instanceof CheckoutError) throw error;
     // A seller that is unknown or not ready: the field is `connected_account`.
@@ -259,6 +308,17 @@ async function planRail(
     }
     return translateRail(error, 'currency');
   }
+}
+
+/**
+ * Whether the payer can choose FairCoin on this session now (ADR 0021): it is
+ * always offered, and says why when it cannot be paid with.
+ */
+export async function faircoinAvailabilityOf(
+  session: CheckoutSessionRow,
+): Promise<{ available: boolean; unavailable_reason: FaircoinUnavailableReason | null } | null> {
+  if (session.mode === 'setup') return null;
+  return faircoinAvailability(session);
 }
 
 /** Refuse a discount the order cannot take, naming the field that carried it. */
@@ -427,7 +487,7 @@ export async function createCheckoutSession(
         'currency',
       );
     }
-    const rail = await planRail(merchant, currency, body);
+    const rail = await planRail(merchant, currency, body, { pays: false });
     const row = await insertCheckoutSession(db, {
       ...common,
       amount: '0',
@@ -1055,18 +1115,69 @@ function describeOrder(lines: readonly CheckoutLineItemRow[]): string | undefine
   return text.slice(0, 1000);
 }
 
+/** How the payer pays (ADR 0021 D3): one of the session's methods, default the currency's rail. */
+export type PayerChoice = { readonly paymentMethodType?: 'card' | 'faircoin' | undefined };
+
+function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
+  const method = choice.paymentMethodType ?? session.rail;
+  if (session.mode === 'setup' && method !== 'card') {
+    throw invalid(
+      'parameter_invalid',
+      'a setup session saves a card; FairCoin has nothing to save',
+      'payment_method_type',
+    );
+  }
+  if (method === 'card' && session.rail !== 'card') {
+    throw invalid('parameter_invalid', 'a FAIR order is paid in FairCoin', 'payment_method_type');
+  }
+  return method;
+}
+
+/** The order amount a payment pays: the quote's fiat amount for a quoted FairCoin payment. */
+export function orderAmountOf(intent: PaymentIntentRow): string {
+  return intent.faircoinQuote?.amount ?? intent.amount;
+}
+
+/** Statuses in which no money has started to move, so a payment can still be replaced. */
+const REPLACEABLE: ReadonlySet<PaymentIntentRow['status']> = new Set([
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+]);
+
+/** A quote lapsing within this long is not handed to a payer: they would not have time to pay it. */
+const QUOTE_MIN_REMAINING_MS = 60_000;
+
+/**
+ * Whether the payment a session links already answers this choice: the same
+ * rail, and — for a quoted FairCoin payment still waiting for the payer — a
+ * quote with time left on it. A payment that is moving money always answers.
+ */
+function linkedAnswers(intent: PaymentIntentRow, method: 'card' | 'faircoin', now: Date): boolean {
+  if (!REPLACEABLE.has(intent.status) || intent.txid !== null) return true;
+  if (intent.rail !== method) return false;
+  const quote = intent.faircoinQuote;
+  return quote === null || quote.expires_at * 1000 - now.getTime() > QUOTE_MIN_REMAINING_MS;
+}
+
 /**
  * `POST /v1/checkout_sessions/:id/public/confirm` — lock the order and create
- * its payment (or setup). Idempotent: a confirmed session answers as it is.
+ * its payment (or setup), in the method the payer chose (ADR 0021 D3).
+ * Idempotent: a session whose payment already answers the choice answers as
+ * it is; a different choice replaces a payment that has not moved money.
  */
 export async function confirmSessionAsPayer(
   session: CheckoutSessionRow,
   merchant: MerchantRow,
   deps: CheckoutDeps = {},
+  choice: PayerChoice = {},
 ): Promise<CheckoutSessionRow> {
   const now = deps.now?.() ?? new Date();
   if (session.status !== 'open') return session;
-  if (session.paymentIntentId !== null || session.setupIntentId !== null) return session;
+  if (session.setupIntentId !== null) return session;
+  const method = chosenMethod(session, choice);
+  if (session.paymentIntentId !== null)
+    return replaceSessionPaymentAsPayer(session, merchant, method, now);
   if (session.expiresAt && session.expiresAt.getTime() <= now.getTime()) {
     throw invalid('checkout_session_expired', 'this checkout session has expired');
   }
@@ -1170,6 +1281,7 @@ export async function confirmSessionAsPayer(
       session: current,
       lines,
       customer,
+      paymentMethodType: method,
     });
     const linked = await db.transaction(async (tx) => {
       const locked = await lockSession(tx, current.id);
@@ -1199,52 +1311,13 @@ export async function confirmSessionAsPayer(
     return completed;
   }
 
-  const email = emailOf(current);
-  const shipping = current.shippingDetails;
-  let intent: PaymentIntentRow;
-  try {
-    intent = (
-      await createIntent({
-        merchant,
-        amount: current.amount,
-        rail: current.rail,
-        currency: current.currency,
-        ...(current.network ? { network: current.network } : {}),
-        ...(current.connectedAccountPublicId
-          ? { connectedAccount: current.connectedAccountPublicId }
-          : {}),
-        ...(current.customerPublicId ? { customer: current.customerPublicId } : {}),
-        ...(email ? { receiptEmail: email } : {}),
-        ...(describeOrder(lines) ? { description: describeOrder(lines) } : {}),
-        ...(shipping
-          ? {
-              shipping: {
-                name: shipping.name,
-                phone: current.customerDetails?.phone ?? null,
-                address: shipping.address,
-                carrier: null,
-                tracking_number: null,
-              },
-            }
-          : {}),
-        ...(current.paymentLinkId ? { paymentLinkId: current.paymentLinkId } : {}),
-        expiresInSeconds: Math.max(60, remainingSeconds(current.expiresAt, now)),
-        // The session and its amount name the payment: a retried confirm finds
-        // the payment the first one created, and a re-priced order a new one.
-        idempotencyKey: `checkout:${current.publicId}:${current.amount}`,
-        metadata: {},
-      })
-    ).intent;
-  } catch (error) {
-    if (error instanceof CheckoutError) throw error;
-    return translateRail(error, 'payment_method_types');
-  }
+  const intent = await createSessionPayment(merchant, current, lines, method, now);
 
   const outcome = await db.transaction(async (tx) => {
     const locked = await lockSession(tx, current.id);
     if (locked?.status !== 'open') return { kind: 'moved' as const };
     if (locked.paymentIntentId === intent.id) return { kind: 'linked' as const, row: locked };
-    if (locked.paymentIntentId !== null || locked.amount !== intent.amount) {
+    if (locked.paymentIntentId !== null || locked.amount !== orderAmountOf(intent)) {
       return { kind: 'moved' as const };
     }
     const refusal = await reserveDiscount(tx, locked);
@@ -1269,6 +1342,203 @@ export async function confirmSessionAsPayer(
     );
   }
   return outcome.row;
+}
+
+/**
+ * The payment for a session's order in the chosen method — created, not yet
+ * linked. A card (or a FAIR order) is created for the order's amount, keyed by
+ * session and amount; FairCoin on a FIAT order is quoted first (ADR 0021 D4)
+ * and created for the quoted FAIR amount, carrying the quote and expiring with
+ * it — keyed per quote, since each quote is a different price.
+ */
+async function createSessionPayment(
+  merchant: MerchantRow,
+  current: CheckoutSessionRow,
+  lines: readonly CheckoutLineItemRow[],
+  method: 'card' | 'faircoin',
+  now: Date,
+): Promise<PaymentIntentRow> {
+  const email = emailOf(current);
+  const shipping = current.shippingDetails;
+  const remaining = Math.max(60, remainingSeconds(current.expiresAt, now));
+  const common = {
+    merchant,
+    ...(current.customerPublicId ? { customer: current.customerPublicId } : {}),
+    ...(email ? { receiptEmail: email } : {}),
+    ...(describeOrder(lines) ? { description: describeOrder(lines) } : {}),
+    ...(shipping
+      ? {
+          shipping: {
+            name: shipping.name,
+            phone: current.customerDetails?.phone ?? null,
+            address: shipping.address,
+            carrier: null,
+            tracking_number: null,
+          },
+        }
+      : {}),
+    ...(current.paymentLinkId ? { paymentLinkId: current.paymentLinkId } : {}),
+    metadata: {},
+  };
+  try {
+    if (method === 'card' || current.currency === 'FAIR') {
+      return (
+        await createIntent({
+          ...common,
+          amount: current.amount,
+          rail: current.rail,
+          currency: current.currency,
+          ...(current.rail === 'faircoin' && current.network ? { network: current.network } : {}),
+          // A card payment of a fiat order is the merchant's own charge; the
+          // seller is paid by the FairCoin choice (ADR 0021 D5).
+          ...(current.rail === 'faircoin' && current.connectedAccountPublicId
+            ? { connectedAccount: current.connectedAccountPublicId }
+            : {}),
+          expiresInSeconds: remaining,
+          // The session and its amount name the payment: a retried confirm finds
+          // the payment the first one created, and a re-priced order a new one.
+          idempotencyKey: `checkout:${current.publicId}:${current.amount}`,
+        })
+      ).intent;
+    }
+    if (current.network === null) {
+      throw new CheckoutError(
+        409,
+        'faircoin_account_required',
+        'this merchant cannot be paid in FairCoin yet: it has not registered its FairCoin receiving key',
+        'payment_method_type',
+      );
+    }
+    const quote = await quoteFaircoin(current.currency, current.amount, { now });
+    const quoteSeconds = Math.floor((quote.expiresAt.getTime() - now.getTime()) / 1000);
+    return (
+      await createIntent({
+        ...common,
+        amount: quote.faircoinAmount,
+        rail: 'faircoin',
+        currency: 'FAIR',
+        network: current.network,
+        ...(current.connectedAccountPublicId
+          ? { connectedAccount: current.connectedAccountPublicId }
+          : {}),
+        faircoinQuote: toFaircoinQuoteDTO(quote),
+        expiresInSeconds: Math.max(60, Math.min(remaining, quoteSeconds)),
+        idempotencyKey: `checkout:${current.publicId}:${current.amount}:faircoin:${randomUUID()}`,
+      })
+    ).intent;
+  } catch (error) {
+    if (error instanceof CheckoutError) throw error;
+    if (error instanceof FaircoinPriceUnavailableError) {
+      throw new CheckoutError(
+        503,
+        'faircoin_price_unavailable',
+        'FairCoin cannot be priced right now; pay another way or try FairCoin again shortly',
+        'payment_method_type',
+      );
+    }
+    if (error instanceof AccountNotReadyError) {
+      throw invalid('account_not_ready', error.message, 'connected_account');
+    }
+    return translateRail(error, 'payment_method_type');
+  }
+}
+
+/**
+ * A confirmed session confirmed again (ADR 0021 D3). Answers the session as it
+ * is when its payment already answers the choice; otherwise creates the payment
+ * for the new choice and, in ONE transaction, links it and cancels the old one
+ * — linking first, so the old payment's cancellation no longer finds (and
+ * expires) the session. A card is cancelled at the provider BEFORE that
+ * transaction: a card that might still be charged stays the order's payment.
+ */
+async function replaceSessionPaymentAsPayer(
+  session: CheckoutSessionRow,
+  merchant: MerchantRow,
+  method: 'card' | 'faircoin',
+  now: Date,
+): Promise<CheckoutSessionRow> {
+  const db = getDb();
+  const linkedId = session.paymentIntentId;
+  if (linkedId === null) return session;
+  const linked = await findIntentById(db, linkedId);
+  if (!linked) throw new Error(`session ${session.publicId} wraps an unreadable intent`);
+  if (linkedAnswers(linked, method, now)) return session;
+  if (session.mode === 'subscription') {
+    // The subscription's first invoice holds the payment; it is replaced there.
+    const fulfiller = subscriptionCheckoutFulfiller();
+    if (!fulfiller)
+      throw invalid('mode_unavailable', 'subscription checkout is not available yet', 'mode');
+    const { paymentIntentId } = await fulfiller.repay({
+      merchant,
+      session,
+      paymentMethodType: method,
+    });
+    const row = await findSessionById(db, session.id);
+    if (!row || row.paymentIntentId !== paymentIntentId) {
+      throw new CheckoutError(
+        409,
+        'checkout_session_changed',
+        'this checkout changed; reload and try again',
+      );
+    }
+    return row;
+  }
+  const lines = await listLineItems(db, session.id);
+  const fresh = await createSessionPayment(merchant, session, lines, method, now);
+  if (linked.rail === 'card') {
+    const cancellation = await cancelCardPaymentAtProvider(
+      linked,
+      `cancel:${linked.publicId}`,
+      'requested_by_customer',
+    );
+    if (cancellation.kind !== 'canceled' && cancellation.kind !== 'nothing_to_cancel') {
+      await cancelOrphanIntent(fresh);
+      throw new CheckoutError(
+        409,
+        'payment_intent_unexpected_state',
+        'this order is already being paid by card; wait for it to finish',
+      );
+    }
+  }
+  let replaced: { row: CheckoutSessionRow; old: PaymentIntentRow } | null = null;
+  try {
+    replaced = await db.transaction(async (tx) => {
+      const locked = await lockSession(tx, session.id);
+      if (locked?.status !== 'open' || locked.paymentIntentId !== linked.id) return null;
+      if (locked.amount !== orderAmountOf(fresh)) return null;
+      const row = await replaceSessionPayment(tx, locked.id, linked.id, fresh.id);
+      if (!row) return null;
+      const moved = await transitionIntentIn(tx, linked.id, {
+        from: linked.status,
+        status: applyEvent(linked.status, 'cancel', linked.rail),
+        cancellationReason: 'requested_by_customer',
+      });
+      // The payer reported a broadcast meanwhile: the old payment is moving money.
+      if (moved.kind !== 'updated') throw new PaymentMovedError();
+      return { row, old: moved.row };
+    });
+  } catch (error) {
+    if (!(error instanceof PaymentMovedError)) throw error;
+  }
+  if (!replaced) {
+    await cancelOrphanIntent(fresh);
+    throw new CheckoutError(
+      409,
+      'checkout_session_changed',
+      'this checkout changed; reload and try again',
+    );
+  }
+  announceIntentChange(replaced.old);
+  kickWebhookOutbox();
+  return replaced.row;
+}
+
+/** Rolls the replacement back: the payment it would have cancelled started moving money. */
+class PaymentMovedError extends Error {
+  constructor() {
+    super('the linked payment moved');
+    this.name = 'PaymentMovedError';
+  }
 }
 
 /** Cancel a payment a confirm created and could not link. Best effort: its own expiry covers a failure. */

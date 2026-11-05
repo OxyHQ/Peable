@@ -596,6 +596,34 @@
       "when": 1793841688031,
       "tag": "0084_webhook_endpoint_url_refused_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1793910574907,
+      "tag": "0085_payment_intents_faircoin_quote",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793910575940,
+      "tag": "0086_balance_transactions_faircoin_quote",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793910587429,
+      "tag": "0087_checkout_sessions_offer_faircoin",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793910588412,
+      "tag": "0088_faircoin_offered_validate",
+      "breakpoints": true
     }
   ]
 }

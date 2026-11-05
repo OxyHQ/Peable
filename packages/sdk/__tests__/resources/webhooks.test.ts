@@ -72,6 +72,7 @@ const EVENT: WebhookEvent = {
         txid: 'tx1',
         confirmations: 6,
         required_confirmations: 6,
+        quote: null,
       },
       expires_at: TIMESTAMP,
       created: TIMESTAMP,

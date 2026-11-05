@@ -56,8 +56,14 @@ export function getPublicInvoice(token: string): Promise<PublicInvoice> {
 }
 
 /** The PaymentIntent the payer completes for this invoice (the same one while it can still be paid). */
-export function payPublicInvoice(token: string): Promise<PublicInvoicePayment> {
-  return post<PublicInvoicePayment>(`${invoicePath(token)}/pay`);
+export function payPublicInvoice(
+  token: string,
+  paymentMethodType?: 'card' | 'faircoin',
+): Promise<PublicInvoicePayment> {
+  return post<PublicInvoicePayment>(
+    `${invoicePath(token)}/pay`,
+    paymentMethodType ? { payment_method_type: paymentMethodType } : {},
+  );
 }
 
 export function getPortal(token: string): Promise<PublicPortalSession> {

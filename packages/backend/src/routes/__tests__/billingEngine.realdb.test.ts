@@ -149,7 +149,7 @@ const { findIntentForMerchant, findIntentById } = await import(
   '../../db/payments/paymentIntentRepository'
 );
 const { transitionIntent } = await import('../../services/intentTransition');
-const { taxTransactions } = await import('../../db/schema');
+const { balanceTransactions, taxTransactions } = await import('../../db/schema');
 const { eq } = await import('drizzle-orm');
 type MerchantRow = import('../../db/merchants/merchantRepository').MerchantRow;
 type TaxProvider = import('../../services/tax/provider').TaxProvider;
@@ -854,7 +854,9 @@ describe('invoices', () => {
     expect(page).toMatchObject({
       object: 'public_invoice',
       amount_remaining: '4200',
-      payment_method_types: ['card'],
+      // FairCoin is always offered beside the card (ADR 0021 D1).
+      payment_method_types: ['card', 'faircoin'],
+      faircoin: { available: true, unavailable_reason: null },
     });
     const pay = await ok('POST', `/v1/invoices/public/${token}/pay`, {});
     expect(pay.payment_intent).toMatch(/^pi_/);
@@ -1087,6 +1089,224 @@ describe('checkout in subscription mode', () => {
       line_items: [{ price: once.id, quantity: 1 }],
     });
     expect(refused.status).toBe(400);
+  });
+});
+
+describe('FairCoin is always offered on fiat orders (ADR 0021)', () => {
+  // The preloaded test sources: 0.5 USD per FAIR, 1.25 USD per EUR → 0.4 EUR per FAIR.
+  const asPayer = (cs: Json, suffix: string, body?: unknown) =>
+    fetch(`${baseUrl}/v1/checkout_sessions/${cs.id}/public${suffix}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Peable-Client-Secret': decodeURIComponent(String(cs.url).split('#cs=')[1] ?? ''),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }).then(async (response) => ({
+      status: response.status,
+      json: (await response.json()) as Json,
+    }));
+  const intentOf = async (publicId: string) =>
+    must(await findIntentForMerchant(gatewayDb(), publicId, merchant.id));
+  const linkedIntent = (view: Json): string =>
+    String(view.payment_intent?.id ?? view.payment_intent);
+  async function paid(intentPublicId: string): Promise<void> {
+    const intent = await intentOf(intentPublicId);
+    await transitionIntent(intent.id, {
+      from: 'requires_action',
+      status: 'processing',
+      txid: 'b'.repeat(64),
+    });
+    await transitionIntent(intent.id, { from: 'processing', status: 'succeeded' });
+  }
+  async function oneTimePrice(unitAmount: string): Promise<Json> {
+    const product = (await ok('POST', '/v1/products', { name: 'Poster' })).id;
+    return ok('POST', '/v1/prices', { product, currency: 'EUR', unit_amount: unitAmount });
+  }
+
+  test('a fiat session offers card and FairCoin; leaving FairCoin out is payment_method_locked', async () => {
+    const poster = await oneTimePrice('4200');
+    const refused = await call('POST', '/v1/checkout_sessions', {
+      success_url: 'https://shop.example/done',
+      line_items: [{ price: poster.id, quantity: 1 }],
+      payment_method_types: ['card'],
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.json.error).toMatchObject({
+      code: 'payment_method_locked',
+      param: 'payment_method_types',
+    });
+    const cs = await ok('POST', '/v1/checkout_sessions', {
+      success_url: 'https://shop.example/done',
+      customer_email: 'payer@example.test',
+      line_items: [{ price: poster.id, quantity: 1 }],
+    });
+    expect(cs).toMatchObject({ rail: 'card', network: 'testnet' });
+    expect(cs.payment_method_types).toEqual(['card', 'faircoin']);
+    const view = (await asPayer(cs, '')).json;
+    expect(view.payment_method_types).toEqual(['card', 'faircoin']);
+    expect(view.faircoin).toEqual({ available: true, unavailable_reason: null });
+  });
+
+  test('choosing FairCoin quotes the total; switching replaces an unpaid payment; FairCoin completes the order', async () => {
+    const poster = await oneTimePrice('4200');
+    const cs = await ok('POST', '/v1/checkout_sessions', {
+      success_url: 'https://shop.example/done',
+      customer_email: 'payer@example.test',
+      line_items: [{ price: poster.id, quantity: 1 }],
+    });
+    const byCard = await asPayer(cs, '/confirm', {});
+    expect(byCard.status, JSON.stringify(byCard.json)).toBe(200);
+    const card = await intentOf(linkedIntent(byCard.json));
+    expect(card).toMatchObject({ rail: 'card', amount: '4200', currency: 'EUR' });
+
+    const byFaircoin = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
+    expect(byFaircoin.status).toBe(200);
+    const fair = byFaircoin.json.payment_intent;
+    expect(fair).toMatchObject({
+      currency: 'FAIR',
+      amount: '10500000000',
+      payment_method_types: ['faircoin'],
+      next_action: { type: 'faircoin_payment' },
+    });
+    expect(fair.faircoin.quote).toMatchObject({
+      currency: 'EUR',
+      amount: '4200',
+      rate: '0.4',
+      price: { source: 'wfair-base', usd_per_fair: '0.5' },
+      reference_rates: { source: 'ecb', usd_per_eur: '1.25', currency_per_eur: '1' },
+    });
+    expect(fair.faircoin.quote.expires_at - fair.faircoin.quote.quoted_at).toBe(600);
+    // The card payment was cancelled at the provider and here; the session stays open.
+    expect((await intentOf(card.publicId)).status).toBe('canceled');
+    expect(byFaircoin.json.status).toBe('open');
+    // Confirming FairCoin again answers the same quoted payment.
+    expect(
+      linkedIntent((await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' })).json),
+    ).toBe(fair.id);
+
+    await paid(fair.id);
+    const done = (await asPayer(cs, '')).json;
+    expect(done).toMatchObject({ status: 'complete', payment_status: 'paid' });
+    // The books record the FAIR received and the fiat it was priced at (ADR 0021 D7).
+    const [entry] = await gatewayDb()
+      .select()
+      .from(balanceTransactions)
+      .where(eq(balanceTransactions.sourceId, fair.id));
+    expect(must(entry)).toMatchObject({
+      currency: 'FAIR',
+      amount: '10500000000',
+      status: 'informational',
+    });
+    expect(must(entry).faircoinQuote).toMatchObject({ currency: 'EUR', amount: '4200' });
+  });
+
+  test('a lapsed quote returns the order to the payer instead of expiring it', async () => {
+    const poster = await oneTimePrice('4200');
+    const cs = await ok('POST', '/v1/checkout_sessions', {
+      success_url: 'https://shop.example/done',
+      customer_email: 'payer@example.test',
+      line_items: [{ price: poster.id, quantity: 1 }],
+    });
+    const quoted = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
+    const { expireIntentNow } = await import('../../services/expirySweeper');
+    await expireIntentNow(await intentOf(linkedIntent(quoted.json)));
+    const after = (await asPayer(cs, '')).json;
+    expect(after).toMatchObject({ status: 'open', payment_intent: null });
+    // A fresh quote is a new payment.
+    const again = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
+    expect(linkedIntent(again.json)).not.toBe(linkedIntent(quoted.json));
+  });
+
+  test('no fresh price: FairCoin says why and fails closed, the card still works', async () => {
+    const { useQuoteSources } = await import('../../services/faircoin/quote');
+    const restore = useQuoteSources({
+      readPrice: async () => ({ usdPerFair: '0.5', observedAt: new Date(Date.now() - 3600_000) }),
+      readReferenceRates: async () => ({
+        perEur: { EUR: '1', USD: '1.25' },
+        observedAt: new Date(),
+      }),
+    });
+    try {
+      const poster = await oneTimePrice('4200');
+      const cs = await ok('POST', '/v1/checkout_sessions', {
+        success_url: 'https://shop.example/done',
+        customer_email: 'payer@example.test',
+        line_items: [{ price: poster.id, quantity: 1 }],
+      });
+      expect((await asPayer(cs, '')).json.faircoin).toEqual({
+        available: false,
+        unavailable_reason: 'price_unavailable',
+      });
+      const refused = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
+      expect(refused.status).toBe(503);
+      expect(refused.json.error.code).toBe('faircoin_price_unavailable');
+      const byCard = await asPayer(cs, '/confirm', { payment_method_type: 'card' });
+      expect(byCard.status).toBe(200);
+      expect(byCard.json.payment_intent.currency).toBe('EUR');
+    } finally {
+      restore();
+    }
+  });
+
+  test('a hosted fiat invoice is payable in FairCoin, and records its fiat amount as paid', async () => {
+    const payerCustomer = await customer(null, { card: false });
+    const invoice = await ok('POST', '/v1/invoices', {
+      customer: payerCustomer.id,
+      currency: 'EUR',
+      collection_method: 'send_invoice',
+      days_until_due: 5,
+    });
+    await ok('POST', '/v1/invoiceitems', {
+      customer: payerCustomer.id,
+      invoice: invoice.id,
+      amount: '4200',
+      currency: 'EUR',
+      description: 'Consulting',
+    });
+    const final = await ok('POST', `/v1/invoices/${invoice.id}/finalize`, {});
+    const token = String(final.hosted_invoice_url).split('/invoice/')[1];
+    const byCard = await ok('POST', `/v1/invoices/public/${token}/pay`, {});
+    const byFaircoin = await ok('POST', `/v1/invoices/public/${token}/pay`, {
+      payment_method_type: 'faircoin',
+    });
+    expect(byFaircoin.payment_intent).not.toBe(byCard.payment_intent);
+    expect((await intentOf(byCard.payment_intent)).status).toBe('canceled');
+    const fair = await intentOf(byFaircoin.payment_intent);
+    expect(fair).toMatchObject({ rail: 'faircoin', amount: '10500000000' });
+    expect(fair.faircoinQuote).toMatchObject({ currency: 'EUR', amount: '4200' });
+    await paid(fair.publicId);
+    expect(await ok('GET', `/v1/invoices/${invoice.id}`)).toMatchObject({
+      status: 'paid',
+      amount_paid: '4200',
+    });
+  });
+
+  test('a subscription checkout paid in FairCoin is invoiced from then on, never debited', async () => {
+    const payerCustomer = await customer(null, { card: false });
+    const plan = await price('1500');
+    const cs = await ok('POST', '/v1/checkout_sessions', {
+      mode: 'subscription',
+      customer: payerCustomer.id,
+      success_url: 'https://shop.example/done',
+      line_items: [{ price: plan.id, quantity: 2 }],
+    });
+    expect(cs.payment_method_types).toEqual(['card', 'faircoin']);
+    const byCard = await asPayer(cs, '/confirm', {});
+    expect(byCard.status).toBe(200);
+    const byFaircoin = await asPayer(cs, '/confirm', { payment_method_type: 'faircoin' });
+    expect(byFaircoin.status).toBe(200);
+    const fair = byFaircoin.json.payment_intent;
+    expect(fair).toMatchObject({ currency: 'FAIR', amount: '7500000000' });
+    expect((await intentOf(linkedIntent(byCard.json))).status).toBe('canceled');
+    const [sub] = (await ok('GET', `/v1/subscriptions?customer=${payerCustomer.id}&status=all`))
+      .data as Json[];
+    expect(must(sub).status).toBe('incomplete');
+    await paid(fair.id);
+    const active = await ok('GET', `/v1/subscriptions/${must(sub).id}?expand[]=latest_invoice`);
+    expect(active).toMatchObject({ status: 'active', collection_method: 'send_invoice' });
+    expect(active.latest_invoice).toMatchObject({ status: 'paid', amount_paid: '3000' });
+    expect((await asPayer(cs, '')).json.status).toBe('complete');
   });
 });
 

@@ -62,6 +62,7 @@ const ON_BEHALF: PaymentIntent = paymentIntentFixture({
     txid: null,
     confirmations: 0,
     required_confirmations: 1,
+    quote: null,
   },
   merchant_id: 'merch_platform',
   connected_account: 'ca_seller',

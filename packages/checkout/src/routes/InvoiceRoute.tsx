@@ -55,12 +55,12 @@ export function InvoiceRoute() {
     };
   }, [token]);
 
-  async function pay(): Promise<void> {
+  async function pay(method?: 'card' | 'faircoin'): Promise<void> {
     if (!token) return;
     setPaying(true);
     setPayError(null);
     try {
-      const payment = await payPublicInvoice(token);
+      const payment = await payPublicInvoice(token, method);
       navigate({
         pathname: `/i/${payment.payment_intent}`,
         hash: `client_secret=${encodeURIComponent(payment.client_secret)}`,
@@ -164,16 +164,38 @@ export function InvoiceRoute() {
       </dl>
 
       {PAYABLE.has(invoice.status) && invoice.amount_remaining !== '0' ? (
-        <button
-          type="button"
-          className="card-payment__button"
-          disabled={paying}
-          onClick={() => {
-            void pay();
-          }}
-        >
-          {paying ? 'Preparing payment…' : `Pay ${money(invoice.amount_remaining)}`}
-        </button>
+        <div className="invoice-page__pay">
+          {invoice.payment_method_types.includes('card') ? (
+            <button
+              type="button"
+              className="card-payment__button"
+              disabled={paying}
+              onClick={() => {
+                void pay('card');
+              }}
+            >
+              {paying ? 'Preparing payment…' : `Pay ${money(invoice.amount_remaining)} by card`}
+            </button>
+          ) : null}
+          {/* FairCoin is always offered (ADR 0021): shown with its reason when it cannot be paid. */}
+          <button
+            type="button"
+            className="card-payment__button"
+            disabled={paying || !invoice.faircoin.available}
+            onClick={() => {
+              void pay('faircoin');
+            }}
+          >
+            {paying ? 'Preparing payment…' : 'Pay with FairCoin'}
+          </button>
+          {invoice.faircoin.available ? null : (
+            <p className="checkout-hint">
+              {invoice.faircoin.unavailable_reason === 'faircoin_account_missing'
+                ? 'This merchant cannot receive FairCoin yet.'
+                : 'FairCoin cannot be priced right now. Try again in a moment.'}
+            </p>
+          )}
+        </div>
       ) : null}
       {payError ? (
         <p className="card-payment__error" role="alert">

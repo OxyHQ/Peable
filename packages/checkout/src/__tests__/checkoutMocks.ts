@@ -9,6 +9,7 @@ import * as realCheckout from '@peable.to/sdk/checkout';
 import { mock } from 'bun:test';
 import type {
   CheckoutSessionPublic,
+  ConfirmCheckoutSessionPublicParams,
   PaymentIntent,
   PaymentLinkSessionStart,
   PublicPaymentLink,
@@ -31,7 +32,11 @@ export const mocks = {
     },
   ),
   confirmCheckoutSession: mock(
-    async (_id: string, _secret: string): Promise<CheckoutSessionPublic> => {
+    async (
+      _id: string,
+      _secret: string,
+      _params?: ConfirmCheckoutSessionPublicParams,
+    ): Promise<CheckoutSessionPublic> => {
       throw new Error('confirmCheckoutSession not configured');
     },
   ),
@@ -89,8 +94,11 @@ export function installCheckoutMocks(): void {
       secret: string,
       params: UpdateCheckoutSessionPublicParams,
     ) => mocks.updateCheckoutSession(id, secret, params),
-    confirmCheckoutSession: (id: string, secret: string) =>
-      mocks.confirmCheckoutSession(id, secret),
+    confirmCheckoutSession: (
+      id: string,
+      secret: string,
+      params?: ConfirmCheckoutSessionPublicParams,
+    ) => mocks.confirmCheckoutSession(id, secret, params),
     getPaymentLink: (id: string) => mocks.getPaymentLink(id),
     startPaymentLinkSession: (id: string, params: { amount?: string }, key?: string) =>
       mocks.startPaymentLinkSession(id, params, key),

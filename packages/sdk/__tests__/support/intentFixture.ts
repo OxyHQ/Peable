@@ -47,6 +47,7 @@ export function paymentIntentFixture(overrides: Partial<PaymentIntent> = {}): Pa
       txid: null,
       confirmations: 0,
       required_confirmations: 1,
+      quote: null,
     },
     merchant_id: 'merch_1',
     connected_account: null,

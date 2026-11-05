@@ -18,6 +18,8 @@ export {
   CHECKOUT_SUBMIT_TYPES,
   CHECKOUT_TAX_ID_TYPES,
   CHECKOUT_UI_MODES,
+  FAIRCOIN_UNAVAILABLE_REASONS,
+  type FaircoinUnavailableReason,
   type CheckoutBillingAddressCollection,
   type CheckoutCustomerCreation,
   type CheckoutCustomFieldType,

@@ -41,7 +41,8 @@ const INVOICE: PublicInvoice = {
   created: 1_800_000_000,
   finalized_at: 1_800_000_000,
   paid_at: null,
-  payment_method_types: ['card'],
+  payment_method_types: ['card', 'faircoin'],
+  faircoin: { available: true, unavailable_reason: null },
   invoice_pdf: 'https://api.peable.to/v1/invoices/public/inv_tok_x/pdf',
 };
 

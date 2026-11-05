@@ -33,6 +33,7 @@ export function toBalanceTransactionDTO(row: BalanceTransactionRow): BalanceTran
     created: toUnix(row.occurredAt),
     description: row.description,
     exchange_rate: row.exchangeRate === null ? null : Number(row.exchangeRate),
+    faircoin_quote: row.faircoinQuote ?? null,
     fee_details: row.feeDetails.map((detail) => ({
       amount: detail.amount,
       currency: detail.currency,

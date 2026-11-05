@@ -19,6 +19,8 @@ export type BillingEngineErrorCode =
   | 'promotion_code_invalid'
   | 'payment_method_missing'
   | 'faircoin_cannot_debit'
+  | 'faircoin_price_unavailable'
+  | 'faircoin_account_required'
   | 'credit_note_exceeds_invoice'
   | 'test_mode_only'
   | 'test_clock_unexpected_state'

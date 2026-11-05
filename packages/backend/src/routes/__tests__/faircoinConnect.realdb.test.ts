@@ -639,6 +639,47 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
   });
 
+  test("a FIAT order on behalf of a seller: FairCoin pays the seller's key, quoted (ADR 0021 D5)", async () => {
+    const seller = await onboardSeller('store_fiat_checkout', 60);
+    const res = await call('POST', '/v1/checkout_sessions', {
+      line_items: [
+        {
+          price_data: { currency: 'USD', unit_amount: '1000', product_data: { name: 'Lamp' } },
+          quantity: 1,
+        },
+      ],
+      connected_account: seller.id,
+      customer_email: 'b@example.com',
+      success_url: 'https://platform.example/ok',
+    });
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({
+      rail: 'card',
+      network: 'testnet',
+      connected_account: seller.id,
+      payment_method_types: ['card', 'faircoin'],
+    });
+    const secret = {
+      'X-Peable-Client-Secret': decodeURIComponent(String(res.json.url).split('#cs=')[1] ?? ''),
+    };
+    const confirmed = await call(
+      'POST',
+      `/v1/checkout_sessions/${String(res.json.id)}/public/confirm`,
+      { payment_method_type: 'faircoin' },
+      secret,
+    );
+    expect(confirmed.status).toBe(200);
+    const pi = (confirmed.json.payment_intent as { id: string }).id;
+    const intent = must(await findIntentByPublicId(gatewayDb(), pi));
+    // 10.00 USD at the test price of 0.5 USD/FAIR: 20 FAIR, to the SELLER's key.
+    expect(intent).toMatchObject({ rail: 'faircoin', currency: 'FAIR', amount: '2000000000' });
+    expect(intent.connectedAccountPublicId).toBe(String(seller.id));
+    expect(intent.address).toBe(
+      deriveIntentAddress(testXpubFor('testnet', 60), 0, 0, getNetwork('testnet')),
+    );
+    expect(intent.faircoinQuote).toMatchObject({ currency: 'USD', amount: '1000', rate: '0.5' });
+  });
+
   test("delivers the payment's events to the PLATFORM, tagged with the seller", async () => {
     const seller = await onboardSeller('store_events', 45);
     const created = await call(

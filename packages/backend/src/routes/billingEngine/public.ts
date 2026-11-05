@@ -36,6 +36,7 @@ import { invoicePdfUrl } from '../../lib/serializeBilling';
 import { toUnix, toUnixOrNull } from '../../lib/time';
 import { resolveMerchantDisplay } from '../../services/merchantDisplay';
 import { payerIntentForInvoice, railOf } from '../../services/billingEngine/collect';
+import { faircoinAvailability } from '../../services/faircoin/quote';
 import { invoicePdf } from '../../services/billingEngine/invoicePdf';
 import {
   portalCancel,
@@ -101,7 +102,10 @@ async function publicInvoice(invoice: InvoiceRow): Promise<PublicInvoice> {
     created: toUnix(invoice.createdAt),
     finalized_at: toUnixOrNull(invoice.finalizedAt),
     paid_at: toUnixOrNull(invoice.paidAt),
-    payment_method_types: [railOf(invoice.currency)],
+    // FairCoin is always offered (ADR 0021 D1); a fiat invoice also takes a card.
+    payment_method_types:
+      railOf(invoice.currency) === 'faircoin' ? ['faircoin'] : ['card', 'faircoin'],
+    faircoin: await faircoinAvailability({ network: merchant.network, currency: invoice.currency }),
     invoice_pdf: invoicePdfUrl(invoice.hostedToken),
   };
 }
@@ -143,8 +147,10 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     limit,
     guarded(async (req, res) => {
       const invoice = await invoiceByToken(res, req.params.token);
-      if (!invoice || !body(req, res, payPublicInvoiceParams)) return;
-      const intent = await payerIntentForInvoice(invoice);
+      if (!invoice) return;
+      const parsed = body(req, res, payPublicInvoiceParams);
+      if (!parsed) return;
+      const intent = await payerIntentForInvoice(invoice, parsed.payment_method_type);
       res.status(200).json({
         object: 'public_invoice_payment',
         payment_intent: intent.publicId,

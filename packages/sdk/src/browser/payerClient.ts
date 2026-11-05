@@ -14,6 +14,7 @@
 import { io, type Socket } from 'socket.io-client';
 import type {
   CheckoutSessionPublic,
+  ConfirmCheckoutSessionPublicParams,
   CreatePaymentLinkSessionParams,
   PaymentIntent,
   PaymentLinkSessionStart,
@@ -114,10 +115,18 @@ export interface PeableCheckoutClient {
   ): Promise<CheckoutSessionPublic>;
   /**
    * `POST /v1/checkout_sessions/:id/public/confirm` — lock the order and create
-   * its payment (or setup). Resolving is NOT completion: the session completes
-   * when the gateway says so, which `getCheckoutSession` reports.
+   * its payment (or setup) in the method the payer chose: one of the session's
+   * `payment_method_types`, default the rail of its currency. FairCoin is
+   * offered on every order (ADR 0021); on a fiat order it is quoted, and
+   * confirming again with the other method replaces an unpaid payment.
+   * Resolving is NOT completion: the session completes when the gateway says
+   * so, which `getCheckoutSession` reports.
    */
-  confirmCheckoutSession(id: string, clientSecret: string): Promise<CheckoutSessionPublic>;
+  confirmCheckoutSession(
+    id: string,
+    clientSecret: string,
+    params?: ConfirmCheckoutSessionPublicParams,
+  ): Promise<CheckoutSessionPublic>;
   /** `GET /v1/setup_intents/:id` with the payer's `client_secret` — the row as the gateway holds it. */
   getSetupIntent(id: string, clientSecret: string): Promise<SetupIntent>;
   /**
@@ -393,11 +402,11 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
       call<CheckoutSessionPublic>(sessionPath(id), { clientSecret }),
     updateCheckoutSession: (id, clientSecret, params) =>
       call<CheckoutSessionPublic>(sessionPath(id), { method: 'POST', clientSecret, body: params }),
-    confirmCheckoutSession: (id, clientSecret) =>
+    confirmCheckoutSession: (id, clientSecret, params = {}) =>
       call<CheckoutSessionPublic>(`${sessionPath(id)}/confirm`, {
         method: 'POST',
         clientSecret,
-        body: {},
+        body: params,
       }),
     getSetupIntent: (id, clientSecret) =>
       call<SetupIntent>(`/v1/setup_intents/${encodeURIComponent(id)}`, { clientSecret }),

@@ -8,6 +8,7 @@ import type {
   PaymentIntentRail,
   PaymentIntentSetupFutureUsage,
   PaymentMethodType,
+  FaircoinQuote,
   Shipping,
 } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
@@ -201,6 +202,12 @@ export interface CreateIntentInput {
   description?: string;
   statementDescriptorSuffix?: string;
   shipping?: Shipping;
+  /**
+   * The fiat order this FairCoin payment pays, as quoted (ADR 0021 D4) — set
+   * only by the order surfaces (checkout, invoices), never by an API caller.
+   * `amount` must be its FAIR amount; the payment expires with the quote.
+   */
+  faircoinQuote?: FaircoinQuote;
   returnUrl?: string;
   /**
    * Card only — a platform acting for one of its connected accounts
@@ -747,6 +754,9 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       ? await resolveConnectedAccountForPayment(merchant, input.connectedAccount)
       : undefined;
   const { rail, currency, network } = resolveRail(merchant, input, account);
+  if (input.faircoinQuote !== undefined && rail !== 'faircoin') {
+    throw new Error('a FairCoin quote prices a FairCoin payment only');
+  }
   const connectedAccountId = account?.id ?? null;
   const { customer, paymentMethod } = await resolvePaymentParties(merchant, rail, input);
   // What a card payment offers, decided ONCE, before anything is reserved or
@@ -881,6 +891,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       receiptEmail: input.receiptEmail ?? null,
       statementDescriptorSuffix: input.statementDescriptorSuffix ?? null,
       shipping: input.shipping ?? null,
+      faircoinQuote: input.faircoinQuote ?? null,
       clientSecret,
       idempotencyKey: key,
       metadata: metadata ?? {},

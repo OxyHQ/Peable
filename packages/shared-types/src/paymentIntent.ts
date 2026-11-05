@@ -20,6 +20,7 @@ export type {
   ListPaymentIntentsParams,
   PaymentIntent,
   PaymentIntentClientAction,
+  FaircoinQuote,
   PaymentIntentFaircoin,
   PaymentIntentLastPaymentError,
   PaymentIntentNextAction,

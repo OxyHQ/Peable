@@ -52,9 +52,10 @@ Returns [CheckoutSession](/reference/objects/checkout-session).
   "submit_type": "auto",
   "currency": "EUR",
   "rail": "card",
-  "network": null,
+  "network": "mainnet",
   "payment_method_types": [
-    "card"
+    "card",
+    "faircoin"
   ],
   "amount_subtotal": "1999",
   "amount_total": "1999",
@@ -174,7 +175,8 @@ Returns [PaymentIntent](/reference/objects/payment-intent).
     "address": "fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG",
     "txid": null,
     "confirmations": 0,
-    "required_confirmations": 6
+    "required_confirmations": 6,
+    "quote": null
   },
   "merchant_id": "merch_0193b8f2c1a87d3e9f4a",
   "connected_account": null,
