@@ -4,6 +4,8 @@
   **The platform fee is NOT decided here** — §D12 lays out the options and a
   recommendation for the owner.
 - **Date:** 2026-10-16
+- **Amended by:** ADR 0021 — a fiat order may name a seller (D5), and the
+  platform fee on a FairCoin sale is decided: none (D6).
 - **Closes:** ADR 0001 open item #1 ("whether the FairCoin rail can settle a
   sub-merchant"). It can, and this is how.
 - **Leaves open:** ADR 0001 open item #2 (a React Native payer surface) — §D11.

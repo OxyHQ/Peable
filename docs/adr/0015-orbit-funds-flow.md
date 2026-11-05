@@ -4,6 +4,7 @@
 it for a third party's live payments is gated on the legal review named below.
 **Refines:** ADR 0009 ("the merchant-of-record question is now open").
 **Date:** 2026-11-03.
+**Amended by:** ADR 0021 D7 (a quoted FairCoin entry carries its fiat equivalent).
 
 ## Context
 
