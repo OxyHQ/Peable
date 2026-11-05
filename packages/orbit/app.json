@@ -1,6 +1,5 @@
 {
   "expo": {
-    "name": "Orbit by Peable",
     "slug": "peable-orbit",
     "version": "0.1.0",
     "orientation": "default",
@@ -9,7 +8,6 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "to.peable.orbit",
       "infoPlist": {
         "LSApplicationQueriesSchemes": ["oxycommons"]
       },
@@ -21,8 +19,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
-      },
-      "package": "to.peable.orbit"
+      }
     },
     "web": {
       "bundler": "metro",

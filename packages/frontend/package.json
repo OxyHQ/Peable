@@ -35,7 +35,7 @@
     "@oxy.so/bloom": "17.9.0",
     "@oxy.so/contracts": "6.9.0",
     "@oxy.so/core": "7.23.0",
-    "@oxy.so/services": "^14.3.8",
+    "@oxy.so/services": "^14.4.0",
     "@peable.to/pay": "workspace:^",
     "@peable.to/shared-types": "*",
     "@react-native-async-storage/async-storage": "^2.2.0",
