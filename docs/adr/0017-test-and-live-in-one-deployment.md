@@ -81,3 +81,22 @@ not run.
 - **Tax and billing.** One Stripe Tax provider per configured mode, chosen by the
   merchant's environment; a billing cohort uses the key of the mode its
   `deployment.livemode` names.
+
+## Production configuration (2026-11-05)
+
+- **Live only.** The production gateway carries `STRIPE_ENABLED=true`, the four
+  `STRIPE_*_LIVE` secrets (SSM `/oxy/peable/<NAME>`, each read under its own
+  name) and `STRIPE_ACCOUNT_ID_LIVE` (Oxy Platforms, Inc.'s account), declared in
+  oxy-infra `terraform-uswest2/app-peable.tf`. No test key is configured, so the
+  card rail answers 503 to every non-production credential.
+- **Provider endpoints.** Platform `https://api.peable.to/v1/webhooks/stripe`
+  (payment intents, charges, refunds, disputes, setup intents, transfers,
+  application fees) and connect `…/stripe/connect` (accounts, capabilities,
+  payouts, `balance.available`). Each mode's endpoint secret is the matching
+  `STRIPE_*WEBHOOK_SECRET_LIVE`. An event type added to a handler set in
+  `services/providers/eventProcessor.ts` must also be enabled on its endpoint,
+  or the provider never sends it.
+- **Tax.** Stripe Tax (live) reports its head office unset, and no merchant has
+  approved Peable Tax settings. Every Checkout Session with `automatic_tax`
+  is refused (`tax_settings_not_active`) until the merchant's owner approves
+  them in Orbit.
