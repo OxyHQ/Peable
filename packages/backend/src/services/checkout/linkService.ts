@@ -230,7 +230,11 @@ export async function createPaymentLink(
       currency,
       ...(rail === 'faircoin' && merchant.network ? { network: merchant.network } : {}),
     });
-    assertRailAvailable(decided.rail, merchant.environment);
+    // FairCoin is offered on every visit (ADR 0021): a fiat link needs a card
+    // rail only when the merchant has no FairCoin key to be paid with instead.
+    if (rail === 'faircoin' || merchant.network === null) {
+      assertRailAvailable(decided.rail, merchant.environment);
+    }
     network = decided.network;
   } catch (error) {
     if (error instanceof NetworkMismatchError || error instanceof RailMismatchError) {

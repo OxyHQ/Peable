@@ -83,6 +83,17 @@ function expiresAtOf(row: CheckoutSessionRow): number {
 }
 
 /** The merchant/SDK session (`GET /v1/checkout_sessions/:id`, every `checkout.session.*` event). */
+/**
+ * What the payer may choose (ADR 0021 D1): FairCoin on every order, beside the
+ * card rail on a fiat one. A `setup` session saves a card and pays nothing.
+ */
+export function sessionPaymentMethodTypes(
+  row: Pick<CheckoutSessionRow, 'mode' | 'rail'>,
+): CheckoutSession['payment_method_types'] {
+  if (row.mode === 'setup') return ['card'];
+  return row.rail === 'faircoin' ? ['faircoin'] : ['card', 'faircoin'];
+}
+
 export function toCheckoutSessionDTO(row: CheckoutSessionRow): CheckoutSession {
   return {
     id: row.publicId,
@@ -97,7 +108,7 @@ export function toCheckoutSessionDTO(row: CheckoutSessionRow): CheckoutSession {
     currency: row.currency,
     rail: row.rail,
     network: row.network,
-    payment_method_types: [row.rail],
+    payment_method_types: sessionPaymentMethodTypes(row),
     amount_subtotal: row.amountSubtotal,
     amount_total: row.amount,
     total_details: {
@@ -230,6 +241,8 @@ export interface PublicSessionView {
   readonly discount: CheckoutSessionPublic['discount'];
   readonly termsOfServiceUrl: string | null;
   readonly publishableKey: string | null;
+  /** Whether FairCoin can be chosen now (ADR 0021); `null` in `setup` mode. */
+  readonly faircoin: CheckoutSessionPublic['faircoin'];
 }
 
 /** What the hosted/embedded checkout loads — no metadata, no client reference, no internal ids. */
@@ -252,6 +265,7 @@ export function toCheckoutSessionPublicDTO(view: PublicSessionView): CheckoutSes
     currency: row.currency,
     rail: row.rail,
     network: row.network,
+    payment_method_types: sessionPaymentMethodTypes(row),
     line_items: view.lines.map(toCheckoutLineItemDTO),
     amount_subtotal: row.amountSubtotal,
     amount_total: row.amount,
@@ -281,6 +295,7 @@ export function toCheckoutSessionPublicDTO(view: PublicSessionView): CheckoutSes
     merchant: view.merchant,
     branding: view.branding,
     publishable_key: view.publishableKey,
+    faircoin: view.faircoin,
     expires_at: expiresAtOf(row),
   };
 }

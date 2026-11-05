@@ -744,6 +744,55 @@ export async function linkSessionObject(
 }
 
 /**
+ * The payer chose another way to pay (ADR 0021 D3): the open session's payment
+ * moves from `fromIntentId` to `toIntentId` — a compare-and-swap on the one it
+ * still links, so a session that moved meanwhile answers `null`.
+ */
+export async function replaceSessionPayment(
+  tx: DatabaseOrTransaction,
+  sessionId: string,
+  fromIntentId: string,
+  toIntentId: string,
+): Promise<CheckoutSessionRow | null> {
+  const [row] = await tx
+    .update(checkoutSessions)
+    .set({ paymentIntentId: toIntentId, updatedAt: now })
+    .where(
+      and(
+        eq(checkoutSessions.id, sessionId),
+        eq(checkoutSessions.status, 'open'),
+        eq(checkoutSessions.paymentIntentId, fromIntentId),
+      ),
+    )
+    .returning(SESSION_COLUMNS);
+  return row ? toSessionRow(row) : null;
+}
+
+/**
+ * An open session forgets a QUOTED FairCoin payment that ended without being
+ * paid (its quote lapsed, ADR 0021 D3): the order stays open for a fresh quote
+ * rather than expiring on the quote's clock. `null` when it no longer linked it.
+ */
+export async function unlinkSessionPayment(
+  tx: DatabaseOrTransaction,
+  sessionId: string,
+  intentId: string,
+): Promise<CheckoutSessionRow | null> {
+  const [row] = await tx
+    .update(checkoutSessions)
+    .set({ paymentIntentId: null, updatedAt: now })
+    .where(
+      and(
+        eq(checkoutSessions.id, sessionId),
+        eq(checkoutSessions.status, 'open'),
+        eq(checkoutSessions.paymentIntentId, intentId),
+      ),
+    )
+    .returning(SESSION_COLUMNS);
+  return row ? toSessionRow(row) : null;
+}
+
+/**
  * `open → complete`, the one writer of completion. `null` when the session was
  * not open (already complete, or expired) — the caller records nothing.
  */

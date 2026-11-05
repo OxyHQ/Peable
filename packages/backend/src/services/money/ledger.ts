@@ -390,7 +390,8 @@ export async function syncLedgerAfterPayment(
  * in the payee's own wallet; nothing here is ever payable.
  *
  * On-behalf payments (ADR 0012) are the SELLER's coins: recorded against the
- * seller's account.
+ * seller's account. A quoted payment (a fiat order, ADR 0021) carries its quote,
+ * so the books show the fiat equivalent it was priced at.
  */
 export async function recordFaircoinLedger(
   tx: DatabaseOrTransaction,
@@ -430,6 +431,9 @@ export async function recordFaircoinLedger(
     occurredAt: intent.updatedAt,
     description: null,
     exchangeRate: null,
+    // A fiat order paid in FairCoin: the fiat equivalent it was priced at
+    // (ADR 0021 D7), beside the FAIR figures — never a conversion.
+    faircoinQuote: intent.faircoinQuote ?? null,
     feeDetails: [],
     sourceType: 'payment_intent',
     sourceId: intent.publicId,

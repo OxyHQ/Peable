@@ -5,6 +5,7 @@
 import { createPeableCheckout, type PeableClientAction } from '@peable.to/sdk/checkout';
 import type {
   CheckoutSessionPublic,
+  ConfirmCheckoutSessionPublicParams,
   CreatePaymentLinkSessionParams,
   PaymentLinkSessionStart,
   PublicPaymentLink,
@@ -32,8 +33,9 @@ export function updateCheckoutSession(
 export function confirmCheckoutSession(
   id: string,
   clientSecret: string,
+  params: ConfirmCheckoutSessionPublicParams = {},
 ): Promise<CheckoutSessionPublic> {
-  return client.confirmCheckoutSession(id, clientSecret);
+  return client.confirmCheckoutSession(id, clientSecret, params);
 }
 
 export function getPaymentLink(id: string): Promise<PublicPaymentLink> {

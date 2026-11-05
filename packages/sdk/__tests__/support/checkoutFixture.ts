@@ -149,5 +149,7 @@ export const publicSessionFixture: CheckoutSessionPublic = {
     border_style: 'rounded',
   },
   publishable_key: 'pk_test_fixture',
+  payment_method_types: ['card', 'faircoin'],
+  faircoin: { available: true, unavailable_reason: null },
   expires_at: 1_790_000_000,
 };

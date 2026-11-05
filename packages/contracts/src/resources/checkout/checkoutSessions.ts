@@ -30,6 +30,7 @@ import {
   CHECKOUT_SUBMIT_TYPES,
   CHECKOUT_TAX_ID_TYPES,
   CHECKOUT_UI_MODES,
+  FAIRCOIN_UNAVAILABLE_REASONS,
 } from '../../vocabulary/checkout';
 import {
   adjustableIssues,
@@ -77,8 +78,19 @@ const sessionFields = {
     .describe("The language checkout renders in; `null` follows the payer's browser."),
   submit_type: z.enum(CHECKOUT_SUBMIT_TYPES),
   currency,
-  rail: railSchema,
-  network: network.nullable().describe('FairCoin rail only; `null` on a card session.'),
+  rail: railSchema.describe(
+    "The rail that settles the order's currency: `faircoin` for a FAIR order, `card` for a fiat one. FairCoin is offered on every order beside it (`payment_method_types`, ADR 0021).",
+  ),
+  network: network
+    .nullable()
+    .describe(
+      'The FairCoin network a FairCoin payment of this order uses — the merchant’s (or the seller’s); `null` when the payee has no FairCoin key yet (test mode) and in `setup` mode.',
+    ),
+  payment_method_types: z
+    .array(railSchema)
+    .describe(
+      "What the payer may choose: `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); `['card']` in `setup` mode.",
+    ),
   amount_subtotal: amount,
   amount_total: amount,
   total_details: checkoutTotalDetailsSchema,
@@ -97,7 +109,6 @@ export const checkoutSessionSchema = defineObject(
   z
     .object({
       ...sessionFields,
-      payment_method_types: z.array(railSchema),
       discounts: z.array(checkoutDiscountSchema),
       customer: expandable(
         'customer',
@@ -156,8 +167,8 @@ export const checkoutSessionSchema = defineObject(
         submit_type: 'auto',
         currency: 'EUR',
         rail: 'card',
-        network: null,
-        payment_method_types: ['card'],
+        network: 'mainnet',
+        payment_method_types: ['card', 'faircoin'],
         amount_subtotal: '1999',
         amount_total: '1999',
         total_details: { amount_discount: '0', amount_tax: '0', amount_shipping: '0' },
@@ -263,6 +274,21 @@ export const checkoutSessionPublicSchema = defineComponent(
         .nullable()
         .describe(
           "The card provider's PUBLIC key for this session's mode, so the payment fields can mount before the payment exists. `null` on FairCoin.",
+        ),
+      faircoin: z
+        .object({
+          available: z.boolean(),
+          unavailable_reason: z
+            .enum(FAIRCOIN_UNAVAILABLE_REASONS)
+            .nullable()
+            .describe(
+              'Why FairCoin cannot be paid with right now; it is still shown, never hidden.',
+            ),
+        })
+        .strict()
+        .nullable()
+        .describe(
+          'Whether the payer can choose FairCoin now (ADR 0021). On a fiat order the FAIR amount is quoted when the payer chooses it (`payment_intent.faircoin.quote`). `null` in `setup` mode.',
         ),
     })
     .strict(),
@@ -377,9 +403,11 @@ export const createCheckoutSessionParams = z
     payment_method_types: z
       .array(z.enum(['card', 'faircoin']))
       .min(1)
-      .max(1)
+      .max(2)
       .optional()
-      .describe("`['card']` or `['faircoin']` — the rail the line items' currency allows."),
+      .describe(
+        "Must include `faircoin`, which is always offered (ADR 0021; leaving it out is 400 `payment_method_locked`): `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. Omit it for exactly that. The fiat methods are chosen in the payment method configuration.",
+      ),
     locale: localeParam.optional(),
     ui_mode: z.enum(CHECKOUT_UI_MODES).optional(),
     success_url: redirectUrlParam
@@ -536,8 +564,20 @@ export const updateCheckoutSessionPublicParams = z
   .strict();
 export type UpdateCheckoutSessionPublicParams = z.input<typeof updateCheckoutSessionPublicParams>;
 
-/** `POST /v1/checkout_sessions/{id}/public/confirm` takes nothing: the order is the session's. */
-export const confirmCheckoutSessionPublicParams = z.object({}).strict();
+/**
+ * `POST /v1/checkout_sessions/{id}/public/confirm` — the order is the
+ * session's; the payer only chooses how to pay it (ADR 0021 D3).
+ */
+export const confirmCheckoutSessionPublicParams = z
+  .object({
+    payment_method_type: z
+      .enum(['card', 'faircoin'])
+      .optional()
+      .describe(
+        "How the payer pays: one of the session's `payment_method_types`. Default: the rail of the order's currency (`card` on a fiat order). `faircoin` on a fiat order quotes its total in FAIR for 10 minutes; confirming again with the other method replaces a payment that has not started moving money.",
+      ),
+  })
+  .strict();
 export type ConfirmCheckoutSessionPublicParams = z.input<typeof confirmCheckoutSessionPublicParams>;
 
 /** `POST /v1/test_helpers/checkout_sessions/{id}/expire` takes nothing. */

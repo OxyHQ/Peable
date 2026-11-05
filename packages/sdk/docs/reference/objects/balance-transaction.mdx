@@ -27,6 +27,7 @@ Object type: `balance_transaction`.
 | `created` | integer | When it happened at its source. |
 | `description` | string \| null |  |
 | `exchange_rate` | number \| null |  |
+| `faircoin_quote` | [FaircoinQuote](/reference/objects/faircoin-quote) \| null | A FairCoin payment of a fiat order: the quote it was priced at — its fiat equivalent (ADR 0021). Informational; no fiat moved. |
 | `fee_details` | array of [BalanceTransactionFeeDetail](/reference/objects/balance-transaction-fee-detail) |  |
 | `source` | string \| null | The Orbit object that caused it (`ch_…`, `re_…`, `po_…`, `fee_…`, `tr_…`, `pi_…`), or `null` when the provider's source is not an object Orbit holds. |
 | `payout` | string \| null | The payout (`po_…`) that paid this transaction out, once known. |
@@ -50,6 +51,7 @@ Object type: `balance_transaction`.
   "created": 1793750400,
   "description": "Order 6735",
   "exchange_rate": null,
+  "faircoin_quote": null,
   "fee_details": [
     {
       "amount": "88",

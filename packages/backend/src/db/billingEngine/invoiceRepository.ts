@@ -250,6 +250,18 @@ export async function findInvoiceByHostedToken(
   return row ? toRow(row) : null;
 }
 
+/** The invoice a PaymentIntent collects, unlocked. */
+export async function findInvoiceByPaymentIntent(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string,
+): Promise<InvoiceRow | null> {
+  const [row] = await db
+    .select(COLUMNS)
+    .from(invoices)
+    .where(eq(invoices.paymentIntentId, paymentIntentId));
+  return row ? toRow(row) : null;
+}
+
 /** The invoice a PaymentIntent collects, locked — the payment hook's read. */
 export async function lockInvoiceByPaymentIntent(
   tx: Transaction,

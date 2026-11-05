@@ -113,6 +113,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
     'applied in production; ledger read 2026-11-05 held 0000–0082 before 0083 was authored',
   '0082_provider_events_drop_retry_after':
     'applied in production; ledger read 2026-11-05 held 0000–0082 before 0083 was authored',
+  // The webhook endpoint `url_refused` validate half is applied in production:
+  // a read-only ledger probe on 2026-11-05 counted 85 rows (`0000`–`0084`) and
+  // the CHECK `convalidated` before ADR 0021's `0085`–`0088` were authored.
+  '0084_webhook_endpoint_url_refused_validate':
+    'applied in production; ledger read 2026-11-05 held 0000–0084 before 0085 was authored',
 };
 
 interface Migration {

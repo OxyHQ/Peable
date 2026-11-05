@@ -37,6 +37,7 @@ export function intentDTO(overrides: Partial<PaymentIntent> = {}): PaymentIntent
       txid: 'tx_1',
       confirmations: 2,
       required_confirmations: 1,
+      quote: null,
     },
     merchant_id: 'merch_1',
     connected_account: null,

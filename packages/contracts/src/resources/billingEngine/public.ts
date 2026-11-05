@@ -5,6 +5,7 @@ import { idParam } from '../../common/params';
 import { amount, currency, livemode, signedAmount, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import { PORTAL_PAYMENT_METHOD_UPDATE_STATUSES } from '../../vocabulary/billingPortal';
+import { FAIRCOIN_UNAVAILABLE_REASONS } from '../../vocabulary/checkout';
 import { INVOICE_STATUSES, PUBLIC_INVOICE_PAYMENT_METHOD_TYPES } from '../../vocabulary/invoices';
 import { COLLECTION_METHODS, SUBSCRIPTION_STATUSES } from '../../vocabulary/subscriptions';
 import { billingPortalBusinessProfileSchema, billingPortalFeaturesSchema } from './billingPortal';
@@ -63,8 +64,20 @@ export const publicInvoiceSchema = defineObject(
       payment_method_types: z
         .array(z.enum(PUBLIC_INVOICE_PAYMENT_METHOD_TYPES))
         .describe(
-          "Which rail pays it: a card through the provider's fields, FairCoin from the payer's wallet.",
+          "What the payer may choose: `['card', 'faircoin']` on a fiat invoice, `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); on a fiat invoice it is quoted when chosen.",
         ),
+      faircoin: z
+        .object({
+          available: z.boolean(),
+          unavailable_reason: z
+            .enum(FAIRCOIN_UNAVAILABLE_REASONS)
+            .nullable()
+            .describe(
+              'Why FairCoin cannot be paid with right now; it is still shown, never hidden.',
+            ),
+        })
+        .strict()
+        .describe('Whether the payer can choose FairCoin now (ADR 0021).'),
       invoice_pdf: z.string(),
     })
     .strict(),
@@ -237,7 +250,17 @@ declare module '../../common/objects' {
 
 // ---- Requests ------------------------------------------------------------------------
 
-export const payPublicInvoiceParams = emptyBody;
+/** How the payer pays the invoice (ADR 0021 D3). */
+export const payPublicInvoiceParams = z
+  .object({
+    payment_method_type: z
+      .enum(PUBLIC_INVOICE_PAYMENT_METHOD_TYPES)
+      .optional()
+      .describe(
+        "One of the invoice's `payment_method_types`. Default: the rail of its currency (`card` on a fiat invoice). `faircoin` on a fiat invoice quotes the amount due in FAIR for 10 minutes; paying again with the other method replaces a payment that has not started moving money.",
+      ),
+  })
+  .strict();
 
 /** A portal action on one of the customer's subscriptions. */
 export const portalSubscriptionParams = z.object({ subscription: idParam }).strict();
@@ -295,7 +318,7 @@ export const publicBillingRoutes = [
     tag: 'Hosted invoices',
     summary: 'Pay a hosted invoice',
     description:
-      'The PaymentIntent the payer completes — a card through the provider’s own fields, FairCoin from the payer’s wallet. The same invoice answers the same intent while it can still be paid.',
+      'The PaymentIntent the payer completes in the method they chose — a card through the provider’s own fields, or FairCoin from the payer’s wallet (quoted on a fiat invoice, ADR 0021). The same invoice answers the same intent while it can still be paid in that method.',
     auth: 'public',
     params: invoiceToken,
     body: payPublicInvoiceParams,

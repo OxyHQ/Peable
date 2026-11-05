@@ -330,6 +330,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('create', () => {
       start: async () => {
         throw new Error('not used here');
       },
+      repay: async () => {
+        throw new Error('not used here');
+      },
       complete: async () => {},
     });
     const accepted = await createSession({

@@ -94,6 +94,7 @@ export function balanceTransactionFixture(
     created: CREATED,
     description: null,
     exchange_rate: null,
+    faircoin_quote: null,
     fee_details: [{ amount: '105', currency: 'eur', type: 'processing_fee' }],
     source: 'ch_1',
     payout: null,

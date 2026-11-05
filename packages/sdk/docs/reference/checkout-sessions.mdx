@@ -93,7 +93,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `custom_fields[][numeric][maximum_length]` | integer | Between 1 and 255. |
 | `automatic_tax` | object |  |
 | `automatic_tax[enabled]` **required** | boolean |  |
-| `payment_method_types` | array of string | `['card']` or `['faircoin']` — the rail the line items' currency allows. At most 1 items. At least 1 item. |
+| `payment_method_types` | array of string | Must include `faircoin`, which is always offered (ADR 0021; leaving it out is 400 `payment_method_locked`): `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. Omit it for exactly that. The fiat methods are chosen in the payment method configuration. At most 2 items. At least 1 item. |
 | `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
 | `ui_mode` | string | One of `hosted`, `embedded`. |
 | `success_url` | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |
@@ -122,9 +122,10 @@ Returns [CheckoutSession](/reference/objects/checkout-session).
   "submit_type": "auto",
   "currency": "EUR",
   "rail": "card",
-  "network": null,
+  "network": "mainnet",
   "payment_method_types": [
-    "card"
+    "card",
+    "faircoin"
   ],
   "amount_subtotal": "1999",
   "amount_total": "1999",
@@ -233,9 +234,10 @@ A list (`object: "list"`) whose `data` holds [CheckoutSession](/reference/object
       "submit_type": "auto",
       "currency": "EUR",
       "rail": "card",
-      "network": null,
+      "network": "mainnet",
       "payment_method_types": [
-        "card"
+        "card",
+        "faircoin"
       ],
       "amount_subtotal": "1999",
       "amount_total": "1999",
@@ -327,9 +329,10 @@ Returns [CheckoutSession](/reference/objects/checkout-session).
   "submit_type": "auto",
   "currency": "EUR",
   "rail": "card",
-  "network": null,
+  "network": "mainnet",
   "payment_method_types": [
-    "card"
+    "card",
+    "faircoin"
   ],
   "amount_subtotal": "1999",
   "amount_total": "1999",
@@ -426,9 +429,10 @@ Returns [CheckoutSession](/reference/objects/checkout-session).
   "submit_type": "auto",
   "currency": "EUR",
   "rail": "card",
-  "network": null,
+  "network": "mainnet",
   "payment_method_types": [
-    "card"
+    "card",
+    "faircoin"
   ],
   "amount_subtotal": "1999",
   "amount_total": "1999",
@@ -524,9 +528,10 @@ Returns [CheckoutSession](/reference/objects/checkout-session).
   "submit_type": "auto",
   "currency": "EUR",
   "rail": "card",
-  "network": null,
+  "network": "mainnet",
   "payment_method_types": [
-    "card"
+    "card",
+    "faircoin"
   ],
   "amount_subtotal": "1999",
   "amount_total": "1999",
@@ -747,7 +752,9 @@ Locks the order and creates its payment (or setup): the answer carries `payment_
 
 **Request body** (`application/json`)
 
-
+| Field | Type | Description |
+| --- | --- | --- |
+| `payment_method_type` | string | How the payer pays: one of the session's `payment_method_types`. Default: the rail of the order's currency (`card` on a fiat order). `faircoin` on a fiat order quotes its total in FAIR for 10 minutes; confirming again with the other method replaces a payment that has not started moving money. |
 
 **Response `200`**
 

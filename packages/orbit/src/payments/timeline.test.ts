@@ -29,6 +29,7 @@ describe('paymentTimeline', () => {
           txid: 'abc',
           confirmations: 1,
           required_confirmations: 2,
+          quote: null,
         },
       }),
     );
@@ -120,6 +121,7 @@ describe('paymentTimeline', () => {
           txid: 'abc',
           confirmations: 1,
           required_confirmations: 2,
+          quote: null,
         },
       }),
     );

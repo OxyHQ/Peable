@@ -417,6 +417,25 @@ A Checkout Session is an ORDER (`services/checkout/`): priced lines
 priced with), at most one discount, Peable Tax and the fields to collect. Its
 rules, each of which is easy to undo:
 
+- **FairCoin is always offered, and nothing turns it off (ADR 0021).** A fiat
+  order's `payment_method_types` is `['card', 'faircoin']` (a FAIR one's
+  `['faircoin']`) and the session carries the payee's `network`; a session
+  `payment_method_types` without `faircoin` is 400 `payment_method_locked`.
+  The payer chooses at confirm (`payment_method_type`). FairCoin on a FIAT
+  order is a FairCoin PaymentIntent for the QUOTED FAIR amount
+  (`services/faircoin/quote.ts`, the ONE reader: Explorer FAIR/USD `wfair-base`
+  ≤ 120 s, ECB reference rates ≤ 5 days for other fiat, exact bigint ceil, a
+  10-minute quote stored on the intent as `faircoin_quote`), linked like any
+  payment and compared by `orderAmountOf` (the quote's fiat amount). A stale or
+  missing price fails CLOSED for FairCoin only (`price_unavailable`, 503
+  `faircoin_price_unavailable`) — never a cached or guessed rate. Choosing the
+  other method REPLACES an unpaid payment in one transaction that links the new
+  one first and then cancels the old (a card at the provider before it); a
+  quoted payment that lapses UNLINKS (the order stays open), never expires the
+  session. It is pricing, not exchange: Peable never holds, buys, sells or
+  converts FAIR. A fiat session naming a seller pays the seller's key in
+  FairCoin; its card payment is the merchant's own charge.
+
 - **The payment exists only once the payer confirms** (`POST
   /v1/checkout_sessions/:id/public/confirm`), created with the amount the
   session computed and the idempotency key `checkout:<cs>:<amount>`, so a
@@ -428,7 +447,9 @@ rules, each of which is easy to undo:
   `followSetupIntentForCheckout`) in the transition's transaction: succeeded →
   `complete`/`paid`; manual-capture authorized → `complete`/`unpaid`; FairCoin
   `processing` → `complete`/`unpaid`, then `async_payment_succeeded|failed`;
-  cancelled → open session `expired`. Hosted/embedded checkout redirect or post
+  cancelled → open session `expired` (a quoted FairCoin payment: unlinked).
+  The rail is the PAYMENT's, never the session's (a fiat order can be a
+  FairCoin sale). Hosted/embedded checkout redirect or post
   `complete` only after re-reading the session — never on a provider callback.
 - **Totals come from `services/checkout/totals.ts` over `pricing.ts`** — the
   discount is the order's, a percentage rounded per line, an amount off
@@ -487,6 +508,10 @@ rebuild a provider-billed subscription beside it. Invariants:
   customer's clock (a test clock's frozen time in test mode).
 - **FairCoin is never debited**: FAIR subscriptions and invoices are
   `send_invoice` (CHECKed) and paid by the payer on the hosted invoice page.
+  Every fiat invoice offers FairCoin too (`payerIntentForInvoice(invoice,
+  method)`, quoted; `amount_paid` is the quote's fiat amount), and a fiat
+  subscription whose FIRST invoice was paid in FairCoin becomes `send_invoice`
+  (`invoiceFaircoinSubscription`) — the payer pays each period.
 - **Entitlements are the access answer**: features attached to products,
   active while a granting product is on a `trialing`/`active`/`past_due`
   subscription — Mention Plus through Plus OR Oxy One is one entitlement.
@@ -743,7 +768,8 @@ could represent one — a design that adds one supersedes ADR 0015 first.
   compare first, record mismatches, then the ordinary ingestion; the next run
   resolves what it no longer sees.
 - **FairCoin is informational** — `recordFaircoinLedger` in `transitionIntent`'s
-  transaction, reversed by a reorg; never payable.
+  transaction, reversed by a reorg; never payable. A quoted payment's entry
+  carries its `faircoin_quote` (the fiat equivalent, ADR 0021 D7).
 - **`Peable-Account`** is accepted only on the routes in
   `PEABLE_ACCOUNT_ROUTES` (`routes/money.ts`) and refused elsewhere by
   `refuseMisplacedPeableAccount`.

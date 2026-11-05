@@ -12,7 +12,7 @@
  * | `succeeded`                               | `complete`, `paid` — or, already complete unpaid, `paid` + `async_payment_succeeded` |
  * | `requires_capture` (manual capture)       | `complete`, `unpaid`                               |
  * | FairCoin `processing` (broadcast, confirming) | `complete`, `unpaid`; the chain decides later  |
- * | `canceled`                                | open → `expired`; complete-unpaid FairCoin → `async_payment_failed` |
+ * | `canceled`                                | open → `expired` (a quoted FairCoin payment: open, unlinked); complete-unpaid FairCoin → `async_payment_failed` |
  *
  * On completion: the discount's redemption is counted (one guarded statement
  * each, `redeemCoupon` / `redeemPromotionCode`), a payment link's completed
@@ -34,6 +34,7 @@ import {
   lockSession,
   markSessionPaid,
   setSessionCustomer,
+  unlinkSessionPayment,
 } from '../../db/payments/checkoutSessionRepository';
 import type { PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
 import { countLinkCompletion } from '../../db/payments/paymentLinkRepository';
@@ -72,15 +73,22 @@ async function recordSessionEvent(
   });
 }
 
-/** Commit the session's Peable Tax calculation — it is a sale now. */
-async function commitSessionTax(tx: DatabaseOrTransaction, row: CheckoutSessionRow): Promise<void> {
+/**
+ * Commit the session's Peable Tax calculation — it is a sale now. `rail` is the
+ * PAYMENT's: a fiat order paid in FairCoin (ADR 0021) is a FairCoin sale.
+ */
+async function commitSessionTax(
+  tx: DatabaseOrTransaction,
+  row: CheckoutSessionRow,
+  rail: CheckoutSessionRow['rail'],
+): Promise<void> {
   if (row.taxCalculationId === null) return;
   await commitTaxTransaction(tx, {
     calculationPublicId: row.taxCalculationId,
     reference: row.publicId,
-    rail: row.rail,
+    rail,
     committedAt: new Date(),
-    ...(row.paymentIntentPublicId && row.rail === 'card'
+    ...(row.paymentIntentPublicId && rail === 'card'
       ? { providerPaymentRef: row.paymentIntentPublicId }
       : {}),
   });
@@ -90,6 +98,7 @@ async function commitSessionTax(tx: DatabaseOrTransaction, row: CheckoutSessionR
 async function finalizeCompletion(
   tx: DatabaseOrTransaction,
   completed: CheckoutSessionRow,
+  rail: CheckoutSessionRow['rail'] = completed.rail,
 ): Promise<CheckoutSessionRow> {
   let row = completed;
   if (row.couponId !== null && !(await redeemCoupon(tx, row.couponId))) {
@@ -125,7 +134,7 @@ async function finalizeCompletion(
   if (row.mode === 'subscription') {
     await subscriptionCheckoutFulfiller()?.complete(tx, row);
   }
-  if (row.paymentStatus === 'paid') await commitSessionTax(tx, row);
+  if (row.paymentStatus === 'paid') await commitSessionTax(tx, row, rail);
   await recordSessionEvent(tx, row, 'checkout.session.completed', { status: 'open' });
   await enqueueCheckoutConfirmation(tx, row);
   return row;
@@ -149,12 +158,12 @@ export async function followIntentForCheckout(
     case 'succeeded': {
       if (session.status === 'open') {
         const completed = await completeSession(tx, session.id, 'paid');
-        if (completed) await finalizeCompletion(tx, completed);
+        if (completed) await finalizeCompletion(tx, completed, intent.rail);
       } else if (session.status === 'complete' && session.paymentStatus === 'unpaid') {
         const paid = await markSessionPaid(tx, session.id);
         if (paid) {
-          await commitSessionTax(tx, paid);
-          if (paid.rail === 'faircoin') {
+          await commitSessionTax(tx, paid, intent.rail);
+          if (intent.rail === 'faircoin') {
             await recordSessionEvent(tx, paid, 'checkout.session.async_payment_succeeded', {
               payment_status: 'unpaid',
             });
@@ -166,7 +175,7 @@ export async function followIntentForCheckout(
     case 'requires_capture': {
       if (session.status !== 'open') return;
       const completed = await completeSession(tx, session.id, 'unpaid');
-      if (completed) await finalizeCompletion(tx, completed);
+      if (completed) await finalizeCompletion(tx, completed, intent.rail);
       return;
     }
     case 'processing': {
@@ -174,10 +183,16 @@ export async function followIntentForCheckout(
       // payment is broadcast — the payer has paid, the chain is confirming.
       if (intent.rail !== 'faircoin' || session.status !== 'open') return;
       const completed = await completeSession(tx, session.id, 'unpaid');
-      if (completed) await finalizeCompletion(tx, completed);
+      if (completed) await finalizeCompletion(tx, completed, intent.rail);
       return;
     }
     case 'canceled': {
+      // A QUOTED FairCoin payment ends on its quote's clock, not the order's
+      // (ADR 0021 D3): the open order forgets it and waits for a fresh quote.
+      if (session.status === 'open' && intent.faircoinQuote !== null) {
+        await unlinkSessionPayment(tx, session.id, intent.id);
+        return;
+      }
       if (session.status === 'open') {
         const expired = await expireSessionRow(tx, session.id);
         if (expired)
@@ -185,7 +200,7 @@ export async function followIntentForCheckout(
       } else if (
         session.status === 'complete' &&
         session.paymentStatus === 'unpaid' &&
-        session.rail === 'faircoin'
+        intent.rail === 'faircoin'
       ) {
         await recordSessionEvent(tx, session, 'checkout.session.async_payment_failed');
       }

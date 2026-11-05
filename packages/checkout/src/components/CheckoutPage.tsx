@@ -20,6 +20,11 @@ import {
   paramsFromDraft,
 } from './DetailsForm';
 import { OrderSummary } from './OrderSummary';
+import {
+  type PayerMethod,
+  PaymentMethodChoice,
+  useFaircoinUnavailableText,
+} from './PaymentMethodChoice';
 import { SetupPayment } from './SetupPayment';
 
 /** How often a locked, open session is re-read while the payer pays. */
@@ -81,6 +86,13 @@ export function CheckoutPage({
   const [busy, setBusy] = useState(false);
   const [setupAccepted, setSetupAccepted] = useState(false);
   const [now, setNow] = useState(Date.now);
+  // How the payer pays (ADR 0021): the order's card methods or FairCoin, which
+  // is always offered. Kept across a lapsed quote, so the payer re-quotes.
+  const methods = initialSession.payment_method_types as readonly PayerMethod[];
+  const [method, setMethod] = useState<PayerMethod>(
+    initialSession.payment_intent?.rail ?? (methods.includes('card') ? 'card' : 'faircoin'),
+  );
+  const faircoinUnavailable = useFaircoinUnavailableText(session.faircoin);
 
   useEffect(() => {
     setSession(initialSession);
@@ -209,7 +221,13 @@ export function CheckoutPage({
       if (Object.keys(params).length > 0) {
         setSession(await updateCheckoutSession(session.id, clientSecret, params));
       }
-      setSession(await confirmCheckoutSession(session.id, clientSecret));
+      setSession(
+        await confirmCheckoutSession(
+          session.id,
+          clientSecret,
+          methods.length > 1 ? { payment_method_type: method } : {},
+        ),
+      );
     } catch (error) {
       const refused = fieldErrorOf(error, t('confirmFailed'));
       // A custom field refused by its position in the request is shown at its key.
@@ -221,6 +239,29 @@ export function CheckoutPage({
     }
   }
 
+  /** The payer chose the other method after confirming: the gateway replaces the unpaid payment. */
+  async function switchMethod(next: PayerMethod) {
+    setBusy(true);
+    setFieldError(null);
+    try {
+      setSession(
+        await confirmCheckoutSession(session.id, clientSecret, { payment_method_type: next }),
+      );
+      setMethod(next);
+    } catch (error) {
+      setFieldError(fieldErrorOf(error, t('confirmFailed')));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const paying = session.payment_intent;
+  const otherMethod: PayerMethod | null =
+    paying && paying.status !== 'processing' && paying.status !== 'succeeded' && methods.length > 1
+      ? paying.rail === 'card'
+        ? 'faircoin'
+        : 'card'
+      : null;
   const label = submitLabel(session, t, locale);
   const appearance = providerAppearance(session.branding, appearanceOverride);
   const taxFailed = session.automatic_tax.enabled && session.automatic_tax.status === 'failed';
@@ -306,6 +347,15 @@ export function CheckoutPage({
                   errorFor={errorFor}
                   disabled={busy}
                 />
+                {session.mode !== 'setup' && (
+                  <PaymentMethodChoice
+                    methods={methods}
+                    value={method}
+                    faircoin={session.faircoin}
+                    disabled={busy}
+                    onChange={setMethod}
+                  />
+                )}
                 {session.automatic_tax.enabled &&
                   session.automatic_tax.status === 'requires_location_inputs' && (
                     <p className="checkout-hint">{t('taxNeedsAddress')}</p>
@@ -340,14 +390,36 @@ export function CheckoutPage({
                     }}
                   />
                 ) : session.payment_intent ? (
-                  <CheckoutView
-                    intent={session.payment_intent}
-                    providerAppearance={appearance}
-                    submitLabel={label}
-                    onIntentChange={() => {
-                      void refresh();
-                    }}
-                  />
+                  <>
+                    <CheckoutView
+                      key={session.payment_intent.id}
+                      intent={session.payment_intent}
+                      providerAppearance={appearance}
+                      submitLabel={label}
+                      onIntentChange={() => {
+                        void refresh();
+                      }}
+                    />
+                    {otherMethod && !(otherMethod === 'faircoin' && faircoinUnavailable) ? (
+                      <button
+                        type="button"
+                        className="checkout-link-button"
+                        disabled={busy}
+                        onClick={() => {
+                          void switchMethod(otherMethod);
+                        }}
+                      >
+                        {otherMethod === 'faircoin'
+                          ? t('payWithFaircoinInstead')
+                          : t('payByCardInstead')}
+                      </button>
+                    ) : null}
+                    {generalError && (
+                      <p className="checkout-error" role="alert">
+                        {generalError}
+                      </p>
+                    )}
+                  </>
                 ) : null}
               </section>
             )}

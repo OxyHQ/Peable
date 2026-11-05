@@ -126,6 +126,7 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
             txid: row.txid,
             confirmations: row.confirmations,
             required_confirmations: row.requiredConfirmations,
+            quote: row.faircoinQuote ?? null,
           }
         : null,
     merchant_id: row.merchantPublicId,

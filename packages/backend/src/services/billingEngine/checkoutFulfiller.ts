@@ -24,7 +24,10 @@
  *   paid the invoice and activated the subscription.
  */
 import { findPricesByRowIds } from '../../db/catalog/priceRepository';
-import { findInvoiceById } from '../../db/billingEngine/invoiceRepository';
+import {
+  findInvoiceById,
+  findInvoiceByPaymentIntent,
+} from '../../db/billingEngine/invoiceRepository';
 import { getDb } from '../../db/postgres';
 import { CheckoutError } from '../checkout/errors';
 import type { SubscriptionCheckoutFulfiller } from '../checkout/subscriptionFulfiller';
@@ -34,6 +37,17 @@ import { cancelSubscriptionNow, createSubscription } from './subscriptions';
 
 function refuse(message: string, param: string): never {
   throw new CheckoutError(400, 'subscription_line_invalid', message, param);
+}
+
+/** A billing engine refusal as checkout answers it. */
+function asCheckoutError(error: unknown): unknown {
+  if (!(error instanceof BillingEngineError)) return error;
+  return new CheckoutError(
+    error.status === 503 ? 503 : error.status === 409 ? 409 : 400,
+    error.code,
+    error.message,
+    error.param,
+  );
 }
 
 export const billingEngineCheckoutFulfiller: SubscriptionCheckoutFulfiller = {
@@ -76,7 +90,7 @@ export const billingEngineCheckoutFulfiller: SubscriptionCheckoutFulfiller = {
     }
   },
 
-  async start({ merchant, session, lines, customer }) {
+  async start({ merchant, session, lines, customer, paymentMethodType }) {
     const prices = await findPricesByRowIds(
       getDb(),
       lines.flatMap((line) => (line.priceId ? [line.priceId] : [])),
@@ -127,8 +141,18 @@ export const billingEngineCheckoutFulfiller: SubscriptionCheckoutFulfiller = {
         'this checkout changed; reload and try again',
       );
     }
-    const intent = await payerIntentForInvoice(invoice);
-    if (intent.amount !== session.amount || intent.currency !== session.currency) {
+    let intent: Awaited<ReturnType<typeof payerIntentForInvoice>>;
+    try {
+      intent = await payerIntentForInvoice(invoice, paymentMethodType);
+    } catch (error) {
+      // Nothing can be paid (FairCoin unpriceable, say): charge nothing.
+      await cancelSubscriptionNow(merchant, subscription.publicId, {});
+      throw asCheckoutError(error);
+    }
+    const quote = intent.faircoinQuote;
+    const orderAmount = quote?.amount ?? intent.amount;
+    const orderCurrency = quote?.currency ?? intent.currency;
+    if (orderAmount !== session.amount || orderCurrency !== session.currency) {
       // The order the payer saw is not what the invoice asks for (a price,
       // a balance or the tax moved): charge nothing.
       await cancelSubscriptionNow(merchant, subscription.publicId, {});
@@ -139,6 +163,26 @@ export const billingEngineCheckoutFulfiller: SubscriptionCheckoutFulfiller = {
       );
     }
     return { paymentIntentId: intent.id };
+  },
+
+  async repay({ session, paymentMethodType }) {
+    const db = getDb();
+    const invoice = session.paymentIntentId
+      ? await findInvoiceByPaymentIntent(db, session.paymentIntentId)
+      : null;
+    if (!invoice) {
+      throw new CheckoutError(
+        409,
+        'checkout_session_changed',
+        'this checkout changed; reload and try again',
+      );
+    }
+    try {
+      const intent = await payerIntentForInvoice(invoice, paymentMethodType);
+      return { paymentIntentId: intent.id };
+    } catch (error) {
+      throw asCheckoutError(error);
+    }
   },
 
   async complete() {

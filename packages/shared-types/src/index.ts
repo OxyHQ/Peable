@@ -26,6 +26,7 @@ export {
   type PaymentIntentCancellationReason,
   type PaymentIntentClientAction,
   type PaymentIntentCaptureMethod,
+  type FaircoinQuote,
   type PaymentIntentFaircoin,
   type PaymentIntentLastPaymentError,
   type PaymentIntentNextAction,
@@ -365,6 +366,8 @@ export {
   type PaymentLinkSessionStart,
 } from './paymentLink';
 export {
+  FAIRCOIN_UNAVAILABLE_REASONS,
+  type FaircoinUnavailableReason,
   CHECKOUT_SESSION_MODES,
   CHECKOUT_SESSION_STATUSES,
   CHECKOUT_PAYMENT_STATUSES,

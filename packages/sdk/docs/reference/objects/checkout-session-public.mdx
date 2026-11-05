@@ -23,8 +23,9 @@ Object type: `checkout_session`.
 | `locale` | string \| null | The language checkout renders in; `null` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
 | `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
 | `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
-| `rail` | string | One of `faircoin`, `card`. |
-| `network` | string \| null | FairCoin rail only; `null` on a card session. One of `mainnet`, `testnet`. |
+| `rail` | string | The rail that settles the order's currency: `faircoin` for a FAIR order, `card` for a fiat one. FairCoin is offered on every order beside it (`payment_method_types`, ADR 0021). |
+| `network` | string \| null | The FairCoin network a FairCoin payment of this order uses — the merchant’s (or the seller’s); `null` when the payee has no FairCoin key yet (test mode) and in `setup` mode. One of `mainnet`, `testnet`. |
+| `payment_method_types` | array of string | What the payer may choose: `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); `['card']` in `setup` mode. |
 | `amount_subtotal` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `amount_total` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
 | `total_details` | [CheckoutTotalDetails](/reference/objects/checkout-total-details) |  |
@@ -64,6 +65,9 @@ Object type: `checkout_session`.
 | `merchant` | [MerchantDisplay](/reference/objects/merchant-display) |  |
 | `branding` | [CheckoutBranding](/reference/objects/checkout-branding) |  |
 | `publishable_key` | string \| null | The card provider's PUBLIC key for this session's mode, so the payment fields can mount before the payment exists. `null` on FairCoin. |
+| `faircoin` | object \| null | Whether the payer can choose FairCoin now (ADR 0021). On a fiat order the FAIR amount is quoted when the payer chooses it (`payment_intent.faircoin.quote`). `null` in `setup` mode. |
+| `faircoin.available` | boolean |  |
+| `faircoin.unavailable_reason` | string \| null | Why FairCoin cannot be paid with right now; it is still shown, never hidden. One of `faircoin_account_missing`, `price_unavailable`. |
 
 ## Returned by
 

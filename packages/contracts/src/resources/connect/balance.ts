@@ -4,6 +4,7 @@ import { defineComponent, defineObject, type Expand } from '../../common/objects
 import { expandOnlyQuery, idParam, listQuery } from '../../common/params';
 import { livemode, signedAmount, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
+import { faircoinQuoteSchema } from '../payments/paymentIntents';
 import {
   BALANCE_TRANSACTION_FEE_TYPES,
   BALANCE_TRANSACTION_STATUSES,
@@ -123,6 +124,11 @@ export const balanceTransactionSchema = defineObject(
       created: unixSeconds.describe('When it happened at its source.'),
       description: z.string().nullable(),
       exchange_rate: z.number().nullable(),
+      faircoin_quote: faircoinQuoteSchema
+        .nullable()
+        .describe(
+          'A FairCoin payment of a fiat order: the quote it was priced at — its fiat equivalent (ADR 0021). Informational; no fiat moved.',
+        ),
       fee_details: z.array(balanceTransactionFeeDetailSchema),
       source: z
         .string()
@@ -159,6 +165,7 @@ export const balanceTransactionSchema = defineObject(
         created: 1793750400,
         description: 'Order 6735',
         exchange_rate: null,
+        faircoin_quote: null,
         fee_details: [{ amount: '88', currency: 'EUR', type: 'processing_fee' }],
         source: 'ch_0193b8f2f7c94b1d8e02',
         payout: null,

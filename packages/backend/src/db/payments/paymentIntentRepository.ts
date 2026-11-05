@@ -6,6 +6,7 @@ import {
   type CurrencyCode,
   type PaymentIntentCancellationReason,
   type PaymentIntentCaptureMethod,
+  type FaircoinQuote,
   type PaymentIntentLastPaymentError,
   type PaymentIntentRail,
   type PaymentIntentSetupFutureUsage,
@@ -111,6 +112,8 @@ export interface PaymentIntentRow {
   readonly receiptEmail: string | null;
   readonly statementDescriptorSuffix: string | null;
   readonly shipping: Shipping | null;
+  /** The fiat order this FairCoin payment pays, as quoted (ADR 0021); `null` otherwise. */
+  readonly faircoinQuote: FaircoinQuote | null;
   readonly lastPaymentError: PaymentIntentLastPaymentError | null;
   readonly cancellationReason: PaymentIntentCancellationReason | null;
   readonly canceledAt: Date | null;
@@ -199,6 +202,7 @@ const INTENT_COLUMNS = {
   receiptEmail: paymentIntents.receiptEmail,
   statementDescriptorSuffix: paymentIntents.statementDescriptorSuffix,
   shipping: paymentIntents.shipping,
+  faircoinQuote: paymentIntents.faircoinQuote,
   lastPaymentError: paymentIntents.lastPaymentError,
   cancellationReason: paymentIntents.cancellationReason,
   canceledAt: paymentIntents.canceledAt,
@@ -283,6 +287,7 @@ export interface InsertPaymentIntentParams {
   readonly receiptEmail?: string | null;
   readonly statementDescriptorSuffix?: string | null;
   readonly shipping?: Shipping | null;
+  readonly faircoinQuote?: FaircoinQuote | null;
   readonly clientSecret: string;
   readonly idempotencyKey: string;
   readonly metadata: Record<string, string>;
@@ -335,6 +340,7 @@ export async function insertPaymentIntent(
       receiptEmail: params.receiptEmail ?? null,
       statementDescriptorSuffix: params.statementDescriptorSuffix ?? null,
       shipping: params.shipping ?? null,
+      faircoinQuote: params.faircoinQuote ?? null,
       clientSecret: params.clientSecret,
       idempotencyKey: params.idempotencyKey,
       metadata: params.metadata,

@@ -34,6 +34,17 @@ export interface SubscriptionCheckoutFulfiller {
     readonly session: CheckoutSessionRow;
     readonly lines: readonly CheckoutLineItemRow[];
     readonly customer: CustomerRow;
+    /** How the payer pays the first invoice (ADR 0021 D3). */
+    readonly paymentMethodType: 'card' | 'faircoin';
+  }): Promise<{ readonly paymentIntentId: string }>;
+  /**
+   * The payer of a confirmed session chose the other method: replace the first
+   * invoice's unpaid payment (relinking the session in the same transaction).
+   */
+  repay(input: {
+    readonly merchant: MerchantRow;
+    readonly session: CheckoutSessionRow;
+    readonly paymentMethodType: 'card' | 'faircoin';
   }): Promise<{ readonly paymentIntentId: string }>;
   /** In the completion's transaction: activate what `start` created. */
   complete(tx: DatabaseOrTransaction, session: CheckoutSessionRow): Promise<void>;

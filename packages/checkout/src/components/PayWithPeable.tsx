@@ -4,6 +4,7 @@ import { buildPayDeepLink } from '../lib/deepLink';
 import { Qr } from './Qr';
 import { DisplayCurrency } from './DisplayCurrency';
 import { useI18n } from '../i18n';
+import { formatAmount } from '../lib/money';
 
 // Heuristic, not a hard guarantee — good enough to decide "can this device
 // plausibly handle a custom URL scheme via a same-tab navigation" for the
@@ -34,7 +35,8 @@ export function isChainIntent(intent: PaymentIntent): intent is ChainPaymentInte
 // deep link directly; desktop shows a QR of the same link for the payer to
 // scan with their phone.
 export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const quote = intent.faircoin.quote;
   const deepLink = buildPayDeepLink({
     intentId: intent.id,
     clientSecret: intent.client_secret,
@@ -46,7 +48,28 @@ export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
   return (
     <div className="pay-with-peable">
       <p className="pay-with-peable__amount">{formatFair(BigInt(intent.amount))} FAIR</p>
-      <DisplayCurrency amount={intent.amount} />
+      {quote ? (
+        // A fiat order paid in FairCoin (ADR 0021): the price it was quoted at,
+        // and until when — not a live estimate.
+        <div className="pay-with-peable__quote">
+          <p>
+            {t('faircoinQuote', {
+              amount: formatAmount(quote.amount, quote.currency, locale),
+              rate: quote.rate,
+              currency: quote.currency,
+            })}
+          </p>
+          <p className="pay-with-peable__hint">
+            {t('faircoinQuoteValid', {
+              time: new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(
+                new Date(quote.expires_at * 1000),
+              ),
+            })}
+          </p>
+        </div>
+      ) : (
+        <DisplayCurrency amount={intent.amount} />
+      )}
       {isMobileDevice() ? (
         <button
           type="button"

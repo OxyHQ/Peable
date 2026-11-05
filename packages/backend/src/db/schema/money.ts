@@ -12,6 +12,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import type { FaircoinQuote } from '@peable.to/shared-types';
 import { connectedAccounts } from './connectedAccounts';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
@@ -297,6 +298,13 @@ export const balanceTransactions = pgTable(
     description: text(),
     /** The provider's rate, as text so a decimal survives byte for byte. */
     exchangeRate: text(),
+    /**
+     * A FairCoin payment of a FIAT order: the quote it was priced at (ADR 0021
+     * D7) — the fiat equivalent the books show beside the FAIR figures. Copied
+     * from the payment, in the wire's shape. Pricing, not a conversion: no
+     * fiat moved.
+     */
+    faircoinQuote: jsonb().$type<FaircoinQuote>(),
     feeDetails: jsonb()
       .$type<{ amount: string; currency: string; type: string }[]>()
       .notNull()
@@ -391,6 +399,11 @@ export const balanceTransactions = pgTable(
     check(
       'balance_transactions_source_agrees_check',
       sql`(${table.sourceType} is null) = (${table.sourceId} is null)`,
+    ),
+    /** Only a FairCoin entry is priced by a quote. */
+    check(
+      'balance_transactions_faircoin_quote_check',
+      sql`${table.faircoinQuote} is null or (${table.status} = 'informational' and jsonb_typeof(${table.faircoinQuote}) = 'object')`,
     ),
   ],
 );

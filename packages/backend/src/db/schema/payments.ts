@@ -16,6 +16,7 @@ import type {
   CheckoutConsent,
   CheckoutCustomerDetails,
   CheckoutShippingDetails,
+  FaircoinQuote,
   PaymentIntentLastPaymentError,
   Shipping,
 } from '@peable.to/shared-types';
@@ -215,6 +216,12 @@ export const paymentIntents = pgTable(
     /** Card only. */
     statementDescriptorSuffix: text(),
     shipping: jsonb().$type<Shipping>(),
+    /**
+     * The fiat order a FairCoin payment pays, as quoted (ADR 0021 D4) — the
+     * wire's `faircoin.quote`, stored in that shape. `null` on a FAIR-priced
+     * payment and always on the card rail. Written once, at creation.
+     */
+    faircoinQuote: jsonb().$type<FaircoinQuote>(),
     /**
      * Why the last attempt failed, in Peable's words (ADR 0019). Written in the
      * same statement as the transition that the failure caused; cleared by any
@@ -469,6 +476,11 @@ export const paymentIntents = pgTable(
       'payment_intents_shipping_object_check',
       sql`${table.shipping} is null or jsonb_typeof(${table.shipping}) = 'object'`,
     ),
+    /** A quote prices a FairCoin payment; a card payment is charged in its own currency. */
+    check(
+      'payment_intents_faircoin_quote_check',
+      sql`${table.faircoinQuote} is null or (${table.rail} = 'faircoin' and jsonb_typeof(${table.faircoinQuote}) = 'object')`,
+    ),
     /**
      * Only a card payment carries types; a chain payment is FairCoin by its rail.
      *
@@ -644,9 +656,9 @@ export const checkoutSessions = pgTable(
     amountTax: text().notNull().default('0'),
     amountShipping: text().notNull().default('0'),
     currency: text().notNull().default('FAIR'),
-    /** Which rail the session's payment uses — decided by its currency. */
+    /** The rail that settles the order's currency; FairCoin is offered beside it (ADR 0021). */
     rail: text().notNull().default('faircoin'),
-    /** FairCoin rail only — NULL on a card session. See ADR 0001 D6. */
+    /** The payee's FairCoin network: a FAIR order's, and a fiat order's when the payee has a key. */
     network: text(),
     /** The seller the session's payment pays (ADR 0012). */
     connectedAccountId: text(),
@@ -750,9 +762,14 @@ export const checkoutSessions = pgTable(
       columns: [table.promotionCodeId, table.merchantId],
       foreignColumns: [promotionCodes.id, promotionCodes.merchantId],
     }).onDelete('restrict'),
+    /**
+     * A seller is paid by the order's FairCoin payment (ADR 0012 D5, ADR 0021
+     * D5): a session naming one carries the seller's network. On a fiat order
+     * the card choice is the merchant's own charge.
+     */
     check(
-      'checkout_sessions_connected_account_is_faircoin_check',
-      sql`${table.connectedAccountId} is null or ${table.rail} = 'faircoin'`,
+      'checkout_sessions_connected_account_has_network_check',
+      sql`${table.connectedAccountId} is null or ${table.network} is not null`,
     ),
     /**
      * The network-free half of that identity, and the reason it is not
@@ -777,9 +794,14 @@ export const checkoutSessions = pgTable(
       'checkout_sessions_network_check',
       sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`),
     ),
+    /**
+     * A FAIR order needs the payee's network. A fiat order carries it too when
+     * the payee has a FairCoin key, so the payer can choose FairCoin (ADR 0021
+     * D1); `null` there means FairCoin is unavailable (no key, test mode).
+     */
     check(
-      'checkout_sessions_rail_network_agrees_check',
-      sql`(${table.rail} = 'faircoin') = (${table.network} is not null)`,
+      'checkout_sessions_faircoin_rail_has_network_check',
+      sql`${table.rail} <> 'faircoin' or ${table.network} is not null`,
     ),
     // Same rule as `payment_intents_rail_currency_agrees_check`, for the same
     // reason: these rows carry the price a payer will be shown, and a rail that

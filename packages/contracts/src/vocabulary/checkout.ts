@@ -3,6 +3,20 @@
 // the wallet import them without the schemas (`@peable.to/contracts/vocabulary`,
 // re-exported by `@peable.to/shared-types`).
 
+/**
+ * Why FairCoin cannot be paid with on an order right now (ADR 0021). It is
+ * still offered — never hidden — and says why:
+ *
+ *  - `faircoin_account_missing` — the payee has no FairCoin receiving key yet
+ *    (test mode only: a live merchant without one cannot take payments at all);
+ *  - `price_unavailable` — no fresh FairCoin price exists to quote a fiat order.
+ */
+export const FAIRCOIN_UNAVAILABLE_REASONS = [
+  'faircoin_account_missing',
+  'price_unavailable',
+] as const;
+export type FaircoinUnavailableReason = (typeof FAIRCOIN_UNAVAILABLE_REASONS)[number];
+
 export const CHECKOUT_SESSION_MODES = ['payment', 'setup', 'subscription'] as const;
 export type CheckoutSessionMode = (typeof CHECKOUT_SESSION_MODES)[number];
 

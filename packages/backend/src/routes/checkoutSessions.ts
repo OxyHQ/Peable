@@ -45,6 +45,7 @@ import { refuseUnknownTaxCodes } from '../services/checkout/params';
 import {
   type CheckoutDeps,
   confirmSessionAsPayer,
+  faircoinAvailabilityOf,
   createCheckoutSession,
   expireSessionForMerchant,
   publishableKeyFor,
@@ -314,13 +315,14 @@ export async function publicSessionDTO(
   merchant: MerchantRow,
 ): Promise<CheckoutSessionPublic> {
   const db = getDb();
-  const [lines, display, brandingRow, intent, setup, discount] = await Promise.all([
+  const [lines, display, brandingRow, intent, setup, discount, faircoin] = await Promise.all([
     listLineItems(db, session.id),
     resolveMerchantDisplay(merchant),
     findBranding(db, merchant.id),
     session.paymentIntentId ? findIntentById(db, session.paymentIntentId) : null,
     setupClientSecretOf(session),
     discountView(session),
+    faircoinAvailabilityOf(session),
   ]);
   return toCheckoutSessionPublicDTO({
     session,
@@ -332,6 +334,7 @@ export async function publicSessionDTO(
     discount,
     termsOfServiceUrl: brandingRow.termsOfServiceUrl,
     publishableKey: publishableKeyFor(session),
+    faircoin,
   });
 }
 
@@ -402,7 +405,9 @@ export function createCheckoutSessionsRouter(deps: {
         return;
       }
       try {
-        const row = await confirmSessionAsPayer(found.session, found.merchant, checkoutDeps);
+        const row = await confirmSessionAsPayer(found.session, found.merchant, checkoutDeps, {
+          paymentMethodType: parsed.data.payment_method_type,
+        });
         answerPayer(res, await publicSessionDTO(row, found.merchant));
       } catch (error) {
         sendCheckoutError(res, error);

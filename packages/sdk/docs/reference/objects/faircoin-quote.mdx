@@ -1,0 +1,31 @@
+---
+title: "FaircoinQuote"
+description: "The FaircoinQuote shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# FaircoinQuote
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `currency` | string | The order's currency. One of `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `amount` | string | The order's total in base units of `currency` (tax included). Matches `^(0\|[1-9][0-9]*)$`. |
+| `rate` | string | `currency` per 1 FAIR, rounded to 10 significant digits. |
+| `price` | object |  |
+| `price.source` | `"wfair-base"` |  |
+| `price.usd_per_fair` | string | The FairCoin Explorer's FAIR/USD price. |
+| `price.observed_at` | integer | Unix seconds. |
+| `reference_rates` | object \| null | The European Central Bank's reference rates; `null` for a USD order. |
+| `reference_rates.source` | `"ecb"` |  |
+| `reference_rates.usd_per_eur` | string |  |
+| `reference_rates.currency_per_eur` | string | `1` for EUR. |
+| `reference_rates.observed_at` | integer | Unix seconds. |
+| `quoted_at` | integer | Unix seconds. |
+| `expires_at` | integer | The payment expires with its quote unless already broadcast. |
+
+## Used in
+
+[BalanceTransaction](/reference/objects/balance-transaction) · [PaymentIntentFaircoin](/reference/objects/payment-intent-faircoin)
