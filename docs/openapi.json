@@ -7286,7 +7286,7 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "description": "The seller's Oxy user id — the only person who may register the key."
+                        "description": "The seller's Oxy account id — the only one that may confirm, and whose Peable wallet receives."
                       }
                     },
                     "required": [
@@ -7719,7 +7719,7 @@
                       "card",
                       "faircoin"
                     ],
-                    "description": "Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER registers their watch-only key."
+                    "description": "Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER confirms, in their own Oxy session, that their FairCoin is paid into their Peable wallet."
                   }
                 },
                 "required": [
@@ -54974,11 +54974,11 @@
               "pending",
               "active"
             ],
-            "description": "`pending`: the seller has not registered a key yet (an on-behalf payment is refused, `account_not_ready`). `active`: payments derive addresses from their key."
+            "description": "`pending`: the seller has not confirmed yet (an on-behalf payment is refused, `account_not_ready`). `active`: the seller confirmed, and payments go to the Peable wallet of their Oxy account."
           },
           "oxy_user_id": {
             "type": "string",
-            "description": "The Oxy user who may register the key — and, once `active`, who did."
+            "description": "The seller’s Oxy account — the only one that may confirm, and the one whose Peable wallet receives."
           },
           "registered_at": {
             "anyOf": [
@@ -54992,7 +54992,7 @@
                 "type": "null"
               }
             ],
-            "description": "When the seller registered their key. `null` while `pending`."
+            "description": "When the seller confirmed. `null` while `pending`."
           }
         },
         "required": [
@@ -59303,7 +59303,7 @@
           },
           "address": {
             "type": "string",
-            "description": "Watch-only receive address derived per intent from the merchant's (or seller's) xpub."
+            "description": "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5)."
           },
           "txid": {
             "type": [

@@ -12,7 +12,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | Field | Type | Description |
 | --- | --- | --- |
 | `network` | string | One of `mainnet`, `testnet`. |
-| `address` | string | Watch-only receive address derived per intent from the merchant's (or seller's) xpub. |
+| `address` | string | Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5). |
 | `txid` | string \| null |  |
 | `confirmations` | integer |  |
 | `required_confirmations` | integer |  |

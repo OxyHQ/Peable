@@ -8,10 +8,10 @@ import { merchantDisplaySchema } from '../checkout/shared';
  * The SELLER-facing half of FairCoin connected accounts (ADR 0012 D3).
  *
  * A platform mints an onboarding link for a seller's account; the SELLER opens
- * it signed in with Oxy and registers the watch-only key their FairCoin will be
- * paid to. These routes are `auth: 'user'` — the seller's own session, never a
- * service token — because the key that decides who receives a seller's money is
- * accepted only from the seller. A platform cannot reach them at all, and the
+ * it signed in with Oxy and confirms that their FairCoin is paid into the
+ * Peable wallet of that account (ADR 0021 D5). These routes are `auth: 'user'`
+ * — the seller's own session, never a service token — because who receives a
+ * seller's money is the seller's consent. A platform cannot reach them at all, and the
  * link token alone is not enough without the session it names.
  */
 
