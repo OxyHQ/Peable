@@ -3,6 +3,7 @@
 **Status:** accepted; Phase 4b as built (below); the Stripe-Billing proxy retired (2026-11-04, below).
 **Supersedes:** ADR 0010 and ADR 0013's renewal hold.
 **Date:** 2026-11-03.
+**Amended by:** ADR 0021 — FairCoin is offered on every fiat invoice and subscription checkout (as built §3).
 
 ## Context
 

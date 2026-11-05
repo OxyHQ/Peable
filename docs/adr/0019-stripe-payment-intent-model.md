@@ -2,6 +2,7 @@
 
 **Status:** accepted.
 **Date:** 2026-11-03.
+**Amended by:** ADR 0021 D1 — an ORDER offers FairCoin beside its fiat methods; a PaymentIntent stays one rail.
 **Amends:** ADR 0001 D5 (the per-rail status sets), ADR 0012 D9 (what can expire).
 **Builds on:** ADR 0014 (one wire, changed at the root), ADR 0016 (Orbit owns its
 objects), ADR 0017 (test and live).
