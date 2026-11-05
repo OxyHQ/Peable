@@ -30,13 +30,7 @@ export async function createLocalStripeTestIntent(operationKey: string) {
       environment: 'development',
       displayName: 'Local test checkout',
     }));
-  if (
-    !merchant ||
-    merchant.livemode ||
-    merchant.network !== null ||
-    merchant.xpub !== null ||
-    (await countEndpointsForMerchant(db, merchant.id)) > 0
-  ) {
+  if (!merchant || merchant.livemode || (await countEndpointsForMerchant(db, merchant.id)) > 0) {
     throw new Error('Unexpected local test merchant');
   }
   const created = await createIntent({

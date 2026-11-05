@@ -35,7 +35,6 @@ import {
   dropSuiteDatabase,
   type SuiteDatabase,
 } from '../testDatabase';
-import { testXpubFor } from '../../__tests__/helpers/gatewayTestDatabase';
 
 let suite: SuiteDatabase | undefined;
 let merchant: MerchantRow;
@@ -107,8 +106,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
       publicId: `merch_${uuidv7()}`,
       oxyAppId: `app_${uuidv7()}`,
       environment: 'development',
-      network: 'testnet',
-      xpub: testXpubFor('testnet'),
     });
     if (!seeded) throw new Error('could not seed the merchant');
     merchant = seeded;

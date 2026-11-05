@@ -104,6 +104,13 @@ mock.module('../../oxy', () => ({
 }));
 
 const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX } = await import('../social');
+const { useIdentityKeyResolver } = await import('../../services/socialReceive');
+
+// This suite mocks the DID read itself: not the preloaded test keys.
+const previousResolver = useIdentityKeyResolver(null);
+afterAll(() => {
+  useIdentityKeyResolver(previousResolver);
+});
 
 const TEST_SENDER_ID = 'user_test_sender';
 // Honors an `X-Test-User-Id` override so individual tests can authenticate as

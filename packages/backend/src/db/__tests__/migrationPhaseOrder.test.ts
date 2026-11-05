@@ -118,6 +118,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // the CHECK `convalidated` before ADR 0021's `0085`–`0088` were authored.
   '0084_webhook_endpoint_url_refused_validate':
     'applied in production; ledger read 2026-11-05 held 0000–0084 before 0085 was authored',
+  // ADR 0021's validate half shipped with #237, whose deploy applied it: a
+  // read-only ledger probe on 2026-11-06 counted 89 rows (`0000`–`0088`) before
+  // the identity-wallet migrations `0089`–`0094` were authored.
+  '0088_faircoin_offered_validate':
+    'applied in production; ledger read 2026-11-06 held 0000–0088 before 0089 was authored',
 };
 
 interface Migration {

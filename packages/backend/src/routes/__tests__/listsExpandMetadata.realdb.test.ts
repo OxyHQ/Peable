@@ -32,7 +32,7 @@ import { upsertDispute } from '../../db/disputes/disputeRepository';
 import { insertTransfer } from '../../db/transfers/transferRepository';
 import {
   insertConnectedAccount,
-  registerFaircoinKey,
+  confirmFaircoinHalf,
   type ConnectedAccountRow,
 } from '../../db/accounts/connectedAccountRepository';
 import { paymentIntents } from '../../db/schema';
@@ -43,7 +43,6 @@ import {
   seedPrice,
   seedMerchant,
   seedSession,
-  testXpubFor,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { POSTGRES_TESTS_ENABLED } from '../../db/testDatabase';
@@ -63,7 +62,6 @@ let stranger: Merchant;
 let actingApp = '';
 let server: Server | undefined;
 let baseUrl = '';
-let sellerKeys = 10;
 
 async function call(
   method: string,
@@ -109,14 +107,9 @@ async function seedSeller(owner: Merchant): Promise<ConnectedAccountRow> {
       faircoin: { network: 'testnet', oxyUserId: `user_${unique}` },
     }),
   );
-  sellerKeys += 1;
-  // A seller key is unique across accounts, so each seller gets its own.
-  const registered = await registerFaircoinKey(
-    gatewayDb(),
-    row.id,
-    testXpubFor('testnet', sellerKeys),
-  );
-  if (!registered.ok) throw new Error(`could not register the seller key: ${registered.refusal}`);
+  // The seller confirms into their own Peable wallet (ADR 0021 D5).
+  const confirmed = await confirmFaircoinHalf(gatewayDb(), row.id);
+  if (!confirmed.ok) throw new Error(`could not confirm the seller: ${confirmed.refusal}`);
   return row;
 }
 

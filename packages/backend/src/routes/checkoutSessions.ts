@@ -322,7 +322,7 @@ export async function publicSessionDTO(
     session.paymentIntentId ? findIntentById(db, session.paymentIntentId) : null,
     setupClientSecretOf(session),
     discountView(session),
-    faircoinAvailabilityOf(session),
+    faircoinAvailabilityOf(session, merchant),
   ]);
   return toCheckoutSessionPublicDTO({
     session,

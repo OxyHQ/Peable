@@ -4,7 +4,6 @@ import {
   check,
   foreignKey,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
@@ -52,14 +51,13 @@ import {
  * `provider` + `provider_account_id` + `country` — the row that existed before
  * ADR 0012, read identically by every card path. The FAIRCOIN half is
  * `network` + `faircoin_oxy_user_id` (set when the platform opens it) and
- * `xpub` + `faircoin_registered_at` (set when the SELLER registers their key,
- * and never again). A FairCoin-only seller has no provider account at all and
+ * `faircoin_registered_at` (set when the SELLER confirms it from their own Oxy
+ * session; payments then go to that account's Peable wallet, ADR 0021 D5). A FairCoin-only seller has no provider account at all and
  * never reaches the acquirer; `connected_accounts_has_a_rail_check` refuses a
  * row with neither half.
  *
- * Like `merchants`, there is deliberately NO column for a private key, a
- * mnemonic or a seed: `services/watchOnly.ts` refuses an extended key that can
- * spend, at the one writer of `xpub`.
+ * Like `merchants`, there is deliberately NO column for a key of any kind: the
+ * seller's address derives from their account's PUBLIC identity key.
  */
 export const connectedAccounts = pgTable(
   'connected_accounts',
@@ -192,24 +190,12 @@ export const connectedAccounts = pgTable(
      */
     faircoinOxyUserId: text(),
     /**
-     * The seller's watch-only ACCOUNT xpub. NULL until the seller registers it,
-     * then immutable — the single writer is `registerFaircoinKey`, whose
-     * `WHERE xpub IS NULL` is the immutability. Re-keying would re-interpret
-     * every address already shown to a payer.
-     *
-     * Never on a DTO: an account xpub reveals every address of that account, so
-     * a platform holding it would learn the seller's whole history (D6).
+     * When the SELLER confirmed the FairCoin half from their own Oxy session
+     * (ADR 0012 D3) — the moment it became payable. Payments go to the Peable
+     * wallet of `faircoin_oxy_user_id`, derived from its identity key (ADR 0021
+     * D5); no key is stored here.
      */
-    xpub: text(),
-    /** When the seller registered `xpub` — the moment the FairCoin half became usable. */
     faircoinRegisteredAt: timestamptz(),
-    /**
-     * The NEXT unused BIP32 child index on this seller's key — the same counter
-     * `merchants.next_derivation_index` is, with the same rules: `integer`
-     * because the non-hardened index space is exactly `int4`, and claimed only
-     * by the one-statement reservation in `db/accounts/accountDerivationIndex.ts`.
-     */
-    nextDerivationIndex: integer().notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -269,7 +255,6 @@ export const connectedAccounts = pgTable(
      * marketplaces registering one pocket twice is exactly that collision.
      * Partial, because a pending half has no key yet.
      */
-    uniqueIndex('connected_accounts_xpub_key').on(table.xpub).where(sql`${table.xpub} is not null`),
     /** The sync sweep: least-recently-synced first, never-synced ahead of all. */
     index('connected_accounts_sync_idx').on(table.provider, table.lastSyncedAt),
     foreignKey({
@@ -306,18 +291,15 @@ export const connectedAccounts = pgTable(
       sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`),
     ),
     /**
-     * The FairCoin half's three moments, in the only orders they can happen:
+     * The FairCoin half's two moments, in the only order they can happen:
      * the platform opens it (`network` + the seller's Oxy id, together), and
-     * later the seller registers the key (`xpub` + the time, together). A key
-     * with no network cannot be interpreted — an extended key's version bytes
-     * are network-specific — and a registered key with no recorded seller
-     * would be a key nobody can say came from the seller.
+     * later the seller confirms it (the time). A confirmation needs the half
+     * it confirms.
      */
     check(
       'connected_accounts_faircoin_fields_agree_check',
       sql`(${table.network} is null) = (${table.faircoinOxyUserId} is null)
-          and (${table.xpub} is null) = (${table.faircoinRegisteredAt} is null)
-          and (${table.xpub} is null or ${table.network} is not null)`,
+          and (${table.faircoinRegisteredAt} is null or ${table.network} is not null)`,
     ),
     /** A seller with neither half is a row nothing can pay. */
     check(
@@ -328,7 +310,6 @@ export const connectedAccounts = pgTable(
       'connected_accounts_faircoin_oxy_user_id_check',
       sql`${table.faircoinOxyUserId} is null or length(${table.faircoinOxyUserId}) > 0`,
     ),
-    check('connected_accounts_next_derivation_index_check', sql`${table.nextDerivationIndex} >= 0`),
     check(
       'connected_accounts_transfers_capability_check',
       sql.raw(

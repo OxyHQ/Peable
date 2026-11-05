@@ -15,9 +15,16 @@ export function useFaircoinUnavailableText(
 ): string | null {
   const { t } = useI18n();
   if (!faircoin || faircoin.available) return null;
-  return faircoin.unavailable_reason === 'faircoin_account_missing'
-    ? t('faircoinUnavailableAccount')
-    : t('faircoinUnavailablePrice');
+  switch (faircoin.unavailable_reason) {
+    case 'faircoin_wallet_missing':
+      return t('faircoinUnavailableWallet');
+    case 'faircoin_network_closed':
+      return t('faircoinUnavailableNetwork');
+    case 'temporarily_unavailable':
+      return t('faircoinUnavailableTemporary');
+    default:
+      return t('faircoinUnavailablePrice');
+  }
 }
 
 /**

@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { getRequiredOxyUserId, OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import type { OxyApplicationAccess, OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { DashboardAction } from '@peable.to/contracts/vocabulary';
-import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { syncMerchantAuthority, type MerchantRow } from '../db/merchants/merchantRepository';
+import { getDb } from '../db/postgres';
 import { sendError, wrap } from '../lib/http';
 import { authorizeApplication, type OxyAccess } from '../services/oxyAccess';
 import type { FileActor } from '../services/oxyFiles/fileOwnership';
@@ -102,8 +103,13 @@ export function dashboardGate(access: OxyAccess): DashboardGate {
         access,
       );
       if (!granted) return;
-      const merchant = await resolveMerchantByApp(granted.applicationId, granted.environment, res);
-      if (!merchant) return;
+      const found = await resolveMerchantByApp(granted.applicationId, granted.environment, res);
+      if (!found) return;
+      // Oxy's answer names the application's owner — whose Peable wallet
+      // receives the merchant's FairCoin (ADR 0021 D5); the row mirrors it.
+      const merchant = await syncMerchantAuthority(getDb(), found, {
+        ownerAccountId: granted.application.ownerAccountId,
+      });
       await core(req, res, merchant, granted);
     });
 }

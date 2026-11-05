@@ -40,15 +40,19 @@ export type PaymentMethodConfigurationType = (typeof PAYMENT_METHOD_CONFIGURATIO
  *
  *  - `provider_unsupported` — the processing provider does not offer it;
  *  - `requires_card` — a wallet rides on card payments, and card is off;
- *  - `faircoin_account_missing` — the merchant has not registered its FairCoin
- *    (watch-only) receiving key yet, so no FairCoin address can be derived for
- *    its payers. In live mode such a merchant cannot take payments at all
- *    (ADR 0021 D5).
+ *  - `faircoin_wallet_missing` — the Peable wallet of the account that owns
+ *    the merchant isn't set up yet (no identity key), so FairCoin cannot be
+ *    received (ADR 0021 D5); the owner sets it up in Peable;
+ *  - `faircoin_network_closed` — the deployment does not open the merchant's
+ *    FairCoin network yet (ADR 0002's gate);
+ *  - `temporarily_unavailable` — the wallet could not be checked just now.
  */
 export const PAYMENT_METHOD_UNAVAILABLE_REASONS = [
   'provider_unsupported',
   'requires_card',
-  'faircoin_account_missing',
+  'faircoin_wallet_missing',
+  'faircoin_network_closed',
+  'temporarily_unavailable',
 ] as const;
 export type PaymentMethodUnavailableReason = (typeof PAYMENT_METHOD_UNAVAILABLE_REASONS)[number];
 

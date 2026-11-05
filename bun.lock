@@ -35,6 +35,8 @@
         "zod": "^4.6.7",
       },
       "devDependencies": {
+        "@noble/hashes": "1.8.0",
+        "@noble/secp256k1": "2.3.0",
         "@oxy.so/contracts": "6.9.0",
         "@peable.to/sdk": "*",
         "@types/bun": "latest",

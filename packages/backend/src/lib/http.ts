@@ -144,6 +144,11 @@ export interface ResolvedServiceApp {
   environment: OxyServiceEnvironment;
   /** Verified live by the shared middleware for an own workload (Oxy ADR 0049). */
   firstParty: boolean;
+  /**
+   * The account that owns the application, as Oxy signed it into the token —
+   * whose Peable wallet receives the merchant's FairCoin (ADR 0021 D5).
+   */
+  ownerAccountId: string | undefined;
 }
 
 /**
@@ -162,6 +167,7 @@ export function requireServiceApp(req: Request, res: Response): ResolvedServiceA
     appId: serviceApp.appId,
     environment: serviceApp.environment,
     firstParty: serviceApp.authority === 'first_party',
+    ownerAccountId: serviceApp.ownerAccountId || undefined,
   };
 }
 

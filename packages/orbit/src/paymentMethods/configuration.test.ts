@@ -48,8 +48,8 @@ describe('truthful wording', () => {
       'Not offered by the processing provider',
     );
     expect(unavailableReasonText('requires_card')).toBe('Needs card payments on');
-    expect(unavailableReasonText('faircoin_account_missing')).toBe(
-      'No FairCoin receiving key registered yet',
+    expect(unavailableReasonText('faircoin_wallet_missing')).toBe(
+      'The owner’s Peable wallet isn’t set up yet',
     );
   });
 
@@ -88,17 +88,17 @@ describe('truthful wording', () => {
     expect(methodNotes(entry())).toEqual([]);
   });
 
-  it('points a merchant without a FairCoin key at registering one', () => {
+  it('points the owner at setting up the Peable wallet that receives FairCoin', () => {
     const keyless = entry({
       locked: true,
       available: false,
       display_preference: { preference: 'on', value: 'on' },
-      unavailable_reason: 'faircoin_account_missing',
+      unavailable_reason: 'faircoin_wallet_missing',
     });
     expect(canToggle(keyless)).toBe(false);
     const notes = methodNotes(keyless);
     expect(notes).toHaveLength(2);
-    expect(notes[1]).toContain('FairCoin receiving key');
+    expect(notes[1]).toContain('Open Peable');
   });
 
   it('words a wallet status with the provider’s detail', () => {

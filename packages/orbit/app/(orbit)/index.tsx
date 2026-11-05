@@ -15,6 +15,7 @@ import { PaymentsTable } from '@/payments/PaymentsTable';
 import { usePaymentPages } from '@/payments/usePayments';
 import { OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { ErrorNotice, ListEmpty } from '@/ui/states';
+import { FaircoinWalletSetup } from '@/paymentMethods/FaircoinWalletSetup';
 
 /** The sample is the first page of the list at the gateway's maximum page size. */
 const SAMPLE_SIZE = 100;
@@ -115,6 +116,8 @@ function Overview({ scope }: { scope: DashboardScope }) {
 
   return (
     <View className="gap-6">
+      {/* FairCoin is always offered; until the owner's Peable wallet exists it cannot be received. */}
+      <FaircoinWalletSetup scope={scope} />
       {/* A failure of one figure is its own banner; the rest of Home still renders. */}
       {balance.isError ? (
         <ErrorNotice error={balance.error} onRetry={() => void balance.refetch()} />

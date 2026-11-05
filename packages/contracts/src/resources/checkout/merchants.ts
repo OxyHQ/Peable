@@ -25,16 +25,14 @@ export const merchantSchema = defineObject(
       livemode: livemode.describe('`true` for a `production` merchant (ADR 0017).'),
       oxy_app_id: z.string().describe('The Oxy application this merchant belongs to.'),
       environment: z.enum(MERCHANT_ENVIRONMENTS),
-      network: network
-        .nullable()
-        .describe(
-          'The FairCoin chain this merchant accepts on; `null` on a card-only merchant. Nullable together with `xpub`.',
-        ),
-      xpub: z
+      network: network.describe(
+        "The FairCoin network this merchant's payments use — its environment's: `mainnet` live, `testnet` otherwise (ADR 0021 D5).",
+      ),
+      owner_account: z
         .string()
         .nullable()
         .describe(
-          'The watch-only account key receive addresses derive from; `null` on a card-only merchant.',
+          'The Oxy account (a person or an organization) that owns the application — its Peable wallet receives the merchant’s FairCoin (ADR 0021 D5). No key is ever registered. `null` until Peable has seen the owner.',
         ),
       required_confirmations: z.number().int().positive(),
       display_name: z
@@ -65,7 +63,7 @@ export const merchantSchema = defineObject(
         oxy_app_id: 'app_0193b8f2c1a87d3e9f4b',
         environment: 'development',
         network: 'testnet',
-        xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+        owner_account: '0193b8f2-c1a8-7d3e-9f4a-5b6c7d8e9f01',
         required_confirmations: 6,
         display_name: 'Jenny’s Plants',
         created: 1793750400,
@@ -93,35 +91,23 @@ const avatarFileId = z.string().min(1).max(128);
 const merchantDescription = z.string().min(1).max(512);
 
 /**
- * `POST /v1/merchants`. The FairCoin half is OPTIONAL — both `network` and
- * `xpub`, or neither: a card-only merchant supplies no key for a chain it
- * never intends to use.
+ * `POST /v1/merchants`. No FairCoin key and no network: the network is the
+ * environment's, and FairCoin is received into the Peable wallet of the
+ * account that owns the application (ADR 0021 D5).
  */
 export const registerMerchantParams = z
   .object({
-    network: network.optional(),
-    xpub: z
-      .string()
-      .min(1)
-      .optional()
-      .describe('A watch-only account xpub. A private extended key is refused.'),
     required_confirmations: z.number().int().positive().optional(),
     display_name: displayName.optional(),
     avatar_file_id: avatarFileId.optional(),
     description: merchantDescription.optional(),
   })
-  .strict()
-  .refine((body) => (body.network === undefined) === (body.xpub === undefined), {
-    message:
-      'accepting FairCoin needs both a network and a watch-only xpub, or neither — ' +
-      'omit both to register a card-only merchant',
-  });
+  .strict();
 export type RegisterMerchantParams = z.input<typeof registerMerchantParams>;
 
 /**
- * `POST /v1/merchants/me`. `null` clears a field. The key, network and
- * environment never change: addresses already derived from the key, and the
- * test/live firewall, depend on them.
+ * `POST /v1/merchants/me`. `null` clears a field. The network and environment
+ * never change: the test/live firewall depends on them.
  */
 export const updateMerchantParams = z
   .object({

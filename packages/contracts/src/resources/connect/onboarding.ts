@@ -56,26 +56,12 @@ declare module '../../common/objects' {
 }
 
 /**
- * An extended public key is 111 characters in base58check; the bound is a
- * request-size guard with headroom, not a format check — the non-custody
- * firewall (`assertWatchOnly`) is.
+ * `POST /v1/connect/onboarding/{token}/faircoin` takes nothing: the seller
+ * confirms, in their own Oxy session, that their FairCoin is paid into the
+ * Peable wallet of that account (ADR 0021 D5). No key travels.
  */
-const XPUB_MAX_LENGTH = 200;
-
-/** `POST /v1/connect/onboarding/{token}/faircoin` — the seller's watch-only ACCOUNT xpub. */
-export const registerFaircoinKeyParams = z
-  .object({
-    xpub: z
-      .string()
-      .trim()
-      .min(1)
-      .max(XPUB_MAX_LENGTH)
-      .describe(
-        'A watch-only extended PUBLIC key. A private extended key is refused (`watch_only_violation`) and never stored.',
-      ),
-  })
-  .strict();
-export type RegisterFaircoinKeyParams = z.input<typeof registerFaircoinKeyParams>;
+export const confirmFaircoinOnboardingParams = z.object({}).strict();
+export type ConfirmFaircoinOnboardingParams = z.input<typeof confirmFaircoinOnboardingParams>;
 
 const tokenParam = { token: 'The onboarding link token (the last segment of its `url`).' } as const;
 
@@ -93,16 +79,16 @@ export const connectOnboardingRoutes = [
     response: connectOnboardingSchema,
   }),
   defineRoute({
-    operationId: 'registerConnectOnboardingFaircoinKey',
+    operationId: 'confirmConnectOnboardingFaircoin',
     method: 'post',
     path: '/v1/connect/onboarding/{token}/faircoin',
     tag: 'Connect onboarding',
-    summary: "Register the seller's FairCoin key",
+    summary: 'Confirm FairCoin payments into the seller’s Peable wallet',
     description:
-      'The ONLY way a key reaches a connected account: runs the non-custody firewall, consumes the link and tells the platform (`connected_account.updated`), in one transaction. The key is immutable once registered and never appears on any response.',
+      'The seller, signed in as the account the link names, confirms that FairCoin paid to them goes to that account’s Peable wallet (ADR 0021 D5) — the only way a FairCoin half becomes payable. No key is sent: addresses derive from the account’s public identity key. 409 `faircoin_wallet_missing` while the account has no Peable wallet yet. Consumes the link and tells the platform (`connected_account.updated`) in one transaction.',
     auth: 'user',
     params: tokenParam,
-    body: registerFaircoinKeyParams,
+    body: confirmFaircoinOnboardingParams,
     response: connectOnboardingCompleteSchema,
   }),
 ] as const;

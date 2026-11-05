@@ -27,15 +27,15 @@ import {
 import {
   faircoinStatusOf,
   findAccountForOnboarding,
-  registerFaircoinKey,
+  confirmFaircoinHalf,
   type ConnectedAccountRow,
-  type RegisterKeyRefusal,
 } from '../../db/accounts/connectedAccountRepository';
 import { findMerchantById } from '../../db/merchants/merchantRepository';
 import { getDb } from '../../db/postgres';
 import { toConnectedAccountDTO } from '../../lib/serializeSettlement';
 import { recordConnectedAccountEvent } from '../intentTransition';
 import { resolveMerchantDisplay } from '../merchantDisplay';
+import { resolveIdentityPublicKey } from '../socialReceive';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { AccountRailMissingError } from './connectedAccountService';
 import { toUnix } from '../../lib/time';
@@ -56,7 +56,7 @@ export type OnboardingRefusalCode =
   | 'link_expired'
   | 'wrong_seller'
   | 'already_registered'
-  | 'key_in_use'
+  | 'faircoin_wallet_missing'
   | 'no_faircoin_half';
 
 const STATUS_FOR: Record<OnboardingRefusalCode, number> = {
@@ -68,7 +68,7 @@ const STATUS_FOR: Record<OnboardingRefusalCode, number> = {
   // can switch account and try again.
   wrong_seller: 403,
   already_registered: 409,
-  key_in_use: 409,
+  faircoin_wallet_missing: 409,
   no_faircoin_half: 409,
 };
 
@@ -77,10 +77,10 @@ const MESSAGE_FOR: Record<OnboardingRefusalCode, string> = {
   link_expired: 'this onboarding link has expired or was already used; ask for a new one',
   wrong_seller:
     'this onboarding link is for a different Oxy account; sign in as the seller it names',
-  already_registered: 'this seller already registered a FairCoin key, and it cannot be changed',
-  key_in_use:
-    'this key already receives payments for another account; use a pocket dedicated to this platform',
-  no_faircoin_half: 'this account has no FairCoin half to register a key for',
+  already_registered: 'this seller already confirmed FairCoin payments',
+  faircoin_wallet_missing:
+    "your Peable wallet isn't set up yet: open Peable signed in with this account, then try again",
+  no_faircoin_half: 'this account has no FairCoin half to confirm',
 };
 
 export class OnboardingRefusedError extends Error {
@@ -201,50 +201,44 @@ export async function describeOnboarding(input: {
   };
 }
 
-/** A refusal from the key writer, in this service's vocabulary. */
-function refusalFor(refusal: RegisterKeyRefusal): OnboardingRefusedError {
-  return new OnboardingRefusedError(refusal);
-}
-
 /**
- * Register the seller's key — the SELLER's half, and the only way a key ever
- * reaches a connected account.
+ * The SELLER confirms FairCoin payments into their own Peable wallet (ADR 0012
+ * D3, ADR 0021 D5) — the only way a FairCoin half becomes payable. No key is
+ * sent: payments derive from the public identity key of the seller's Oxy
+ * account, so the account must have one (a Peable wallet).
  *
  * One transaction, in this order: lock the link; check it is live and this is
- * the seller it names; store the key through `registerFaircoinKey` (which runs
- * the non-custody firewall and enforces immutability and uniqueness); consume
- * the link; enqueue `connected_account.updated` to the PLATFORM (ADR 0001 D7 —
- * the readiness and the news commit together, or neither does).
+ * the seller it names; confirm the half (`confirmFaircoinHalf`); consume the
+ * link; enqueue `connected_account.updated` to the PLATFORM (ADR 0001 D7).
  *
  * @throws {OnboardingRefusedError} for every refusal; nothing is written.
- * @throws {WatchOnlyViolationError} for a key that can spend or is for the
- *   other network; nothing is written.
  */
-export async function registerFromOnboarding(input: {
+export async function confirmFromOnboarding(input: {
   readonly token: string;
   readonly oxyUserId: string;
-  readonly xpub: string;
   readonly now?: Date;
 }): Promise<{ account: ConnectedAccountRow; returnUrl: string }> {
   const now = input.now ?? new Date();
+  // Outside the transaction: a DID read is a network call. The key it finds is
+  // the seller's own; nothing of it is stored here (the cursor records it).
+  if ((await resolveIdentityPublicKey(input.oxyUserId)) === null) {
+    throw new OnboardingRefusedError('faircoin_wallet_missing');
+  }
   const result = await getDb().transaction(async (tx) => {
     const { link, account } = await resolveLink(tx, input.token, input.oxyUserId, now, {
       forUpdate: true,
     });
-    const registered = await registerFaircoinKey(tx, account.id, input.xpub.trim(), now);
-    // THROWN, not returned: a refusal can follow a statement the server
-    // rejected (the unique index), and only a rollback leaves the transaction
-    // in a state anything can trust.
-    if (!registered.ok) throw refusalFor(registered.refusal);
+    const confirmed = await confirmFaircoinHalf(tx, account.id, now);
+    if (!confirmed.ok) throw new OnboardingRefusedError(confirmed.refusal);
     if (!(await consumeAccountLink(tx, link.id, now))) {
       throw new OnboardingRefusedError('link_expired', link.refreshUrl);
     }
     await recordConnectedAccountEvent(
       tx,
-      registered.account.merchantId,
-      toConnectedAccountDTO(registered.account),
+      confirmed.account.merchantId,
+      toConnectedAccountDTO(confirmed.account),
     );
-    return { account: registered.account, returnUrl: link.returnUrl };
+    return { account: confirmed.account, returnUrl: link.returnUrl };
   });
   // After the commit, for the reason `announceIntentChange` gives: the outbox
   // row is durable either way, this only saves the poll interval.

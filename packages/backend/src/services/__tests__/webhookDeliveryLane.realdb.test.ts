@@ -23,7 +23,7 @@ import { SsrfRejection, type SafeFetchResult } from '@oxy.so/core/server';
 import { PEABLE_API_VERSION } from '@peable.to/contracts';
 import { verifyWebhook } from '@peable.to/shared-types';
 import { must } from '../../__tests__/helpers/must';
-import { syncMerchantFirstParty, type MerchantRow } from '../../db/merchants/merchantRepository';
+import { syncMerchantAuthority, type MerchantRow } from '../../db/merchants/merchantRepository';
 import { findDeliveryForMerchant } from '../../db/webhooks/webhookDeliveryRepository';
 import {
   findEndpointForMerchant,
@@ -115,7 +115,7 @@ async function merchantOf(options: { live: boolean; firstParty: boolean }): Prom
   const merchant = await seedMerchant(
     options.live ? { environment: 'production', network: 'mainnet' } : {},
   );
-  return syncMerchantFirstParty(gatewayDb(), merchant, options.firstParty);
+  return syncMerchantAuthority(gatewayDb(), merchant, { firstParty: options.firstParty });
 }
 
 async function deliverOnce(

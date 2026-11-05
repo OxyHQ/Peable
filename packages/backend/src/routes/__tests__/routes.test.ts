@@ -1,11 +1,13 @@
+import { deriveSocialReceiveAddress, getNetwork } from '@fairco.in/core';
+import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import { test, expect, beforeAll, afterAll, describe } from 'bun:test';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
 import type { RequestHandler } from 'express';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
-import { merchants, paymentIntents } from '../../db/schema';
+import { paymentIntents } from '../../db/schema';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 import {
   gatewayDb,
@@ -14,12 +16,15 @@ import {
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createPaymentIntentsRouter } from '../paymentIntents';
 
-// Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
-// (m/44'/1'/0' neutered) — public-key-only, cannot spend. Index 0 derives the
-// address asserted below.
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
-const FIRST_ADDRESS = 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3';
+// The merchant's owner, whose Peable wallet receives (ADR 0021 D5): its
+// deterministic test identity key (`setup/identityKeys.ts`) derives the tree
+// every FairCoin address here must come from.
+const OWNER = 'owner';
+const OWNER_TREE = new Set(
+  Array.from({ length: 64 }, (_, i) =>
+    deriveSocialReceiveAddress(testIdentityPublicKey(OWNER), i + 1, getNetwork('testnet')),
+  ),
+);
 const TEST_APP_ID = 'app_test';
 
 // Test stub for the merchant auth middleware: bypass real Oxy service tokens by
@@ -131,7 +136,7 @@ beforeAll(async () => {
     oxyAppId: TEST_APP_ID,
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
+    ownerAccountId: OWNER,
     webhookUrl: 'https://example.test/webhook',
     webhookSecret: 'whsec_test',
   });
@@ -158,18 +163,6 @@ afterAll(async () => {
 
 describe('POST /v1/payment_intents', () => {
   test('creates an intent (201) with a pi_ id, derived address and client_secret', async () => {
-    // Order-independence: this is the only test in the file that asserts an
-    // EXACT derived address (`FIRST_ADDRESS` = index 0 of `XPUB`). The
-    // merchant's `nextDerivationIndex` is shared, monotonically-incrementing
-    // state that every other intent-creating test also advances, so under
-    // `--randomize` a sibling test can reserve index 0 first. Pin the
-    // merchant back to a known derivation state right before reserving so
-    // this test's outcome never depends on what ran before it.
-    await gatewayDb()
-      .update(merchants)
-      .set({ nextDerivationIndex: 0 })
-      .where(and(eq(merchants.oxyAppId, TEST_APP_ID), eq(merchants.environment, 'development')));
-
     const { status, body } = await createIntent('idem-create-1');
 
     expect(status).toBe(201);
@@ -179,11 +172,13 @@ describe('POST /v1/payment_intents', () => {
     expect(body.amount).toBe('150000000');
     expect(body.currency).toBe('FAIR');
     expect(body.faircoin?.network).toBe('testnet');
-    expect(body.faircoin?.address).toBe(FIRST_ADDRESS);
+    // An address of the OWNER's Peable wallet, reserved on its cursor.
+    const address = String(body.faircoin?.address);
+    expect(OWNER_TREE.has(address)).toBe(true);
     expect(body.faircoin?.txid).toBeNull();
     // What the payer does next: send exactly the amount to the address.
     expect(body.next_action?.type).toBe('faircoin_payment');
-    expect(body.next_action?.faircoin_payment?.uri).toBe(`faircoin:${FIRST_ADDRESS}?amount=1.5`);
+    expect(body.next_action?.faircoin_payment?.uri).toBe(`faircoin:${address}?amount=1.5`);
     // The merchant's PUBLIC id, never its internal uuid.
     expect(body.merchant_id).toMatch(/^merch_/);
     expect(body.metadata.orderId).toBe('o1');

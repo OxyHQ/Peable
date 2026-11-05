@@ -14,16 +14,16 @@ import type { PgTable } from 'drizzle-orm/pg-core';
  *
  * The registry is the set of columns that must not reach ANY client — not the
  * set of columns that are sensitive. Two obvious candidates are excluded on
- * that distinction, and neither should be added without changing the
+ * that distinction, and it should not be added without changing the
  * serializer that publishes it:
  *
- *  - `merchants.xpub` is in `toMerchantDTO`. A merchant reads back their own
- *    watch-only key, by design.
  *  - `payment_intents.client_secret` is in `toPaymentIntentDTO`, which the
  *    PAYER loads — possession of it is what authorizes `submit_tx`.
  *
- * Listing either would not withhold it; it would make every read of the table
- * name it explicitly, which is the opposite of a guard.
+ * Listing it would not withhold it; it would make every read of the table name
+ * it explicitly, which is the opposite of a guard. There is no key column left
+ * to protect: FairCoin derives from the recipient's PUBLIC identity key (ADR
+ * 0021 D5).
  */
 export const PROTECTED_COLUMNS = {
   webhookEndpoints: [
@@ -32,21 +32,6 @@ export const PROTECTED_COLUMNS = {
     // by `findEndpointSigningTarget`, to sign.
     'secret',
     'previousSecret',
-  ],
-  merchants: [
-    // The counter `reserveNextAddress` claims from. Deliberately absent from
-    // `toMerchantDTO`; publishing it would hand out the merchant's address
-    // enumeration and therefore their revenue.
-    'nextDerivationIndex',
-  ],
-  connectedAccounts: [
-    // A seller's watch-only ACCOUNT xpub (ADR 0012 D6). Unlike a merchant's own
-    // key, it is never on any DTO: an account xpub reveals every address of the
-    // account, so the PLATFORM reading it would learn the seller's whole history
-    // in that pocket. Read only by the reservation and the registration writer.
-    'xpub',
-    // The seller's derivation counter, withheld for the merchant's reason.
-    'nextDerivationIndex',
   ],
 } as const;
 

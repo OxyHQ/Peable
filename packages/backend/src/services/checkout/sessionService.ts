@@ -94,10 +94,16 @@ import {
 } from '../intentTransition';
 import {
   FaircoinPriceUnavailableError,
-  faircoinAvailability,
   quoteFaircoin,
   toFaircoinQuoteDTO,
 } from '../faircoin/quote';
+import {
+  FaircoinNetworkClosedError,
+  FaircoinWalletMissingError,
+  faircoinAvailability,
+  faircoinRecipientOf,
+} from '../faircoin/recipient';
+import { findAccountById } from '../../db/accounts/connectedAccountRepository';
 import { applyEvent } from '../intentState';
 import type { TaxService } from '../tax/taxService';
 import { kickWebhookOutbox } from '../webhookOutbox';
@@ -316,9 +322,19 @@ async function planRail(
  */
 export async function faircoinAvailabilityOf(
   session: CheckoutSessionRow,
+  merchant: MerchantRow,
 ): Promise<{ available: boolean; unavailable_reason: FaircoinUnavailableReason | null } | null> {
   if (session.mode === 'setup') return null;
-  return faircoinAvailability(session);
+  // The seller's own wallet for an on-behalf order, the owner's otherwise.
+  const account =
+    session.connectedAccountId !== null
+      ? await findAccountById(getDb(), session.merchantId, session.connectedAccountId)
+      : null;
+  return faircoinAvailability({
+    network: session.network,
+    currency: session.currency,
+    recipientAccountId: faircoinRecipientOf(merchant, account),
+  });
 }
 
 /** Refuse a discount the order cannot take, naming the field that carried it. */
@@ -1401,14 +1417,7 @@ async function createSessionPayment(
         })
       ).intent;
     }
-    if (current.network === null) {
-      throw new CheckoutError(
-        409,
-        'faircoin_account_required',
-        'this merchant cannot be paid in FairCoin yet: it has not registered its FairCoin receiving key',
-        'payment_method_type',
-      );
-    }
+    if (current.network === null) throw new FaircoinWalletMissingError();
     const quote = await quoteFaircoin(current.currency, current.amount, { now });
     const quoteSeconds = Math.floor((quote.expiresAt.getTime() - now.getTime()) / 1000);
     return (
@@ -1438,6 +1447,14 @@ async function createSessionPayment(
     }
     if (error instanceof AccountNotReadyError) {
       throw invalid('account_not_ready', error.message, 'connected_account');
+    }
+    // The recipient's Peable wallet is not set up, or the network is not open
+    // (ADR 0021 D5): FairCoin cannot be paid now — the payer can use a card.
+    if (error instanceof FaircoinWalletMissingError) {
+      throw new CheckoutError(409, 'faircoin_wallet_missing', error.message, 'payment_method_type');
+    }
+    if (error instanceof FaircoinNetworkClosedError) {
+      throw new CheckoutError(409, 'faircoin_network_closed', error.message, 'payment_method_type');
     }
     return translateRail(error, 'payment_method_type');
   }

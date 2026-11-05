@@ -6,5 +6,5 @@ export type {
   AccountLink,
   ConnectOnboarding,
   ConnectOnboardingComplete,
-  RegisterFaircoinKeyParams,
+  ConfirmFaircoinOnboardingParams,
 } from '@peable.to/contracts';

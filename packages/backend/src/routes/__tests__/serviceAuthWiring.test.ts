@@ -10,10 +10,6 @@ import { seedMerchant, useGatewayDatabase } from '../../__tests__/helpers/gatewa
 import { createPaymentIntentsRouter } from '../paymentIntents';
 import { oxyGuard } from '../../lib/http';
 
-// Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic —
-// public-key-only, cannot spend. Same fixture used across the rest of the suite.
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
 const APP_ID = 'app_wiring';
 const KID = 'wiring-test-key';
 const live = new Map<string, Record<string, unknown>>();
@@ -103,7 +99,6 @@ beforeAll(async () => {
     oxyAppId: APP_ID,
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
   });
 
   const jwks = express().use(express.json());

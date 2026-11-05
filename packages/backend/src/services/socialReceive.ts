@@ -25,6 +25,22 @@ const SECP256K1_VERIFICATION_METHOD_TYPE = 'EcdsaSecp256k1VerificationKey2019';
  */
 const ACCOUNT_KEY_FRAGMENT = '#key-1';
 
+type IdentityKeyResolver = (oxyUserId: string) => Promise<Uint8Array | null>;
+let identityKeyResolver: IdentityKeyResolver | null = null;
+
+/**
+ * Replace how identity keys are resolved (tests: a deterministic key per
+ * account instead of a DID read); `null` restores the DID read. Answers the
+ * previous resolver so a suite can put it back.
+ */
+export function useIdentityKeyResolver(
+  next: IdentityKeyResolver | null,
+): IdentityKeyResolver | null {
+  const previous = identityKeyResolver;
+  identityKeyResolver = next;
+  return previous;
+}
+
 /**
  * Resolve `oxyUserId`'s identity secp256k1 public key from their DID document
  * (`GET /u/:userId/did.json`, public — no auth). Returns `null` for a
@@ -37,6 +53,7 @@ const ACCOUNT_KEY_FRAGMENT = '#key-1';
  * money at an address nobody can spend, chosen by list order.
  */
 export async function resolveIdentityPublicKey(oxyUserId: string): Promise<Uint8Array | null> {
+  if (identityKeyResolver) return identityKeyResolver(oxyUserId);
   const doc = await oxy.identity.resolveDid(oxyUserId);
   const secp256k1 = doc.verificationMethod.filter(
     (entry) => entry.type === SECP256K1_VERIFICATION_METHOD_TYPE && 'publicKeyHex' in entry,

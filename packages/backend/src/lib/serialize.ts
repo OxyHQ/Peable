@@ -225,7 +225,7 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
     oxy_app_id: row.oxyAppId,
     environment: row.environment,
     network: row.network,
-    xpub: row.xpub,
+    owner_account: row.ownerAccountId,
     required_confirmations: row.requiredConfirmations,
     display_name: row.displayName ?? undefined,
     avatar_file_id: row.avatarFileId ?? undefined,

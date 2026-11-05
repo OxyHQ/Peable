@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-110 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+109 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -61,7 +61,7 @@ The connected account cannot take this payment yet: its onboarding or a capabili
 
 ### `already_registered`
 
-The seller already registered a FairCoin key, and it cannot be changed.
+The seller already confirmed FairCoin payments into their Peable wallet.
 
 ### `amount_not_representable`
 
@@ -151,17 +151,21 @@ The dispute is in a status that no longer accepts evidence.
 
 The domain is already registered by another merchant.
 
-### `faircoin_account_required`
-
-This merchant has not registered its FairCoin receiving key, so it cannot be paid in FairCoin yet.
-
 ### `faircoin_cannot_debit`
 
 A FairCoin invoice cannot be charged automatically: the payer signs every payment.
 
+### `faircoin_network_closed`
+
+FairCoin payments on this network are not open on this deployment yet. The other payment methods still work.
+
 ### `faircoin_price_unavailable`
 
 No fresh FairCoin price exists right now, so this order cannot be quoted in FAIR. The other payment methods still work; try FairCoin again shortly.
+
+### `faircoin_wallet_missing`
+
+The Peable wallet that receives this payment (the merchant owner's, or the seller's) isn't set up yet, so it cannot be paid in FairCoin. The other payment methods still work.
 
 ### `feature_lookup_key_taken`
 
@@ -226,10 +230,6 @@ The invoice's payment needs the customer to act (a card challenge).
 ### `invoice_unexpected_state`
 
 The invoice is in a status that does not allow this operation.
-
-### `key_in_use`
-
-The key already receives payments for another account.
 
 ### `keyless_recipient`
 
@@ -466,10 +466,6 @@ Too many live streams are open for this merchant.
 ### `url_invalid`
 
 The URL is not an allowed https URL.
-
-### `watch_only_violation`
-
-The extended key carries a private key. Peable only ever accepts watch-only (public) keys.
 
 ### `webhook_endpoint_disabled`
 

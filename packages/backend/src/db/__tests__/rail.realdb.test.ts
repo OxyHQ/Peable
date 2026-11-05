@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
-import { paymentIntents, merchants } from '../schema';
+import { paymentIntents, socialReceiveCursors } from '../schema';
 import { insertPaymentIntent, findWatchableIntents } from '../payments/paymentIntentRepository';
 import { updateIntentState } from '../payments/paymentIntentRepository';
 import { findMerchantById } from '../merchants/merchantRepository';
@@ -26,14 +26,14 @@ import {
 
 useGatewayDatabase();
 
-/** The internal `next_derivation_index`, which no ordinary read may select. */
+/** How far the merchant OWNER's identity cursor has gone (0: never reserved). */
 async function readCounter(merchantId: string): Promise<number> {
+  const merchant = must(await findMerchantById(gatewayDb(), merchantId));
   const [row] = await gatewayDb()
-    .select({ next: merchants.nextDerivationIndex })
-    .from(merchants)
-    .where(eq(merchants.id, merchantId));
-  if (!row) throw new Error(`no merchant ${merchantId}`);
-  return row.next;
+    .select({ next: socialReceiveCursors.nextDerivationIndex })
+    .from(socialReceiveCursors)
+    .where(eq(socialReceiveCursors.oxyUserId, must(merchant.ownerAccountId)));
+  return row?.next ?? 0;
 }
 
 function cardIntentParams(merchantId: string, overrides: Record<string, unknown> = {}) {
@@ -197,7 +197,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
    * the only way to see it — a card intent's own row says nothing about the
    * merchant's.
    */
-  test('creating a card intent does not move the merchant derivation counter', async () => {
+  test('creating a card intent does not move the owner identity cursor', async () => {
     const merchant = await seedMerchant();
     const before = await readCounter(merchant.id);
 

@@ -1,8 +1,10 @@
 # `bun test` in this package: every route test answer is checked against its
 # contract (ADR 0014 D5, `src/__tests__/setup/contractCheck.ts`), and the
-# FairCoin quote reads fixed, fresh sources instead of the network (ADR 0021).
+# FairCoin quote reads fixed, fresh sources and identity keys are deterministic
+# per account, never a DID read (ADR 0021).
 [test]
 preload = [
   "./src/__tests__/setup/contractCheck.ts",
   "./src/__tests__/setup/faircoinQuoteSources.ts",
+  "./src/__tests__/setup/identityKeys.ts",
 ]

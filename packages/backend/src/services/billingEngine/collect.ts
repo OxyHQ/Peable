@@ -58,6 +58,7 @@ import { renderInvoice } from '../../lib/serializeBilling';
 import { cancelCardPaymentAtProvider } from '../cardCancellation';
 import { confirmCardIntent } from '../confirmIntent';
 import { createIntent } from '../createIntent';
+import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
 import { announceIntentChange, transitionIntent, transitionIntentIn } from '../intentTransition';
 import {
   type FaircoinQuote,
@@ -227,14 +228,6 @@ async function createInvoiceIntent(
   const db = getDb();
   const customer = await findCustomerById(db, invoice.customerId);
   if (!customer) throw new Error('invoice customer vanished');
-  if (rail === 'faircoin' && merchant.network === null) {
-    throw new BillingEngineError(
-      'faircoin_account_required',
-      'this merchant cannot be paid in FairCoin yet: it has not registered its FairCoin receiving key',
-      'payment_method_type',
-      409,
-    );
-  }
   let quoted: FaircoinQuote | null = null;
   if (rail === 'faircoin' && invoice.currency !== 'FAIR') {
     try {
@@ -252,33 +245,56 @@ async function createInvoiceIntent(
   const quoteSeconds = quoted
     ? Math.max(60, Math.floor((quoted.expiresAt.getTime() - Date.now()) / 1000))
     : null;
-  const created = await createIntent({
-    merchant,
-    amount: quoted ? quoted.faircoinAmount : amount.toString(),
-    rail,
-    currency: quoted ? 'FAIR' : invoice.currency,
-    ...(quoted ? { faircoinQuote: toFaircoinQuoteDTO(quoted) } : {}),
-    ...(rail === 'faircoin' && merchant.network ? { network: merchant.network } : {}),
-    customer: customer.publicId,
-    ...(rail === 'card' && method ? { paymentMethod: method.publicId } : {}),
-    // A subscription the payer starts on-session saves the card it is paid
-    // with, so its renewals can be charged off-session.
-    ...(rail === 'card' &&
-    !method &&
-    invoice.subscriptionId &&
-    invoice.collectionMethod === 'charge_automatically'
-      ? { setupFutureUsage: 'off_session' as const }
-      : {}),
-    description: `Invoice ${invoice.number ?? invoice.publicId}`,
-    metadata: { invoice: invoice.publicId },
-    // A fresh key per replacement: the previous intent was retired.
-    idempotencyKey: `invoice:${invoice.publicId}:${randomUUID()}`,
-    ...(quoteSeconds !== null
-      ? { expiresInSeconds: Math.min(quoteSeconds, FAIRCOIN_INVOICE_PAYMENT_SECONDS) }
-      : rail === 'faircoin'
-        ? { expiresInSeconds: FAIRCOIN_INVOICE_PAYMENT_SECONDS }
+  let created: Awaited<ReturnType<typeof createIntent>>;
+  try {
+    created = await createIntent({
+      merchant,
+      amount: quoted ? quoted.faircoinAmount : amount.toString(),
+      rail,
+      currency: quoted ? 'FAIR' : invoice.currency,
+      ...(quoted ? { faircoinQuote: toFaircoinQuoteDTO(quoted) } : {}),
+      ...(rail === 'faircoin' && merchant.network ? { network: merchant.network } : {}),
+      customer: customer.publicId,
+      ...(rail === 'card' && method ? { paymentMethod: method.publicId } : {}),
+      // A subscription the payer starts on-session saves the card it is paid
+      // with, so its renewals can be charged off-session.
+      ...(rail === 'card' &&
+      !method &&
+      invoice.subscriptionId &&
+      invoice.collectionMethod === 'charge_automatically'
+        ? { setupFutureUsage: 'off_session' as const }
         : {}),
-  });
+      description: `Invoice ${invoice.number ?? invoice.publicId}`,
+      metadata: { invoice: invoice.publicId },
+      // A fresh key per replacement: the previous intent was retired.
+      idempotencyKey: `invoice:${invoice.publicId}:${randomUUID()}`,
+      ...(quoteSeconds !== null
+        ? { expiresInSeconds: Math.min(quoteSeconds, FAIRCOIN_INVOICE_PAYMENT_SECONDS) }
+        : rail === 'faircoin'
+          ? { expiresInSeconds: FAIRCOIN_INVOICE_PAYMENT_SECONDS }
+          : {}),
+    });
+  } catch (error) {
+    // The owner's Peable wallet is not set up, or the network is not open (ADR
+    // 0021 D5): FairCoin cannot pay this invoice yet; a card still can.
+    if (error instanceof FaircoinWalletMissingError) {
+      throw new BillingEngineError(
+        'faircoin_wallet_missing',
+        error.message,
+        'payment_method_type',
+        409,
+      );
+    }
+    if (error instanceof FaircoinNetworkClosedError) {
+      throw new BillingEngineError(
+        'faircoin_network_closed',
+        error.message,
+        'payment_method_type',
+        409,
+      );
+    }
+    throw error;
+  }
   return created.intent;
 }
 

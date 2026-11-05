@@ -114,6 +114,8 @@ export interface PaymentIntentRow {
   readonly shipping: Shipping | null;
   /** The fiat order this FairCoin payment pays, as quoted (ADR 0021); `null` otherwise. */
   readonly faircoinQuote: FaircoinQuote | null;
+  /** The Oxy account whose Peable wallet this FairCoin payment pays (ADR 0021 D5). */
+  readonly faircoinRecipientAccountId: string | null;
   readonly lastPaymentError: PaymentIntentLastPaymentError | null;
   readonly cancellationReason: PaymentIntentCancellationReason | null;
   readonly canceledAt: Date | null;
@@ -203,6 +205,7 @@ const INTENT_COLUMNS = {
   statementDescriptorSuffix: paymentIntents.statementDescriptorSuffix,
   shipping: paymentIntents.shipping,
   faircoinQuote: paymentIntents.faircoinQuote,
+  faircoinRecipientAccountId: paymentIntents.faircoinRecipientAccountId,
   lastPaymentError: paymentIntents.lastPaymentError,
   cancellationReason: paymentIntents.cancellationReason,
   canceledAt: paymentIntents.canceledAt,
@@ -288,6 +291,7 @@ export interface InsertPaymentIntentParams {
   readonly statementDescriptorSuffix?: string | null;
   readonly shipping?: Shipping | null;
   readonly faircoinQuote?: FaircoinQuote | null;
+  readonly faircoinRecipientAccountId?: string | null;
   readonly clientSecret: string;
   readonly idempotencyKey: string;
   readonly metadata: Record<string, string>;
@@ -341,6 +345,7 @@ export async function insertPaymentIntent(
       statementDescriptorSuffix: params.statementDescriptorSuffix ?? null,
       shipping: params.shipping ?? null,
       faircoinQuote: params.faircoinQuote ?? null,
+      faircoinRecipientAccountId: params.faircoinRecipientAccountId ?? null,
       clientSecret: params.clientSecret,
       idempotencyKey: params.idempotencyKey,
       metadata: params.metadata,

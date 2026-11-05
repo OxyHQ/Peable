@@ -13,8 +13,8 @@ const merchant: Merchant = {
   livemode: false,
   oxy_app_id: 'app_1',
   environment: 'development',
-  network: null,
-  xpub: null,
+  network: 'testnet',
+  owner_account: 'acct_owner',
   required_confirmations: 6,
   display_name: 'Shop',
   created: 1,
@@ -22,32 +22,20 @@ const merchant: Merchant = {
 };
 
 describe('buildRegisterBody', () => {
-  it('sends nothing for an empty form: a card-only merchant with gateway defaults', () => {
+  it('sends nothing for an empty form: gateway defaults, and never a key (ADR 0021 D5)', () => {
     expect(buildRegisterBody(EMPTY_MERCHANT_FORM)).toEqual({ ok: true, body: {} });
   });
 
-  it('sends what was typed, trimmed, and the FairCoin half only as a pair', () => {
+  it('sends what was typed, trimmed', () => {
     expect(
       buildRegisterBody({
         ...EMPTY_MERCHANT_FORM,
         displayName: ' Shop ',
         requiredConfirmations: '3',
-        network: 'testnet',
-        xpub: ' tpubABC ',
       }),
     ).toEqual({
       ok: true,
-      body: {
-        display_name: 'Shop',
-        required_confirmations: 3,
-        network: 'testnet',
-        xpub: 'tpubABC',
-      },
-    });
-    // A network without a key is not half a registration: it is none.
-    expect(buildRegisterBody({ ...EMPTY_MERCHANT_FORM, network: 'mainnet' })).toEqual({
-      ok: true,
-      body: {},
+      body: { display_name: 'Shop', required_confirmations: 3 },
     });
   });
 

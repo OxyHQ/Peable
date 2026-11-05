@@ -14,11 +14,6 @@ import {
 import type { ExplorerTx } from '../explorer';
 import { SettlementWatcher, type WatcherDeps } from '../settlementWatcher';
 
-// Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
-// (m/44'/1'/0' neutered) — public-key-only, cannot spend. Its index-0 external
-// address is TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3.
-const XPUB =
-  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
 const ADDRESS = 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3';
 const AMOUNT = '100000000';
 const PAID_VALUE = 100_000_000n;
@@ -36,7 +31,6 @@ test('a paid intent stays processing as confirmations climb, then succeeds', asy
     oxyAppId: 'app_settle',
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
     requiredConfirmations: REQUIRED_CONFIRMATIONS,
   });
 
@@ -110,7 +104,6 @@ test('cancels an under-value payment as underpaid', async () => {
     oxyAppId: 'app_under',
     environment: 'development',
     network: 'testnet',
-    xpub: XPUB,
     requiredConfirmations: REQUIRED_CONFIRMATIONS,
   });
 

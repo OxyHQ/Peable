@@ -247,13 +247,15 @@ separate product. **No extensions** (an explicit empty list in
 
 ### The reservation is the highest-risk thing in this repo
 
-`db/merchants/derivationIndex.ts`, `db/accounts/accountDerivationIndex.ts` (a
-SELLER's key, ADR 0012) and `db/social/receiveCursor.ts` decide which address a
-payer sends money to. All three are ONE statement — `UPDATE … SET x = x + 1
-… RETURNING x - 1`, and for the social cursor an `INSERT … ON CONFLICT DO UPDATE`
-that folds the lazy create into the same statement. Never split either into a
-read followed by a write: two callers reading the same value derive the same
-address, and two payments land where the gateway can tell only one of them apart.
+`db/social/receiveCursor.ts` decides which address a payer sends money to — for
+EVERY FairCoin payment: an `@username` payment, a merchant's (its owner's
+wallet) and a seller's (ADR 0021 D5). It is ONE statement, `INSERT … ON
+CONFLICT DO UPDATE … RETURNING next - 1`, which folds the lazy create into the
+claim and records the identity key the address derives from. Never split it
+into a read followed by a write: two callers reading the same value derive the
+same address, and two payments land where the gateway can tell only one of them
+apart. One account has ONE cursor per network, so merchant, seller and social
+payments to it can never collide.
 
 The counters are `integer` on purpose (see `CONVENTIONS.md` §Counters) — a
 `bigint` column comes back from postgres.js as a STRING, and `"0" + 1` is `"01"`.
@@ -292,34 +294,37 @@ is bounded by the money supply and has ~14x of headroom.
 
 ## Non-custody is enforced in code, not by policy
 
-**A seller's key comes ONLY from the seller (ADR 0012).** FairCoin connected
-accounts hold a marketplace seller's own watch-only xpub, and the one writer,
-`registerFaircoinKey`, is reached only from `/v1/connect/onboarding/:token/*` —
-Oxy USER auth, the user the account names. Never add a service-authed path
-that sets it: the key decides who receives the money, and a platform-supplied
-key is indistinguishable from the platform's own. It is immutable once stored,
-unique across accounts, never on a DTO (a protected column), and the platform
-needs no xpub of its own — an on-behalf intent reads `payment_intents.
-merchant_network` (a generated column) for the merchant firewall and
-`(connected_account_id, merchant_id, network)` for the seller's.
+**FairCoin is received into a Peable wallet, never into a key someone pasted
+(ADR 0021 D5).** A merchant's FairCoin goes to the Peable wallet of the Oxy
+account that OWNS its application — a person or an organization
+(`merchants.owner_account_id`, mirrored from the verified credential's
+`ownerAccountId` and the dashboard's application read by
+`syncMerchantAuthority`) — and an on-behalf payment to the wallet of the
+seller's own account (`connected_accounts.faircoin_oxy_user_id`).
+`services/faircoin/recipient.ts` is the ONE place that decides who receives,
+on which network (the merchant's environment's) and the address
+(`reserveFaircoinAddress` → `reserveNextSocialAddress`: the account's DID
+`#key-1` PUBLIC key, `deriveSocialReceiveAddress`, the one-statement cursor).
+The payment stores the account it pays (`faircoin_recipient_account_id`).
+There is no column for a key of any kind, no xpub registration and no
+`assertWatchOnly` left to guard — the private key lives on the holder's
+devices only. Mainnet identity addresses are ADR 0002's deployment gate
+(`PEABLE_SOCIAL_PAY_NETWORK`).
 
-A merchant registers a **watch-only account xpub**. `services/derivation.ts`
-derives a per-intent receive address from it and **throws
-`watch-only violation` if the extended key carries a private key**
-(`services/watchOnly.ts`'s `assertWatchOnly`, ONE implementation for merchant
-and seller keys). That guard is
-the legal firewall: if a merchant ever hands over an `xprv`, the gateway refuses
-it rather than silently gaining the ability to spend their funds. Never relax it,
-and never add a code path that accepts a private extended key.
+**A seller still CONFIRMS, in their own Oxy session.** `POST
+/v1/connect/onboarding/:token/faircoin` (Oxy USER auth, the user the account
+names) is the one writer of `faircoin_registered_at` (`confirmFaircoinHalf`)
+and takes no body; it is refused 409 `faircoin_wallet_missing` while that
+account has no identity key. Never add a service-authed path that confirms a
+seller or names another receiving account: who receives the money is the
+seller's consent, and a platform-supplied recipient is indistinguishable from
+the platform's own.
 
-`services/reserveAddress.ts` claims the next derivation index through
-`db/merchants/derivationIndex.ts`, whose `UPDATE … SET x = x + 1 … RETURNING
-x - 1` takes the row lock and returns the **pre**-increment value — exactly the
-index that call owns, so concurrent callers each get a distinct index with no
-read-modify-write race. The `- 1` is load-bearing: dropping it hands out an
-index one higher than the one recorded, and the address a payer is shown is not
-the address the next reservation avoids. The same statement returns the xpub, so
-the key the address derives from is the one the reservation was taken against.
+**A recipient without a wallet is never refused an order and never silently
+card-only.** FairCoin stays offered with `unavailable_reason:
+'faircoin_wallet_missing'` (or `faircoin_network_closed`), confirming FairCoin
+is a 409 with that code, and Orbit shows the owners a setup task (open Peable
+as the owning account, or acting as the organization, and create its wallet).
 
 ## The wire (ADR 0014)
 
@@ -653,7 +658,7 @@ Merchant/file ownership and reference visibility checks still apply. See
 [`docs/first-party-authority.md`](docs/first-party-authority.md).
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
-`src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
+`src/models/`: `merchants/` (`merchantRepository`),
 `payments/` (`paymentIntentRepository`, `chargeRepository`,
 `paymentLinkRepository`, `checkoutSessionRepository`), `customers/`
 (`customerRepository`, `paymentMethodRepository`, `setupIntentRepository`),
@@ -662,7 +667,7 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `events/` (`eventRepository`), `webhooks/` (`webhookEndpointRepository`,
 `webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
-(`connectedAccountRepository`, `accountDerivationIndex`,
+(`connectedAccountRepository`,
 `accountLinkRepository`), `transfers/` (`transferRepository`,
 `transferReversalRepository`), `refunds/` (`refundRepository`), `disputes/`
 (`disputeRepository`), `files/` (`fileRepository`), `paymentMethods/`
@@ -1027,7 +1032,7 @@ branch. Peable's fork deleted FAIRWallet's create/restore SCREENS (`4287418`),
 not the capability.
 
 Everything else a wallet shows needs no private key: balances and history are
-public chain data, the receive address derives from a public xpub, and
+public chain data, the receive address derives from a public identity key, and
 `GET /v1/social/me/payments` answers by identity rather than by derived
 addresses, which is the only payment view a keyless surface can ask for. So the
 probe result is `"no-keystore"` and the route is `"read-only"`.

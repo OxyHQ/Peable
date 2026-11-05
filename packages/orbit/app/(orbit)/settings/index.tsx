@@ -4,11 +4,6 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Merchant } from '@peable.to/shared-types';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-  SegmentedControlItemText,
-} from '@oxy.so/bloom/segmented-control';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
@@ -56,13 +51,11 @@ function MerchantFields({
   form,
   setForm,
   busy,
-  registering,
   invalidConfirmations,
 }: {
   form: MerchantForm;
   setForm: (update: (prior: MerchantForm) => MerchantForm) => void;
   busy: boolean;
-  registering: boolean;
   invalidConfirmations: boolean;
 }) {
   const set = (field: keyof MerchantForm) => (value: string) =>
@@ -88,44 +81,11 @@ function MerchantFields({
           disabled={busy}
         />
       </View>
-      <View className="gap-4">
+      <View className="gap-2">
         <Text variant="body-semibold">{t('settings.faircoin')}</Text>
-        {registering ? (
-          <>
-            <View className="gap-1.5">
-              <Text variant="caption-1-medium" className="text-muted-foreground">
-                {t('settings.network')}
-              </Text>
-              <SegmentedControl<MerchantForm['network']>
-                label={t('settings.network')}
-                type="radio"
-                size="sm"
-                value={form.network}
-                disabled={busy}
-                onValueChange={(network) => setForm((prior) => ({ ...prior, network }))}
-              >
-                <SegmentedControlItem value="none">
-                  <SegmentedControlItemText>{t('settings.cardOnly')}</SegmentedControlItemText>
-                </SegmentedControlItem>
-                <SegmentedControlItem value="testnet">
-                  <SegmentedControlItemText>testnet</SegmentedControlItemText>
-                </SegmentedControlItem>
-                <SegmentedControlItem value="mainnet">
-                  <SegmentedControlItemText>mainnet</SegmentedControlItemText>
-                </SegmentedControlItem>
-              </SegmentedControl>
-            </View>
-            {form.network !== 'none' ? (
-              <FormField
-                label={t('settings.xpub')}
-                value={form.xpub}
-                onChange={set('xpub')}
-                hint={t('settings.xpubHelp')}
-                disabled={busy}
-              />
-            ) : null}
-          </>
-        ) : null}
+        <Text variant="caption-1-medium" className="text-muted-foreground">
+          {t('settings.faircoinWallet')}
+        </Text>
         <FormField
           label={t('settings.confirmations')}
           value={form.requiredConfirmations}
@@ -203,8 +163,12 @@ function MerchantSettings({
         >
           <Field label={t('settings.merchantId')} value={merchant.id} mono />
           <Field label={t('settings.environment')} value={merchant.environment} />
-          <Field label={t('settings.network')} value={merchant.network ?? t('settings.cardOnly')} />
-          {merchant.xpub ? <Field label={t('settings.xpub')} value={merchant.xpub} mono /> : null}
+          <Field label={t('settings.network')} value={merchant.network} />
+          <Field
+            label={t('settings.faircoinRecipient')}
+            value={merchant.owner_account ?? t('settings.faircoinRecipientUnknown')}
+            mono={merchant.owner_account !== null}
+          />
           <Field label={t('settings.created')} value={formatInstant(merchant.created)} />
         </Section>
       ) : null}
@@ -217,7 +181,6 @@ function MerchantSettings({
           form={form}
           setForm={setForm}
           busy={save.isPending || !allowed}
-          registering={!merchant}
           invalidConfirmations={invalidConfirmations}
         />
         <View className="flex-row justify-end pt-2">

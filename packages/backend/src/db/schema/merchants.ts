@@ -18,10 +18,9 @@ import { MERCHANT_AVATAR_WITHHELD_REASONS, NETWORK_TYPES, SERVICE_ENVIRONMENTS }
  * A merchant of the Peable Gateway.
  *
  * The non-custody firewall is a property of what this table CAN hold: there is
- * an `xpub` column and there is deliberately no column for a private key, a
- * mnemonic or a seed. `services/derivation.ts` refuses an extended key that
- * carries a private key, so a merchant handing over an `xprv` is rejected
- * rather than silently granting the gateway the ability to spend their funds.
+ * no column for a key of any kind. FairCoin is paid into the Peable wallet of
+ * the account that owns the merchant, derived from that account's PUBLIC
+ * identity key at payment time (ADR 0021 D5, ADR 0002).
  */
 /**
  * The File columns the logo reference points at, behind an explicit return
@@ -43,34 +42,22 @@ export const merchants = pgTable(
     /** Test/live isolation: the environment of the credential that registered this merchant. */
     environment: text().notNull(),
     /**
-     * The FairCoin chain this merchant accepts on — NULL for a card-only one.
-     *
-     * Nullable together with `xpub`, and `merchants_chain_fields_agree_check`
-     * says so: they are two halves of one capability. Registration used to
-     * require both unconditionally, so a merchant who only wanted to take cards
-     * had to supply a watch-only extended key for a chain they had no intention
-     * of using — and whatever they supplied would have been either a real key
-     * they now had to custody or a fixture that silently made their FairCoin
-     * receive addresses undeliverable.
+     * The FairCoin network this merchant's payments use — its environment's
+     * (`mainnet` live, `testnet` otherwise; 0092 backfilled, and a row that had
+     * chosen one keeps it). Every order offers FairCoin (ADR 0021), paid into
+     * the owning account's Peable wallet (`owner_account_id`); there is no key
+     * here — the address derives from that account's identity key (ADR 0002).
      */
     network: text(),
-    /** Watch-only account extended public key. Never a private key — see the table comment. */
-    xpub: text(),
-    /**
-     * The NEXT unused BIP32 child index. Claimed by
-     * `db/merchants/derivationIndex.ts`, never by a read-modify-write.
-     *
-     * `integer`, not `bigint`, and that is the domain rather than a size
-     * guess: a non-hardened BIP32 child index is bounded by 2^31 − 1, which is
-     * exactly `int4`'s ceiling. Reaching it raises `22003 integer out of
-     * range` and refuses the reservation — the correct answer, since the next
-     * index would not be derivable. It also keeps this value a JS `number` on
-     * the way back: postgres.js decodes `int8` to a STRING, so a `bigint`
-     * column here would make `index + 1` string concatenation and derive a
-     * DIFFERENT address than the one reserved.
-     */
-    nextDerivationIndex: integer().notNull().default(0),
     requiredConfirmations: integer().notNull().default(1),
+    /**
+     * The Oxy account that OWNS this merchant's application — a person or an
+     * organization — whose Peable wallet receives the merchant's FairCoin (ADR
+     * 0021 D5). Mirrored from the VERIFIED credential (`ownerAccountId`) and
+     * the dashboard's application read on every authenticated request, like
+     * `first_party`; NULL until one has been seen. Oxy's key space: no FK.
+     */
+    ownerAccountId: text(),
     /**
      * Whether this merchant's payments are REAL money, derived from the
      * environment of the credential that registered it.
@@ -212,11 +199,7 @@ export const merchants = pgTable(
      * on the wrong chain, which is unrecoverable, so it is refused here rather
      * than checked at the one call site that happens to look.
      */
-    check(
-      'merchants_chain_fields_agree_check',
-      sql`(${table.network} is null) = (${table.xpub} is null)`,
-    ),
-    check('merchants_next_derivation_index_check', sql`${table.nextDerivationIndex} >= 0`),
+    check('merchants_network_present_check', sql`${table.network} is not null`),
     check(
       'merchants_avatar_withheld_check',
       sql.raw(
@@ -242,5 +225,9 @@ export const merchants = pgTable(
     // The create and update schemas both validate `.positive()`; this is that
     // range, in the one place a write that skipped them still has to pass.
     check('merchants_required_confirmations_check', sql`${table.requiredConfirmations} > 0`),
+    check(
+      'merchants_owner_account_id_check',
+      sql`${table.ownerAccountId} is null or length(${table.ownerAccountId}) > 0`,
+    ),
   ],
 );

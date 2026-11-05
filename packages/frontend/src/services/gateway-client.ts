@@ -186,18 +186,15 @@ export async function getConnectOnboarding(token: string): Promise<ConnectOnboar
 }
 
 /**
- * Register the watch-only ACCOUNT xpub of the pocket that will receive this
- * platform's sales. A PUBLIC key only — the Gateway refuses a private one and
- * the wallet never sends one.
+ * Confirm, as the seller, that this platform's FairCoin sales are paid into
+ * the Peable wallet of the signed-in account (ADR 0021 D5). No key travels:
+ * the Gateway derives addresses from the account's PUBLIC identity key.
  */
-export async function registerConnectKey(
-  token: string,
-  xpub: string,
-): Promise<ConnectOnboardingComplete> {
+export async function confirmConnectFaircoin(token: string): Promise<ConnectOnboardingComplete> {
   return connectCall(() =>
     gateway.client.post<ConnectOnboardingComplete>(
       `/v1/connect/onboarding/${encodeURIComponent(token)}/faircoin`,
-      { xpub },
+      {},
     ),
   );
 }

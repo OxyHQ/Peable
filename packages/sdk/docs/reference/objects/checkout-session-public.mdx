@@ -67,7 +67,7 @@ Object type: `checkout_session`.
 | `publishable_key` | string \| null | The card provider's PUBLIC key for this session's mode, so the payment fields can mount before the payment exists. `null` on FairCoin. |
 | `faircoin` | object \| null | Whether the payer can choose FairCoin now (ADR 0021). On a fiat order the FAIR amount is quoted when the payer chooses it (`payment_intent.faircoin.quote`). `null` in `setup` mode. |
 | `faircoin.available` | boolean |  |
-| `faircoin.unavailable_reason` | string \| null | Why FairCoin cannot be paid with right now; it is still shown, never hidden. One of `faircoin_account_missing`, `price_unavailable`. |
+| `faircoin.unavailable_reason` | string \| null | Why FairCoin cannot be paid with right now; it is still shown, never hidden. One of `faircoin_wallet_missing`, `faircoin_network_closed`, `price_unavailable`, `temporarily_unavailable`. |
 
 ## Returned by
 

@@ -6,17 +6,12 @@ export interface MerchantForm {
   displayName: string;
   description: string;
   requiredConfirmations: string;
-  /** Registration only: `none` registers a card-only merchant. */
-  network: 'none' | 'mainnet' | 'testnet';
-  xpub: string;
 }
 
 export const EMPTY_MERCHANT_FORM: MerchantForm = {
   displayName: '',
   description: '',
   requiredConfirmations: '',
-  network: 'none',
-  xpub: '',
 };
 
 export function formFromMerchant(merchant: Merchant): MerchantForm {
@@ -24,8 +19,6 @@ export function formFromMerchant(merchant: Merchant): MerchantForm {
     displayName: merchant.display_name ?? '',
     description: merchant.description ?? '',
     requiredConfirmations: String(merchant.required_confirmations),
-    network: merchant.network ?? 'none',
-    xpub: merchant.xpub ?? '',
   };
 }
 
@@ -42,8 +35,8 @@ function parseConfirmations(text: string): number | null | undefined {
 
 /**
  * The registration body: only what was filled in, so the gateway's defaults
- * apply to the rest. The FairCoin half is sent whole or not at all, as the
- * gateway requires.
+ * apply to the rest. No FairCoin key: the merchant's FairCoin goes to the
+ * Peable wallet of the account that owns the application (ADR 0021 D5).
  */
 export function buildRegisterBody(form: MerchantForm): FormResult<RegisterMerchantBody> {
   const confirmations = parseConfirmations(form.requiredConfirmations);
@@ -55,10 +48,6 @@ export function buildRegisterBody(form: MerchantForm): FormResult<RegisterMercha
   if (displayName) body.display_name = displayName;
   if (description) body.description = description;
   if (confirmations !== null) body.required_confirmations = confirmations;
-  if (form.network !== 'none' && form.xpub.trim()) {
-    body.network = form.network;
-    body.xpub = form.xpub.trim();
-  }
   return { ok: true, body };
 }
 
