@@ -12,8 +12,8 @@ signed webhook. Everything here runs in **test mode** first; going live is a
 credential swap (see [Going live](/going-live)).
 
 Peable is **non-custodial** on the FairCoin rail: the payer pays from their own
-wallet straight to an address derived from your **watch-only** key, and your
-server never holds a private key. Card payments go through Peable's provider;
+wallet straight into the **Peable wallet of the Oxy account that owns your
+application**, and neither Peable nor your server ever holds a private key. Card payments go through Peable's provider;
 card data is collected by the provider's own fields in the payer's browser and
 never reaches Peable or you.
 
@@ -63,22 +63,25 @@ const peable = new Peable({
 
 ## 3. Register as a merchant (once)
 
-Your application becomes a merchant with one call. What you send decides
-which rails you accept:
+Your application becomes a merchant with one call. There is no key to
+register:
 
 ```ts
-// FairCoin and cards: a WATCH-ONLY account extended public key and its network.
-await peable.merchants.register({ network: 'testnet', xpub: 'tpub…' });
-
-// Cards only: send neither.
-await peable.merchants.register();
+const merchant = await peable.merchants.register({ display_name: 'My Shop' });
+merchant.network;       // 'testnet' in test mode, 'mainnet' in live mode
+merchant.owner_account; // the Oxy account (person or organization) that owns your application
 ```
 
-`network` and `xpub` are two halves of one capability; the gateway refuses
-one without the other. Peable derives a fresh receive address per payment
-from the key and **refuses any key that can spend** (`watch_only_violation`):
-an `xprv` is never accepted. A test credential can only register a `testnet`
-key. Registering twice answers `409`; read your merchant with
+FairCoin paid to you goes to the **Peable wallet of `owner_account`**. Peable
+derives a fresh address for each payment from that account's public identity
+key and never holds a private key. If that account has no Peable wallet yet,
+orders are still created and cards still work, but FairCoin is shown
+unavailable (`faircoin_wallet_missing`) until the owner opens Peable, signed in
+as that account (or acting as the organization), and creates its wallet; Orbit
+shows the owner this as a setup task
+([FairCoin on every order](/faircoin#who-receives-the-faircoin)).
+
+Registering twice answers `409`; read your merchant with
 `peable.merchants.retrieve()` (`GET /v1/merchants/me`).
 
 ## 4. Create a Checkout Session
@@ -166,7 +169,8 @@ whole model.
 - [ ] A test-environment service credential with `payments:read` and
       `payments:write`; `PEABLE_PUBLIC_KEY`, `PEABLE_SECRET` and
       `PEABLE_WEBHOOK_SECRET` in your server's environment.
-- [ ] Merchant registered (a watch-only `testnet` key to accept FairCoin).
+- [ ] Merchant registered, and the owning account's Peable wallet created, so
+      FairCoin is available.
 - [ ] Checkout Session created at checkout; the payer redirected to
       `session.url`, or the checkout [embedded](/checkout#embedded-checkout).
 - [ ] A webhook endpoint registered, `Peable-Signature` verified on every

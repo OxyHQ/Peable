@@ -20,8 +20,9 @@ credential's through the test key, and an operation on an existing object
 always uses the key that created it. Nothing you send can choose the other
 mode. Every object and every event carries `livemode: true | false`.
 
-A test merchant is on FairCoin **testnet**: a non-production credential cannot
-register a mainnet key.
+A test merchant is on FairCoin **testnet** and a live one on `mainnet`: the
+network follows the credential's environment, and nothing you send can choose
+it.
 
 Everything below is **test mode only**: a live credential is refused with
 `403 permission_error`, code [`test_mode_only`](/errors#test_mode_only).

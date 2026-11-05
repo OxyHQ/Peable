@@ -10,8 +10,9 @@ Peable is the payments platform of the Oxy ecosystem: one API, one SDK
 (`@peable.to/sdk`) and a hosted checkout for accepting payments on two rails.
 
 - **FairCoin, non-custodially.** The payer pays from their own wallet straight
-  to an address derived from your **watch-only** key. Peable watches the chain
-  and never holds the coins — it cannot spend, refund or move them.
+  into the **Peable wallet of the Oxy account that owns your application**.
+  Peable derives each address from that account's public identity key, watches
+  the chain and never holds the coins — it cannot spend, refund or move them.
 - **Cards**, through Peable's payment provider: card data is collected by the
   provider's own fields in the payer's browser and never reaches Peable or
   your server. Peable holds the provider credentials; you supply none.

@@ -1,6 +1,6 @@
 ---
 title: "Accept a payment"
-description: "PaymentIntents on both rails: FairCoin paid to your watch-only key, and cards."
+description: "PaymentIntents on both rails: FairCoin paid into your owner's Peable wallet, and cards."
 order: 3
 ---
 
@@ -8,9 +8,10 @@ order: 3
 
 A **PaymentIntent** (`pi_…`) is one payment, on one of two rails:
 
-- **FairCoin** — the payer sends FAIR from their own wallet to an address
-  derived from your watch-only key. Peable watches the chain and never holds
-  the coins, so it cannot spend, refund or move them.
+- **FairCoin** — the payer sends FAIR from their own wallet into the Peable
+  wallet of the Oxy account that owns your application, at an address derived
+  from that account's public identity key. Peable watches the chain and never
+  holds the coins, so it cannot spend, refund or move them.
 - **Card** — collected by Peable's payment provider in the payer's browser
   (cards, Apple Pay, Google Pay, and the bank methods you turn on). Card data
   never reaches Peable or your server.
@@ -29,8 +30,9 @@ you build your own payment UI: it is one payment on the one rail you choose.
 - **Currencies**: `FAIR` on the FairCoin rail; on the card rail `EUR`, `USD`,
   `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD` and `JPY`.
 - **Network** is `testnet` or `mainnet`. A FairCoin payment's network must be
-  your merchant's registered network — or, for a payment on behalf of a seller,
-  the seller's ([FairCoin sellers](/connect-faircoin)).
+  your merchant's (`merchant.network`: `mainnet` in live mode, `testnet` in
+  test mode) — or, for a payment on behalf of a seller, the seller's
+  ([FairCoin sellers](/connect-faircoin)).
 
 ## A FairCoin payment
 
@@ -176,8 +178,11 @@ while cards are off).
 
 Every configuration also has a `faircoin` entry. It is always `on` and has
 `locked: true`, because every order offers FairCoin; setting it `off` is
-`400 payment_method_locked`. It never reaches a card PaymentIntent's
-`payment_method_types`.
+`400 payment_method_locked`. When FairCoin cannot be paid right now, its
+`unavailable_reason` says why (`faircoin_wallet_missing`,
+`faircoin_network_closed` or `temporarily_unavailable`; see
+[Who receives the FairCoin](/faircoin#who-receives-the-faircoin)). It never
+reaches a card PaymentIntent's `payment_method_types`.
 
 ```ts
 const [config] = (await peable.paymentMethodConfigurations.list()).data; // the default

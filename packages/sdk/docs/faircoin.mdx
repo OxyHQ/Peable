@@ -148,3 +148,32 @@ succeeds (`invoice.paid`).
   page, by card or in FairCoin at that period's quote. If the payer pays by
   card, the card is saved and renewals are charged automatically, as before
   ([Subscriptions](/billing#sell-a-subscription-with-checkout)).
+
+## Who receives the FairCoin
+
+No merchant or seller registers a FairCoin key. A merchant's FairCoin goes to
+the **Peable wallet of the Oxy account that owns its application**: a person
+or an organization, shown as `owner_account` on your
+[merchant](/reference/objects/merchant). A seller's FairCoin goes to the
+Peable wallet of the seller's own Oxy account
+([FairCoin sellers](/connect-faircoin)). Peable derives each payment's
+address from that account's public identity key, the same way payments to an
+`@username` are received, so the wallet already sees them. Peable handles
+only the public key and never holds a private one.
+
+The network follows your credential: `mainnet` in live mode, `testnet` in
+test mode.
+
+When FairCoin cannot be paid, the order is still created and the fiat
+methods keep working. FairCoin stays listed, with `faircoin.available: false`
+and one of these reasons:
+
+| `unavailable_reason` | Why | What to do |
+|---|---|---|
+| `faircoin_wallet_missing` | The receiving account has no Peable wallet yet | The owner opens Peable signed in as that account (or acting as the organization) and creates its wallet; Orbit shows it as a setup task. Confirming FairCoin meanwhile is [`409 faircoin_wallet_missing`](/errors#faircoin_wallet_missing) |
+| `faircoin_network_closed` | This deployment has not opened FairCoin on `mainnet` yet ([`faircoin_network_closed`](/errors#faircoin_network_closed)) | Nothing on your side |
+| `price_unavailable` | No fresh FAIR price for a fiat order ([the quote](#the-quote)) | Try again shortly |
+| `temporarily_unavailable` | Peable cannot offer FairCoin for this order right now | Try again shortly |
+
+There is no live-mode gate: a merchant whose wallet is not set up takes card
+payments and shows FairCoin as unavailable.
