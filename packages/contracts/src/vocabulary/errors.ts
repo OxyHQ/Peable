@@ -53,6 +53,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   account_missing: 'The merchant has no account object yet.',
   amount_not_representable: 'The amount does not fit the currency or the rail.',
   domain_taken: 'The domain is already registered by another merchant.',
+  faircoin_account_required:
+    'A live merchant cannot take payments until it registers its own watch-only FairCoin receiving key (ADR 0021): creating a PaymentIntent, a Checkout Session or a Payment Link, and finalizing an invoice, are refused until then. Register it once in Orbit (Settings) or with `POST /v1/merchants/me/faircoin`. Test mode is not gated, but choosing FairCoin there still needs the key.',
   file_too_large: 'The uploaded file is larger than its purpose allows.',
   file_unavailable: 'The file exists but its contents cannot be served right now.',
   idempotency_error:
@@ -161,8 +163,6 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'A FairCoin invoice cannot be charged automatically: the payer signs every payment.',
   faircoin_price_unavailable:
     'No fresh FairCoin price exists right now, so this order cannot be quoted in FAIR. The other payment methods still work; try FairCoin again shortly.',
-  faircoin_account_required:
-    'This merchant has not registered its FairCoin receiving key, so it cannot be paid in FairCoin yet.',
   credit_note_exceeds_invoice:
     "The credit note's amount exceeds what the invoice can still credit.",
   test_clock_unexpected_state: 'The test clock is advancing; wait until it is ready.',
@@ -178,8 +178,9 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'The onboarding link has expired or was already used; `refresh_url` is where the seller gets a fresh one.',
   wrong_seller:
     'The onboarding link names a different Oxy account; sign in as the seller it was minted for.',
-  already_registered: 'The seller already registered a FairCoin key, and it cannot be changed.',
-  key_in_use: 'The key already receives payments for another account.',
+  already_registered:
+    'A FairCoin key is already registered for this seller or merchant, and it cannot be changed.',
+  key_in_use: 'The key already receives payments for another merchant or seller.',
   no_faircoin_half: 'The connected account has no FairCoin half to register a key for.',
   // The dashboard routes (`/v1/dashboard/*`, Orbit): the signed-in person, not a credential.
   merchant_missing:

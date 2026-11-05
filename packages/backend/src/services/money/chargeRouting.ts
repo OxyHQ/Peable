@@ -31,6 +31,7 @@ import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
 import type { DatabaseOrTransaction } from '../../db/postgres';
 import { getDb } from '../../db/postgres';
+import { SELLER_FAIRCOIN_KEY_REQUIRED_MESSAGE, sellerHasFaircoinKey } from '../faircoinAccount';
 
 /** The third-party live gate is closed for this merchant (ADR 0015 release gate). 403. */
 export class ThirdPartyLiveGateError extends Error {
@@ -124,6 +125,15 @@ async function requireSellerWithCard(
   if (!hasCardHalf(account)) {
     throw new ChargeRoutingError(
       'this connected account has no card account; open one first',
+      param,
+      409,
+      'account_not_ready',
+    );
+  }
+  // ADR 0021 D5: a seller is payable only once its own FairCoin key is registered.
+  if (!sellerHasFaircoinKey(account)) {
+    throw new ChargeRoutingError(
+      SELLER_FAIRCOIN_KEY_REQUIRED_MESSAGE,
       param,
       409,
       'account_not_ready',

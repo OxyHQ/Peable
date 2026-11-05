@@ -18,10 +18,10 @@ Object type: `connected_account`.
 | `livemode` | boolean | `true` in live mode, `false` in test mode. |
 | `external_ref` | string | The merchant's OWN id for this seller — how they address it. |
 | `rails` | array of string | Which halves this account has. Never empty. |
-| `faircoin` | [ConnectedAccountFaircoin](/reference/objects/connected-account-faircoin) \| null | The FairCoin half, or `null` when the platform never opened one. Readiness for FairCoin is `faircoin.status === 'active'`; `payable` is about the CARD half. |
+| `faircoin` | [ConnectedAccountFaircoin](/reference/objects/connected-account-faircoin) \| null | The FairCoin half, or `null` when the platform never opened one. A seller is ready only once `faircoin.status === 'active'` (ADR 0021 D5): until then `requirements.currently_due` lists `faircoin.receiving_key` and the seller takes no transfer and no on-behalf payment (`account_not_ready`). |
 | `country` | string \| null | ISO 3166-1 alpha-2, upper-case. `null` on a FairCoin-only seller, which has no card half. |
 | `default_currency` | string \| null |  |
-| `payable` | boolean | Whether this seller can receive a CARD settlement (a transfer) right now. A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller. |
+| `payable` | boolean | Whether this seller can receive a CARD settlement (a transfer) right now: its card half can, and its own FairCoin key is registered (`faircoin.status === 'active'`, ADR 0021 D5). A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller. |
 | `payouts_enabled` | boolean |  |
 | `charges_enabled` | boolean |  |
 | `transfers_capability` | string \| null | `null`: never requested — a different fact from the provider declining it. One of `active`, `pending`, `inactive`. |

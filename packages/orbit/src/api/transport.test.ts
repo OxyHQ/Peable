@@ -4,7 +4,7 @@ import {
   createOrbitTransport,
   describeError,
   isOrbitApiError,
-  type OrbitApiError,
+  OrbitApiError,
   withQuery,
 } from './transport';
 import { errorState } from '../ui/errorState';
@@ -210,5 +210,18 @@ describe('describeError', () => {
   it('uses a plain error message, then the fallback', () => {
     expect(describeError(new Error('offline'), 'fallback')).toBe('offline');
     expect(describeError('???', 'fallback')).toBe('fallback');
+  });
+
+  it('says where to fix a live merchant’s missing FairCoin key, not the gateway’s words', () => {
+    const refused = new OrbitApiError({
+      status: 409,
+      type: 'invalid_request_error',
+      code: 'faircoin_account_required',
+      message: 'gateway words',
+      requestId: 'req_9',
+    });
+    expect(describeError(refused, 'fallback')).toBe(
+      'You cannot take payments until you register your FairCoin key. Register it once in Settings › FairCoin receiving key. (request req_9)',
+    );
   });
 });

@@ -45,6 +45,20 @@ describe('errorState — what a screen shows for a thrown value', () => {
     ).toEqual({ kind: 'feature_unavailable', feature: 'tax' });
   });
 
+  it('a live merchant without its FairCoin key is told to register it, not shown a failure', () => {
+    expect(
+      errorState(
+        api({
+          status: 409,
+          type: 'invalid_request_error',
+          code: 'faircoin_account_required',
+          message: 'x',
+          requestId: 'req_1',
+        }),
+      ),
+    ).toEqual({ kind: 'faircoin_account_required', requestId: 'req_1' });
+  });
+
   it('a 403 names the missing permission from the code and param', () => {
     expect(
       errorState(

@@ -303,6 +303,23 @@ needs no xpub of its own — an on-behalf intent reads `payment_intents.
 merchant_network` (a generated column) for the merchant firewall and
 `(connected_account_id, merchant_id, network)` for the seller's.
 
+**FairCoin is always offered, so the key is REQUIRED (ADR 0021 D5).** A
+merchant that registered without one registers it ONCE afterwards —
+`POST /v1/merchants/me/faircoin` (its own credential) or Orbit's
+`POST …/merchant/faircoin` (`money`), both `registerMerchantFaircoin` over the
+one writer `registerMerchantFaircoinKey` (`WHERE xpub IS NULL`, `assertWatchOnly`
+first, unique against every merchant's and seller's key, testnet only outside
+production). Until it does, a LIVE merchant takes no payment: creating a
+PaymentIntent, a Checkout Session (its own or a payment link visit's), a payment
+link or a subscription, and finalizing an invoice, answer 409
+`faircoin_account_required` through ONE gate, `services/faircoinAccount.ts`
+(the scheduler records the refusal on the draft and retries it hourly). Test mode
+is never gated. A SELLER is ready only once its OWN key is registered (still only
+from the seller's session): until then its DTO lists `faircoin.receiving_key` in
+`requirements.currently_due`, `payable` is false, and a transfer or an on-behalf
+charge answers 409 `account_not_ready`. The merchant's own account (`role =
+'merchant'`) is not a seller and is never judged by it.
+
 A merchant registers a **watch-only account xpub**. `services/derivation.ts`
 derives a per-intent receive address from it and **throws
 `watch-only violation` if the extended key carries a private key**

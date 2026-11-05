@@ -294,7 +294,7 @@ const en: Record<string, string> = {
     'The Peable merchant of this application in {mode} mode. Test and live are separate merchants.',
   'settings.register': 'Register merchant',
   'settings.registerIntro':
-    'Register this application as a Peable merchant in {mode} mode. A card-only merchant needs nothing else; to also accept FairCoin, add the network and a WATCH-ONLY account xpub.',
+    'Register this application as a Peable merchant in {mode} mode. Every order can always be paid in FairCoin, straight to your own wallet, so your FairCoin receiving key is REQUIRED to take payments: add it now, or register it once later from this page.',
   'settings.saved': 'Merchant saved.',
   'settings.registered': 'Merchant registered.',
   'settings.branding': 'Branding',
@@ -304,10 +304,40 @@ const en: Record<string, string> = {
   'settings.confirmationsHelp': 'FairCoin confirmations before a payment counts as succeeded.',
   'settings.faircoin': 'FairCoin',
   'settings.network': 'Network',
-  'settings.cardOnly': 'Card only',
   'settings.xpub': 'Watch-only account xpub',
   'settings.xpubHelp':
-    'A PUBLIC extended key. Peable refuses a private key: it can never spend your funds.',
+    'A PUBLIC (watch-only) account xpub, e.g. xpub… or tpub…. Peable refuses a private key: it can never spend your funds.',
+  'settings.faircoinLater': 'Later',
+  'settings.faircoinLaterLive':
+    'Without the key this merchant cannot take payments in live mode. Register it once from Settings.',
+  'settings.faircoinLaterTest':
+    'Without the key, test orders are created but FairCoin is shown as unavailable. Register a testnet key once from Settings.',
+  'settings.faircoinKey.title': 'FairCoin receiving key',
+  'settings.faircoinKey.required': 'Required',
+  'settings.faircoinKey.intro':
+    'Every order in Orbit can always be paid in FairCoin. Each FairCoin payment goes straight to an address derived from this key, in your own wallet.',
+  'settings.faircoinKey.watchOnly':
+    'Paste the WATCH-ONLY account xpub of a wallet account (pocket) you use for nothing else: Peable derives receive addresses from it in order, and a pocket you also use for personal receipts would collide with them. Peable never holds a private key and can never spend your funds. Once registered, the key cannot be changed.',
+  'settings.faircoinKey.testNote':
+    'Test mode: orders are created without a key, and FairCoin is shown as unavailable until a testnet key is registered.',
+  'settings.faircoinKey.register': 'Register key',
+  'settings.faircoinKey.confirm':
+    'This key cannot be changed once registered. Check that it is the watch-only key of a pocket used only for this application.',
+  'settings.faircoinKey.confirmAction': 'Register this key',
+  'settings.faircoinKey.registered': 'FairCoin receiving key registered.',
+  'settings.faircoinKey.notRegistered': 'No FairCoin key registered',
+  'settings.faircoinKey.immutable': 'cannot be changed',
+  'settings.faircoinKey.error.xpub_missing': 'Paste the watch-only account xpub.',
+  'settings.faircoinKey.error.private_key':
+    'This is a PRIVATE key (xprv…/tprv…). Never paste it anywhere: use the watch-only xpub of the same account.',
+  'settings.faircoinKey.error.network': 'Test mode registers a testnet key only.',
+  'settings.faircoinKey.refusal.already_registered':
+    'A FairCoin key is already registered for this merchant, and it cannot be changed.',
+  'settings.faircoinKey.refusal.key_in_use':
+    'This key already receives payments for another merchant or seller. Use a pocket dedicated to this application.',
+  'settings.faircoinKey.refusal.watch_only_violation':
+    'Peable refused this key: it is a private key, or a key for the other network. Paste the watch-only xpub of an account on the selected network.',
+  'settings.faircoinKey.refusal.network': 'Test mode registers a testnet key only.',
   'settings.merchantId': 'Merchant ID',
   'settings.environment': 'Environment',
   'settings.created': 'Registered',
@@ -1283,7 +1313,7 @@ const es: Record<string, string> = {
     'El comercio de Peable de esta aplicación en modo {mode}. Prueba y real son comercios distintos.',
   'settings.register': 'Registrar comercio',
   'settings.registerIntro':
-    'Registra esta aplicación como comercio de Peable en modo {mode}. Un comercio solo con tarjeta no necesita nada más; para aceptar también FairCoin, añade la red y una xpub de cuenta de SOLO LECTURA.',
+    'Registra esta aplicación como comercio de Peable en modo {mode}. Todo pedido se puede pagar siempre en FairCoin, directamente a tu propio monedero, así que tu clave de recepción de FairCoin es OBLIGATORIA para cobrar: añádela ahora o regístrala una sola vez más tarde desde esta página.',
   'settings.saved': 'Comercio guardado.',
   'settings.registered': 'Comercio registrado.',
   'settings.branding': 'Imagen de marca',
@@ -1294,10 +1324,40 @@ const es: Record<string, string> = {
     'Confirmaciones de FairCoin antes de que un pago cuente como completado.',
   'settings.faircoin': 'FairCoin',
   'settings.network': 'Red',
-  'settings.cardOnly': 'Solo tarjeta',
   'settings.xpub': 'Xpub de cuenta de solo lectura',
   'settings.xpubHelp':
-    'Una clave extendida PÚBLICA. Peable rechaza una clave privada: nunca puede gastar tus fondos.',
+    'Una xpub de cuenta PÚBLICA (de solo lectura), p. ej. xpub… o tpub…. Peable rechaza una clave privada: nunca puede gastar tus fondos.',
+  'settings.faircoinLater': 'Más tarde',
+  'settings.faircoinLaterLive':
+    'Sin la clave, este comercio no puede cobrar en modo real. Regístrala una vez desde Ajustes.',
+  'settings.faircoinLaterTest':
+    'Sin la clave, los pedidos de prueba se crean, pero FairCoin aparece como no disponible. Registra una vez una clave de testnet desde Ajustes.',
+  'settings.faircoinKey.title': 'Clave de recepción de FairCoin',
+  'settings.faircoinKey.required': 'Obligatoria',
+  'settings.faircoinKey.intro':
+    'Todo pedido en Orbit se puede pagar siempre en FairCoin. Cada pago en FairCoin va directamente a una dirección derivada de esta clave, en tu propio monedero.',
+  'settings.faircoinKey.watchOnly':
+    'Pega la xpub de SOLO LECTURA de una cuenta (bolsillo) del monedero que no uses para nada más: Peable deriva de ella las direcciones de recepción en orden, y un bolsillo que también uses para cobros personales chocaría con ellas. Peable nunca guarda una clave privada y nunca puede gastar tus fondos. Una vez registrada, la clave no se puede cambiar.',
+  'settings.faircoinKey.testNote':
+    'Modo de prueba: los pedidos se crean sin clave y FairCoin aparece como no disponible hasta que se registre una clave de testnet.',
+  'settings.faircoinKey.register': 'Registrar clave',
+  'settings.faircoinKey.confirm':
+    'Esta clave no se puede cambiar una vez registrada. Comprueba que es la clave de solo lectura de un bolsillo usado solo para esta aplicación.',
+  'settings.faircoinKey.confirmAction': 'Registrar esta clave',
+  'settings.faircoinKey.registered': 'Clave de recepción de FairCoin registrada.',
+  'settings.faircoinKey.notRegistered': 'Ninguna clave de FairCoin registrada',
+  'settings.faircoinKey.immutable': 'no se puede cambiar',
+  'settings.faircoinKey.error.xpub_missing': 'Pega la xpub de cuenta de solo lectura.',
+  'settings.faircoinKey.error.private_key':
+    'Esta es una clave PRIVADA (xprv…/tprv…). No la pegues nunca en ningún sitio: usa la xpub de solo lectura de la misma cuenta.',
+  'settings.faircoinKey.error.network': 'El modo de prueba solo registra una clave de testnet.',
+  'settings.faircoinKey.refusal.already_registered':
+    'Ya hay una clave de FairCoin registrada para este comercio, y no se puede cambiar.',
+  'settings.faircoinKey.refusal.key_in_use':
+    'Esta clave ya recibe pagos de otro comercio o vendedor. Usa un bolsillo dedicado a esta aplicación.',
+  'settings.faircoinKey.refusal.watch_only_violation':
+    'Peable rechazó esta clave: es una clave privada o una clave de la otra red. Pega la xpub de solo lectura de una cuenta de la red seleccionada.',
+  'settings.faircoinKey.refusal.network': 'El modo de prueba solo registra una clave de testnet.',
   'settings.merchantId': 'ID del comercio',
   'settings.environment': 'Entorno',
   'settings.created': 'Registrado',

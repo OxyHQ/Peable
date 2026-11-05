@@ -122,7 +122,7 @@ export const billingEngineCheckoutFulfiller: SubscriptionCheckoutFulfiller = {
     } catch (error) {
       if (error instanceof BillingEngineError) {
         throw new CheckoutError(
-          error.status === 503 ? 503 : 400,
+          error.status === 503 || error.status === 409 ? error.status : 400,
           error.code,
           error.message,
           error.param,

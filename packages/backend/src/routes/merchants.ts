@@ -1,12 +1,18 @@
 import { idempotent } from '../lib/idempotency';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
+import {
+  registerMerchantFaircoinParams,
+  registerMerchantParams,
+  updateMerchantParams,
+} from '@peable.to/contracts';
+import type { ErrorCode } from '@peable.to/contracts/vocabulary';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import {
   ChainRegistrationError,
   insertMerchant,
+  registerMerchantFaircoinKey,
   updateMerchantSettings,
   WatchOnlyViolationError,
 } from '../db/merchants/merchantRepository';
@@ -176,6 +182,92 @@ export async function registerMerchant(
 }
 
 export type PatchMerchantResult = RegisterMerchantResult;
+
+export type RegisterFaircoinKeyResult =
+  | { ok: true; merchant: MerchantRow }
+  | {
+      ok: false;
+      status: 400 | 404 | 409;
+      code: ErrorCode;
+      message: string;
+      param?: string;
+    };
+
+/**
+ * Register the merchant's FairCoin receiving key ONCE (ADR 0021 D5) — shared by
+ * `POST /v1/merchants/me/faircoin` (the merchant's own credential) and Orbit's
+ * `POST …/merchant/faircoin` (`money`), so both run the same firewalls. The
+ * non-custody firewall, the immutability and the uniqueness live in the one
+ * writer, `registerMerchantFaircoinKey`; the test/live firewall is here, as it
+ * is for {@link registerMerchant}.
+ */
+export async function registerMerchantFaircoin(
+  merchant: MerchantRow,
+  params: { network: 'mainnet' | 'testnet'; xpub: string },
+): Promise<RegisterFaircoinKeyResult> {
+  if (merchant.xpub !== null) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'already_registered',
+      message: 'this merchant already registered its FairCoin key, and it cannot be changed',
+    };
+  }
+  if (merchant.environment !== 'production' && params.network === 'mainnet') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'parameter_invalid',
+      param: 'network',
+      message: `a '${merchant.environment}' merchant can register a testnet key only`,
+    };
+  }
+  let result: Awaited<ReturnType<typeof registerMerchantFaircoinKey>>;
+  try {
+    result = await registerMerchantFaircoinKey(getDb(), merchant.id, params);
+  } catch (error) {
+    // A key that can spend, or one for the other chain. Refused, never stored.
+    if (error instanceof WatchOnlyViolationError) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'watch_only_violation',
+        param: 'xpub',
+        message: `xpub is not a watch-only ${params.network} account key: ${error.message}`,
+      };
+    }
+    throw error;
+  }
+  if (result.ok) return result;
+  switch (result.refusal) {
+    case 'not_found':
+      return { ok: false, status: 404, code: 'resource_missing', message: 'merchant not found' };
+    case 'already_registered':
+      return {
+        ok: false,
+        status: 409,
+        code: 'already_registered',
+        message: 'this merchant already registered its FairCoin key, and it cannot be changed',
+      };
+    case 'key_in_use':
+      return {
+        ok: false,
+        status: 409,
+        code: 'key_in_use',
+        param: 'xpub',
+        message:
+          'this key already receives payments for another merchant or seller; register a wallet account used for nothing else',
+      };
+  }
+}
+
+/** The answer to a refused key registration. */
+export function sendFaircoinKeyRefusal(
+  res: Response,
+  result: Extract<RegisterFaircoinKeyResult, { ok: false }>,
+): void {
+  sendError(res, result.status, 'invalid_request_error', result.message, result.code, result.param);
+}
 
 /**
  * The answer to a refused registration or patch. A 503 is Oxy being
@@ -351,6 +443,32 @@ export function createMerchantsRouter(deps: {
       });
       if (!result.ok) {
         sendMerchantWriteError(res, result);
+        return;
+      }
+      res.status(200).json(toMerchantDTO(result.merchant));
+    }),
+  );
+
+  // The FairCoin receiving key, once (ADR 0021 D5): a live merchant without one
+  // takes no payment.
+  router.post(
+    '/v1/merchants/me/faircoin',
+    requireMerchant,
+    requireAuthenticated,
+    requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+
+      const parsed = registerMerchantFaircoinParams.safeParse(req.body);
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const result = await registerMerchantFaircoin(merchant, parsed.data);
+      if (!result.ok) {
+        sendFaircoinKeyRefusal(res, result);
         return;
       }
       res.status(200).json(toMerchantDTO(result.merchant));

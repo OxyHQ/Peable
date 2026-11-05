@@ -6,6 +6,7 @@
  * `payment_link.updated` with the moved fields. A payer visiting the link
  * creates a Checkout Session (`createSessionFromLink`), never a payment.
  */
+import { assertMerchantCanTakePayments } from '../faircoinAccount';
 import type { z } from 'zod';
 import {
   METADATA_LIMIT_MESSAGE,
@@ -184,6 +185,8 @@ export async function createPaymentLink(
   body: CreateLinkBody,
   deps: { tax?: TaxService | undefined } = {},
 ): Promise<PaymentLinkRow> {
+  // ADR 0021 D5: a live merchant without its FairCoin key takes no payment.
+  assertMerchantCanTakePayments(merchant);
   const db = getDb();
   const resolved: {
     priceId: string;
