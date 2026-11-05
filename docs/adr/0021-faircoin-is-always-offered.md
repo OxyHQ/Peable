@@ -1,7 +1,7 @@
 # ADR 0021 — FairCoin is always offered
 
 **Status:** accepted.
-**Date:** 2026-11-05.
+**Date:** 2026-11-05; D5 amended 2026-11-06.
 **Amends:** ADR 0012 (D5 `connected_account` on a fiat order, D12 the platform
 fee), ADR 0015 §5 (the FairCoin ledger entry gains its fiat equivalent), ADR 0018
 ("as built" §3 *the rail follows the currency*, and the "not built" item
@@ -62,9 +62,8 @@ is not done here.
 
 `faircoin` is an entry of every `pmc_…` (`PAYMENT_METHOD_CONFIGURATION_TYPES`),
 always `display_preference.value: 'on'`, with a new `locked: true` (every other
-entry answers `locked: false`). Its `available` is `true` unless the merchant
-has no FairCoin key (`unavailable_reason: 'faircoin_account_missing'`, test mode
-only — D5). It is never pushed to the card provider and never appears in a card
+entry answers `locked: false`). Its `available` is `true` unless the owning account's Peable wallet is not set
+up (`unavailable_reason: 'faircoin_wallet_missing'`, D5). It is never pushed to the card provider and never appears in a card
 PaymentIntent's `payment_method_types`. Orbit's Settings → Payment methods shows
 it as a locked, always-on row with the reason in words.
 
@@ -137,34 +136,70 @@ payment. **Peable never holds, buys, sells or converts FAIR** (AGENTS.md, produc
 boundary): the payer's wallet pays FAIR to the payee's own address; nothing is
 exchanged, and no fiat moves on that payment.
 
-### D5. FairCoin pays the payee's own watch-only key — so the key is required
+### D5. FairCoin is received into the Peable wallet of the account that owns the payee — no key is ever registered
 
-Non-custody is unchanged: a FairCoin payment derives its address from the
-merchant's (or the seller's) watch-only account xpub through the one-statement
-reservation (`derivationIndex.ts`, `accountDerivationIndex.ts`).
+**Amended 2026-11-06 (owner's decision; supersedes the first D5 and #236 at the
+root, reverted by #240).** A merchant must not paste or register a FairCoin key.
+FairCoin paid to an Orbit merchant goes to the **Peable wallet of the Oxy
+account that owns the merchant's application** — a person or an organization
+(organizations get their own identity root: OxyHQ/oxy ADR on organization
+wallets) — and a marketplace seller's FairCoin to the Peable wallet of the
+seller's own Oxy account. There is ONE way: the identity wallet. The watch-only
+xpub mechanism is removed.
 
-- **A merchant's FairCoin key becomes required.** A merchant that registered
-  without one may register it ONCE afterwards (`network` + `xpub`, immutable once
-  set, `assertWatchOnly`, unique against every merchant and seller key — the
-  rules of ADR 0012 D4) from Orbit (`money` permission) or its own service
-  credential. Orbit's onboarding shows it as a required step.
-- **A live merchant without a key cannot take payments**: creating a
-  PaymentIntent, a Checkout Session or a payment link, and finalizing an invoice,
-  answer 409 `faircoin_account_required` — never a silent card-only order. In
-  test mode the order is created and the FairCoin option answers
-  `unavailable_reason: 'faircoin_account_missing'`, so integrations can be built
-  before the key exists.
-- **Marketplace sellers (ADR 0012).** A seller is ready only once its OWN
-  FairCoin key is registered from the seller's own Oxy session (D3 of ADR 0012,
-  unchanged — a platform-supplied key is still impossible). A card-only seller
-  reports the FairCoin key as a current requirement and is not payable — no
-  transfer and no on-behalf payment — until it registers.
-- **A fiat order on behalf of a seller** (`connected_account` on a fiat
-  session, refused before) is now accepted: its FairCoin payment is an on-behalf
-  intent paying the SELLER's key (ADR 0012 D5); its card payment is the
-  platform's own charge, settled to the seller with the transfers it already
-  makes (ADR 0015 §2, separate charges and transfers). On-behalf CARD charges stay
-  ADR 0009's open question.
+- **Derivation is social receive's (ADR 0002).** The recipient's public key is
+  its DID's `#key-1` (`resolveIdentityPublicKey`, by name), the address is
+  `deriveSocialReceiveAddress(key, index, network)` from `@fairco.in/core`, and
+  the index comes from the recipient's ONE cursor (`social_receive_cursors`,
+  `INSERT … ON CONFLICT DO UPDATE … RETURNING next - 1`, the identity key written
+  on every reservation). Merchant payments, seller payments and `@username`
+  payments to the same account share that cursor and that tree — the wallet
+  already scans it — so two payments can never be handed the same address. The
+  gateway handles a PUBLIC key only; the private key lives on the holder's
+  devices, and Peable never holds one.
+- **Who receives is recorded, not re-derived.** The merchant row mirrors its
+  application's VERIFIED owner account (`merchants.owner_account_id`, synced
+  from the credential's `ownerAccountId` and the dashboard's application read on
+  every authenticated request, like `first_party`). A FairCoin payment stores
+  the account it pays (`payment_intents.faircoin_recipient_account_id`) beside
+  the address it was reserved at; a key rotation afterwards does not move that
+  address (ADR 0002: funds received under a key are spendable with that key).
+- **Network.** A merchant's FairCoin network is its environment's: `mainnet` in
+  live mode, `testnet` otherwise (rows that already chose one keep it — their
+  payments reference it). Minting a mainnet identity address is ADR 0002's
+  deployment gate (`PEABLE_SOCIAL_PAY_NETWORK`); while that deployment says
+  `testnet`, a live order's FairCoin option answers `faircoin_network_closed`.
+- **A recipient without a wallet** (a keyless, custodial account; an
+  organization whose owners have not created its root; a merchant whose owner is
+  not yet known) is never refused and never silently card-only: the order is
+  created, FairCoin is shown unavailable with `unavailable_reason:
+  'faircoin_wallet_missing'` ("the merchant's Peable wallet isn't set up"), and
+  confirming FairCoin is 409 `faircoin_wallet_missing`. Orbit shows the owners a
+  setup task: open Peable, signed in as (or acting as) the owning account, and
+  create its wallet. There is no live-mode payment gate.
+- **Marketplace sellers (ADR 0012, amended).** The platform still names the
+  seller's Oxy account (`faircoin.oxy_user_id`), and the seller still CONFIRMS
+  from their own Oxy session through the hosted onboarding link — the consent
+  that makes provenance a property of the code path (ADR 0012 D3). The link no
+  longer carries a key: confirming activates the FairCoin half, refused 409
+  `faircoin_wallet_missing` while the seller's account has no identity key.
+  On-behalf payments reserve on the SELLER's cursor and pay the seller's wallet.
+- **A fiat order on behalf of a seller** is accepted: its FairCoin payment pays
+  the seller's wallet; its card payment is the platform's own charge, settled with
+  the transfers it already makes (ADR 0015 §2). On-behalf CARD charges stay ADR
+  0009's open question.
+- **What is removed:** `merchants.xpub` and `next_derivation_index`, the
+  connected accounts' `xpub` and `next_derivation_index`, `derivationIndex.ts`,
+  `accountDerivationIndex.ts`, `reserveAddress.ts`, xpub derivation and
+  `assertWatchOnly` (there is no extended key left to guard), the registration
+  and onboarding `xpub` parameters, and the wallet's "register this pocket" step.
+  **Existing rows** (read-only production read, 2026-11-05): three merchants
+  (`merch_05af…`, `merch_28f7…`, `merch_ae2f…`, the "ctf" test merchants, owned by
+  two personal accounts and one organization) and one seller (`ca_7a1c…`) hold an
+  xpub. Their past payments keep their addresses, so the watcher still settles
+  them (one is `processing`); the money is in those holders' xpub wallets, which
+  Peable never touched. Their keys are dropped in a `post` migration; new
+  payments for them go to their owners' identity wallets. No other row holds a key.
 
 ### D6. The marketplace's fee on a FairCoin sale: none
 
@@ -195,7 +230,7 @@ the sale was priced at. No fiat balance is created by it.
 ## Consequences
 
 - Contracts, shared-types and the SDK gain fields and one choice parameter
-  (additive) plus `payment_method_locked`, `faircoin_account_required` and
+  plus `payment_method_locked`, `faircoin_wallet_missing` and
   `faircoin_price_unavailable`; `PaymentMethodConfigurationEntry.locked` is new.
   A consumer that sends `payment_method_types: ['card']` on a fiat session must
   add `faircoin` (or omit the field).
@@ -203,10 +238,15 @@ the sale was priced at. No fiat balance is created by it.
   default, CHECK `NOT VALID` then validated `post`); `checkout_sessions` drops
   the *network ⇔ FairCoin rail* and *connected account ⇒ FairCoin rail* CHECKs
   for *connected account ⇒ network*; `balance_transactions.faircoin_quote`.
-- **The two live first-party merchants have no FairCoin key.** Until the owner
-  registers Oxy Platforms' (and Mercaria's) own watch-only xpub in Orbit, their
-  live checkouts answer `faircoin_account_required`. Only the key's holder can
-  supply it: generating one for them would be custody.
+- Removing the xpub mechanism (D5) is a contracts/SDK major: `Merchant.xpub`
+  and the registration and onboarding `xpub` parameters are gone.
+- **The two live first-party merchants are owned by the organization `oxy`**,
+  which had no identity key (2026-11-05). Their FairCoin option answers
+  `faircoin_wallet_missing` until an owner of `oxy` creates the organization's
+  Peable wallet (OxyHQ/oxy organization wallets) — the one human step; nobody
+  else can create it, because generating a key for them would be custody — and
+  `faircoin_network_closed` until the deployment opens mainnet identity receive
+  (ADR 0002).
 
 ## Not decided here
 

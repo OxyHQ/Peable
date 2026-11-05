@@ -6,8 +6,10 @@
   only as three code comments (`src/pay/social-network.ts`,
   `src/pay/profile-route.ts`, `app/(tabs)/[username].tsx`) and had no record
   anywhere in `docs/`.
-- **Scope:** pay-by-`@username` (social receive). Merchant payments derive from
-  a registered account xpub and are not affected.
+- **Scope:** pay-by-`@username` (social receive). **Amended by ADR 0021 D5
+  (2026-11-06):** merchant and marketplace-seller payments now derive from the
+  same identity key and the same cursor — the owning account's Peable wallet —
+  and the registered-xpub path is removed, so every rule below binds them too.
 
 ## Context
 

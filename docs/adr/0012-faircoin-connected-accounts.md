@@ -4,8 +4,11 @@
   **The platform fee is NOT decided here** — §D12 lays out the options and a
   recommendation for the owner.
 - **Date:** 2026-10-16
-- **Amended by:** ADR 0021 — a fiat order may name a seller (D5), and the
-  platform fee on a FairCoin sale is decided: none (D6).
+- **Amended by:** ADR 0021 — a fiat order may name a seller (D5), the
+  platform fee on a FairCoin sale is decided: none (D6), and (D5, 2026-11-06)
+  the seller's FairCoin goes to the Peable wallet of the seller's own Oxy
+  account: the onboarding link confirms, it no longer carries an xpub (D3/D4's
+  key rules are retired with the key).
 - **Closes:** ADR 0001 open item #1 ("whether the FairCoin rail can settle a
   sub-merchant"). It can, and this is how.
 - **Leaves open:** ADR 0001 open item #2 (a React Native payer surface) — §D11.
