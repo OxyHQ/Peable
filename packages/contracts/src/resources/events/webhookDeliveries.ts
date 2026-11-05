@@ -28,7 +28,7 @@ export const webhookDeliverySchema = defineObject(
       last_status: z
         .enum(WEBHOOK_DELIVERY_STATUSES)
         .describe(
-          '`pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address) or was disabled first — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered.',
+          '`pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address), was disabled first, or its stored url breaks the registration rules — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered.',
         ),
       last_error: z
         .string()

@@ -282,6 +282,14 @@ export interface EndpointSigningTarget {
   readonly status: WebhookEndpointStatus;
   /** The current secret first, then the rolled one while it is still inside its window. */
   readonly secrets: readonly string[];
+  /** The merchant's mode (ADR 0017): a live endpoint's URL must be https. */
+  readonly livemode: boolean;
+  /**
+   * The merchant's VERIFIED first-party authority (`merchants.first_party`,
+   * mirrored from the credential by `resolveMerchant`) — never branding. Only
+   * such a merchant's endpoint may be sent through Oxy's own transport.
+   */
+  readonly firstParty: boolean;
 }
 
 /**
@@ -297,19 +305,48 @@ export async function findEndpointSigningTarget(
     .select({
       url: webhookEndpoints.url,
       status: webhookEndpoints.status,
+      livemode: merchants.livemode,
+      firstParty: merchants.firstParty,
       secret: webhookEndpoints.secret,
       previousSecret: sql<
         string | null
       >`case when ${webhookEndpoints.previousSecretExpiresAt} > now() then ${webhookEndpoints.previousSecret} end`,
     })
     .from(webhookEndpoints)
+    .innerJoin(merchants, eq(merchants.id, webhookEndpoints.merchantId))
     .where(eq(webhookEndpoints.id, endpointId));
   if (!row) return null;
   return {
     url: row.url,
     status: row.status as WebhookEndpointStatus,
     secrets: row.previousSecret ? [row.secret, row.previousSecret] : [row.secret],
+    livemode: row.livemode,
+    firstParty: row.firstParty,
   };
+}
+
+/**
+ * Disable an ENABLED endpoint for `reason`, in one guarded statement: an
+ * endpoint already disabled keeps the reason it has. The row stays — its
+ * deliveries are the record of what was (not) sent.
+ *
+ * @returns `true` when this call disabled it.
+ */
+export async function disableEndpoint(
+  db: DatabaseOrTransaction,
+  endpointId: string,
+  reason: WebhookEndpointDisabledReason,
+): Promise<boolean> {
+  const rows = await db
+    .update(webhookEndpoints)
+    .set({
+      status: 'disabled',
+      disabledReason: reason,
+      updatedAt: sql`date_trunc('milliseconds', now())`,
+    })
+    .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.status, 'enabled')))
+    .returning({ id: webhookEndpoints.id });
+  return rows.length > 0;
 }
 
 /**

@@ -104,6 +104,15 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // CHECK `convalidated` before the proxy migration's `0079` merged.
   '0078_subscription_adoption_validate':
     'released with #222; applied in production by the bfef755d deploy',
+  // Retiring the Stripe-Billing proxy (#224) is applied in production: a
+  // read-only ledger probe on 2026-11-05 counted 83 rows (`0000`–`0082`, ids
+  // 1–83) before the webhook endpoint `url_refused` migrations `0083`–`0084`.
+  '0080_retire_billing_proxy':
+    'applied in production; ledger read 2026-11-05 held 0000–0082 before 0083 was authored',
+  '0081_retire_billing_proxy_validate':
+    'applied in production; ledger read 2026-11-05 held 0000–0082 before 0083 was authored',
+  '0082_provider_events_drop_retry_after':
+    'applied in production; ledger read 2026-11-05 held 0000–0082 before 0083 was authored',
 };
 
 interface Migration {

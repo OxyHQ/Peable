@@ -11,6 +11,10 @@ import { eq, sql } from 'drizzle-orm';
 import type { RequestHandler } from 'express';
 import type { OxyAuthRequest, OxyServiceEnvironment, SafeFetchResult } from '@oxy.so/core/server';
 import { WEBHOOK_ENDPOINTS_MAX_PER_MERCHANT } from '@peable.to/shared-types';
+import { PEABLE_API_VERSION } from '@peable.to/contracts';
+import { insertEndpoint } from '../../db/webhooks/webhookEndpointRepository';
+import { newId } from '../../lib/ids';
+import { generateWebhookSecret } from '../../services/webhookEndpoints';
 import { createGateway, type Gateway } from '../../server';
 import { events } from '../../db/schema';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
@@ -219,6 +223,44 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook endpoints', () => {
     expect(deleted.json).toEqual({ id, object: 'webhook_endpoint', deleted: true });
     expect((await call('GET', `/v1/webhook_endpoints/${id}`)).status).toBe(404);
     expect((await call('DELETE', `/v1/webhook_endpoints/${id}`)).status).toBe(404);
+  });
+
+  test('a stored url the rule refuses: the test event disables it url_refused, and it comes back only with a url that passes', async () => {
+    // Written as migration 0040 wrote it: through the repository, not the route.
+    const stored = await insertEndpoint(gatewayDb(), {
+      publicId: newId('we'),
+      merchantId: merchant.id,
+      url: 'https://127.0.0.1:9/ssrf',
+      enabledEvents: ['*'],
+      metadata: {},
+      apiVersion: PEABLE_API_VERSION,
+      secret: generateWebhookSecret(),
+    });
+    if (stored === 'limit_reached') throw new Error('endpoint limit reached');
+    const id = stored.publicId;
+
+    const tested = await call('POST', `/v1/webhook_endpoints/${id}/test`, {});
+    expect(tested.status).toBe(200);
+    expect(tested.json).toMatchObject({
+      last_status: 'failed',
+      attempts: 0,
+      last_error: 'webhook endpoint url refused: url must use port 80 or 443',
+    });
+    expect((await call('GET', `/v1/webhook_endpoints/${id}`)).json).toMatchObject({
+      status: 'disabled',
+      disabled_reason: 'url_refused',
+    });
+
+    const reenabled = await call('POST', `/v1/webhook_endpoints/${id}`, { disabled: false });
+    expect(reenabled.status).toBe(400);
+    expect(reenabled.json.error).toMatchObject({ code: 'url_invalid', param: 'url' });
+
+    const fixed = await call('POST', `/v1/webhook_endpoints/${id}`, {
+      url: 'https://merchant.example/hook',
+      disabled: false,
+    });
+    expect(fixed.status).toBe(200);
+    expect(fixed.json).toMatchObject({ status: 'enabled', disabled_reason: null });
   });
 
   test('roll_secret shows a new secret once and bounds the overlap to 24 hours', async () => {

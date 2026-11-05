@@ -211,6 +211,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
       url: 'https://merchant.example/hook',
       status: 'enabled',
       secrets: ['whsec_only_the_dispatcher_reads_this'],
+      livemode: created.livemode,
+      firstParty: false,
     });
     const read = await findEndpointForMerchant(must(suite).db, 'we_secret_read', created.id);
     expect(Object.keys(read ?? {})).not.toContain('secret');

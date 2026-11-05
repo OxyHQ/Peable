@@ -42,7 +42,7 @@ const endpointShape = {
     .enum(WEBHOOK_ENDPOINT_DISABLED_REASONS)
     .nullable()
     .describe(
-      '`null` exactly when `status` is `enabled`. `delivery_failures`: every delivery failed for three days straight.',
+      '`null` exactly when `status` is `enabled`. `delivery_failures`: every delivery failed for three days straight. `url_refused`: the stored `url` breaks the registration rules, judged before every delivery; re-enable it with a `url` that passes.',
     ),
   api_version: z.string().describe('The wire version events are rendered with for this endpoint.'),
   metadata,

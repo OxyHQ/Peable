@@ -187,7 +187,20 @@ export async function updateWebhookEndpoint(
     return;
   }
   const body = parsed.data;
-  if (body.url !== undefined && refuseUrl(res, body.url, merchant)) return;
+  // An endpoint is only ever enabled with a URL that passes: re-enabling one
+  // judges the URL it would be sent to, which is the stored one unless the same
+  // update replaces it (an endpoint disabled `url_refused` comes back only with
+  // a `url` that passes).
+  let url = body.url;
+  if (url === undefined && body.disabled === false) {
+    const existing = await findEndpointForMerchant(getDb(), id, merchant.id);
+    if (!existing) {
+      sendNotFound(res);
+      return;
+    }
+    url = existing.url;
+  }
+  if (url !== undefined && refuseUrl(res, url, merchant)) return;
 
   const updated = await updateEndpoint(getDb(), id, merchant.id, {
     url: body.url,

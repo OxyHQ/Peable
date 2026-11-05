@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@fairco.in/core": "0.5.0",
-    "@oxy.so/core": "7.18.0",
+    "@oxy.so/core": "7.23.0",
     "@oxy.so/db": "1.4.0",
     "@peable.to/shared-types": "*",
     "@scure/bip32": "^1.7.0",
@@ -33,7 +33,7 @@
     "@aws-sdk/credential-provider-node": "3.972.84"
   },
   "devDependencies": {
-    "@oxy.so/contracts": "6.5.0",
+    "@oxy.so/contracts": "6.9.0",
     "@types/bun": "latest",
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",

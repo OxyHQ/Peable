@@ -802,10 +802,23 @@ not any endpoint wants it.
   column (`db/protectedColumns.ts`): only `findEndpointSigningTarget` reads it.
   A roll with `expires_in_seconds` (≤ 24h) keeps the previous secret signing
   beside the new one — two `v1=` per delivery — until then.
-- **URLs are refused at create/update by the dispatcher's own SSRF rules**
+- **One URL rule, judged at create, update AND before every delivery**
   (`webhookUrlProblem`: https, http only in test mode, ports 80/443, no
-  credentials, no blocked host or private IP literal); `safeFetch` still
-  resolves and checks DNS on every attempt.
+  credentials, no blocked host or private IP literal). The outbox judges the
+  STORED url: one that fails is never sent to and its endpoint is disabled
+  `url_refused` (migration 0040 copied `merchants.webhook_url` without the
+  rule); re-enabling judges the url it would be sent to. Never write
+  `webhook_endpoints.url` on a path that skips it.
+- **One lane decision, `webhookDeliveryLane`** (`services/webhookDispatcher.ts`):
+  a VERIFIED first-party merchant's (`merchants.first_party`) endpoint on Oxy's
+  own API — `oxy.isFirstPartyServiceUrl`, the SDK's answer, never a hostname
+  list here — goes through `OxyServer`'s
+  `createServiceClient({ baseURL: oxy.baseURL, audience: 'oxy-api' }).fetch`
+  (inside the VPC `api.oxy.so` is a private address `safeFetch` refuses);
+  every other URL through `safeFetch`, which resolves and checks DNS on every
+  attempt. That lane carries Peable's bearer, so a third-party merchant's
+  `api.oxy.so` URL stays on `safeFetch`. Same bytes, signature, deadline and
+  classification on both lanes.
 - **Retries span ~3 days** (`WEBHOOK_RETRY_SCHEDULE_MS`, ±20% jitter);
   `recordEndpointAttempt` folds every attempt into the endpoint's
   `failing_since` run in ONE statement and disables it with

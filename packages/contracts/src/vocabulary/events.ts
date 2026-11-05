@@ -171,10 +171,15 @@ export type WebhookEndpointStatus = (typeof WEBHOOK_ENDPOINT_STATUSES)[number];
  *  - `delivery_failures`    — every delivery to it failed for three days
  *    straight, so Peable stopped sending. Re-enabling it (`disabled: false`)
  *    starts the clock again.
+ *  - `url_refused`          — its stored `url` breaks the rules a URL is
+ *    registered under (https in live mode, ports 80/443, no private, loopback
+ *    or reserved address), judged again before every delivery, so Peable never
+ *    sent to it. It is re-enabled only together with a `url` that passes.
  */
 export const WEBHOOK_ENDPOINT_DISABLED_REASONS = [
   'disabled_by_merchant',
   'delivery_failures',
+  'url_refused',
 ] as const;
 export type WebhookEndpointDisabledReason = (typeof WEBHOOK_ENDPOINT_DISABLED_REASONS)[number];
 

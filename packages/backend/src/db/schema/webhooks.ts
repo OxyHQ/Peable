@@ -50,7 +50,9 @@ export { WEBHOOK_ENDPOINT_DESCRIPTION_MAX };
  * attempts; any delivered attempt clears it. An attempt that fails when the run
  * is three days old disables the endpoint with `disabled_reason =
  * 'delivery_failures'` — `recordEndpointAttempt` does both in one statement,
- * so two dispatchers cannot disagree about it.
+ * so two dispatchers cannot disagree about it. A stored `url` that breaks the
+ * registration rule (`webhookUrlProblem`, judged by the outbox before every
+ * delivery) disables it `url_refused` without an attempt.
  */
 export const webhookEndpoints = pgTable(
   'webhook_endpoints',
