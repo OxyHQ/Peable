@@ -22,7 +22,7 @@ Object type: `webhook_delivery`.
 | `url` | string | The URL actually POSTed to, as of the latest attempt. |
 | `attempts` | integer |  |
 | `delivered` | boolean |  |
-| `last_status` | string | `pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address) or was disabled first — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered. |
+| `last_status` | string | `pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address), was disabled first, or its stored url breaks the registration rules — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered. |
 | `last_error` | string | Why the last attempt did not succeed — operator-facing, never a secret. |
 | `next_attempt_at` | integer | Unix seconds. |
 | `created` | integer | Unix seconds. |

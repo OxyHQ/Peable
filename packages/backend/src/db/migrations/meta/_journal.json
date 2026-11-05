@@ -582,6 +582,20 @@
       "when": 1793821280764,
       "tag": "0082_provider_events_drop_retry_after",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793841671006,
+      "tag": "0083_webhook_endpoint_url_refused",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793841688031,
+      "tag": "0084_webhook_endpoint_url_refused_validate",
+      "breakpoints": true
     }
   ]
 }

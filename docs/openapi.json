@@ -66648,7 +66648,7 @@
               "failed",
               "dead"
             ],
-            "description": "`pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address) or was disabled first — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered."
+            "description": "`pending`: will be attempted (`next_attempt_at`). `delivered`: terminal success. `failed`: the endpoint refused it (a 4xx, a blocked address), was disabled first, or its stored url breaks the registration rules — never retried. `dead`: every attempt failed transiently for three days; it can be redelivered."
           },
           "last_error": {
             "type": "string",
@@ -66843,14 +66843,15 @@
                 "type": "string",
                 "enum": [
                   "disabled_by_merchant",
-                  "delivery_failures"
+                  "delivery_failures",
+                  "url_refused"
                 ]
               },
               {
                 "type": "null"
               }
             ],
-            "description": "`null` exactly when `status` is `enabled`. `delivery_failures`: every delivery failed for three days straight."
+            "description": "`null` exactly when `status` is `enabled`. `delivery_failures`: every delivery failed for three days straight. `url_refused`: the stored `url` breaks the registration rules, judged before every delivery; re-enable it with a `url` that passes."
           },
           "api_version": {
             "type": "string",
@@ -67052,14 +67053,15 @@
                 "type": "string",
                 "enum": [
                   "disabled_by_merchant",
-                  "delivery_failures"
+                  "delivery_failures",
+                  "url_refused"
                 ]
               },
               {
                 "type": "null"
               }
             ],
-            "description": "`null` exactly when `status` is `enabled`. `delivery_failures`: every delivery failed for three days straight."
+            "description": "`null` exactly when `status` is `enabled`. `delivery_failures`: every delivery failed for three days straight. `url_refused`: the stored `url` breaks the registration rules, judged before every delivery; re-enable it with a `url` that passes."
           },
           "api_version": {
             "type": "string",

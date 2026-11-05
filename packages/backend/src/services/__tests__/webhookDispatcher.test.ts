@@ -12,6 +12,7 @@ const SECRET = 'whsec_test_secret';
 const TARGET: WebhookTarget = {
   url: 'https://merchant.example/peable/webhook',
   secrets: [SECRET],
+  firstParty: false,
 };
 
 const INTENT: PaymentIntent = intentDTO();
@@ -166,7 +167,7 @@ test('signs with every secret of the target, one v1 each', async () => {
   let body: string | undefined;
   await attemptDelivery(
     buildEvent('payment_intent.succeeded', INTENT),
-    { url: TARGET.url, secrets: ['whsec_new', 'whsec_old'] },
+    { url: TARGET.url, secrets: ['whsec_new', 'whsec_old'], firstParty: false },
     {
       safeFetch: async (_url, options) => {
         signature = options?.headers?.['Peable-Signature'];

@@ -24,6 +24,13 @@ export function generateWebhookSecret(): string {
  * change after the check — so a public name that resolves to a private address
  * is still refused per attempt by `safeFetch`.
  *
+ * The ONE rule, judged at create, at update (and re-enable), AND by the outbox
+ * on the stored URL before every delivery — on both lanes, Oxy's included. A
+ * stored URL it refuses is never sent to; its endpoint is disabled
+ * `url_refused`. Never write `webhook_endpoints.url` on a path that skips it
+ * (migration 0040's backfill did, and carried in a live
+ * `http://127.0.0.1:9/ssrf`).
+ *
  * - `https` always; `http` only for a test-mode endpoint (Stripe's rule: live
  *   events carry real payment data and never travel in clear text).
  * - ports 80/443 only, no credentials in the URL, at most `MAX_URL_LENGTH`.

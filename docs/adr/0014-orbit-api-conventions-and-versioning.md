@@ -115,6 +115,36 @@ disabled (`delivery_failures`). The merchant's single `webhook_url` /
 `webhook_secret` were removed in the same change, each existing pair migrated to
 one `['*']` endpoint keeping its secret.
 
+Where a delivery may go is decided twice, by one rule each:
+
+- **The URL rule is `webhookUrlProblem`** (`services/webhookEndpoints.ts`):
+  https, http only in test mode, ports 80/443, no credentials, no blocked host
+  or private/loopback/reserved IP literal. It refuses a URL at create and
+  update (and re-enabling an endpoint judges the URL it would be sent to), AND
+  the outbox judges the STORED URL by it before every delivery: a row that
+  fails is never sent to, its delivery ends `failed` without an attempt, and
+  the endpoint is disabled `url_refused`. The second judgement exists because
+  the migration above did not go through the first: it copied
+  `merchants.webhook_url`, which had been accepted as any `z.string().url()`,
+  with only a scheme check, and so carried a live `http://127.0.0.1:9/ssrf`
+  endpoint (`we_dcc4e42ee41ae60ad31bde53`) in as enabled. `safeFetch` refused
+  each of its deliveries (`disallowed port 9`); nothing reached loopback.
+- **The transport is `webhookDeliveryLane`** (`services/webhookDispatcher.ts`),
+  the one place it is chosen. A VERIFIED first-party merchant's
+  (`merchants.first_party`) endpoint whose URL is Oxy's own API — the SDK's
+  `oxy.isFirstPartyServiceUrl`, exactly the configured API origin, never a
+  hostname list here — goes through the shared `OxyServer`
+  (`createServiceClient({ baseURL: oxy.baseURL, audience: 'oxy-api' }).fetch`,
+  Peable's workload authority, no redirects). Every other URL goes through
+  `safeFetch` with its full SSRF checks. Inside the VPC `api.oxy.so` resolves
+  to a private address, which `safeFetch` refuses by design, so without this
+  Oxy could never receive its own events. The merchant half is required
+  because this lane carries Peable's bearer: a third-party merchant naming
+  `api.oxy.so` stays on `safeFetch` and is refused there. Both lanes send the
+  same signed bytes, with the same header deadline, and classify the answer
+  the same way (2xx delivered, 5xx/timeout/transport failure retried, other
+  4xx and SSRF refused).
+
 ### D5 — The contract is the source of truth
 
 Every route's request and response schema lives in `packages/contracts` as Zod,

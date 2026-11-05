@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/postgres';
 import { findEventById } from '../db/events/eventRepository';
 import {
+  disableEndpoint,
   findEndpointSigningTarget,
   recordEndpointAttempt,
 } from '../db/webhooks/webhookEndpointRepository';
@@ -19,7 +20,8 @@ import {
   type ClaimedDeliveryRow,
 } from '../db/webhooks/webhookOutboxRepository';
 import { toEventDTO } from '../lib/serialize';
-import { attemptDelivery, type SafeFetchFn } from './webhookDispatcher';
+import { attemptDelivery, type FirstPartyFetchFn, type SafeFetchFn } from './webhookDispatcher';
+import { webhookUrlProblem } from './webhookEndpoints';
 
 /**
  * The backoff schedule, in milliseconds, one entry per elapsed attempt —
@@ -81,6 +83,8 @@ export function nextAttemptDelayMs(
 
 export interface OutboxPassDeps {
   readonly safeFetch?: SafeFetchFn | undefined;
+  /** Oxy's own transport, for a first-party merchant's endpoint on Oxy's API. */
+  readonly firstPartyFetch?: FirstPartyFetchFn | undefined;
   readonly batchSize?: number;
   readonly leaseMs?: number;
   readonly now?: Date;
@@ -177,10 +181,34 @@ async function deliverOne(
     return 'terminal';
   }
 
+  // The registration rule, judged again on the URL as stored: a row that never
+  // passed it (the 0040 backfill copied `merchants.webhook_url` with nothing
+  // but a scheme check) or that a tightened rule now refuses is never sent to,
+  // on either lane. Not an attempt: nothing left Peable. The endpoint is
+  // disabled with the reason, so the merchant sees why and its next events are
+  // not enqueued for it.
+  const urlProblem = webhookUrlProblem(target.url, target.livemode);
+  if (urlProblem !== null) {
+    const disabled = await disableEndpoint(db, row.endpointId, 'url_refused');
+    await releaseDeliveryClaim(db, row.id, {
+      nextAttemptAt: null,
+      reason: `webhook endpoint url refused: ${urlProblem}`,
+    });
+    if (disabled) {
+      process.emitWarning(
+        `Peable disabled webhook endpoint ${row.endpointId}: its url is refused (${urlProblem})`,
+      );
+    }
+    return 'terminal';
+  }
+
   const outcome = await attemptDelivery(
     toEventDTO(event),
-    { url: target.url, secrets: target.secrets },
-    deps.safeFetch ? { safeFetch: deps.safeFetch } : {},
+    { url: target.url, secrets: target.secrets, firstParty: target.firstParty },
+    {
+      ...(deps.safeFetch ? { safeFetch: deps.safeFetch } : {}),
+      ...(deps.firstPartyFetch ? { firstPartyFetch: deps.firstPartyFetch } : {}),
+    },
   );
 
   const delayMs =
