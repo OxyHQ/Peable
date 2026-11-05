@@ -16,8 +16,10 @@ A **PaymentIntent** (`pi_…`) is one payment, on one of two rails:
   never reaches Peable or your server.
 
 [Checkout](/checkout) and [Payment Links](/payment-links) create
-PaymentIntents for you. Create one yourself when you build your own payment
-UI.
+PaymentIntents for you, and they are the integration that always offers the
+payer FairCoin beside your fiat methods
+([FairCoin on every order](/faircoin)). Create a PaymentIntent yourself when
+you build your own payment UI: it is one payment on the one rail you choose.
 
 ## Amounts, currencies and networks
 
@@ -171,6 +173,13 @@ SEPA Debit, iDEAL, Bancontact and EPS (EUR only) are yours to turn on. Every
 method says whether it is `available` and, when not, why
 (`unavailable_reason`: `provider_unsupported`, or `requires_card` for a wallet
 while cards are off).
+
+Every configuration also has a `faircoin` entry. It is always `on` and has
+`locked: true`, because every order offers FairCoin; setting it `off` is
+`400 payment_method_locked`. Its `unavailable_reason` is
+`faircoin_account_missing` until you register your FairCoin key (test mode
+only: a live merchant without one cannot take payments). It never reaches a
+card PaymentIntent's `payment_method_types`.
 
 ```ts
 const [config] = (await peable.paymentMethodConfigurations.list()).data; // the default

@@ -45,13 +45,17 @@ const session = await peable.checkout.sessions.create({
 redirect(session.url);
 ```
 
-A `FAIR` order is paid on the FairCoin rail, any other currency by card: the
-line items' currency decides, and every line has the same one.
+Every line has the same currency. A `FAIR` order is paid in FairCoin. A fiat
+order offers your fiat methods **and** FairCoin, and the payer chooses when
+they confirm; FairCoin on a fiat order is quoted in FAIR for 10 minutes. You
+can narrow the fiat side, but nothing removes FairCoin
+([FairCoin on every order](/faircoin)).
 
 | Field | Meaning |
 |---|---|
 | `mode` | `payment` (default); `setup` — save a card for a customer (`currency` required, card only: FairCoin has no stored methods); `subscription` — sell a subscription ([Subscriptions](/billing#sell-a-subscription-with-checkout)) |
 | `ui_mode` | `hosted` (answers `url`) or `embedded` (answers `client_secret`) |
+| `payment_method_types` | What the payer may choose: `['card', 'faircoin']` on a fiat order, `['faircoin']` on a `FAIR` one. Omit it for exactly that. A list without `faircoin` is `400 payment_method_locked` |
 | `status` | `open`, then `complete` or `expired` |
 | `payment_status` | `paid`; `unpaid` (a FairCoin payment broadcast and confirming, or a card authorized for manual capture); `no_payment_required` (setup, or a discount took the total to zero) |
 | `amount_subtotal`, `amount_total`, `total_details` | Priced by the catalog's one pricing module: tiers, `transform_quantity`, the discount (half-up per line; an amount off allocated in proportion), Peable Tax on the discounted lines |
@@ -79,7 +83,7 @@ payment already in flight cannot be called off: the expiry is refused.
 
 | Event | When |
 |---|---|
-| `checkout.session.completed` | The payment succeeded, was authorized for capture, or — FairCoin — was broadcast |
+| `checkout.session.completed` | The payment succeeded, was authorized for capture, or — FairCoin, on a `FAIR` or a fiat order — was broadcast |
 | `checkout.session.async_payment_succeeded` | A FairCoin payment the session completed with was confirmed on chain |
 | `checkout.session.async_payment_failed` | …or failed (an underpayment) |
 | `checkout.session.expired` | The session ran out without a payment |
@@ -93,8 +97,13 @@ server if you act on a redirect.
 `session.url` opens `checkout.peable.to/c/<id>`. The payer sees your
 [branding](#branding), the lines (with a quantity stepper where you allowed
 one), a promotion-code box, the fields you asked for, the totals with tax, and
-then the payment step: the provider's secure card fields (with Apple Pay and
-Google Pay above them where available) or the FairCoin deep link and QR code.
+then the payment step. On a fiat order the payer chooses a method: the
+provider's secure card fields (with Apple Pay and Google Pay above them where
+available) or FairCoin, which shows the FAIR amount, its quote and how long
+the quote holds. FairCoin pays through a deep link or a QR code. The payer can
+switch with **Pay with FairCoin instead** or **Pay by card instead** until
+money starts moving. FairCoin is always listed; when it cannot be paid right
+now, it appears disabled with the reason.
 It speaks `en`, `es`, `fr`, `de`, `it` and `pt` (`locale`, else the browser's
 language).
 
@@ -118,7 +127,8 @@ const checkout = PeableCheckout.mountCheckout('#checkout', {
 });
 ```
 
-The same experience runs in an iframe from `checkout.peable.to`. The frame and
+The same experience runs in an iframe from `checkout.peable.to`, including the
+choice between your fiat methods and FairCoin. The frame and
 your page talk over `postMessage`, each checking the other's origin and
 window; the client secret travels in the frame URL's fragment, never to a
 server log. `complete` is posted only after the gateway says so — re-read the
@@ -159,5 +169,8 @@ that cannot be sent within three days is dropped rather than sent late.
 
 ## On behalf of a seller
 
-`connected_account: 'ca_…'` on the session pays one of your FairCoin sellers
-directly ([FairCoin sellers](/connect-faircoin#4-take-a-payment-for-a-seller)).
+`connected_account: 'ca_…'` on the session makes it an order for one of your
+sellers ([FairCoin sellers](/connect-faircoin#4-take-a-payment-for-a-seller)).
+A FairCoin payment of that order goes straight to the seller's own key. On a
+fiat order, a card payment is your own charge, and you pay the seller with a
+[transfer](/connect).

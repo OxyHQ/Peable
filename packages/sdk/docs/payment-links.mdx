@@ -35,6 +35,9 @@ link.url; // https://checkout.peable.to/l/<id>
   never a payment. The payment exists only once the payer confirms that
   session, and the session names the link (`payment_link`), so everything in
   [Checkout](/checkout) — events, fulfilment, branding — applies unchanged.
+- **Every visit offers FairCoin.** A link over fiat prices offers your fiat
+  methods and FairCoin, quoted in FAIR when the payer chooses it; a link over
+  `FAIR` prices is paid in FairCoin ([FairCoin on every order](/faircoin)).
 - `peable.paymentLinks.listLineItems(id)` lists the lines;
   `peable.paymentLinks.list({ active: true })` your links.
 - Orbit → Payment Links builds links from your products and copies the URL or

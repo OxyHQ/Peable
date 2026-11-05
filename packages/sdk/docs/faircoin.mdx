@@ -1,0 +1,178 @@
+---
+title: "FairCoin on every order"
+description: "Every Checkout Session, Payment Link and hosted invoice offers FairCoin beside your fiat methods. The payer chooses, and a fiat order is quoted in FAIR."
+order: 4.5
+---
+
+# FairCoin on every order
+
+Every order a payer completes on Peable offers FairCoin, and nothing turns it
+off. You decide which **fiat** methods a payer sees. FairCoin is always one of
+the choices.
+
+| Surface | `FAIR` order | Fiat order (`EUR`, `USD`, …) |
+|---|---|---|
+| [Checkout Session](/checkout): hosted, embedded, `mode: 'subscription'` | FairCoin | Your fiat methods **and** FairCoin |
+| [Payment Link](/payment-links): each visit is a session | FairCoin | Your fiat methods **and** FairCoin |
+| Hosted invoice page: one-off and subscription [invoices](/billing#invoices) | FairCoin | Your fiat methods **and** FairCoin |
+
+Your [payment method configuration](/accept-a-payment#payment-methods-and-wallets)
+controls the fiat side: cards, wallets and the bank methods you turn on.
+FairCoin is a locked entry in every configuration: it is always `on` and has
+`locked: true`. A request that would remove FairCoin is refused with
+`400 payment_method_locked`, and `param` names the field that tried:
+
+```ts
+// Omit payment_method_types, or name both. A fiat order offers ['card', 'faircoin'].
+await peable.checkout.sessions.create({ line_items, success_url });
+
+// FairCoin only: you may narrow the fiat side, never FairCoin.
+await peable.checkout.sessions.create({ line_items, success_url, payment_method_types: ['faircoin'] });
+
+// 400 payment_method_locked, param: 'payment_method_types'
+await peable.checkout.sessions.create({ line_items, success_url, payment_method_types: ['card'] });
+
+// 400 payment_method_locked, param: 'faircoin'
+await peable.paymentMethodConfigurations.update(config.id, {
+  faircoin: { display_preference: { preference: 'off' } },
+});
+```
+
+> **Checkout Sessions offer FairCoin. A raw card PaymentIntent does not.**
+>
+> A PaymentIntent is one payment on one rail. If you create a card
+> PaymentIntent yourself and mount [Elements](/elements) over it, the payer
+> can only pay by card. To offer FairCoin, use a Checkout Session (hosted or
+> [embedded](/checkout#embedded-checkout)), a Payment Link or an invoice.
+
+## The payer chooses
+
+Hosted and embedded checkout show every method. FairCoin is always listed;
+when it cannot be paid right now, it appears disabled with the reason. A payer
+who has started paying can switch with **Pay with FairCoin instead** or **Pay
+by card instead**. If you build your own payer page with the payer client, the
+choice is the `payment_method_type` you confirm with:
+
+```ts
+import { createPeableCheckout } from '@peable.to/sdk/checkout';
+
+const payer = createPeableCheckout();
+const session = await payer.getCheckoutSession(sessionId, clientSecret);
+
+session.payment_method_types; // ['card', 'faircoin'] on a fiat order
+session.faircoin;             // { available: true, unavailable_reason: null }
+
+const confirmed = await payer.confirmCheckoutSession(sessionId, clientSecret, {
+  payment_method_type: 'faircoin',
+});
+confirmed.payment_intent?.next_action?.faircoin_payment; // { address, amount, uri }, in FAIR
+confirmed.payment_intent?.faircoin?.quote;              // the price behind that amount
+```
+
+- **Without `payment_method_type`**, the confirm uses the rail of the order's
+  currency: card on a fiat order, FairCoin on a `FAIR` one. Clients written
+  before this change keep working unchanged.
+- **Hosted invoices** take the same parameter on
+  `POST /v1/invoices/public/:token/pay`.
+- **Switching** to the other method replaces the payment, as long as no money
+  has started moving on it. The new payment is linked to the order and the old
+  one is cancelled in one step. A card payment is cancelled at the provider
+  first. If Peable cannot confirm that cancellation, the switch is refused,
+  because a card that might still be charged has to stay the order's payment.
+
+## The quote
+
+When a payer chooses FairCoin on a fiat order, Peable creates a FairCoin
+PaymentIntent in `FAIR` for the order's total, with tax, discount and shipping
+included. That is the same amount a card would be charged. The FAIR amount is
+quoted for **10 minutes**, and the intent carries its quote in
+`faircoin.quote`:
+
+```ts
+const quote = intent.faircoin.quote; // null on a FAIR-priced payment
+quote.currency;        // 'EUR': the order's currency
+quote.amount;          // '2500': the order's total, in base units of that currency
+quote.rate;            // EUR per 1 FAIR, rounded for display
+quote.price;           // { source: 'wfair-base', usd_per_fair, observed_at }
+quote.reference_rates; // { source: 'ecb', usd_per_eur, currency_per_eur, observed_at }, or null on a USD order
+quote.quoted_at;       // Unix seconds
+quote.expires_at;      // Unix seconds: the payment expires with the quote unless it was already broadcast
+```
+
+The FAIR/USD price comes from the FairCoin Explorer (`wfair-base`) and is used
+only if it is at most two minutes old. Any other fiat currency is converted
+through USD using the European Central Bank's daily reference rates, which are
+used only if they are at most five days old. The FAIR amount is rounded up to
+the smallest FAIR unit with exact integer arithmetic, so the result can be
+recomputed from the stored sources.
+
+- **The FAIR amount is what the payer pays.** Peable checks the transaction
+  against the FAIR amount, as it does for every FairCoin payment. A
+  transaction that pays less cancels the payment as `underpaid`.
+- **A broadcast payment never expires.** Once the payer's transaction is
+  reported (`processing`), the quote's deadline no longer applies.
+- **A lapsed quote does not close the order.** If the quote expires before
+  the payer pays, its PaymentIntent is cancelled. The session or invoice stays
+  open, and choosing FairCoin again gets a fresh quote. The order's own
+  `expires_at` is unchanged.
+- **An invoice records the fiat figure.** An invoice paid with a quoted
+  payment records the quote's fiat `amount` as `amount_paid`.
+
+**The quote sets a price. It does not exchange currency.** Peable never holds,
+buys, sells or converts FAIR. The payer's wallet pays FAIR to your own
+address, and no fiat moves on that payment.
+
+**Without a fresh price, FairCoin is unavailable for a moment, and nothing
+else is affected.** FairCoin still appears, with `faircoin: { available:
+false, unavailable_reason: 'price_unavailable' }`, and a confirm with
+`faircoin` answers `503 faircoin_price_unavailable`. The fiat methods keep
+working. Peable never uses a cached, manual or estimated rate.
+
+## Completion, books and renewals
+
+Completion depends on the payment, exactly as for a `FAIR` order. A fiat order
+paid in FairCoin sends `checkout.session.completed` when the payer's
+transaction is broadcast (`payment_status: 'unpaid'`), then
+`checkout.session.async_payment_succeeded` once it confirms, or
+`checkout.session.async_payment_failed` if it underpays. Fulfil it as in
+[Checkout](/checkout#fulfil-the-order). An invoice is paid when that payment
+succeeds (`invoice.paid`).
+
+- **Ledger.** The FairCoin balance transaction is informational and in FAIR,
+  as before. It also carries `faircoin_quote`, so your books and reports show
+  what the sale was priced at in fiat. It creates no fiat balance
+  ([Connect and money](/connect#balance-and-payouts)).
+- **Subscriptions.** Peable never debits FairCoin. If the payer pays a
+  subscription's first invoice in FairCoin, the subscription becomes
+  `send_invoice`. Each renewal is then an invoice the payer pays on its hosted
+  page, by card or in FairCoin at that period's quote. If the payer pays by
+  card, the card is saved and renewals are charged automatically, as before
+  ([Subscriptions](/billing#sell-a-subscription-with-checkout)).
+
+## Your FairCoin receiving key is required
+
+A FairCoin payment goes to an address derived from **your** watch-only key,
+so every merchant needs one. If you registered without a key, register it once:
+
+```ts
+await peable.merchants.faircoin.register({ network: 'mainnet', xpub: 'xpub…' });
+```
+
+You can also register it in Orbit under Settings › FairCoin receiving key.
+
+- **The key is immutable.** A second registration answers
+  `409 already_registered`. A private key, or a key for the other network, is
+  refused with `watch_only_violation` and never stored. A key that already
+  receives payments for another merchant or a seller answers `409 key_in_use`.
+  A test credential registers `testnet` only. Use a wallet account (pocket)
+  that you use for nothing else.
+- **A live merchant without a key cannot take payments.** These calls answer
+  `409 faircoin_account_required`: creating a PaymentIntent, a Checkout
+  Session (including a Payment Link visit), a Payment Link or a subscription,
+  and finalizing an invoice. Peable never falls back to a card-only order.
+- **Test mode works without a key.** Orders are created, and FairCoin appears
+  with `unavailable_reason: 'faircoin_account_missing'` on the session and on
+  the configuration entry, so you can build the integration before the key
+  exists.
+- **Marketplace sellers** register their own key. See
+  [FairCoin sellers](/connect-faircoin).
