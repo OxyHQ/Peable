@@ -50,7 +50,6 @@ import {
   runFinalDunningAction,
 } from './collect';
 import { finalizeStoredInvoice, markUncollectibleInTx } from './invoiceEngine';
-import { BillingEngineError } from './errors';
 import { InvoiceTaxError } from './invoiceTax';
 import { addDays } from './periods';
 import { engineNow } from './runtime';
@@ -80,13 +79,8 @@ export async function runInvoiceStep(invoiceId: string): Promise<void> {
         const finalized = await finalizeStoredInvoice(invoice.id);
         await applyPauseToFinalized(finalized.id);
       } catch (error) {
-        // Recorded on the draft (and retried) by the finalize itself: a tax
-        // failure, or a live merchant without its FairCoin key (ADR 0021 D5).
-        if (
-          !(error instanceof InvoiceTaxError) &&
-          !(error instanceof BillingEngineError && error.code === 'faircoin_account_required')
-        )
-          throw error;
+        // Recorded on the draft (and retried) by the finalize itself.
+        if (!(error instanceof InvoiceTaxError)) throw error;
       }
       return;
     }

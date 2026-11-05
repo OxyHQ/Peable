@@ -32,8 +32,7 @@ export type BillingEngineErrorCode =
   | 'portal_feature_disabled'
   | 'portal_session_expired'
   | 'card_declined'
-  | 'rail_unavailable'
-  | 'faircoin_account_required';
+  | 'rail_unavailable';
 
 export type BillingEngineStatus = 400 | 402 | 403 | 404 | 409 | 503;
 

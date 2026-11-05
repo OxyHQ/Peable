@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import type { AccountRequirements } from '@peable.to/shared-types';
-import { FAIRCOIN_KEY_REQUIREMENT } from '@peable.to/contracts/vocabulary';
 import {
   disabledReasonLabel,
   humanizeRequirement,
@@ -19,12 +18,6 @@ const none: AccountRequirements = {
 };
 
 describe('requirementLabel', () => {
-  it('words the seller’s FairCoin receiving key (ADR 0021 D5)', () => {
-    expect(requirementLabel(FAIRCOIN_KEY_REQUIREMENT)).toBe(
-      'The seller’s FairCoin receiving key (the seller registers it from the onboarding link)',
-    );
-  });
-
   it('words a known identifier', () => {
     expect(requirementLabel('external_account')).toBe('Bank account for payouts');
     expect(requirementLabel('individual.verification.document')).toBe('An identity document');

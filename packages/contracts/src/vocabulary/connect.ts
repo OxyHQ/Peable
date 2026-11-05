@@ -33,15 +33,6 @@ export type ConnectedAccountRail = (typeof CONNECTED_ACCOUNT_RAILS)[number];
 export const CONNECTED_ACCOUNT_FAIRCOIN_STATUSES = ['pending', 'active'] as const;
 export type ConnectedAccountFaircoinStatus = (typeof CONNECTED_ACCOUNT_FAIRCOIN_STATUSES)[number];
 
-/**
- * The requirement a seller reports in `requirements.currently_due` until its
- * OWN FairCoin receiving key is registered (ADR 0021 D5): a seller without one
- * is not payable — no transfer and no on-behalf payment. Only the seller can
- * clear it, from their own Oxy session (ADR 0012 D3); the platform opens the
- * FairCoin half and sends an onboarding link.
- */
-export const FAIRCOIN_KEY_REQUIREMENT = 'faircoin.receiving_key';
-
 export const PAYOUT_INTERVALS = ['manual', 'daily', 'weekly', 'monthly'] as const;
 export type PayoutInterval = (typeof PAYOUT_INTERVALS)[number];
 

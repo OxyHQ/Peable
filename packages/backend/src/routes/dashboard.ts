@@ -1,23 +1,13 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import {
-  registerMerchantFaircoinParams,
-  registerMerchantParams,
-  updateMerchantParams,
-} from '@peable.to/contracts';
+import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import type { OxyAccess } from '../services/oxyAccess';
 import { oxy } from '../oxy';
 import { dashboardGate, resolveDashboardAccess } from './dashboardAccess';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
-import {
-  registerMerchant,
-  registerMerchantFaircoin,
-  applyMerchantPatch,
-  sendFaircoinKeyRefusal,
-  sendMerchantWriteError,
-} from './merchants';
+import { registerMerchant, applyMerchantPatch, sendMerchantWriteError } from './merchants';
 import {
   answerDisputeList,
   closeDisputeCore,
@@ -205,28 +195,6 @@ export function createDashboardRouter(deps: {
       }
       res.status(200).json(toMerchantDTO(result.merchant));
     }),
-  );
-
-  // The FairCoin receiving key, once (ADR 0021 D5): who receives the money.
-  router.post(
-    `${base}/merchant/faircoin`,
-    requireOxyUser,
-    requestContextMiddleware,
-    gate('money', (req, res, merchant) =>
-      runIdempotent(req, res, merchant.id, async () => {
-        const parsed = registerMerchantFaircoinParams.safeParse(req.body);
-        if (!parsed.success) {
-          sendValidationError(res, parsed.error);
-          return;
-        }
-        const result = await registerMerchantFaircoin(merchant, parsed.data);
-        if (!result.ok) {
-          sendFaircoinKeyRefusal(res, result);
-          return;
-        }
-        res.status(200).json(toMerchantDTO(result.merchant));
-      }),
-    ),
   );
 
   router.get(

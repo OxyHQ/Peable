@@ -28,13 +28,13 @@ export const merchantSchema = defineObject(
       network: network
         .nullable()
         .describe(
-          'The FairCoin chain this merchant is paid on; `null` until its key is registered. Nullable together with `xpub`.',
+          'The FairCoin chain this merchant accepts on; `null` on a card-only merchant. Nullable together with `xpub`.',
         ),
       xpub: z
         .string()
         .nullable()
         .describe(
-          'The watch-only account key receive addresses derive from; `null` until it is registered (`POST /v1/merchants/me/faircoin`). A live merchant without one cannot take payments (`faircoin_account_required`, ADR 0021).',
+          'The watch-only account key receive addresses derive from; `null` on a card-only merchant.',
         ),
       required_confirmations: z.number().int().positive(),
       display_name: z
@@ -139,26 +139,6 @@ export const updateMerchantParams = z
   })
   .strict();
 export type UpdateMerchantParams = z.input<typeof updateMerchantParams>;
-
-/**
- * `POST /v1/merchants/me/faircoin`: register the merchant's FairCoin receiving
- * key ONCE, when it registered without one (ADR 0021 D5). Both fields, always.
- */
-export const registerMerchantFaircoinParams = z
-  .object({
-    network: network.describe(
-      'The chain the key is for. A non-production merchant registers `testnet` only.',
-    ),
-    xpub: z
-      .string()
-      .min(1)
-      .max(256)
-      .describe(
-        'A watch-only ACCOUNT xpub of a wallet account (pocket) used for nothing else. A private extended key is refused and never stored.',
-      ),
-  })
-  .strict();
-export type RegisterMerchantFaircoinParams = z.input<typeof registerMerchantFaircoinParams>;
 
 // ---- Branding ----------------------------------------------------------------
 
@@ -313,21 +293,6 @@ export const merchantRoutes = [
     body: updateMerchantParams,
     response: merchantSchema,
     sdk: 'merchants.update',
-  }),
-  defineRoute({
-    operationId: 'registerMerchantFaircoinKey',
-    method: 'post',
-    path: '/v1/merchants/me/faircoin',
-    tag: 'Merchants',
-    summary: 'Register your FairCoin receiving key',
-    description:
-      'Registers the watch-only account xpub FairCoin payments to this merchant derive their addresses from, once, for a merchant that has none (ADR 0021 D5). Immutable once set: a second registration answers 409 `already_registered`. A private extended key, or a key for another network, is refused (`watch_only_violation`) and never stored; a non-production merchant registers `testnet` only; a key that already receives payments for another merchant or seller is refused (`key_in_use`). Until it is registered a live merchant cannot take payments (`faircoin_account_required`).',
-    auth: 'service',
-    scope: 'payments:write',
-    idempotent: true,
-    body: registerMerchantFaircoinParams,
-    response: merchantSchema,
-    sdk: 'merchants.faircoin.register',
   }),
   defineRoute({
     operationId: 'retrieveBrandingSettings',

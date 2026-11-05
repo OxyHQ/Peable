@@ -14,16 +14,8 @@ import { DETAIL_ASIDE_WIDTH, DETAIL_MAIN_MIN_WIDTH } from '../shell/layout';
 import { errorState } from './errorState';
 import { pageGate } from './pageGate';
 import { CopyableId } from './data';
-import {
-  FailureBanner,
-  FaircoinKeyRequired,
-  PageFailureContext,
-  PageSkeleton,
-  SetupPayments,
-  StateFor,
-} from './states';
+import { FailureBanner, PageFailureContext, PageSkeleton, SetupPayments, StateFor } from './states';
 import { useMerchant } from '../merchant/useMerchant';
-import { faircoinKeyStatus } from '../merchant/faircoinKey';
 
 /**
  * The page template every Orbit screen renders in, Stripe's: a breadcrumb
@@ -104,16 +96,6 @@ export function OrbitScreen({
     // The page's banner stands for every section that failed with it: Retry reloads them all.
     const retryPage = () =>
       void queryClient.invalidateQueries({ queryKey: ['orbit', applicationId, environment] });
-    // A live merchant without its FairCoin receiving key cannot take payments
-    // (ADR 0021 D5): said over every page of that merchant until it registers one.
-    // In test mode it is a required setup step, shown on Home only.
-    const keyStatus = merchantProbe.data ? faircoinKeyStatus(merchantProbe.data) : 'registered';
-    const keyTask =
-      keyStatus === 'required_live' ? (
-        <FaircoinKeyRequired />
-      ) : keyStatus === 'required_test' && pathname === '/' ? (
-        <FaircoinKeyRequired task />
-      ) : null;
     switch (gate.kind) {
       case 'loading':
         body = <PageSkeleton accessibilityLabel={title} />;
@@ -129,7 +111,6 @@ export function OrbitScreen({
         body = (
           <>
             <FailureBanner state={gate.state} onRetry={retryPage} page />
-            {keyTask}
             <PageFailureContext.Provider value={true}>
               {children({ ...scope, scope: scope.scope })}
             </PageFailureContext.Provider>
@@ -138,12 +119,7 @@ export function OrbitScreen({
         break;
       case 'page':
         ready = true;
-        body = (
-          <>
-            {keyTask}
-            {children({ ...scope, scope: scope.scope })}
-          </>
-        );
+        body = children({ ...scope, scope: scope.scope });
         break;
     }
   }

@@ -55,8 +55,6 @@ export function StateFor({ state, onRetry }: { state: ErrorState; onRetry?: () =
       return <SetupPayments environment={environment} />;
     case 'account_missing':
       return <AccountMissing environment={environment} />;
-    case 'faircoin_account_required':
-      return <FaircoinKeyRequired requestId={state.requestId} />;
     case 'feature_unavailable':
       return (
         <EmptyState
@@ -142,60 +140,6 @@ export function AccountMissing({ environment }: { environment: OrbitEnvironment 
         onPress: () => router.navigate('/account'),
       }}
     />
-  );
-}
-
-/**
- * A live merchant without its FairCoin receiving key cannot take payments
- * (ADR 0021 D5). Shown over every page of a live merchant that has none, and
- * as the answer to a refused create or finalize (`faircoin_account_required`):
- * what is true, and the one thing to do — register the key in Settings.
- */
-export function FaircoinKeyRequired({
-  requestId = null,
-  task = false,
-}: {
-  requestId?: string | null;
-  /**
-   * Test mode: a required setup step, not a refusal — test orders are still
-   * created, with FairCoin shown unavailable until a testnet key exists.
-   */
-  task?: boolean;
-}) {
-  const router = useRouter();
-  return (
-    <View
-      testID={task ? 'state-faircoin-key-task' : 'state-faircoin-key-required'}
-      accessibilityRole={task ? undefined : 'alert'}
-    >
-      <AdmonitionRoot type={task ? 'warning' : 'error'}>
-        <AdmonitionRow>
-          <AdmonitionIcon />
-          <AdmonitionContent>
-            <AdmonitionText>
-              {t(task ? 'state.faircoinKey.taskTitle' : 'state.faircoinKey.title')}
-            </AdmonitionText>
-            <Text variant="caption-1-regular" className="text-muted-foreground">
-              {t(task ? 'state.faircoinKey.taskBody' : 'state.faircoinKey.body')}
-            </Text>
-            {requestId ? (
-              <Text
-                variant="caption-1-regular"
-                selectable
-                className="font-mono text-muted-foreground"
-              >
-                {t('state.failure.requestId', { id: requestId })}
-              </Text>
-            ) : null}
-            <View className="flex-row flex-wrap gap-2 pt-1">
-              <AdmonitionButton appearance="outline" onPress={() => router.navigate('/settings')}>
-                {t('state.faircoinKey.action')}
-              </AdmonitionButton>
-            </View>
-          </AdmonitionContent>
-        </AdmonitionRow>
-      </AdmonitionRoot>
-    </View>
   );
 }
 

@@ -37,8 +37,6 @@ import {
 import type { TransferRow } from '../db/transfers/transferRepository';
 import type { TransferReversalRow } from '../db/transfers/transferReversalRepository';
 import { toUnix, toUnixOrNull } from './time';
-import { FAIRCOIN_KEY_REQUIREMENT } from '@peable.to/contracts/vocabulary';
-import { sellerHasFaircoinKey } from '../services/faircoinAccount';
 
 /**
  * Serialize a connected account.
@@ -68,10 +66,8 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
     default_currency: row.defaultCurrency,
     // Both halves, and `transfers` is the one that actually gates a settlement:
     // an account with payouts enabled but no transfers capability cannot
-    // receive one, and the reverse cannot pay it out. And the seller's own
-    // FairCoin key (ADR 0021 D5): without it a seller takes no transfer.
-    payable:
-      row.payoutsEnabled && row.transfersCapability === 'active' && sellerHasFaircoinKey(row),
+    // receive one, and the reverse cannot pay it out.
+    payable: row.payoutsEnabled && row.transfersCapability === 'active',
     payouts_enabled: row.payoutsEnabled,
     charges_enabled: row.chargesEnabled,
     transfers_capability: row.transfersCapability,
@@ -83,21 +79,10 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
   };
 }
 
-/**
- * Stripe's requirements shape: identifiers, and the provider's one summary
- * reason. A SELLER without its own FairCoin key also owes
- * `faircoin.receiving_key` (ADR 0021 D5) — Peable's requirement, not the
- * provider's, and the only one the seller clears in their own Oxy session.
- */
+/** Stripe's requirements shape: identifiers, and the provider's one summary reason. */
 function toRequirements(row: ConnectedAccountRow): AccountRequirements {
-  const faircoinDue =
-    row.role === 'seller' &&
-    !sellerHasFaircoinKey(row) &&
-    !row.currentlyDue.includes(FAIRCOIN_KEY_REQUIREMENT);
   return {
-    currently_due: faircoinDue
-      ? [...row.currentlyDue, FAIRCOIN_KEY_REQUIREMENT]
-      : [...row.currentlyDue],
+    currently_due: [...row.currentlyDue],
     eventually_due: [...row.eventuallyDue],
     past_due: [...row.pastDue],
     pending_verification: [...row.pendingVerification],

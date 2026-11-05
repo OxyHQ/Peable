@@ -68,7 +68,7 @@ export const connectedAccountSchema = defineObject(
       faircoin: connectedAccountFaircoinSchema
         .nullable()
         .describe(
-          "The FairCoin half, or `null` when the platform never opened one. A seller is ready only once `faircoin.status === 'active'` (ADR 0021 D5): until then `requirements.currently_due` lists `faircoin.receiving_key` and the seller takes no transfer and no on-behalf payment (`account_not_ready`).",
+          "The FairCoin half, or `null` when the platform never opened one. Readiness for FairCoin is `faircoin.status === 'active'`; `payable` is about the CARD half.",
         ),
       country: z
         .string()
@@ -80,7 +80,7 @@ export const connectedAccountSchema = defineObject(
       payable: z
         .boolean()
         .describe(
-          "Whether this seller can receive a CARD settlement (a transfer) right now: its card half can, and its own FairCoin key is registered (`faircoin.status === 'active'`, ADR 0021 D5). A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller.",
+          'Whether this seller can receive a CARD settlement (a transfer) right now. A convenience: every field it is derived from is here too. Always `false` on a FairCoin-only seller.',
         ),
       payouts_enabled: z.boolean(),
       charges_enabled: z.boolean(),

@@ -170,13 +170,11 @@ mock.module('../../services/providers/registry', () => ({
 }));
 
 const { ProviderError } = await import('../../services/providers/provider');
-const { findAccountByPublicId, registerFaircoinKey } = await import(
-  '../../db/accounts/connectedAccountRepository'
-);
+const { findAccountByPublicId } = await import('../../db/accounts/connectedAccountRepository');
 const { createConnectedAccountsRouter } = await import('../connectedAccounts');
 const { createTransfersRouter } = await import('../transfers');
 const { insertPaymentIntent } = await import('../../db/payments/paymentIntentRepository');
-const { gatewayDb, seedMerchant, testXpubFor, useGatewayDatabase } = await import(
+const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
@@ -305,11 +303,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     // Upper-cased on the way in, which is the form the CHECK insists on.
     expect(json.country).toBe('ES');
     expect(json.payable).toBe(false);
-    // The provider's requirement, and Peable's own (ADR 0021 D5): a card-only
-    // seller owes its FairCoin receiving key too.
     expect((json.requirements as Record<string, unknown>).currently_due).toEqual([
       'business_profile.url',
-      'faircoin.receiving_key',
     ]);
   });
 
@@ -456,14 +451,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     );
 
     expect(refreshed.status).toBe(200);
-    expect(refreshed.json.transfers_capability).toBe('active');
-    expect(refreshed.json.payouts_enabled).toBe(true);
-    // The card half is ready; the seller is not, until its own FairCoin key is
-    // registered (ADR 0021 D5).
-    expect(refreshed.json.payable).toBe(false);
-    expect((refreshed.json.requirements as Record<string, unknown>).currently_due).toEqual([
-      'faircoin.receiving_key',
-    ]);
+    expect(refreshed.json.payable).toBe(true);
+    expect((refreshed.json.requirements as Record<string, unknown>).currently_due).toEqual([]);
     expect(refreshed.json.default_currency).toBe('EUR');
   });
 
@@ -541,53 +530,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     });
   }
 
-  /**
-   * A seller that can receive a settlement: its card half onboarded AND its own
-   * FairCoin key registered (ADR 0021 D5) — by the seller's writer, never a
-   * platform path.
-   */
-  let sellerPocket = 100;
   async function payableAccount(ref: string): Promise<string> {
     const created = await call('POST', '/v1/connected_accounts', {
       external_ref: ref,
       country: 'ES',
       business_type: 'individual',
-      faircoin: { network: 'testnet', oxy_user_id: `user_${ref}` },
     });
     await call('POST', `/v1/connected_accounts/${String(created.json.id)}/refresh`);
-    const row = await findAccountByPublicId(gatewayDb(), merchant.id, String(created.json.id));
-    if (!row) throw new Error(`no seller ${ref}`);
-    sellerPocket += 1;
-    const registered = await registerFaircoinKey(
-      gatewayDb(),
-      row.id,
-      testXpubFor('testnet', sellerPocket),
-    );
-    if (!registered.ok) throw new Error(`could not register ${ref}'s key: ${registered.refusal}`);
     return String(created.json.id);
   }
-
-  test('refuses to settle to a card-only seller until its own FairCoin key is registered', async () => {
-    const created = await call('POST', '/v1/connected_accounts', {
-      external_ref: 'store_t_card_only',
-      country: 'ES',
-      business_type: 'individual',
-    });
-    const refreshed = await call(
-      'POST',
-      `/v1/connected_accounts/${String(created.json.id)}/refresh`,
-    );
-    expect(refreshed.json.transfers_capability).toBe('active');
-    const refused = await call('POST', '/v1/transfers', {
-      payment_intent: 'pi_settled_for_transfers',
-      connected_account: created.json.id,
-      external_ref: 'order_card_only',
-      amount: '100',
-    });
-    expect(refused.status).toBe(409);
-    expect((refused.json.error as Record<string, unknown>).code).toBe('account_not_ready');
-    expect(providerCalls.filter((entry) => entry.fn === 'createTransfer')).toEqual([]);
-  });
 
   /**
    * A refresh and an onboarding link go to the provider that OPENED the

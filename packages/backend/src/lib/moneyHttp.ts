@@ -12,16 +12,10 @@ import { LedgerUnavailableError } from '../services/money/ledger';
 import { PayoutNotCancelableError, PayoutNotManualError } from '../services/money/payouts';
 import { AccountsUnavailableError } from '../services/accounts/connectedAccountService';
 import { ProviderError } from '../services/providers/provider';
-import { FaircoinAccountRequiredError } from '../services/faircoinAccount';
 import { sendError, sendProviderError } from './http';
 
 /** Answer a money refusal and return `true`, or return `false` for anything else. */
 export function sendMoneyRefusal(res: Response, error: unknown): boolean {
-  // A live merchant without its FairCoin key takes no payment (ADR 0021 D5).
-  if (error instanceof FaircoinAccountRequiredError) {
-    sendError(res, error.status, 'invalid_request_error', error.message, error.code);
-    return true;
-  }
   if (error instanceof ThirdPartyLiveGateError) {
     sendError(res, 403, 'permission_error', error.message, 'live_payments_gated');
     return true;
