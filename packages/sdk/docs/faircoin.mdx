@@ -20,7 +20,7 @@ Your [payment method configuration](/accept-a-payment#payment-methods-and-wallet
 controls the fiat side: cards, wallets and the bank methods you turn on.
 FairCoin is a locked entry in every configuration: it is always `on` and has
 `locked: true`. A request that would remove FairCoin is refused with
-`400 payment_method_locked`, and `param` names the field that tried:
+[`400 payment_method_locked`](/errors#payment_method_locked), and `param` names the field that tried:
 
 ```ts
 // Omit payment_method_types, or name both. A fiat order offers ['card', 'faircoin'].
@@ -86,7 +86,7 @@ When a payer chooses FairCoin on a fiat order, Peable creates a FairCoin
 PaymentIntent in `FAIR` for the order's total, with tax, discount and shipping
 included. That is the same amount a card would be charged. The FAIR amount is
 quoted for **10 minutes**, and the intent carries its quote in
-`faircoin.quote`:
+`faircoin.quote` ([FaircoinQuote](/reference/objects/faircoin-quote)):
 
 ```ts
 const quote = intent.faircoin.quote; // null on a FAIR-priced payment
@@ -125,7 +125,7 @@ address, and no fiat moves on that payment.
 **Without a fresh price, FairCoin is unavailable for a moment, and nothing
 else is affected.** FairCoin still appears, with `faircoin: { available:
 false, unavailable_reason: 'price_unavailable' }`, and a confirm with
-`faircoin` answers `503 faircoin_price_unavailable`. The fiat methods keep
+`faircoin` answers [`503 faircoin_price_unavailable`](/errors#faircoin_price_unavailable). The fiat methods keep
 working. Peable never uses a cached, manual or estimated rate.
 
 ## Completion, books and renewals
@@ -169,7 +169,8 @@ You can also register it in Orbit under Settings › FairCoin receiving key.
 - **A live merchant without a key cannot take payments.** These calls answer
   `409 faircoin_account_required`: creating a PaymentIntent, a Checkout
   Session (including a Payment Link visit), a Payment Link or a subscription,
-  and finalizing an invoice. Peable never falls back to a card-only order.
+  and finalizing an invoice ([`faircoin_account_required`](/errors#faircoin_account_required)).
+  Peable never falls back to a card-only order.
 - **Test mode works without a key.** Orders are created, and FairCoin appears
   with `unavailable_reason: 'faircoin_account_missing'` on the session and on
   the configuration entry, so you can build the integration before the key
