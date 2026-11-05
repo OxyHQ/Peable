@@ -13,14 +13,9 @@ rail the network.
    application in its `production` environment, with the same scopes
    (`payments:read`, `payments:write`). Its token selects live mode; nothing
    in your requests changes ([Testing](/testing#test-mode-and-live-mode)).
-2. **A live merchant with its FairCoin key.** Your production credential
-   resolves to its own merchant: register it as you did in test mode, with a
-   **`mainnet`** watch-only key (or add the key once with
-   `peable.merchants.faircoin.register`, or in Orbit). The key is required:
-   every order offers FairCoin, so a live merchant without one is refused
-   with `409 faircoin_account_required` when it creates a PaymentIntent, a
-   Checkout Session, a Payment Link or a subscription, or finalizes an invoice
-   ([FairCoin on every order](/faircoin#your-faircoin-receiving-key-is-required)).
+2. **A live merchant.** Your production credential resolves to its own
+   merchant: register it as you did in test mode, with a **`mainnet`**
+   watch-only key to accept FairCoin.
 3. **A live webhook endpoint.** Endpoints, events and secrets belong to a
    mode. Create the endpoint with the production credential, store its new
    `whsec_…`, and keep `https` — plain `http` is refused in live mode.

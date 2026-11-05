@@ -9,11 +9,9 @@ order: 12
 Pay a marketplace's **sellers** in FairCoin, straight to their own wallets —
 like Stripe Connect, without anyone ever holding the coins.
 
-You are the **platform**: a Peable merchant. Like every live merchant, you
-need your own FairCoin receiving key to take payments
-([FairCoin on every order](/faircoin#your-faircoin-receiving-key-is-required)),
-but on-behalf payments never go to it. Each seller gets a **connected
-account** (`ca_…`) holding the seller's **own** watch-only key. You create payments on behalf of a seller
+You are the **platform**: a Peable merchant (a card-only one is fine; you
+need no `xpub`). Each seller gets a **connected account** (`ca_…`) holding the
+seller's **own** watch-only key. You create payments on behalf of a seller
 (`connected_account: 'ca_…'`): the payer's address derives from the seller's
 key, so the coins go payer → seller in one transaction. You own the payment
 record and receive every webhook for it, each tagged with the seller. Peable
@@ -91,11 +89,8 @@ if (event.type === 'connected_account.updated') {
 ```
 
 The event is committed in the same transaction as the key, so it is never
-lost and never early. Until the key is registered, `faircoin.receiving_key`
-is in `requirements.currently_due`. A **card** seller needs this key too:
-every order offers FairCoin, so `payable` stays `false`, and transfers and
-destination charges to the seller answer `409 account_not_ready`, until the
-seller registers it. You never see the seller's
+lost and never early. `payable` on the same object is about **card**
+settlements and says nothing about FairCoin. You never see the seller's
 `xpub`: an account key reveals every address of that pocket, and nothing you
 do needs it.
 
@@ -119,7 +114,7 @@ intent.connected_account; // seller.id
 or a Checkout Session with the same `connected_account`. A `FAIR` session
 pays the seller in FairCoin. A fiat session offers the payer your card
 methods and FairCoin: a FairCoin choice is an on-behalf payment to the
-seller's key, quoted in FAIR ([FairCoin on every order](/faircoin#the-quote)),
+seller, quoted in FAIR ([FairCoin on every order](/faircoin#the-quote)),
 and a card payment is your own charge, which you settle to the seller with a
 [transfer](/connect#card-sellers). Refusals to handle:
 

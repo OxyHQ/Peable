@@ -162,14 +162,6 @@ await peable.transfers.list({ connected_account: seller.id });
 - `accountLinks.create` onboards **your own** account (`POST /v1/account_links`),
   or a seller's with `{ peableAccount }`; a seller's link from its `ca_…` is
   `connectedAccounts.createAccountLink(id, { … })`.
-- **A card seller also needs its own FairCoin key.** Every order offers
-  FairCoin, so a seller cannot be paid until it registers its own watch-only
-  key. Until then, `faircoin.receiving_key` is in
-  `requirements.currently_due`, and transfers and destination charges to the
-  seller answer `409 account_not_ready`. Open the seller's FairCoin side and
-  send them the FairCoin onboarding link
-  ([FairCoin sellers](/connect-faircoin#1-open-the-sellers-faircoin-account)).
-  Only the seller can register the key.
 
 ### Learn when a seller is ready
 
@@ -185,10 +177,9 @@ if (event.type === 'connected_account.updated') {
 }
 ```
 
-`payable` is a convenience, not the authority. It needs card settlements
-enabled **and** the seller's own FairCoin key registered. Every field it is
-derived from is on the same object, and a marketplace with its own readiness
-policy should read those.
+`payable` is a convenience about **card** settlements, not the authority:
+every field it is derived from is on the same object, and a marketplace with
+its own readiness policy should read those.
 
 ## Events
 

@@ -148,32 +148,3 @@ succeeds (`invoice.paid`).
   page, by card or in FairCoin at that period's quote. If the payer pays by
   card, the card is saved and renewals are charged automatically, as before
   ([Subscriptions](/billing#sell-a-subscription-with-checkout)).
-
-## Your FairCoin receiving key is required
-
-A FairCoin payment goes to an address derived from **your** watch-only key,
-so every merchant needs one. If you registered without a key, register it once:
-
-```ts
-await peable.merchants.faircoin.register({ network: 'mainnet', xpub: 'xpub…' });
-```
-
-You can also register it in Orbit under Settings › FairCoin receiving key.
-
-- **The key is immutable.** A second registration answers
-  `409 already_registered`. A private key, or a key for the other network, is
-  refused with `watch_only_violation` and never stored. A key that already
-  receives payments for another merchant or a seller answers `409 key_in_use`.
-  A test credential registers `testnet` only. Use a wallet account (pocket)
-  that you use for nothing else.
-- **A live merchant without a key cannot take payments.** These calls answer
-  `409 faircoin_account_required`: creating a PaymentIntent, a Checkout
-  Session (including a Payment Link visit), a Payment Link or a subscription,
-  and finalizing an invoice ([`faircoin_account_required`](/errors#faircoin_account_required)).
-  Peable never falls back to a card-only order.
-- **Test mode works without a key.** Orders are created, and FairCoin appears
-  with `unavailable_reason: 'faircoin_account_missing'` on the session and on
-  the configuration entry, so you can build the integration before the key
-  exists.
-- **Marketplace sellers** register their own key. See
-  [FairCoin sellers](/connect-faircoin).

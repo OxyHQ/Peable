@@ -63,19 +63,16 @@ const peable = new Peable({
 
 ## 3. Register as a merchant (once)
 
-Your application becomes a merchant with one call, with the **watch-only**
-account extended public key that FairCoin payments go to:
+Your application becomes a merchant with one call. What you send decides
+which rails you accept:
 
 ```ts
+// FairCoin and cards: a WATCH-ONLY account extended public key and its network.
 await peable.merchants.register({ network: 'testnet', xpub: 'tpub…' });
-```
 
-Every order offers FairCoin, so the key is required to take live payments
-([FairCoin on every order](/faircoin#your-faircoin-receiving-key-is-required)).
-You can register without one and add it once later with
-`peable.merchants.faircoin.register({ network, xpub })`. Until you do, test
-mode shows FairCoin as unavailable, and a live merchant is refused with
-`409 faircoin_account_required`.
+// Cards only: send neither.
+await peable.merchants.register();
+```
 
 `network` and `xpub` are two halves of one capability; the gateway refuses
 one without the other. Peable derives a fresh receive address per payment
@@ -169,7 +166,7 @@ whole model.
 - [ ] A test-environment service credential with `payments:read` and
       `payments:write`; `PEABLE_PUBLIC_KEY`, `PEABLE_SECRET` and
       `PEABLE_WEBHOOK_SECRET` in your server's environment.
-- [ ] Merchant registered with a watch-only `testnet` key (required to go live).
+- [ ] Merchant registered (a watch-only `testnet` key to accept FairCoin).
 - [ ] Checkout Session created at checkout; the payer redirected to
       `session.url`, or the checkout [embedded](/checkout#embedded-checkout).
 - [ ] A webhook endpoint registered, `Peable-Signature` verified on every
