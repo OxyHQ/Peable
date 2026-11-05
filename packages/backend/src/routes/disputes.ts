@@ -42,7 +42,8 @@ import type { OxyFilesClient } from '../services/oxyFiles/client';
 import { oxyFilesClient } from '../services/oxyFiles/client';
 import { FileStorageUnavailableError } from '../services/files';
 import { ProviderError } from '../services/providers/provider';
-import { toDisputeDTO } from '../lib/serialize';
+import { toDisputeDTO, toSettlementDTO } from '../lib/serialize';
+import { reportDisputeSettlement } from '../services/settlementReport';
 import {
   requireAuthenticated,
   sendError,
@@ -206,6 +207,33 @@ export async function retrieveDispute(
   res.status(200).json(dto);
 }
 
+/**
+ * `GET /v1/disputes/:id/settlement` — what the dispute WITHDREW from the
+ * settlement balance: `gross` the principal, `fee` the dispute fee, a negative
+ * `net`, in the settlement currency. An inquiry moves no money and is
+ * `unknown` with every figure `null`, never `0`.
+ */
+export async function retrieveDisputeSettlement(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const query = parseQuery(req, res, expandOnlyQuery);
+  if (!query) return;
+  const expand = parseExpand(res, 'settlement', query.expand, { list: false });
+  if (!expand) return;
+  const dispute = await loadDispute(req, res, merchant);
+  if (!dispute) return;
+
+  const body = toSettlementDTO(await reportDisputeSettlement(dispute), {
+    livemode: dispute.livemode,
+    paymentIntentPublicId: await intentPublicIdOf(dispute),
+    disputePublicId: dispute.publicId,
+  });
+  await expandObjects([body], 'settlement', expand, merchant.id);
+  res.status(200).json(body);
+}
+
 /** `POST /v1/disputes/:id` — metadata, a draft, or the one submission. */
 export async function updateDisputeCore(
   req: Request,
@@ -313,6 +341,11 @@ export function createDisputesRouter(deps: {
   );
   router.get('/v1/disputes', ...read, withMerchant(answerDisputeList));
   router.get('/v1/disputes/:disputeId', ...read, withMerchant(retrieveDispute));
+  router.get(
+    '/v1/disputes/:disputeId/settlement',
+    ...read,
+    withMerchant(retrieveDisputeSettlement),
+  );
   router.post(
     '/v1/disputes/:disputeId',
     ...write,

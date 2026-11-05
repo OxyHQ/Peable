@@ -167,6 +167,40 @@ a LIVE destination charge or instruct a LIVE payout (403 `live_payments_gated`).
 Test mode is never gated. Setting it is the operator's act of recording that the
 gate's three conditions above were met; nothing in the repository sets it.
 
+## As built: the settlement of a refund and of a dispute
+
+§4's rule — a figure the provider has not given is `null` with a status, never
+`0` — first lived in one read: `GET /v1/payment_intents/{intentId}/settlement`
+(`refunds.settlement`), what a payment's charge brought into the balance. A
+marketplace on separate charges and transfers (Mercaria) also books what a
+REFUND took out and what a DISPUTE withdrew, in the currency the money actually
+moved in on the platform balance, and had nothing to read it from. Two reads
+were added beside it, live and unstored like the first:
+
+- `GET /v1/refunds/{id}/settlement` (`refunds.refundSettlement`): the refund's
+  own balance transaction. A refund the provider never acknowledged, and one
+  that `failed` (its debit is undone by a second transaction) or was `canceled`,
+  is `unknown`.
+- `GET /v1/disputes/{disputeId}/settlement` (`disputes.settlement`): the
+  dispute's WITHDRAWAL — the negative balance transaction, principal plus
+  dispute fee. An inquiry moves no money and is `unknown`; the reinstatement of
+  a won dispute is a later movement this does not report.
+
+They answer the ONE `settlement` object, generalised additively: `refund` and
+`dispute` (expandable, `null` on a payment's) name whose movement it is beside
+`payment_intent`. The signs are fixed for all three: `gross` is the MAGNITUDE of
+the movement, `fee` the provider's fee on it as the provider signs it (positive
+charged, negative returned — a refund's is usually `0`), `net` the SIGNED effect
+on the balance, so `net = gross − fee` for a payment and `net = −gross − fee` for
+a refund or a dispute; `currency` is the settlement currency and
+`exchange_rate` is present only when a conversion happened. `fee` is therefore a
+signed amount on the wire (a payment's is never negative). The seam is the same
+`SettlementReportingProvider` (`getRefundSettlement`, `getDisputeSettlement` by
+the provider's object ids, each `UNKNOWN_SETTLEMENT` without a balance
+transaction), reached only through `settlementReport.ts`'s one never-throwing
+read in the row's own mode (`selectStoredProvider`). As with the payment's, it
+reports what moved and attributes the cost to nobody.
+
 ## Consequences
 
 - No Peable-held balance, no Peable-initiated bank transfer, and no table that

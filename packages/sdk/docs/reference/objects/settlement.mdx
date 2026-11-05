@@ -15,12 +15,14 @@ Object type: `settlement`.
 | --- | --- | --- |
 | `object` | `"settlement"` |  |
 | `livemode` | boolean | `true` in live mode, `false` in test mode. |
-| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | The `pi_…` this describes, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
-| `status` | string | `available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**. |
-| `gross` | string \| null | Base units of `currency`. Matches `^(0\|[1-9][0-9]*)$`. |
-| `fee` | string \| null | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
-| `net` | string \| null | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
-| `currency` | string \| null | The SETTLEMENT currency (uppercase ISO 4217), which may differ from the payment's. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | The `pi_…` this describes (the refunded or disputed payment, for a refund or a dispute), or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `refund` | string \| [Refund](/reference/objects/refund) \| null | The `re_…` whose movement this is, or the Refund with `expand[]=refund`; `null` unless this is the settlement of a refund. Expandable. |
+| `dispute` | string \| [Dispute](/reference/objects/dispute) \| null | The `dp_…` whose withdrawal this is, or the Dispute with `expand[]=dispute`; `null` unless this is the settlement of a dispute. Expandable. |
+| `status` | string | `available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**. A dispute inquiry, which moves no money, and a refund that failed or was canceled are `unknown`. |
+| `gross` | string \| null | The MAGNITUDE of the movement, never negative, in base units of `currency`: what the payment brought in, the refund took out or the dispute withdrew. Matches `^(0\|[1-9][0-9]*)$`. |
+| `fee` | string \| null | The provider's fee on THIS movement, as the provider signs it: positive when charged to the balance (a payment's processing fee, a dispute fee), negative when returned to it (part of the original fee on some refunds). A refund's is usually `0`. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `net` | string \| null | The SIGNED effect on the balance: positive for a payment, negative for a refund or a dispute. Always `gross − fee` for a payment and `−gross − fee` for a refund or a dispute. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string \| null | The SETTLEMENT currency (uppercase ISO 4217) every figure is in, which may differ from the payment's, refund's or dispute's. |
 | `available_on` | integer \| null | When the funds become available. |
 | `exchange_rate` | number \| null | Present only when a conversion happened. `null` is not a rate of 1. |
 
@@ -29,7 +31,11 @@ Object type: `settlement`.
 Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
 
 - `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `refund` → [Refund](/reference/objects/refund)
+- `dispute` → [Dispute](/reference/objects/dispute)
 
 ## Returned by
 
+- [`GET /v1/disputes/{disputeId}/settlement`](/reference/disputes#retrieve-a-disputes-settlement) — Retrieve a dispute's settlement
 - [`GET /v1/payment_intents/{intentId}/settlement`](/reference/refunds#retrieve-a-payments-settlement) — Retrieve a payment's settlement
+- [`GET /v1/refunds/{id}/settlement`](/reference/refunds#retrieve-a-refunds-settlement) — Retrieve a refund's settlement

@@ -903,6 +903,26 @@ export function isDomainRegisteringProvider(
  * `gross` is not the payment's amount: a partial capture, a refund or a
  * currency conversion all make them differ, which is why it is read rather than
  * copied from the intent.
+ *
+ * ## One movement of the settlement balance, and its signs
+ *
+ * The same shape answers for a payment, a refund and a dispute: each is ONE
+ * movement of the platform's settlement balance at the provider (Stripe's
+ * balance transaction), in the SETTLEMENT currency.
+ *
+ *  - `gross` — the MAGNITUDE of the movement's principal, never negative: what
+ *    the payment brought in, what the refund took out, what the dispute
+ *    withdrew.
+ *  - `fee`   — the provider's fee on THIS movement, signed as the provider signs
+ *    it: positive is a fee charged to the balance (a payment's processing fee,
+ *    a dispute fee), negative a fee returned to it (part of the original fee on
+ *    some refunds). A refund's is usually `0`.
+ *  - `net`   — the SIGNED effect on the balance: positive for a payment,
+ *    negative for a refund or a dispute withdrawal.
+ *
+ * so that, always, `net = ±gross − fee`, with `+` for a payment and `−` for a
+ * refund or a dispute. Payment `10000`, fee `204` → net `9796`; refund `1000`,
+ * fee `0` → net `-1000`; dispute `1000`, fee `1500` → net `-2500`.
  */
 export interface ProviderSettlement {
   /**
@@ -918,7 +938,7 @@ export interface ProviderSettlement {
   readonly currency: CurrencyCode | null;
   /** When the funds become available. */
   readonly availableOn: Date | null;
-  /** Present only when the settlement currency differs from the charge's. */
+  /** Present only when the settlement currency differs from the presentment currency. */
   readonly exchangeRate: number | null;
 }
 
@@ -927,8 +947,9 @@ export interface ProviderSettlement {
  *
  * Shared rather than written out per caller, because it is an ANSWER and not a
  * default — the Stripe adapter returns it for a charge with no balance
- * transaction, and `reportSettlement` returns it for a rail that takes no fee,
- * a payment with no charge, and a provider it cannot reach. Two identical
+ * transaction (and a refund or dispute with none), and `settlementReport.ts`
+ * returns it for a rail that takes no fee, an object with no provider id, and a
+ * provider it cannot reach. Two identical
  * copies of it invite one of them growing a zero.
  */
 export const UNKNOWN_SETTLEMENT: ProviderSettlement = {
@@ -942,23 +963,45 @@ export const UNKNOWN_SETTLEMENT: ProviderSettlement = {
 };
 
 /**
- * A provider that can report what a payment settled to.
+ * A provider that can report what a payment, a refund or a dispute did to the
+ * settlement balance — each one movement, in {@link ProviderSettlement}'s signs.
  *
  * Optional for the same reason the others are: the FairCoin rail takes no fee
  * and holds no balance, so there is nothing to report and a method returning
- * zeros would be inventing an answer.
+ * zeros would be inventing an answer. Each read answers
+ * {@link UNKNOWN_SETTLEMENT} when the provider has no balance movement for the
+ * object — never zeros.
  */
 export interface SettlementReportingProvider extends PaymentProvider {
   /** @param chargeObjectId the CHARGE, not the payment — fees attach to it. */
   getSettlement(chargeObjectId: string): Promise<ProviderSettlement>;
+  /**
+   * What a refund took off the balance: its own balance transaction. A refund
+   * that failed or was canceled took nothing in the end and answers `unknown`.
+   *
+   * @param refundObjectId the provider's refund id (`refunds.provider_object_id`).
+   */
+  getRefundSettlement(refundObjectId: string): Promise<ProviderSettlement>;
+  /**
+   * What a dispute WITHDREW from the balance: the principal and the dispute fee.
+   * An inquiry moves no money and answers `unknown`; a reinstatement after a
+   * won dispute is a later, separate movement this does not report.
+   *
+   * @param disputeObjectId the provider's dispute id (`disputes.provider_object_id`).
+   */
+  getDisputeSettlement(disputeObjectId: string): Promise<ProviderSettlement>;
 }
 
-/** Whether this rail can report a payment's fees and net. */
+/** Whether this rail can report a payment's, refund's and dispute's balance movements. */
 export function isSettlementReportingProvider(
   provider: PaymentProvider,
 ): provider is SettlementReportingProvider {
   const candidate = provider as Partial<SettlementReportingProvider>;
-  return typeof candidate.getSettlement === 'function';
+  return (
+    typeof candidate.getSettlement === 'function' &&
+    typeof candidate.getRefundSettlement === 'function' &&
+    typeof candidate.getDisputeSettlement === 'function'
+  );
 }
 
 /** What the provider says about one charge: the outcome and the card, never prose. */

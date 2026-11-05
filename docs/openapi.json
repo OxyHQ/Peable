@@ -11816,6 +11816,111 @@
         }
       }
     },
+    "/v1/disputes/{disputeId}/settlement": {
+      "get": {
+        "operationId": "retrieveDisputeSettlement",
+        "tags": [
+          "Disputes"
+        ],
+        "summary": "Retrieve a dispute's settlement",
+        "description": "What the dispute WITHDREW from the settlement balance — `gross` the principal, `fee` the dispute fee, a negative `net` — in the settlement currency, read live from the provider. An inquiry moves no money: `unknown`, every figure `null`, never `0`. A reinstatement after a won dispute is not this figure.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "disputes.settlement",
+        "x-peable-expandable": "settlement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "disputeId",
+            "required": true,
+            "description": "The dispute (`dp_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/enrich": {
       "post": {
         "operationId": "enrichAddresses",
@@ -29065,6 +29170,111 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Refund"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/refunds/{id}/settlement": {
+      "get": {
+        "operationId": "retrieveRefundSettlement",
+        "tags": [
+          "Refunds"
+        ],
+        "summary": "Retrieve a refund's settlement",
+        "description": "What the refund took off the settlement balance — `gross`, `fee`, a negative `net` — in the settlement currency, read live from the provider. A missing figure is `null` with a `status`, never `0`; a refund that failed or was canceled is `unknown`.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "refunds.refundSettlement",
+        "x-peable-expandable": "settlement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The refund (`re_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
                 }
               }
             }
@@ -62118,7 +62328,45 @@
               }
             ],
             "x-peable-expandable": "payment_intent",
-            "description": "The `pi_…` this describes, or the PaymentIntent with `expand[]=payment_intent`."
+            "description": "The `pi_…` this describes (the refunded or disputed payment, for a refund or a dispute), or the PaymentIntent with `expand[]=payment_intent`."
+          },
+          "refund": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Refund"
+                  }
+                ],
+                "x-peable-expandable": "refund",
+                "description": "The `re_…` whose movement this is, or the Refund with `expand[]=refund`; `null` unless this is the settlement of a refund."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dispute": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Dispute"
+                  }
+                ],
+                "x-peable-expandable": "dispute",
+                "description": "The `dp_…` whose withdrawal this is, or the Dispute with `expand[]=dispute`; `null` unless this is the settlement of a dispute."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "type": "string",
@@ -62127,7 +62375,7 @@
               "pending",
               "unknown"
             ],
-            "description": "`available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**."
+            "description": "`available`: settled, the figures are final; `pending`: not final yet; `unknown`: there is none to read — **not zero**. A dispute inquiry, which moves no money, and a refund that failed or was canceled are `unknown`."
           },
           "gross": {
             "anyOf": [
@@ -62140,19 +62388,20 @@
                 "type": "null"
               }
             ],
-            "description": "Base units of `currency`."
+            "description": "The MAGNITUDE of the movement, never negative, in base units of `currency`: what the payment brought in, the refund took out or the dispute withdrew."
           },
           "fee": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^(0|[1-9][0-9]*)$",
-                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+                "pattern": "^(0|-?[1-9][0-9]*)$",
+                "description": "Signed base units of `currency`, as an integer string."
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The provider's fee on THIS movement, as the provider signs it: positive when charged to the balance (a payment's processing fee, a dispute fee), negative when returned to it (part of the original fee on some refunds). A refund's is usually `0`."
           },
           "net": {
             "anyOf": [
@@ -62164,10 +62413,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The SIGNED effect on the balance: positive for a payment, negative for a refund or a dispute. Always `gross − fee` for a payment and `−gross − fee` for a refund or a dispute."
           },
           "currency": {
-            "description": "The SETTLEMENT currency (uppercase ISO 4217), which may differ from the payment's.",
+            "description": "The SETTLEMENT currency (uppercase ISO 4217) every figure is in, which may differ from the payment's, refund's or dispute's.",
             "type": [
               "string",
               "null"
@@ -62199,6 +62449,8 @@
           "object",
           "livemode",
           "payment_intent",
+          "refund",
+          "dispute",
           "status",
           "gross",
           "fee",

@@ -13,6 +13,7 @@ import type {
   PaymentIntentNextAction,
   Refund,
   RequestLog,
+  Settlement,
   SocialPaymentSource,
   WebhookDelivery,
   WebhookEndpoint,
@@ -30,6 +31,7 @@ import type { PaymentMethodRow } from '../db/customers/paymentMethodRepository';
 import type { SetupIntentRow } from '../db/customers/setupIntentRepository';
 import type { DisputeRow } from '../db/disputes/disputeRepository';
 import type { RefundRow } from '../db/refunds/refundRepository';
+import type { ProviderSettlement } from '../services/providers/provider';
 import type { StoredContribution } from '../db/schema/payments';
 import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
 import type { WebhookEndpointRow } from '../db/webhooks/webhookEndpointRepository';
@@ -365,6 +367,35 @@ export function toRefundDTO(row: RefundRow, paymentIntentPublicId: string): Refu
   };
 }
 
+/**
+ * The ONE `settlement` object (`GET …/settlement` of a payment, a refund or a
+ * dispute): the provider's figures as read, beside the public ids of what they
+ * describe — `refund` and `dispute` `null` unless it is theirs.
+ */
+export function toSettlementDTO(
+  settlement: ProviderSettlement,
+  subject: {
+    readonly livemode: boolean;
+    readonly paymentIntentPublicId: string;
+    readonly refundPublicId?: string;
+    readonly disputePublicId?: string;
+  },
+): Settlement {
+  return {
+    object: 'settlement',
+    livemode: subject.livemode,
+    payment_intent: subject.paymentIntentPublicId,
+    refund: subject.refundPublicId ?? null,
+    dispute: subject.disputePublicId ?? null,
+    status: settlement.status,
+    gross: settlement.gross,
+    fee: settlement.fee,
+    net: settlement.net,
+    currency: settlement.currency,
+    available_on: toUnixOrNull(settlement.availableOn),
+    exchange_rate: settlement.exchangeRate,
+  };
+}
 /**
  * A dispute row on the wire.
  *

@@ -552,6 +552,34 @@ export function retrieveStripeChargeWithBalance(
   );
 }
 
+/**
+ * A refund with its BALANCE TRANSACTION expanded — what it took off the
+ * settlement balance, in one consistent read for the reason the charge's is.
+ * `balance_transaction` is null while Stripe has not debited it.
+ */
+export function retrieveStripeRefundWithBalance(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.Refund> {
+  return call(mode, 'settlement', (stripe) =>
+    stripe.refunds.retrieve(id, { expand: ['balance_transaction'] }),
+  );
+}
+
+/**
+ * A dispute with its BALANCE TRANSACTIONS expanded: the withdrawal (principal
+ * plus dispute fee) and, after a won dispute, the reinstatement. An inquiry
+ * has none.
+ */
+export function retrieveStripeDisputeWithBalances(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.Dispute> {
+  return call(mode, 'settlement', (stripe) =>
+    stripe.disputes.retrieve(id, { expand: ['balance_transactions'] }),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Connected accounts
 // ---------------------------------------------------------------------------

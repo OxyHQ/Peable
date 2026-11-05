@@ -41,6 +41,8 @@ import {
   retrieveStripeAccount,
   retrieveStripeCharge,
   retrieveStripeChargeWithBalance,
+  retrieveStripeDisputeWithBalances,
+  retrieveStripeRefundWithBalance,
   retrieveStripePaymentIntent,
   retrieveStripeTransfer,
   updateStripeDispute,
@@ -336,6 +338,36 @@ function toDomainSnapshot(domain: Stripe.PaymentMethodDomain): ProviderPaymentMe
 }
 
 /** Stripe wants a lowercase ISO code; the gateway's set is uppercase. */
+/** An EXPANDED balance transaction, or `null` for none (or an unexpanded id). */
+function expandedBalance(
+  balance: string | Stripe.BalanceTransaction | null | undefined,
+): Stripe.BalanceTransaction | null {
+  return typeof balance === 'object' && balance !== null ? balance : null;
+}
+
+/**
+ * One balance transaction in {@link ProviderSettlement}'s signs: `gross` its
+ * MAGNITUDE, `fee` and `net` exactly as Stripe signs them (`net = amount − fee`,
+ * so a debit's `net` is negative and a fee returned on a refund is a negative
+ * `fee`). No transaction is `unknown`, never zeros.
+ */
+function toSettlement(balance: Stripe.BalanceTransaction | null): ProviderSettlement {
+  if (balance === null) return UNKNOWN_SETTLEMENT;
+  return {
+    status: balance.status === 'available' ? 'available' : 'pending',
+    gross: String(Math.abs(balance.amount)),
+    fee: String(balance.fee),
+    net: String(balance.net),
+    currency: balance.currency.toUpperCase() as CurrencyCode,
+    // Seconds since the epoch, like every Stripe timestamp.
+    availableOn: fromUnix(balance.available_on),
+    // Only when the settlement currency differs from the presentment one.
+    // `null` rather than `1` for a same-currency settlement: a rate of one is
+    // a conversion that happened, and none happened.
+    exchangeRate: balance.exchange_rate ?? null,
+  };
+}
+
 function toStripeCurrency(currency: string): string {
   return currency.toLowerCase();
 }
@@ -892,35 +924,45 @@ export class StripePaymentProvider
    * to fetch the transaction by id leaves a window in which the charge can be
    * refunded between the two reads.
    *
-   * Reports `pending` rather than zeros when Stripe has no balance transaction
+   * Reports `unknown` rather than zeros when Stripe has no balance transaction
    * yet. It is the whole reason this method exists: a settlement report that
    * renders an unknown fee as `0` is one a merchant reconciles against and
    * cannot explain, and zero is a number somebody will subtract.
    */
   async getSettlement(chargeObjectId: string): Promise<ProviderSettlement> {
     const charge = await retrieveStripeChargeWithBalance(this.mode, chargeObjectId);
-    const balance = charge.balance_transaction;
+    // Either an unexpanded id — which cannot happen, this asked for the
+    // expansion — or no transaction at all, which is an uncaptured or
+    // not-yet-settled charge. Neither is "the fee was nothing".
+    return toSettlement(expandedBalance(charge.balance_transaction));
+  }
 
-    if (typeof balance !== 'object' || balance === null) {
-      // Either an unexpanded id — which cannot happen, this asked for the
-      // expansion — or no transaction at all, which is an uncaptured or
-      // not-yet-settled charge. Neither is "the fee was nothing".
-      return UNKNOWN_SETTLEMENT;
-    }
+  /**
+   * What a refund took off the settlement balance: the refund's OWN balance
+   * transaction (Stripe's `amount` negative, `fee` usually `0`).
+   *
+   * A refund that `failed` or was `canceled` answers `unknown`: a failed
+   * refund's debit is undone by a second transaction, so its own figure is
+   * money that came back, and a merchant booking it would book a refund that
+   * never happened.
+   */
+  async getRefundSettlement(refundObjectId: string): Promise<ProviderSettlement> {
+    const refund = await retrieveStripeRefundWithBalance(this.mode, refundObjectId);
+    if (refund.status === 'failed' || refund.status === 'canceled') return UNKNOWN_SETTLEMENT;
+    return toSettlement(expandedBalance(refund.balance_transaction));
+  }
 
-    return {
-      status: balance.status === 'available' ? 'available' : 'pending',
-      gross: String(balance.amount),
-      fee: String(balance.fee),
-      net: String(balance.net),
-      currency: balance.currency.toUpperCase() as CurrencyCode,
-      // Seconds since the epoch, like every Stripe timestamp.
-      availableOn: fromUnix(balance.available_on),
-      // Only when the settlement currency differs from the charge's. `null`
-      // rather than `1` for a same-currency settlement: a rate of one is a
-      // conversion that happened, and none happened.
-      exchangeRate: balance.exchange_rate ?? null,
-    };
+  /**
+   * What a dispute WITHDREW from the settlement balance: the negative balance
+   * transaction, whose `amount` is the principal and whose `fee` is the dispute
+   * fee. An inquiry moves no money — no transaction, `unknown`, never zeros.
+   * The reinstatement of a won dispute is a later positive movement and is not
+   * this figure.
+   */
+  async getDisputeSettlement(disputeObjectId: string): Promise<ProviderSettlement> {
+    const dispute = await retrieveStripeDisputeWithBalances(this.mode, disputeObjectId);
+    const withdrawal = dispute.balance_transactions.find((balance) => balance.amount < 0);
+    return toSettlement(withdrawal ?? null);
   }
 
   // -------------------------------------------------------------------------

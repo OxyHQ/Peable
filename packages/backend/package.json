@@ -29,7 +29,7 @@
     "socket.io": "^4.8.1",
     "stripe": "22.4.0",
     "zod": "^4.6.7",
-    "@peable.to/contracts": "workspace:3.0.0",
+    "@peable.to/contracts": "workspace:3.1.0",
     "@aws-sdk/credential-provider-node": "3.972.84"
   },
   "devDependencies": {

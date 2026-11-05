@@ -26,6 +26,10 @@ let retrievedTransferResponse: Record<string, unknown> = {};
 let accountResponse: Record<string, unknown> = {};
 let disputeResponse: Record<string, unknown> = {};
 let domainResponse: Record<string, unknown> = {};
+/** What the expanded settlement reads answer: a charge, a refund, a dispute. */
+let chargeWithBalanceResponse: Record<string, unknown> = {};
+let refundWithBalanceResponse: Record<string, unknown> = {};
+let disputeWithBalancesResponse: Record<string, unknown> = {};
 
 function record(fn: string, [mode, ...args]: readonly unknown[]) {
   calls.push({ fn, mode, args });
@@ -37,8 +41,17 @@ mock.module('../client', () => ({
     throw new Error('the adapter must not reach the SDK directly');
   },
   resetStripeClient: () => undefined,
-  retrieveStripeChargeWithBalance: async () => {
-    throw new Error('not used by these tests');
+  retrieveStripeChargeWithBalance: async (...args: unknown[]) => {
+    record('retrieveStripeChargeWithBalance', args);
+    return chargeWithBalanceResponse;
+  },
+  retrieveStripeRefundWithBalance: async (...args: unknown[]) => {
+    record('retrieveStripeRefundWithBalance', args);
+    return refundWithBalanceResponse;
+  },
+  retrieveStripeDisputeWithBalances: async (...args: unknown[]) => {
+    record('retrieveStripeDisputeWithBalances', args);
+    return disputeWithBalancesResponse;
   },
   updateStripeDispute: async (...args: unknown[]) => {
     record('updateStripeDispute', args);
@@ -154,6 +167,35 @@ mock.module('../client', () => ({
     throw new Error('not used by these tests');
   },
   retrieveStripeCharge: async () => {
+    throw new Error('not used by these tests');
+  },
+  // Every other export the adapter imports, so this file also runs on its own:
+  // a module mock missing a named import fails the whole file at link time.
+  cancelStripeRefund: async () => {
+    throw new Error('not used by these tests');
+  },
+  listStripeBalanceTransactions: async () => {
+    throw new Error('not used by these tests');
+  },
+  retrieveStripeChargeWithLedger: async () => {
+    throw new Error('not used by these tests');
+  },
+  retrieveStripePayout: async () => {
+    throw new Error('not used by these tests');
+  },
+  listStripePayouts: async () => {
+    throw new Error('not used by these tests');
+  },
+  createStripePayout: async () => {
+    throw new Error('not used by these tests');
+  },
+  cancelStripePayout: async () => {
+    throw new Error('not used by these tests');
+  },
+  retrieveStripeApplicationFee: async () => {
+    throw new Error('not used by these tests');
+  },
+  updateStripeAccount: async () => {
     throw new Error('not used by these tests');
   },
 }));
@@ -653,6 +695,214 @@ describe('StripePaymentProvider', () => {
       expect(domain.applePay.error).not.toContain('provider prose');
       expect(domain.applePay.error).toContain('Apple Pay');
       expect(domain.googlePay).toEqual({ status: 'active', error: null });
+    });
+  });
+});
+
+/**
+ * One movement of the settlement balance each — a payment, a refund, a
+ * dispute — in one set of signs: `gross` the magnitude, `fee` and `net` as
+ * Stripe signs them (`net = amount − fee`). No balance transaction is
+ * `unknown`, never zeros.
+ */
+describe('StripePaymentProvider settlement', () => {
+  /** A Stripe balance transaction, settled in EUR unless a test says otherwise. */
+  function balance(fields: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: 'txn_1',
+      object: 'balance_transaction',
+      status: 'available',
+      currency: 'eur',
+      available_on: 1_793_750_400,
+      exchange_rate: null,
+      ...fields,
+    };
+  }
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  test("a payment's figures are its charge's balance transaction", async () => {
+    chargeWithBalanceResponse = {
+      id: 'ch_1',
+      balance_transaction: balance({ amount: 10_000, fee: 204, net: 9_796 }),
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'live' }).getSettlement('ch_1');
+
+    expect(settlement).toEqual({
+      status: 'available',
+      gross: '10000',
+      fee: '204',
+      net: '9796',
+      currency: 'EUR',
+      availableOn: new Date(1_793_750_400_000),
+      exchangeRate: null,
+    });
+    expect(calls).toEqual([
+      { fn: 'retrieveStripeChargeWithBalance', mode: 'live', args: ['ch_1'] },
+    ]);
+  });
+
+  test('a refund reports its own debit: gross the magnitude, net negative', async () => {
+    refundWithBalanceResponse = {
+      id: 're_stripe_1',
+      status: 'succeeded',
+      balance_transaction: balance({ amount: -1_000, fee: 0, net: -1_000, status: 'pending' }),
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'test' }).getRefundSettlement(
+      're_stripe_1',
+    );
+
+    expect(settlement).toEqual({
+      status: 'pending',
+      gross: '1000',
+      fee: '0',
+      net: '-1000',
+      currency: 'EUR',
+      availableOn: new Date(1_793_750_400_000),
+      exchangeRate: null,
+    });
+    expect(calls).toEqual([
+      { fn: 'retrieveStripeRefundWithBalance', mode: 'test', args: ['re_stripe_1'] },
+    ]);
+  });
+
+  /**
+   * A refund of a payment presented in USD and settled in EUR moves EUR: the
+   * figure a marketplace books, at the rate the provider applied.
+   */
+  test('a converted refund is in the settlement currency, with the rate', async () => {
+    refundWithBalanceResponse = {
+      id: 're_stripe_2',
+      status: 'succeeded',
+      currency: 'usd',
+      amount: 1_000,
+      balance_transaction: balance({
+        amount: -921,
+        fee: 0,
+        net: -921,
+        currency: 'eur',
+        exchange_rate: 0.921,
+      }),
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'test' }).getRefundSettlement(
+      're_stripe_2',
+    );
+
+    expect(settlement.currency).toBe('EUR');
+    expect(settlement.gross).toBe('921');
+    expect(settlement.net).toBe('-921');
+    expect(settlement.exchangeRate).toBe(0.921);
+  });
+
+  /** A fee the provider RETURNED on a refund is a negative fee: `net = −gross − fee`. */
+  test('a fee returned on a refund is negative and shrinks the debit', async () => {
+    refundWithBalanceResponse = {
+      id: 're_stripe_3',
+      status: 'succeeded',
+      balance_transaction: balance({ amount: -1_000, fee: -30, net: -970 }),
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'test' }).getRefundSettlement(
+      're_stripe_3',
+    );
+
+    expect([settlement.gross, settlement.fee, settlement.net]).toEqual(['1000', '-30', '-970']);
+  });
+
+  test('a refund with no balance transaction yet is unknown, not zero', async () => {
+    refundWithBalanceResponse = { id: 're_stripe_4', status: 'pending', balance_transaction: null };
+
+    const settlement = await new StripePaymentProvider({ mode: 'test' }).getRefundSettlement(
+      're_stripe_4',
+    );
+
+    expect(settlement).toEqual({
+      status: 'unknown',
+      gross: null,
+      fee: null,
+      net: null,
+      currency: null,
+      availableOn: null,
+      exchangeRate: null,
+    });
+  });
+
+  /**
+   * A failed refund's debit is undone by a second transaction: its own figure
+   * is money that came back, and booking it would book a refund that never
+   * happened.
+   */
+  test('a refund that failed took nothing in the end: unknown', async () => {
+    refundWithBalanceResponse = {
+      id: 're_stripe_5',
+      status: 'failed',
+      balance_transaction: balance({ amount: -1_000, fee: 0, net: -1_000 }),
+      failure_balance_transaction: 'txn_back',
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'test' }).getRefundSettlement(
+      're_stripe_5',
+    );
+
+    expect(settlement.status).toBe('unknown');
+    expect(settlement.net).toBeNull();
+  });
+
+  test('a dispute reports its WITHDRAWAL: the principal and the dispute fee', async () => {
+    disputeWithBalancesResponse = {
+      id: 'du_1',
+      status: 'won',
+      balance_transactions: [
+        // Stripe lists them in order; the reinstatement of a won dispute is
+        // the later, positive one and is not this figure.
+        balance({ id: 'txn_out', amount: -5_000, fee: 1_500, net: -6_500 }),
+        balance({ id: 'txn_back', amount: 5_000, fee: 0, net: 5_000 }),
+      ],
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'live' }).getDisputeSettlement(
+      'du_1',
+    );
+
+    expect(settlement).toEqual({
+      status: 'available',
+      gross: '5000',
+      fee: '1500',
+      net: '-6500',
+      currency: 'EUR',
+      availableOn: new Date(1_793_750_400_000),
+      exchangeRate: null,
+    });
+    expect(calls).toEqual([
+      { fn: 'retrieveStripeDisputeWithBalances', mode: 'live', args: ['du_1'] },
+    ]);
+  });
+
+  /** An inquiry moves no money: no balance transaction, every figure `null`. */
+  test('an inquiry with no balance transaction is unknown, not zero', async () => {
+    disputeWithBalancesResponse = {
+      id: 'du_2',
+      status: 'warning_needs_response',
+      balance_transactions: [],
+    };
+
+    const settlement = await new StripePaymentProvider({ mode: 'test' }).getDisputeSettlement(
+      'du_2',
+    );
+
+    expect(settlement).toEqual({
+      status: 'unknown',
+      gross: null,
+      fee: null,
+      net: null,
+      currency: null,
+      availableOn: null,
+      exchangeRate: null,
     });
   });
 });

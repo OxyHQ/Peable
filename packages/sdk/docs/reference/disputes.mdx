@@ -13,6 +13,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | [`GET /v1/disputes/{disputeId}`](#retrieve-a-dispute) | Retrieve a dispute |
 | [`POST /v1/disputes/{disputeId}`](#update-a-dispute) | Update a dispute |
 | [`POST /v1/disputes/{disputeId}/close`](#close-a-dispute) | Close a dispute |
+| [`GET /v1/disputes/{disputeId}/settlement`](#retrieve-a-disputes-settlement) | Retrieve a dispute's settlement |
 | [`GET /v1/payment_intents/{intentId}/disputes`](#list-a-payments-disputes) | List a payment's disputes |
 
 ## List disputes
@@ -277,6 +278,36 @@ Returns [Dispute](/reference/objects/dispute).
   "updated_at": 1793750400
 }
 ```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a dispute's settlement
+
+`GET /v1/disputes/{disputeId}/settlement`
+
+What the dispute WITHDREW from the settlement balance — `gross` the principal, `fee` the dispute fee, a negative `net` — in the settlement currency, read live from the provider. An inquiry moves no money: `unknown`, every figure `null`, never `0`. A reinstatement after a won dispute is not this figure.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.disputes.settlement()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `disputeId` **required** | path | string | The dispute (`dp_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Settlement](/reference/objects/settlement).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `refund` → [Refund](/reference/objects/refund)
+- `dispute` → [Dispute](/reference/objects/dispute)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
