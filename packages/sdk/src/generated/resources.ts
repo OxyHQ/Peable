@@ -769,7 +769,7 @@ export interface PaymentMethodConfigurationsResource {
   /**
    * Create a payment method configuration.
    *
-   * An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused.
+   * An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused, and so is turning `faircoin` `off` (`payment_method_locked`): FairCoin is always offered.
    *
    * `POST /v1/payment_method_configurations`
    */
@@ -790,7 +790,7 @@ export interface PaymentMethodConfigurationsResource {
   /**
    * Update a payment method configuration.
    *
-   * Method settings are merged; the default configuration is always active.
+   * Method settings are merged; the default configuration is always active. `faircoin` is locked on: setting it `off` is refused with `payment_method_locked`.
    *
    * `POST /v1/payment_method_configurations/{id}`
    */

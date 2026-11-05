@@ -69,6 +69,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'The request carries a parameter this route does not accept; `param` names it.',
   payment_intent_unexpected_state:
     'The PaymentIntent is in a status that does not allow this operation.',
+  payment_method_locked:
+    'The payment method cannot be turned off or removed: FairCoin is always offered to every payer; `param` names the field.',
   payout_not_allowed: 'Payouts cannot be created for this account.',
   rate_limited: 'Too many requests; back off and retry.',
   refund_not_cancelable: 'The refund has already left a cancelable state.',

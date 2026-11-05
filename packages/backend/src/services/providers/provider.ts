@@ -815,12 +815,18 @@ export function isDisputeHandlingProvider(
 // ---------------------------------------------------------------------------
 
 /**
+ * The configuration methods a card provider can process: every one but
+ * `faircoin`, the chain rail, which no provider is ever told about (ADR 0021 D2).
+ */
+export type ProviderPaymentMethodType = Exclude<PaymentMethodConfigurationType, 'faircoin'>;
+
+/**
  * The methods each provider can offer at all. A configuration's
  * `unavailable_reason: 'provider_unsupported'` is read from here, so the
  * merchant is told the truth instead of a toggle that does nothing.
  */
 export const PROVIDER_PAYMENT_METHODS: Readonly<
-  Record<ProviderId, readonly PaymentMethodConfigurationType[]>
+  Record<ProviderId, readonly ProviderPaymentMethodType[]>
 > = Object.freeze({
   stripe: ['card', 'apple_pay', 'google_pay', 'sepa_debit', 'ideal', 'bancontact', 'eps'],
 });
@@ -831,7 +837,7 @@ export interface SavePaymentMethodConfigurationRequest {
   /** Orbit's `pmc_…` — the provider-side name and the idempotency basis. */
   readonly configurationId: string;
   /** Every method this provider supports, on or off. */
-  readonly methods: Readonly<Partial<Record<PaymentMethodConfigurationType, 'on' | 'off'>>>;
+  readonly methods: Readonly<Partial<Record<ProviderPaymentMethodType, 'on' | 'off'>>>;
   readonly idempotencyKey: string;
 }
 

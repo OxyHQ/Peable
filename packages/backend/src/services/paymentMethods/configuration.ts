@@ -1,6 +1,16 @@
 /**
- * Payment method breadth on the card rail: what a configuration offers, which
- * methods a payment carries, and the provider binding behind both.
+ * Payment method breadth: what a configuration offers, which card-rail methods
+ * a payment carries, and the provider binding behind both.
+ *
+ * ## FairCoin is listed, locked, and never the provider's
+ *
+ * Every configuration shows a `faircoin` entry that is always on and
+ * `locked: true` (ADR 0021 D2): every payer can always pay with FairCoin, and
+ * no merchant choice is stored for it. It is `available` exactly when the
+ * merchant has a FairCoin (watch-only) key to derive addresses from. It is the
+ * chain rail, so it is never pushed to the card provider (the push iterates
+ * `PROVIDER_PAYMENT_METHODS`) and never one of a card payment's
+ * `payment_method_types` ({@link cardRailTypesFor} lists card-rail methods only).
  *
  * ## Availability is an intersection, and the answer says which side failed
  *
@@ -28,6 +38,7 @@ import {
   type PaymentMethodConfigurationType,
 } from '@peable.to/shared-types';
 import {
+  type ChoosablePaymentMethodType,
   ensureDefaultConfiguration,
   findConfigurationBinding,
   findConfigurationByPublicId,
@@ -42,6 +53,7 @@ import {
   PROVIDER_PAYMENT_METHODS,
   type PaymentProvider,
   type ProviderId,
+  type ProviderPaymentMethodType,
 } from '../providers/provider';
 
 /**
@@ -50,7 +62,7 @@ import {
  * until the merchant opts in, because each comes with its own settlement time
  * (SEPA Debit takes days) a merchant should choose knowingly.
  */
-export const DEFAULT_PREFERENCES: Readonly<Record<PaymentMethodConfigurationType, 'on' | 'off'>> =
+export const DEFAULT_PREFERENCES: Readonly<Record<ChoosablePaymentMethodType, 'on' | 'off'>> =
   Object.freeze({
     card: 'on',
     apple_pay: 'on',
@@ -64,20 +76,44 @@ export const DEFAULT_PREFERENCES: Readonly<Record<PaymentMethodConfigurationType
 
 const WALLETS: ReadonlySet<PaymentMethodConfigurationType> = new Set(['apple_pay', 'google_pay']);
 
+/** The methods a merchant chooses, in the configuration's order: every type but `faircoin`. */
+const CHOOSABLE_TYPES: readonly ChoosablePaymentMethodType[] =
+  PAYMENT_METHOD_CONFIGURATION_TYPES.filter(
+    (type): type is ChoosablePaymentMethodType => type !== 'faircoin',
+  );
+
+/** What the `faircoin` entry depends on: whether the merchant registered a FairCoin key. */
+export type FaircoinKeyHolder = Pick<MerchantRow, 'xpub'>;
+
 /** The provider a merchant's card payments go through. One today. */
 const CARD_PROVIDER: ProviderId = 'stripe';
 
 function preferenceOf(
   row: PaymentMethodConfigurationRow,
-  type: PaymentMethodConfigurationType,
+  type: ChoosablePaymentMethodType,
 ): 'on' | 'off' {
   return row.preferences[type] ?? DEFAULT_PREFERENCES[type];
 }
 
-/** One method of a configuration, as the wire shows it. */
+/**
+ * The `faircoin` entry: always on and locked, whatever the row says; available
+ * once the merchant has a FairCoin key, `faircoin_account_missing` before.
+ */
+export function faircoinEntry(merchant: FaircoinKeyHolder): PaymentMethodConfigurationEntry {
+  const hasKey = merchant.xpub !== null;
+  return {
+    available: hasKey,
+    display_preference: { preference: 'on', value: 'on' },
+    locked: true,
+    unavailable_reason: hasKey ? null : 'faircoin_account_missing',
+    currencies: [...PAYMENT_METHOD_CURRENCIES.faircoin],
+  };
+}
+
+/** One card-rail method of a configuration, as the wire shows it. */
 export function entryFor(
   row: PaymentMethodConfigurationRow,
-  type: PaymentMethodConfigurationType,
+  type: ChoosablePaymentMethodType,
   provider: ProviderId = CARD_PROVIDER,
 ): PaymentMethodConfigurationEntry {
   const value = preferenceOf(row, type);
@@ -90,16 +126,22 @@ export function entryFor(
   return {
     available: value === 'on' && unavailable_reason === null,
     display_preference: { preference: row.preferences[type] ?? 'none', value },
+    locked: false,
     unavailable_reason,
     currencies: [...PAYMENT_METHOD_CURRENCIES[type]],
   };
 }
 
+/** `row` as the wire shows it; `merchant` (its owner) decides the `faircoin` entry. */
 export function toPaymentMethodConfigurationDTO(
   row: PaymentMethodConfigurationRow,
+  merchant: FaircoinKeyHolder,
 ): PaymentMethodConfiguration {
   const entries = Object.fromEntries(
-    PAYMENT_METHOD_CONFIGURATION_TYPES.map((type) => [type, entryFor(row, type)]),
+    PAYMENT_METHOD_CONFIGURATION_TYPES.map((type) => [
+      type,
+      type === 'faircoin' ? faircoinEntry(merchant) : entryFor(row, type),
+    ]),
   ) as Record<PaymentMethodConfigurationType, PaymentMethodConfigurationEntry>;
   return {
     id: row.publicId,
@@ -117,13 +159,14 @@ export function toPaymentMethodConfigurationDTO(
 /**
  * The card-rail types a payment in `currency` carries under `row`: every
  * available method that takes the currency, wallets folded into `card`.
+ * Never `faircoin`: it is the chain rail, not a card-rail method.
  */
 export function cardRailTypesFor(
   row: PaymentMethodConfigurationRow,
   currency: CurrencyCode,
 ): CardRailPaymentMethodType[] {
   const offered = new Set<CardRailPaymentMethodType>();
-  for (const type of PAYMENT_METHOD_CONFIGURATION_TYPES) {
+  for (const type of CHOOSABLE_TYPES) {
     const entry = entryFor(row, type);
     if (!entry.available || !(entry.currencies as readonly string[]).includes(currency)) continue;
     offered.add(WALLETS.has(type) ? 'card' : (type as CardRailPaymentMethodType));
@@ -282,7 +325,7 @@ export async function ensureProviderConfiguration(
       type,
       entryFor(row, type, provider.id).available ? 'on' : 'off',
     ]),
-  ) as Partial<Record<PaymentMethodConfigurationType, 'on' | 'off'>>;
+  ) as Partial<Record<ProviderPaymentMethodType, 'on' | 'off'>>;
   const saved = await provider.savePaymentMethodConfiguration({
     ...(binding !== null ? { providerObjectId: binding.providerObjectId } : {}),
     configurationId: row.publicId,

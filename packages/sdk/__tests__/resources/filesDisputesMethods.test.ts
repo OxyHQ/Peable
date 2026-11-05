@@ -58,6 +58,7 @@ const DISPUTE: Dispute = {
 const ENTRY: PaymentMethodConfigurationEntry = {
   available: true,
   display_preference: { preference: 'none', value: 'on' },
+  locked: false,
   unavailable_reason: null,
   currencies: ['EUR'],
 };

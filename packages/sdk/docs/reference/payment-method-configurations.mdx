@@ -50,13 +50,149 @@ A list (`object: "list"`) whose `data` holds [PaymentMethodConfiguration](/refer
 | `has_more` | boolean | Whether another page exists in the direction this one was read. |
 | `url` | string | The path that was listed. |
 
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "pmc_0193b8f2c1a87d3e9f4b",
+      "object": "payment_method_configuration",
+      "livemode": false,
+      "name": "Default",
+      "active": true,
+      "is_default": true,
+      "created": 1793750400,
+      "updated_at": 1793750400,
+      "faircoin": {
+        "available": true,
+        "display_preference": {
+          "preference": "on",
+          "value": "on"
+        },
+        "locked": true,
+        "unavailable_reason": null,
+        "currencies": [
+          "FAIR",
+          "EUR",
+          "USD"
+        ]
+      },
+      "card": {
+        "available": true,
+        "display_preference": {
+          "preference": "none",
+          "value": "on"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR",
+          "USD",
+          "GBP"
+        ]
+      },
+      "apple_pay": {
+        "available": true,
+        "display_preference": {
+          "preference": "none",
+          "value": "on"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR",
+          "USD",
+          "GBP"
+        ]
+      },
+      "google_pay": {
+        "available": true,
+        "display_preference": {
+          "preference": "none",
+          "value": "on"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR",
+          "USD",
+          "GBP"
+        ]
+      },
+      "sepa_debit": {
+        "available": true,
+        "display_preference": {
+          "preference": "on",
+          "value": "on"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR"
+        ]
+      },
+      "ideal": {
+        "available": false,
+        "display_preference": {
+          "preference": "none",
+          "value": "off"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR"
+        ]
+      },
+      "bancontact": {
+        "available": false,
+        "display_preference": {
+          "preference": "none",
+          "value": "off"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR"
+        ]
+      },
+      "eps": {
+        "available": false,
+        "display_preference": {
+          "preference": "none",
+          "value": "off"
+        },
+        "locked": false,
+        "unavailable_reason": null,
+        "currencies": [
+          "EUR"
+        ]
+      },
+      "bizum": {
+        "available": false,
+        "display_preference": {
+          "preference": "none",
+          "value": "off"
+        },
+        "locked": false,
+        "unavailable_reason": "provider_unsupported",
+        "currencies": [
+          "EUR"
+        ]
+      }
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_method_configurations"
+}
+```
+
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
 ## Create a payment method configuration
 
 `POST /v1/payment_method_configurations`
 
-An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused.
+An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused, and so is turning `faircoin` `off` (`payment_method_locked`): FairCoin is always offered.
 
 - **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
 - **Scope:** `payments:write`
@@ -74,6 +210,9 @@ An additional, non-default configuration. Turning `on` a method the processing p
 | Field | Type | Description |
 | --- | --- | --- |
 | `name` | string | 1–100 characters. |
+| `faircoin` | object |  |
+| `faircoin[display_preference]` **required** | object |  |
+| `faircoin[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
 | `card` | object |  |
 | `card[display_preference]` **required** | object |  |
 | `card[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
@@ -102,6 +241,135 @@ An additional, non-default configuration. Turning `on` a method the processing p
 **Response `200`**
 
 Returns [PaymentMethodConfiguration](/reference/objects/payment-method-configuration).
+
+```json
+{
+  "id": "pmc_0193b8f2c1a87d3e9f4b",
+  "object": "payment_method_configuration",
+  "livemode": false,
+  "name": "Default",
+  "active": true,
+  "is_default": true,
+  "created": 1793750400,
+  "updated_at": 1793750400,
+  "faircoin": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": true,
+    "unavailable_reason": null,
+    "currencies": [
+      "FAIR",
+      "EUR",
+      "USD"
+    ]
+  },
+  "card": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "apple_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "google_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "sepa_debit": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "ideal": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bancontact": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "eps": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bizum": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": "provider_unsupported",
+    "currencies": [
+      "EUR"
+    ]
+  }
+}
+```
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
@@ -125,13 +393,142 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 
 Returns [PaymentMethodConfiguration](/reference/objects/payment-method-configuration).
 
+```json
+{
+  "id": "pmc_0193b8f2c1a87d3e9f4b",
+  "object": "payment_method_configuration",
+  "livemode": false,
+  "name": "Default",
+  "active": true,
+  "is_default": true,
+  "created": 1793750400,
+  "updated_at": 1793750400,
+  "faircoin": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": true,
+    "unavailable_reason": null,
+    "currencies": [
+      "FAIR",
+      "EUR",
+      "USD"
+    ]
+  },
+  "card": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "apple_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "google_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "sepa_debit": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "ideal": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bancontact": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "eps": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bizum": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": "provider_unsupported",
+    "currencies": [
+      "EUR"
+    ]
+  }
+}
+```
+
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
 ## Update a payment method configuration
 
 `POST /v1/payment_method_configurations/{id}`
 
-Method settings are merged; the default configuration is always active.
+Method settings are merged; the default configuration is always active. `faircoin` is locked on: setting it `off` is refused with `payment_method_locked`.
 
 - **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
 - **Scope:** `payments:write`
@@ -151,6 +548,9 @@ Method settings are merged; the default configuration is always active.
 | --- | --- | --- |
 | `name` | string | 1–100 characters. |
 | `active` | boolean |  |
+| `faircoin` | object |  |
+| `faircoin[display_preference]` **required** | object |  |
+| `faircoin[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
 | `card` | object |  |
 | `card[display_preference]` **required** | object |  |
 | `card[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
@@ -179,5 +579,134 @@ Method settings are merged; the default configuration is always active.
 **Response `200`**
 
 Returns [PaymentMethodConfiguration](/reference/objects/payment-method-configuration).
+
+```json
+{
+  "id": "pmc_0193b8f2c1a87d3e9f4b",
+  "object": "payment_method_configuration",
+  "livemode": false,
+  "name": "Default",
+  "active": true,
+  "is_default": true,
+  "created": 1793750400,
+  "updated_at": 1793750400,
+  "faircoin": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": true,
+    "unavailable_reason": null,
+    "currencies": [
+      "FAIR",
+      "EUR",
+      "USD"
+    ]
+  },
+  "card": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "apple_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "google_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "sepa_debit": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "ideal": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bancontact": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "eps": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bizum": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": "provider_unsupported",
+    "currencies": [
+      "EUR"
+    ]
+  }
+}
+```
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -15,9 +15,13 @@ import type { DatabaseOrTransaction } from '../postgres';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { PaymentMethodDomainWalletStatus } from '../schema/valueSets';
 
-export type PaymentMethodPreferences = Partial<
-  Record<PaymentMethodConfigurationType, 'on' | 'off'>
->;
+/**
+ * The methods a merchant chooses: every configuration type but `faircoin`,
+ * which is locked on (ADR 0021 D2) and so never has a stored preference.
+ */
+export type ChoosablePaymentMethodType = Exclude<PaymentMethodConfigurationType, 'faircoin'>;
+
+export type PaymentMethodPreferences = Partial<Record<ChoosablePaymentMethodType, 'on' | 'off'>>;
 
 export interface PaymentMethodConfigurationRow {
   readonly id: string;
@@ -194,7 +198,7 @@ export async function updateConfiguration(
 export async function clearConfigurationPreferences(
   db: DatabaseOrTransaction,
   id: string,
-  types: readonly PaymentMethodConfigurationType[],
+  types: readonly ChoosablePaymentMethodType[],
 ): Promise<void> {
   if (types.length === 0) return;
   await db

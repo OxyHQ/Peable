@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { listOf } from '../../common/envelopes';
 import { defineComponent, defineObject } from '../../common/objects';
 import { expandOnlyQuery, listQuery, queryBoolean } from '../../common/params';
-import { fiatCurrency, livemode, unixSeconds } from '../../common/primitives';
+import { currency, livemode, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import {
   PAYMENT_METHOD_CONFIGURATION_TYPES,
@@ -11,11 +11,13 @@ import {
 } from '../../vocabulary/paymentMethodConfigurations';
 
 /**
- * Payment method breadth on the card rail — which methods a merchant's payers
- * are offered (`pmc_…`), and the web domains wallets may run on (`pmd_…`).
- * Both are Orbit's objects; the provider's configuration and domain are
- * bindings behind them (ADR 0016). Card data and bank credentials are entered
- * in the provider's hosted fields and never reach Peable (PCI SAQ-A).
+ * Payment method breadth — which methods a merchant's payers are offered
+ * (`pmc_…`), and the web domains wallets may run on (`pmd_…`). FairCoin is an
+ * entry of every configuration and is locked on (ADR 0021 D2); the card-rail
+ * methods are the merchant's choice. Both are Orbit's objects; the provider's
+ * configuration and domain are bindings behind them (ADR 0016). Card data and
+ * bank credentials are entered in the provider's hosted fields and never reach
+ * Peable (PCI SAQ-A).
  */
 
 /** The merchant's choice (`none`: Orbit's default) and what is in effect. */
@@ -35,17 +37,39 @@ export const paymentMethodConfigurationEntrySchema = defineComponent(
         .boolean()
         .describe('Whether payers can be offered this method: it is on and nothing prevents it.'),
       display_preference: paymentMethodDisplayPreferenceSchema,
+      locked: z
+        .boolean()
+        .describe(
+          'Whether the merchant can change it. Only `faircoin` is locked: it is always on, because every payer can always pay with FairCoin (ADR 0021), and setting it `off` is refused with `payment_method_locked`.',
+        ),
       unavailable_reason: z
         .enum(PAYMENT_METHOD_UNAVAILABLE_REASONS)
         .nullable()
         .describe('Why it cannot be offered whatever the merchant chooses; `null` when it can.'),
-      currencies: z.array(fiatCurrency).describe('The payment currencies it is offered on.'),
+      currencies: z.array(currency).describe('The payment currencies it is offered on.'),
     })
     .strict(),
 );
 export type PaymentMethodConfigurationEntry = z.output<
   typeof paymentMethodConfigurationEntrySchema
 >;
+
+/** One entry of the configuration's documented example (abbreviated currency lists). */
+function exampleEntry(
+  preference: 'on' | 'off' | 'none',
+  value: 'on' | 'off',
+  overrides: Partial<PaymentMethodConfigurationEntry> = {},
+): PaymentMethodConfigurationEntry {
+  const unavailable_reason = overrides.unavailable_reason ?? null;
+  return {
+    available: value === 'on' && unavailable_reason === null,
+    display_preference: { preference, value },
+    locked: false,
+    unavailable_reason,
+    currencies: ['EUR', 'USD', 'GBP'],
+    ...overrides,
+  };
+}
 
 const entryFields = Object.fromEntries(
   PAYMENT_METHOD_CONFIGURATION_TYPES.map((type) => [type, paymentMethodConfigurationEntrySchema]),
@@ -73,6 +97,32 @@ export const paymentMethodConfigurationSchema = defineObject(
       ...entryFields,
     })
     .strict(),
+  {
+    examples: [
+      {
+        id: 'pmc_0193b8f2c1a87d3e9f4b',
+        object: 'payment_method_configuration',
+        livemode: false,
+        name: 'Default',
+        active: true,
+        is_default: true,
+        created: 1793750400,
+        updated_at: 1793750400,
+        faircoin: exampleEntry('on', 'on', { locked: true, currencies: ['FAIR', 'EUR', 'USD'] }),
+        card: exampleEntry('none', 'on'),
+        apple_pay: exampleEntry('none', 'on'),
+        google_pay: exampleEntry('none', 'on'),
+        sepa_debit: exampleEntry('on', 'on', { currencies: ['EUR'] }),
+        ideal: exampleEntry('none', 'off', { currencies: ['EUR'] }),
+        bancontact: exampleEntry('none', 'off', { currencies: ['EUR'] }),
+        eps: exampleEntry('none', 'off', { currencies: ['EUR'] }),
+        bizum: exampleEntry('none', 'off', {
+          currencies: ['EUR'],
+          unavailable_reason: 'provider_unsupported',
+        }),
+      },
+    ],
+  },
 );
 export type PaymentMethodConfiguration = z.output<typeof paymentMethodConfigurationSchema>;
 
@@ -139,7 +189,11 @@ declare module '../../common/objects' {
   }
 }
 
-/** One method's setting in a create or update. `none` returns it to Orbit's default. */
+/**
+ * One method's setting in a create or update. `none` returns it to Orbit's
+ * default. For `faircoin` only `on` and `none` are accepted, and neither stores
+ * anything: it is always on, and `off` is refused with `payment_method_locked`.
+ */
 export const paymentMethodConfigurationEntryParams = z
   .object({
     display_preference: z.object({ preference: z.enum(['on', 'off', 'none']) }).strict(),
@@ -228,7 +282,7 @@ export const paymentMethodConfigurationRoutes = [
     tag: 'Payment method configurations',
     summary: 'Create a payment method configuration',
     description:
-      'An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused.',
+      'An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused, and so is turning `faircoin` `off` (`payment_method_locked`): FairCoin is always offered.',
     auth: 'service',
     scope: 'payments:write',
     idempotent: true,
@@ -256,7 +310,8 @@ export const paymentMethodConfigurationRoutes = [
     path: '/v1/payment_method_configurations/{id}',
     tag: 'Payment method configurations',
     summary: 'Update a payment method configuration',
-    description: 'Method settings are merged; the default configuration is always active.',
+    description:
+      'Method settings are merged; the default configuration is always active. `faircoin` is locked on: setting it `off` is refused with `payment_method_locked`.',
     auth: 'service',
     scope: 'payments:write',
     idempotent: true,

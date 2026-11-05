@@ -23,8 +23,9 @@ import { PAYMENT_METHOD_DOMAIN_WALLET_STATUSES, PROVIDER_IDS } from './valueSets
  * binding (`payment_method_configuration_bindings`), created and brought up to
  * date lazily the first time a payment needs it, per mode.
  *
- * `preferences` holds only the merchant's EXPLICIT choices (`{type: 'on'|'off'}`);
- * a type absent from it follows Orbit's default (`services/paymentMethods/
+ * `preferences` holds only the merchant's EXPLICIT choices (`{type: 'on'|'off'}`)
+ * and never `faircoin`, which is locked on (ADR 0021 D2) and has no choice to
+ * store; a type absent from it follows Orbit's default (`services/paymentMethods/
  * configuration.ts`). Stored as the choices rather than the effective set, so a
  * default Orbit changes later reaches every merchant who never chose, and a
  * merchant who did choose keeps their choice.
@@ -44,7 +45,7 @@ export const paymentMethodConfigurations = pgTable(
     active: boolean().notNull().default(true),
     isDefault: boolean().notNull().default(false),
     preferences: jsonb()
-      .$type<Partial<Record<PaymentMethodConfigurationType, 'on' | 'off'>>>()
+      .$type<Partial<Record<Exclude<PaymentMethodConfigurationType, 'faircoin'>, 'on' | 'off'>>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
     version: integer().notNull().default(1),
