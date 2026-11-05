@@ -1036,6 +1036,9 @@ conflicts plain, 11 with it, each a Peable edit to the same lines.
 
 ## Deploy
 
+Production runs the card rail in LIVE mode only (no test key); ADR 0017's
+"Production configuration" lists the variables and provider endpoints.
+
 `.github/workflows/deploy-aws.yml` is the only deployment: native `linux/arm64`
 build on an arm64 runner, pushed to ECR `oxy/peable`, rolling the `peable` ECS
 service on `oxy-cluster`. AWS SSM SecureString is the sole source of truth for backend credentials.
