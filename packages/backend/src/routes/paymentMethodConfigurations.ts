@@ -24,6 +24,7 @@ import {
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
+  type ChoosablePaymentMethodType,
   clearConfigurationPreferences,
   ensureDefaultConfiguration,
   findConfigurationById,
@@ -82,17 +83,35 @@ function idParam(req: Request, res: Response): string | null {
   return id;
 }
 
-/** Split a body's method settings into choices and resets, refusing what cannot be on. */
+/**
+ * Split a body's method settings into choices and resets, refusing what cannot
+ * be on — and FairCoin off: it is locked on (ADR 0021 D2), so `off` is a 400
+ * `payment_method_locked` and `on`/`none` are accepted and store nothing.
+ */
 function preferencesOf(
   res: Response,
   body: Partial<Record<PaymentMethodConfigurationType, EntryParams | undefined>>,
-): { set: PaymentMethodPreferences; reset: PaymentMethodConfigurationType[] } | null {
+): { set: PaymentMethodPreferences; reset: ChoosablePaymentMethodType[] } | null {
   const set: PaymentMethodPreferences = {};
-  const reset: PaymentMethodConfigurationType[] = [];
+  const reset: ChoosablePaymentMethodType[] = [];
   for (const type of PAYMENT_METHOD_CONFIGURATION_TYPES) {
     const entry = body[type];
     if (entry === undefined) continue;
     const preference = entry.display_preference.preference;
+    if (type === 'faircoin') {
+      if (preference === 'off') {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          'FairCoin is always offered to every payer and cannot be turned off',
+          'payment_method_locked',
+          'faircoin',
+        );
+        return null;
+      }
+      continue;
+    }
     if (preference === 'on' && !PROVIDER_PAYMENT_METHODS.stripe.includes(type)) {
       // Truthful: a toggle that can never take effect is refused, not stored.
       sendError(
@@ -129,7 +148,7 @@ export async function answerConfigurationList(
     cursor: async (publicId) =>
       (await findConfigurationByPublicId(db, merchant.id, publicId))?.id ?? null,
     fetch: (page) => listConfigurationsForMerchant(db, { merchantId: merchant.id, page }),
-    serialize: toPaymentMethodConfigurationDTO,
+    serialize: (row) => toPaymentMethodConfigurationDTO(row, merchant),
   });
 }
 
@@ -163,7 +182,7 @@ export async function retrieveConfiguration(
   if (!parseQuery(req, res, retrieveQuery[surface])) return;
   const row = await loadConfiguration(req, res, merchant);
   if (!row) return;
-  res.status(200).json(toPaymentMethodConfigurationDTO(row));
+  res.status(200).json(toPaymentMethodConfigurationDTO(row, merchant));
 }
 
 /** `POST /v1/payment_method_configurations` — an additional, non-default configuration. */
@@ -186,7 +205,7 @@ export async function createConfiguration(
     name: parsed.data.name ?? 'Configuration',
     preferences: prefs.set,
   });
-  res.status(200).json(toPaymentMethodConfigurationDTO(row));
+  res.status(200).json(toPaymentMethodConfigurationDTO(row, merchant));
 }
 
 /** `POST /v1/payment_method_configurations/:id` — methods (merged), name, active. */
@@ -225,7 +244,7 @@ export async function updateConfigurationCore(
     });
     return findConfigurationById(tx, row.id);
   });
-  res.status(200).json(toPaymentMethodConfigurationDTO(updated ?? row));
+  res.status(200).json(toPaymentMethodConfigurationDTO(updated ?? row, merchant));
 }
 
 function sendDomainError(res: Response, error: unknown): void {

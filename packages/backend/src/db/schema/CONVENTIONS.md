@@ -525,7 +525,8 @@ file references. Decisions a reader would otherwise undo:
 
 - **`payment_method_configurations.preferences` holds only explicit choices**
   (`{type: 'on'|'off'}`), merged in SQL (`||`), so a default Orbit changes later
-  reaches every merchant who never chose. `version` moves with every change and
+  reaches every merchant who never chose. It never holds `faircoin`: FairCoin is
+  locked on (ADR 0021 D2) and its entry is computed from the merchant's key. `version` moves with every change and
   is the compare half of `payment_method_configuration_bindings.synced_version`,
   which only moves forward (`greatest`).
 - **One default per merchant** is a partial unique index (`… where is_default`),

@@ -21,6 +21,7 @@ Object type: `payment_method_configuration`.
 | `is_default` | boolean | The configuration a PaymentIntent uses when it names none. One per merchant. |
 | `created` | integer | Unix seconds. |
 | `updated_at` | integer | Unix seconds. |
+| `faircoin` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
 | `card` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
 | `apple_pay` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
 | `google_pay` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
@@ -29,6 +30,137 @@ Object type: `payment_method_configuration`.
 | `bancontact` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
 | `eps` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
 | `bizum` | [PaymentMethodConfigurationEntry](/reference/objects/payment-method-configuration-entry) |  |
+
+## Example
+
+```json
+{
+  "id": "pmc_0193b8f2c1a87d3e9f4b",
+  "object": "payment_method_configuration",
+  "livemode": false,
+  "name": "Default",
+  "active": true,
+  "is_default": true,
+  "created": 1793750400,
+  "updated_at": 1793750400,
+  "faircoin": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": true,
+    "unavailable_reason": null,
+    "currencies": [
+      "FAIR",
+      "EUR",
+      "USD"
+    ]
+  },
+  "card": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "apple_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "google_pay": {
+    "available": true,
+    "display_preference": {
+      "preference": "none",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR",
+      "USD",
+      "GBP"
+    ]
+  },
+  "sepa_debit": {
+    "available": true,
+    "display_preference": {
+      "preference": "on",
+      "value": "on"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "ideal": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bancontact": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "eps": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": null,
+    "currencies": [
+      "EUR"
+    ]
+  },
+  "bizum": {
+    "available": false,
+    "display_preference": {
+      "preference": "none",
+      "value": "off"
+    },
+    "locked": false,
+    "unavailable_reason": "provider_unsupported",
+    "currencies": [
+      "EUR"
+    ]
+  }
+}
+```
 
 ## Returned by
 

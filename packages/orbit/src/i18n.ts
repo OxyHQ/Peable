@@ -467,7 +467,7 @@ const en: Record<string, string> = {
 
   'methods.title': 'Payment methods',
   'methods.intro':
-    'What payers are offered on card payments. Card details and bank logins are entered in the provider’s secure fields and never reach Peable.',
+    'What payers are offered. FairCoin is always offered; the card methods are yours to turn on and off. Card details and bank logins are entered in the provider’s secure fields and never reach Peable.',
   'methods.configuration': 'Configuration',
   'methods.defaultName': '{name} (default)',
   'methods.inactive': 'This configuration is inactive: new payments cannot use it.',
@@ -476,6 +476,9 @@ const en: Record<string, string> = {
   'methods.toggle': 'Offer {method}',
   'methods.none': 'No payment method configuration yet',
   'methods.noMerchant': 'Register the merchant first.',
+  'methods.locked': 'FairCoin is always offered to every payer and cannot be turned off.',
+  'methods.faircoinKeyMissing':
+    'Register your FairCoin receiving key (a watch-only account xpub) in the Merchant settings above so payers can pay you in FairCoin.',
 
   'domains.title': 'Wallet domains',
   'domains.intro':
@@ -918,6 +921,7 @@ const en: Record<string, string> = {
   'price.tiersMode.graduated': 'graduated',
   'price.tiersMode.volume': 'volume',
 
+  'methods.type.faircoin': 'FairCoin',
   'methods.type.card': 'Cards',
   'methods.type.apple_pay': 'Apple Pay',
   'methods.type.google_pay': 'Google Pay',
@@ -928,6 +932,7 @@ const en: Record<string, string> = {
   'methods.type.bizum': 'Bizum',
   'methods.reason.provider_unsupported': 'Not offered by the processing provider',
   'methods.reason.requires_card': 'Needs card payments on',
+  'methods.reason.faircoin_account_missing': 'No FairCoin receiving key registered yet',
   'methods.currencies.all': 'All currencies',
   'methods.currencies.only': '{currency} only',
   'methods.preference.default': 'Default ({value})',
@@ -935,6 +940,7 @@ const en: Record<string, string> = {
   'methods.preference.value.off': 'off',
   'methods.preference.on': 'On',
   'methods.preference.off': 'Off',
+  'methods.preference.locked': 'Always on',
   'domains.wallet.active': 'Active',
   'domains.wallet.inactive': 'Inactive',
   'domains.wallet.inactiveDetail': 'Inactive: {message}',
@@ -1456,7 +1462,7 @@ const es: Record<string, string> = {
 
   'methods.title': 'Métodos de pago',
   'methods.intro':
-    'Lo que se ofrece a los pagadores en los pagos con tarjeta. Los datos de la tarjeta y los accesos bancarios se introducen en los campos seguros del proveedor y nunca llegan a Peable.',
+    'Lo que se ofrece a los pagadores. FairCoin se ofrece siempre; los métodos de tarjeta los activas y desactivas tú. Los datos de la tarjeta y los accesos bancarios se introducen en los campos seguros del proveedor y nunca llegan a Peable.',
   'methods.configuration': 'Configuración',
   'methods.defaultName': '{name} (predeterminada)',
   'methods.inactive': 'Esta configuración está inactiva: los pagos nuevos no pueden usarla.',
@@ -1465,6 +1471,9 @@ const es: Record<string, string> = {
   'methods.toggle': 'Ofrecer {method}',
   'methods.none': 'Aún no hay ninguna configuración de métodos de pago',
   'methods.noMerchant': 'Registra antes el comercio.',
+  'methods.locked': 'FairCoin se ofrece siempre a todos los pagadores y no se puede desactivar.',
+  'methods.faircoinKeyMissing':
+    'Registra tu clave de recepción de FairCoin (una xpub de cuenta de solo lectura) en los ajustes del comercio de arriba para que los pagadores puedan pagarte en FairCoin.',
 
   'domains.title': 'Dominios de monederos',
   'domains.intro':
@@ -1526,10 +1535,13 @@ const es: Record<string, string> = {
   'price.tiersMode.graduated': 'escalonado',
   'price.tiersMode.volume': 'por volumen',
 
+  'methods.type.faircoin': 'FairCoin',
   'methods.type.card': 'Tarjetas',
   'methods.type.sepa_debit': 'Adeudo directo SEPA',
   'methods.reason.provider_unsupported': 'El proveedor de procesamiento no lo ofrece',
   'methods.reason.requires_card': 'Requiere activar los pagos con tarjeta',
+  'methods.reason.faircoin_account_missing':
+    'Aún no hay ninguna clave de recepción de FairCoin registrada',
   'methods.currencies.all': 'Todas las divisas',
   'methods.currencies.only': 'Solo {currency}',
   'methods.preference.default': 'Predeterminado ({value})',
@@ -1537,6 +1549,7 @@ const es: Record<string, string> = {
   'methods.preference.value.off': 'desactivado',
   'methods.preference.on': 'Activado',
   'methods.preference.off': 'Desactivado',
+  'methods.preference.locked': 'Siempre activado',
   'domains.wallet.active': 'Activo',
   'domains.wallet.inactive': 'Inactivo',
   'domains.wallet.inactiveDetail': 'Inactivo: {message}',

@@ -14,6 +14,7 @@ import { labelFor, t } from '../i18n';
  * pinned to it by `configuration.test.ts`.
  */
 export const ORBIT_PAYMENT_METHOD_TYPES: readonly PaymentMethodConfigurationType[] = [
+  'faircoin',
   'card',
   'apple_pay',
   'google_pay',
@@ -49,6 +50,7 @@ export function currenciesText(currencies: readonly string[]): string {
  * default (`none`) followed by the value it currently resolves to.
  */
 export function preferenceText(entry: PaymentMethodConfigurationEntry): string {
+  if (entry.locked) return t('methods.preference.locked');
   const { preference, value } = entry.display_preference;
   if (preference === 'none') {
     return t('methods.preference.default', {
@@ -59,13 +61,27 @@ export function preferenceText(entry: PaymentMethodConfigurationEntry): string {
 }
 
 /**
- * Whether the toggle can be changed at all. A method the provider does not
- * offer cannot be turned on, so its switch is disabled — shown, never hidden.
- * A wallet waiting on cards can still be set: its preference takes effect when
- * cards are on.
+ * Whether the toggle can be changed at all. A locked method (FairCoin, always
+ * offered — ADR 0021) cannot be turned off, and a method the provider does not
+ * offer cannot be turned on, so both switches are disabled — shown, never
+ * hidden. A wallet waiting on cards can still be set: its preference takes
+ * effect when cards are on.
  */
 export function canToggle(entry: PaymentMethodConfigurationEntry): boolean {
-  return entry.unavailable_reason !== 'provider_unsupported';
+  return !entry.locked && entry.unavailable_reason !== 'provider_unsupported';
+}
+
+/**
+ * The notes under a method, in words: why a locked method cannot be changed,
+ * and what the merchant can do about an unavailable FairCoin (register its key).
+ */
+export function methodNotes(entry: PaymentMethodConfigurationEntry): string[] {
+  const notes: string[] = [];
+  if (entry.locked) notes.push(t('methods.locked'));
+  if (entry.unavailable_reason === 'faircoin_account_missing') {
+    notes.push(t('methods.faircoinKeyMissing'));
+  }
+  return notes;
 }
 
 /** The update body that turns one method on or off, and nothing else. */

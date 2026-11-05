@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-107 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+108 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -294,6 +294,10 @@ The PaymentIntent is in a status that does not allow this operation.
 ### `payment_link_inactive`
 
 The Payment Link is deactivated.
+
+### `payment_method_locked`
+
+The payment method cannot be turned off or removed: FairCoin is always offered to every payer; `param` names the field.
 
 ### `payment_method_missing`
 

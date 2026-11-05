@@ -346,9 +346,12 @@ is Stripe's enum; `charge` is expandable.
 `paymentMethodConfigurations` (`pmc_…`) say which card-rail methods payers are
 offered: `card`, `apple_pay`, `google_pay`, `sepa_debit`, `ideal`,
 `bancontact`, `eps` (and `bizum`, reported `unavailable_reason:
-'provider_unsupported'`). Each method carries `available`,
-`display_preference`, `unavailable_reason` and the `currencies` it is offered
-in. A card PaymentIntent uses the default configuration unless it names
+'provider_unsupported'`), plus `faircoin`, which is always on and `locked: true`
+(ADR 0021: every payer can always pay with FairCoin; setting it `off` is a 400
+`payment_method_locked`, and it is `unavailable_reason:
+'faircoin_account_missing'` until the merchant registers its FairCoin key). Each
+method carries `available`, `display_preference`, `locked`,
+`unavailable_reason` and the `currencies` it is offered in. A card PaymentIntent uses the default configuration unless it names
 `payment_method_configuration` or explicit `payment_method_types`.
 
 ```ts

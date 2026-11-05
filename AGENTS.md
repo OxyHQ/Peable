@@ -661,6 +661,11 @@ offers a method the merchant turned off. Every method Orbit does not model
 (the provider's own consumer wallet, BNPL, …) is switched OFF explicitly on
 every push. Wallet domains (`pmd_…`) are registered at the provider first and
 the row records its answer; Peable's, Oxy's and Kaana's own hosts are refused.
+**FairCoin is a LOCKED entry of every configuration (ADR 0021 D2)**: always
+`on`, `locked: true`, `available` only once the merchant has a FairCoin key
+(`faircoin_account_missing` before); `off` is a 400 `payment_method_locked` and
+nothing is ever stored for it. It is the chain rail, so it is never pushed to
+the provider and never one of a card PaymentIntent's `payment_method_types`.
 
 **A refund and a dispute run in OPPOSITE directions, and the difference is the
 whole handler.** A refund is merchant-initiated: Peable writes the row, then

@@ -10,6 +10,7 @@ import {
   canToggle,
   currenciesText,
   defaultConfiguration,
+  methodNotes,
   ORBIT_PAYMENT_METHOD_TYPES,
   parseDomainInput,
   paymentMethodLabel,
@@ -23,6 +24,7 @@ function entry(overrides: Partial<PaymentMethodConfigurationEntry> = {}) {
   return {
     available: true,
     display_preference: { preference: 'none', value: 'on' },
+    locked: false,
     unavailable_reason: null,
     currencies: ['EUR'],
     ...overrides,
@@ -46,6 +48,9 @@ describe('truthful wording', () => {
       'Not offered by the processing provider',
     );
     expect(unavailableReasonText('requires_card')).toBe('Needs card payments on');
+    expect(unavailableReasonText('faircoin_account_missing')).toBe(
+      'No FairCoin receiving key registered yet',
+    );
   });
 
   it('names the currencies a method applies to', () => {
@@ -53,6 +58,7 @@ describe('truthful wording', () => {
     expect(currenciesText(PAYMENT_METHOD_CURRENCIES.card)).toBe('All currencies');
     expect(currenciesText(FIAT_CURRENCY_CODES)).toBe('All currencies');
     expect(currenciesText(['EUR', 'GBP'])).toBe('EUR, GBP');
+    expect(currenciesText(PAYMENT_METHOD_CURRENCIES.faircoin)).toBe('All currencies');
   });
 
   it('tells the merchant’s choice from Orbit’s default', () => {
@@ -67,6 +73,32 @@ describe('truthful wording', () => {
       false,
     );
     expect(canToggle(entry({ unavailable_reason: 'requires_card', available: false }))).toBe(true);
+  });
+
+  it('shows FairCoin always on and locked, with the reason in words', () => {
+    const faircoin = entry({
+      locked: true,
+      display_preference: { preference: 'on', value: 'on' },
+    });
+    expect(canToggle(faircoin)).toBe(false);
+    expect(preferenceText(faircoin)).toBe('Always on');
+    expect(methodNotes(faircoin)).toEqual([
+      'FairCoin is always offered to every payer and cannot be turned off.',
+    ]);
+    expect(methodNotes(entry())).toEqual([]);
+  });
+
+  it('points a merchant without a FairCoin key at registering one', () => {
+    const keyless = entry({
+      locked: true,
+      available: false,
+      display_preference: { preference: 'on', value: 'on' },
+      unavailable_reason: 'faircoin_account_missing',
+    });
+    expect(canToggle(keyless)).toBe(false);
+    const notes = methodNotes(keyless);
+    expect(notes).toHaveLength(2);
+    expect(notes[1]).toContain('FairCoin receiving key');
   });
 
   it('words a wallet status with the provider’s detail', () => {

@@ -22738,7 +22738,7 @@
           "Payment method configurations"
         ],
         "summary": "Create a payment method configuration",
-        "description": "An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused.",
+        "description": "An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused, and so is turning `faircoin` `off` (`payment_method_locked`): FairCoin is always offered.",
         "security": [
           {
             "oxyServiceToken": []
@@ -22779,6 +22779,32 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "faircoin": {
+                    "type": "object",
+                    "properties": {
+                      "display_preference": {
+                        "type": "object",
+                        "properties": {
+                          "preference": {
+                            "type": "string",
+                            "enum": [
+                              "on",
+                              "off",
+                              "none"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "preference"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "display_preference"
+                    ],
+                    "additionalProperties": false
                   },
                   "card": {
                     "type": "object",
@@ -23157,7 +23183,7 @@
           "Payment method configurations"
         ],
         "summary": "Update a payment method configuration",
-        "description": "Method settings are merged; the default configuration is always active.",
+        "description": "Method settings are merged; the default configuration is always active. `faircoin` is locked on: setting it `off` is refused with `payment_method_locked`.",
         "security": [
           {
             "oxyServiceToken": []
@@ -23210,6 +23236,32 @@
                   },
                   "active": {
                     "type": "boolean"
+                  },
+                  "faircoin": {
+                    "type": "object",
+                    "properties": {
+                      "display_preference": {
+                        "type": "object",
+                        "properties": {
+                          "preference": {
+                            "type": "string",
+                            "enum": [
+                              "on",
+                              "off",
+                              "none"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "preference"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "display_preference"
+                    ],
+                    "additionalProperties": false
                   },
                   "card": {
                     "type": "object",
@@ -56801,7 +56853,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 107 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 108 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -59671,6 +59723,9 @@
             "maximum": 9007199254740991,
             "description": "Unix seconds."
           },
+          "faircoin": {
+            "$ref": "#/components/schemas/PaymentMethodConfigurationEntry"
+          },
           "card": {
             "$ref": "#/components/schemas/PaymentMethodConfigurationEntry"
           },
@@ -59705,6 +59760,7 @@
           "is_default",
           "created",
           "updated_at",
+          "faircoin",
           "card",
           "apple_pay",
           "google_pay",
@@ -59714,7 +59770,135 @@
           "eps",
           "bizum"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "pmc_0193b8f2c1a87d3e9f4b",
+            "object": "payment_method_configuration",
+            "livemode": false,
+            "name": "Default",
+            "active": true,
+            "is_default": true,
+            "created": 1793750400,
+            "updated_at": 1793750400,
+            "faircoin": {
+              "available": true,
+              "display_preference": {
+                "preference": "on",
+                "value": "on"
+              },
+              "locked": true,
+              "unavailable_reason": null,
+              "currencies": [
+                "FAIR",
+                "EUR",
+                "USD"
+              ]
+            },
+            "card": {
+              "available": true,
+              "display_preference": {
+                "preference": "none",
+                "value": "on"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR",
+                "USD",
+                "GBP"
+              ]
+            },
+            "apple_pay": {
+              "available": true,
+              "display_preference": {
+                "preference": "none",
+                "value": "on"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR",
+                "USD",
+                "GBP"
+              ]
+            },
+            "google_pay": {
+              "available": true,
+              "display_preference": {
+                "preference": "none",
+                "value": "on"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR",
+                "USD",
+                "GBP"
+              ]
+            },
+            "sepa_debit": {
+              "available": true,
+              "display_preference": {
+                "preference": "on",
+                "value": "on"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR"
+              ]
+            },
+            "ideal": {
+              "available": false,
+              "display_preference": {
+                "preference": "none",
+                "value": "off"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR"
+              ]
+            },
+            "bancontact": {
+              "available": false,
+              "display_preference": {
+                "preference": "none",
+                "value": "off"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR"
+              ]
+            },
+            "eps": {
+              "available": false,
+              "display_preference": {
+                "preference": "none",
+                "value": "off"
+              },
+              "locked": false,
+              "unavailable_reason": null,
+              "currencies": [
+                "EUR"
+              ]
+            },
+            "bizum": {
+              "available": false,
+              "display_preference": {
+                "preference": "none",
+                "value": "off"
+              },
+              "locked": false,
+              "unavailable_reason": "provider_unsupported",
+              "currencies": [
+                "EUR"
+              ]
+            }
+          }
+        ]
       },
       "PaymentMethodConfigurationEntry": {
         "type": "object",
@@ -59748,13 +59932,18 @@
             ],
             "additionalProperties": false
           },
+          "locked": {
+            "type": "boolean",
+            "description": "Whether the merchant can change it. Only `faircoin` is locked: it is always on, because every payer can always pay with FairCoin (ADR 0021), and setting it `off` is refused with `payment_method_locked`."
+          },
           "unavailable_reason": {
             "anyOf": [
               {
                 "type": "string",
                 "enum": [
                   "provider_unsupported",
-                  "requires_card"
+                  "requires_card",
+                  "faircoin_account_missing"
                 ]
               },
               {
@@ -59768,6 +59957,7 @@
             "items": {
               "type": "string",
               "enum": [
+                "FAIR",
                 "EUR",
                 "USD",
                 "GBP",
@@ -59780,7 +59970,8 @@
                 "CAD",
                 "AUD",
                 "JPY"
-              ]
+              ],
+              "description": "Uppercase ISO 4217 code, or `FAIR`."
             },
             "description": "The payment currencies it is offered on."
           }
@@ -59788,6 +59979,7 @@
         "required": [
           "available",
           "display_preference",
+          "locked",
           "unavailable_reason",
           "currencies"
         ],

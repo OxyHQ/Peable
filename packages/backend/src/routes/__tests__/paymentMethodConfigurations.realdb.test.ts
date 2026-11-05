@@ -9,7 +9,10 @@
  *  - a PaymentIntent carries the configuration's methods in its currency, or
  *    exactly the types it named — refused when one cannot take the currency;
  *  - currencies beyond EUR/USD, JPY's zero decimals included;
- *  - wallet domains: validated, registered at the provider, re-validated.
+ *  - wallet domains: validated, registered at the provider, re-validated;
+ *  - FairCoin (ADR 0021 D2): an always-on, locked entry, available once the
+ *    merchant has a FairCoin key; `off` refused with `payment_method_locked` on
+ *    the API and the dashboard; never stored, pushed or a card payment's type.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AddressInfo } from 'node:net';
@@ -18,6 +21,8 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 import type { ProviderMode } from '../../services/providers/provider';
+import { must } from '../../__tests__/helpers/must';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 
 interface Call {
   readonly fn: string;
@@ -106,8 +111,14 @@ mock.module('../../services/providers/registry', () => ({
 
 const { createPaymentMethodConfigurationsRouter } = await import('../paymentMethodConfigurations');
 const { createPaymentIntentsRouter } = await import('../paymentIntents');
-const { seedMerchant, useGatewayDatabase } = await import(
+const { createDashboardRouter } = await import('../dashboard');
+const { requestIdMiddleware } = await import('../../lib/requestId');
+const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
+);
+const { insertMerchant } = await import('../../db/merchants/merchantRepository');
+const { findConfigurationByPublicId } = await import(
+  '../../db/paymentMethods/paymentMethodConfigurationRepository'
 );
 const { useStripeKeys } = await import('../../__tests__/helpers/stripeModes');
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
@@ -119,6 +130,7 @@ type Json = Record<string, unknown> & {
 type Entry = {
   available: boolean;
   display_preference: { preference: string; value: string };
+  locked: boolean;
   unavailable_reason: string | null;
   currencies: string[];
 };
@@ -127,6 +139,9 @@ let merchant: Merchant;
 let actingAs: () => Merchant;
 let server: Server;
 let baseUrl = '';
+let dashboardServer: Server;
+let dashboardUrl = '';
+const MEMBER = 'user_member';
 
 async function call(method: 'GET' | 'POST', path: string, body?: unknown) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -173,6 +188,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
     );
     server = app.listen(0);
     baseUrl = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
+
+    const dashboard = express();
+    dashboard.use(requestIdMiddleware);
+    dashboard.use(express.json());
+    dashboard.use(
+      createDashboardRouter({
+        requireOxyUser: (req, _res, next) => {
+          (req as OxyAuthRequest).userId = MEMBER;
+          (req as OxyAuthRequest).accessToken = `token-for-${MEMBER}`;
+          next();
+        },
+        access: stubOxyAccess({
+          application: (userId) => (userId === MEMBER ? { ownerAccountId: 'owner' } : undefined),
+        }),
+      }),
+    );
+    dashboardServer = dashboard.listen(0);
+    dashboardUrl = `http://127.0.0.1:${String((dashboardServer.address() as AddressInfo).port)}`;
   });
 
   beforeEach(() => {
@@ -183,6 +216,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
   afterAll(async () => {
     useFake = false;
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => dashboardServer.close(() => resolve()));
   });
 
   test('the default exists on first read, and says what cannot be offered and why', async () => {
@@ -423,5 +457,156 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment method breadth', () => {
       domain_name: 'shop.example.com',
     });
     expect(taken.status).toBe(409);
+  });
+  test('FairCoin is an always-on, locked entry, available once the merchant has a key', async () => {
+    const config = await defaultConfiguration();
+    expect(config.faircoin).toEqual({
+      available: true,
+      display_preference: { preference: 'on', value: 'on' },
+      locked: true,
+      unavailable_reason: null,
+      currencies: [
+        'FAIR',
+        'EUR',
+        'USD',
+        'GBP',
+        'CHF',
+        'SEK',
+        'NOK',
+        'DKK',
+        'PLN',
+        'CZK',
+        'CAD',
+        'AUD',
+        'JPY',
+      ],
+    });
+    // Every other entry is the merchant's to change.
+    for (const type of ['card', 'apple_pay', 'google_pay', 'sepa_debit', 'bizum']) {
+      expect([type, (config[type] as Entry).locked]).toEqual([type, false]);
+    }
+
+    // A merchant without a FairCoin key: still listed and locked on, but not available.
+    const id = crypto.randomUUID();
+    const keyless = must(
+      await insertMerchant(gatewayDb(), {
+        publicId: `merch_${id}`,
+        oxyAppId: `app_${id}`,
+        environment: 'development',
+      }),
+    );
+    actingAs = () => keyless;
+    const keylessConfig = await defaultConfiguration();
+    expect(keylessConfig.faircoin).toMatchObject({
+      available: false,
+      display_preference: { preference: 'on', value: 'on' },
+      locked: true,
+      unavailable_reason: 'faircoin_account_missing',
+    });
+    expect((keylessConfig.card as Entry).available).toBe(true);
+  });
+
+  test('turning FairCoin off is refused; on and none store nothing', async () => {
+    const config = await defaultConfiguration();
+    const path = `/v1/payment_method_configurations/${String(config.id)}`;
+    const off = await call('POST', path, {
+      faircoin: { display_preference: { preference: 'off' } },
+      ideal: { display_preference: { preference: 'on' } },
+    });
+    expect(off.status).toBe(400);
+    expect(off.json.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'payment_method_locked',
+      param: 'faircoin',
+    });
+    expect(off.json.error?.message).toContain('cannot be turned off');
+    // Refused whole: the other method in the same body did not change.
+    expect((await defaultConfiguration()).ideal).toEqual(config.ideal);
+
+    const created = await call('POST', '/v1/payment_method_configurations', {
+      name: 'No FairCoin',
+      faircoin: { display_preference: { preference: 'off' } },
+    });
+    expect(created.status).toBe(400);
+    expect(created.json.error?.code).toBe('payment_method_locked');
+    expect(created.json.error?.param).toBe('faircoin');
+
+    for (const preference of ['on', 'none'] as const) {
+      const accepted = await call('POST', path, {
+        faircoin: { display_preference: { preference } },
+      });
+      expect([preference, accepted.status]).toEqual([preference, 200]);
+      expect((accepted.json.faircoin as Entry).locked).toBe(true);
+      expect((accepted.json.faircoin as Entry).display_preference.value).toBe('on');
+    }
+    const withOn = await call('POST', '/v1/payment_method_configurations', {
+      name: 'FairCoin named',
+      faircoin: { display_preference: { preference: 'on' } },
+    });
+    expect(withOn.status).toBe(200);
+    for (const publicId of [String(config.id), String(withOn.json.id)]) {
+      const row = must(await findConfigurationByPublicId(gatewayDb(), merchant.id, publicId));
+      expect(Object.keys(row.preferences)).not.toContain('faircoin');
+    }
+  });
+
+  test('the dashboard refuses FairCoin off the same way and shows it locked', async () => {
+    const dashboard = (path: string, init: { method?: string; body?: unknown } = {}) =>
+      fetch(
+        `${dashboardUrl}/v1/dashboard/applications/${merchant.oxyAppId}${path}?environment=development`,
+        {
+          method: init.method ?? 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        },
+      ).then(async (response) => ({
+        status: response.status,
+        json: (await response.json()) as Json,
+      }));
+    const list = await dashboard('/payment_method_configurations');
+    expect(list.status).toBe(200);
+    const config = must((list.json.data as Json[]).find((row) => row.is_default === true));
+    expect((config.faircoin as Entry).locked).toBe(true);
+    const off = await dashboard(`/payment_method_configurations/${String(config.id)}`, {
+      method: 'POST',
+      body: { faircoin: { display_preference: { preference: 'off' } } },
+    });
+    expect(off.status).toBe(400);
+    expect(off.json.error).toMatchObject({ code: 'payment_method_locked', param: 'faircoin' });
+    const created = await dashboard('/payment_method_configurations', {
+      method: 'POST',
+      body: { faircoin: { display_preference: { preference: 'off' } } },
+    });
+    expect(created.status).toBe(400);
+    expect(created.json.error).toMatchObject({ code: 'payment_method_locked', param: 'faircoin' });
+  });
+
+  test('FairCoin never reaches the provider push nor a card payment’s types', async () => {
+    const config = await defaultConfiguration();
+    // A new version, so the next card payment pushes the configuration.
+    await call('POST', `/v1/payment_method_configurations/${String(config.id)}`, {
+      faircoin: { display_preference: { preference: 'on' } },
+      bancontact: { display_preference: { preference: 'on' } },
+    });
+    calls.length = 0;
+    for (const currency of ['EUR', 'USD']) {
+      const intent = await call('POST', '/v1/payment_intents', {
+        amount: '2500',
+        rail: 'card',
+        currency,
+      });
+      expect(intent.status).toBe(201);
+      expect(intent.json.payment_method_types as string[]).not.toContain('faircoin');
+    }
+    const pushes = calls.filter((entry) => entry.fn === 'savePaymentMethodConfiguration');
+    expect(pushes.length).toBeGreaterThan(0);
+    for (const push of pushes) {
+      expect(Object.keys(push.request.methods as Record<string, string>)).not.toContain('faircoin');
+    }
+    for (const created of calls.filter((entry) => entry.fn === 'createPayment')) {
+      expect((created.request.paymentMethodTypes as string[] | undefined) ?? []).not.toContain(
+        'faircoin',
+      );
+    }
   });
 });

@@ -25,6 +25,7 @@ import {
   canToggle,
   currenciesText,
   defaultConfiguration,
+  methodNotes,
   ORBIT_PAYMENT_METHOD_TYPES,
   parseDomainInput,
   paymentMethodLabel,
@@ -86,6 +87,11 @@ function MethodRow({
             {unavailableReasonText(entry.unavailable_reason)}
           </Text>
         ) : null}
+        {methodNotes(entry).map((note) => (
+          <Text key={note} variant="caption-1-regular" className="text-muted-foreground">
+            {note}
+          </Text>
+        ))}
       </View>
       <Switch
         accessibilityLabel={t('methods.toggle', { method: label })}
