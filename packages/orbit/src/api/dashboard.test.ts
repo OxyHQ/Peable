@@ -249,6 +249,17 @@ describe('merchant', () => {
       },
     ]);
   });
+
+  it('registers the FairCoin receiving key once, on its own route', async () => {
+    await api.merchant.registerFaircoinKey(scope, { network: 'testnet', xpub: 'tpubD6' });
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/dashboard/applications/app%201/merchant/faircoin?environment=development',
+        options: { body: { network: 'testnet', xpub: 'tpubD6' } },
+      },
+    ]);
+  });
 });
 
 describe('tax', () => {

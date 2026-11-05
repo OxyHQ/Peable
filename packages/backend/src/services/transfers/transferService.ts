@@ -42,6 +42,7 @@ import {
   type SettlingPaymentProvider,
 } from '../providers/provider';
 import { redactProviderMessage } from '../providers/redact';
+import { SELLER_FAIRCOIN_KEY_REQUIRED_MESSAGE, sellerHasFaircoinKey } from '../faircoinAccount';
 
 /** The rail cannot settle sub-merchants — a true statement about the chain rail. */
 export class TransfersUnavailableError extends Error {
@@ -64,6 +65,19 @@ export class AccountNotPayableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'AccountNotPayableError';
+  }
+}
+
+/**
+ * The seller has not registered its own FairCoin key (ADR 0021 D5): it takes
+ * no transfer until it does. A 409 `account_not_ready` — the request is right
+ * and the seller is not; onboarding it is the fix.
+ */
+export class SellerFaircoinKeyMissingError extends Error {
+  readonly code = 'account_not_ready' as const;
+  constructor() {
+    super(SELLER_FAIRCOIN_KEY_REQUIRED_MESSAGE);
+    this.name = 'SellerFaircoinKeyMissingError';
   }
 }
 
@@ -206,6 +220,8 @@ export async function createTransfer(input: CreateTransferInput): Promise<Create
   if (input.account.transfersCapability !== 'active' || !input.account.payoutsEnabled) {
     throw new AccountNotPayableError("the seller's account cannot receive settlements yet");
   }
+  // ADR 0021 D5: a seller is ready only once its own FairCoin key is registered.
+  if (!sellerHasFaircoinKey(input.account)) throw new SellerFaircoinKeyMissingError();
   // A FairCoin-only seller (ADR 0012) has no provider account to transfer to.
   // It already failed the capability check above — its transfers capability is
   // NULL — and this narrows the type to what that check implies, so the

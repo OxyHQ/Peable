@@ -61,7 +61,7 @@ The connected account cannot take this payment yet: its onboarding or a capabili
 
 ### `already_registered`
 
-The seller already registered a FairCoin key, and it cannot be changed.
+A FairCoin key is already registered for this seller or merchant, and it cannot be changed.
 
 ### `amount_not_representable`
 
@@ -153,7 +153,7 @@ The domain is already registered by another merchant.
 
 ### `faircoin_account_required`
 
-This merchant has not registered its FairCoin receiving key, so it cannot be paid in FairCoin yet.
+A live merchant cannot take payments until it registers its own watch-only FairCoin receiving key (ADR 0021): creating a PaymentIntent, a Checkout Session or a Payment Link, and finalizing an invoice, are refused until then. Register it once in Orbit (Settings) or with `POST /v1/merchants/me/faircoin`. Test mode is not gated, but choosing FairCoin there still needs the key.
 
 ### `faircoin_cannot_debit`
 
@@ -229,7 +229,7 @@ The invoice is in a status that does not allow this operation.
 
 ### `key_in_use`
 
-The key already receives payments for another account.
+The key already receives payments for another merchant or seller.
 
 ### `keyless_recipient`
 

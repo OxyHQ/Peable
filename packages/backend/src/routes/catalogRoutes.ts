@@ -6,6 +6,7 @@ import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
 import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { requestIdOf } from '../lib/requestId';
 import { BillingEngineError } from '../services/billingEngine/errors';
+import { FaircoinAccountRequiredError } from '../services/faircoinAccount';
 import { StaleTransitionError } from '../services/billingEngine/transitions';
 import { idempotent } from '../lib/idempotency';
 import type { QuerySurface } from '../lib/list';
@@ -41,8 +42,9 @@ export interface CatalogRoute {
  * ({@link BillingEngineError}, ADR 0018); anything else is rethrown.
  */
 export function sendCatalogError(res: Response, error: unknown): void {
-  // Checkout's routes (sessions, payment links, branding) ride the same mount.
-  if (error instanceof CheckoutError) {
+  // Checkout's routes (sessions, payment links, branding) ride the same mount,
+  // and so does the live gate on a merchant without a FairCoin key.
+  if (error instanceof CheckoutError || error instanceof FaircoinAccountRequiredError) {
     sendCheckoutError(res, error);
     return;
   }

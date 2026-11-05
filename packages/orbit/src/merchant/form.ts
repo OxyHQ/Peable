@@ -1,12 +1,15 @@
 import type { Merchant } from '@peable.to/shared-types';
-import type { RegisterMerchantBody, UpdateMerchantBody } from '../api/dashboard';
+import type { OrbitEnvironment, RegisterMerchantBody, UpdateMerchantBody } from '../api/dashboard';
 
 /** What the Settings form holds: every field as the text a person typed. */
 export interface MerchantForm {
   displayName: string;
   description: string;
   requiredConfirmations: string;
-  /** Registration only: `none` registers a card-only merchant. */
+  /**
+   * Registration only. The FairCoin receiving key is REQUIRED to take payments
+   * (ADR 0021 D5); `none` registers without it, to be registered once later.
+   */
   network: 'none' | 'mainnet' | 'testnet';
   xpub: string;
 }
@@ -18,6 +21,18 @@ export const EMPTY_MERCHANT_FORM: MerchantForm = {
   network: 'none',
   xpub: '',
 };
+
+/**
+ * A registration form that starts on the FairCoin key: the network this mode
+ * may register (testnet in test mode, mainnet in live), so the key field is
+ * shown from the start rather than hidden behind "card only".
+ */
+export function emptyMerchantForm(environment: OrbitEnvironment): MerchantForm {
+  return {
+    ...EMPTY_MERCHANT_FORM,
+    network: environment === 'production' ? 'mainnet' : 'testnet',
+  };
+}
 
 export function formFromMerchant(merchant: Merchant): MerchantForm {
   return {

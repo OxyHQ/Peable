@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
@@ -10,9 +10,9 @@ import { assertWatchOnly, WatchOnlyViolationError } from '../../services/watchOn
  * importers keep reading it from here.
  */
 export { WatchOnlyViolationError };
-import { merchantAvatarAudit, merchants } from '../schema';
+import { connectedAccounts, merchantAvatarAudit, merchants } from '../schema';
 import type { MerchantAvatarAuditAction, MerchantAvatarWithheldReason } from '../schema/valueSets';
-import type { DatabaseOrTransaction } from '../postgres';
+import type { Database, DatabaseOrTransaction } from '../postgres';
 import { enqueueReferenceSync } from '../oxyFiles/referenceSyncRepository';
 
 /**
@@ -212,6 +212,83 @@ export async function insertMerchant(
     }
     throw error;
   }
+}
+
+/** Why {@link registerMerchantFaircoinKey} wrote nothing. */
+export type MerchantKeyRefusal = 'not_found' | 'already_registered' | 'key_in_use';
+
+export type RegisterMerchantKeyResult =
+  | { readonly ok: true; readonly merchant: MerchantRow }
+  | { readonly ok: false; readonly refusal: MerchantKeyRefusal };
+
+/**
+ * Register the FairCoin half of a merchant that registered without one —
+ * ONCE (ADR 0021 D5, the rules of ADR 0012 D4). With {@link insertMerchant},
+ * the only statement that sets `merchants.xpub`.
+ *
+ * - **Watch-only, first.** {@link assertWatchOnly} runs before any read of the
+ *   key, so a private key is refused on its own merits and never stored; it
+ *   also derives index 0 with `network`'s version bytes, so a key for the other
+ *   chain is refused the same way.
+ * - **Immutable.** The write is `… WHERE xpub IS NULL`: re-keying would
+ *   re-interpret every address already handed to a payer, so a second
+ *   registration changes nothing and answers `already_registered`.
+ * - **Unique across every merchant and every seller.** Two derivation counters
+ *   walking one key hand out the SAME addresses. `merchants.xpub` carries no
+ *   unique index (fixtures share keys across test merchants), so the check is
+ *   here, under a transaction-scoped advisory lock on the key that serializes
+ *   two merchants registering it at once. A seller registering the same key in
+ *   the same instant (`registerFaircoinKey`, which checks merchants) is the
+ *   residual race ADR 0012 D4 already writes down.
+ *
+ * The test/live firewall (a non-production merchant registers `testnet` only)
+ * is the caller's, as at registration.
+ *
+ * @throws {WatchOnlyViolationError} for a key that can spend or is for the
+ *   other network; nothing is written.
+ */
+export async function registerMerchantFaircoinKey(
+  db: Database,
+  merchantId: string,
+  params: { readonly network: NetworkType; readonly xpub: string },
+): Promise<RegisterMerchantKeyResult> {
+  // The legal firewall, before ANY other read of the key.
+  assertWatchOnly(params.xpub, params.network);
+
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ xpub: merchants.xpub })
+      .from(merchants)
+      .where(eq(merchants.id, merchantId))
+      .for('update');
+    if (!current) return { ok: false, refusal: 'not_found' } as const;
+    if (current.xpub !== null) return { ok: false, refusal: 'already_registered' } as const;
+
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`faircoin-key:${params.xpub}`}))`);
+    const [merchantHolding] = await tx
+      .select({ id: merchants.id })
+      .from(merchants)
+      .where(and(eq(merchants.xpub, params.xpub), ne(merchants.id, merchantId)))
+      .limit(1);
+    const [sellerHolding] = await tx
+      .select({ id: connectedAccounts.id })
+      .from(connectedAccounts)
+      .where(eq(connectedAccounts.xpub, params.xpub))
+      .limit(1);
+    if (merchantHolding || sellerHolding) return { ok: false, refusal: 'key_in_use' } as const;
+
+    // `merchants_chain_fields_agree_check` holds both halves together; the
+    // composite references from `payment_intents`, `checkout_sessions` and
+    // `payment_links` cannot object, because every existing child row names a
+    // NULL network and a NULL in a referenced key is referenced by nothing.
+    const [row] = await tx
+      .update(merchants)
+      .set({ network: params.network, xpub: params.xpub })
+      .where(and(eq(merchants.id, merchantId), isNull(merchants.xpub)))
+      .returning(MERCHANT_COLUMNS);
+    if (!row) return { ok: false, refusal: 'already_registered' } as const;
+    return { ok: true, merchant: toMerchantRow(row) } as const;
+  });
 }
 
 /** Resolve by the pair the test/live firewall is expressed in. Never by app alone. */

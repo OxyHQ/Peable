@@ -250,6 +250,8 @@ export const MONEY_EN: Readonly<Record<string, string>> = {
   'disabledReason.other': 'Restricted by the provider',
 
   'requirement.business_type': 'Business type',
+  'requirement.faircoin.receiving_key':
+    'The seller’s FairCoin receiving key (the seller registers it from the onboarding link)',
   'requirement.business_profile.url': 'Business website',
   'requirement.business_profile.mcc': 'Merchant category',
   'requirement.business_profile.product_description': 'Description of what you sell',
@@ -525,6 +527,8 @@ export const MONEY_ES: Readonly<Record<string, string>> = {
   'disabledReason.other': 'Restringida por el proveedor',
 
   'requirement.business_type': 'Tipo de negocio',
+  'requirement.faircoin.receiving_key':
+    'La clave de recepción de FairCoin del vendedor (la registra el vendedor desde el enlace de alta)',
   'requirement.business_profile.url': 'Sitio web del negocio',
   'requirement.business_profile.mcc': 'Categoría del comercio',
   'requirement.business_profile.product_description': 'Descripción de lo que vendes',

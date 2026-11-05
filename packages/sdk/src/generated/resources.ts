@@ -858,6 +858,23 @@ export interface PaymentMethodDomainsResource {
 }
 
 /**
+ * Merchants: `peable.merchants.faircoin`.
+ */
+export interface MerchantsFaircoinResource {
+  /**
+   * Register your FairCoin receiving key.
+   *
+   * Registers the watch-only account xpub FairCoin payments to this merchant derive their addresses from, once, for a merchant that has none (ADR 0021 D5). Immutable once set: a second registration answers 409 `already_registered`. A private extended key, or a key for another network, is refused (`watch_only_violation`) and never stored; a non-production merchant registers `testnet` only; a key that already receives payments for another merchant or seller is refused (`key_in_use`). Until it is registered a live merchant cannot take payments (`faircoin_account_required`).
+   *
+   * `POST /v1/merchants/me/faircoin`
+   */
+  register(
+    params: BodyOf<Op<'registerMerchantFaircoinKey'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'registerMerchantFaircoinKey'>>>;
+}
+
+/**
  * Merchants: `peable.merchants.branding`.
  */
 export interface MerchantsBrandingResource {
@@ -903,6 +920,7 @@ export interface MerchantsEmailSettingsResource {
  * Merchants: `peable.merchants`.
  */
 export interface MerchantsResource {
+  readonly faircoin: MerchantsFaircoinResource;
   readonly branding: MerchantsBrandingResource;
   readonly emailSettings: MerchantsEmailSettingsResource;
   /**
@@ -3700,6 +3718,17 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     operationId: 'updateMerchant',
     method: 'POST',
     path: '/v1/merchants/me',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'merchants.faircoin.register',
+    operationId: 'registerMerchantFaircoinKey',
+    method: 'POST',
+    path: '/v1/merchants/me/faircoin',
     pathParams: [],
     input: 'body',
     encoding: 'json',

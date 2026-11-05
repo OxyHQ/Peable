@@ -264,7 +264,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('settlement events and the sync sweep',
     // The payload is the ACCOUNT, and it carries what a merchant acts on.
     const event = rows[0]?.event;
     expect(event?.data.object.object).toBe('connected_account');
-    expect(event?.data.object.payable).toBe(true);
+    expect(event?.data.object.transfers_capability).toBe('active');
+    // A card-only seller: its card half is ready, and it still owes its own
+    // FairCoin key before it is payable (ADR 0021 D5).
+    expect(event?.data.object.payable).toBe(false);
+    expect(event?.data.object.requirements.currently_due).toContain('faircoin.receiving_key');
     // ...and never the provider's own account id (ADR 0001 D3).
     expect(JSON.stringify(event)).not.toContain('acct_evt_notify');
   });

@@ -228,6 +228,11 @@ export interface SeedMerchantValues {
   readonly network?: NetworkType;
   readonly xpub?: string;
   /**
+   * No FairCoin key at all (`network` and `xpub` NULL) — a merchant that
+   * registered without one. A LIVE one takes no payment (ADR 0021 D5).
+   */
+  readonly keyless?: boolean;
+  /**
    * A webhook endpoint to create for the merchant (every event, `*`): its URL,
    * and optionally its secret. The merchant row has no webhook fields; this is
    * shorthand for {@link seedWebhookEndpoint}.
@@ -254,9 +259,13 @@ export async function seedMerchant(values: SeedMerchantValues = {}): Promise<Mer
     publicId: values.publicId ?? `merch_${unique}`,
     oxyAppId: values.oxyAppId ?? `app_${unique}`,
     environment: values.environment ?? 'development',
-    network,
-    // Follows the NETWORK, never a fixed constant — see `testXpubFor`.
-    xpub: values.xpub ?? testXpubFor(network),
+    ...(values.keyless
+      ? {}
+      : {
+          network,
+          // Follows the NETWORK, never a fixed constant — see `testXpubFor`.
+          xpub: values.xpub ?? testXpubFor(network),
+        }),
     requiredConfirmations: values.requiredConfirmations,
     avatarFileId: values.avatarFileId,
   });
