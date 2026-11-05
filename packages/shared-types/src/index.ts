@@ -158,3 +158,5 @@ export {
   type TaxReport,
   type BillingInvoiceTaxLine,
 } from './tax';
+
+export type { BillingEmbeddedCheckoutAction } from "./billing";

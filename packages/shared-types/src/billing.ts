@@ -309,3 +309,14 @@ export interface BillingFaircoinFxQuote {
   expires_at: number;
   rounding: 'ceil_to_base_unit';
 }
+
+/** Ephemeral processor capability released only to the authenticated owning workload. */
+export interface BillingEmbeddedCheckoutAction {
+  kind: 'checkout_session';
+  provider: 'stripe';
+  session_id: string;
+  client_secret: string;
+  publishable_key: string;
+  amount_minor_units: number;
+  currency: string;
+}
