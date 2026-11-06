@@ -38,7 +38,7 @@ interface StorageAdapter {
 function createNativeAdapter(): StorageAdapter {
   // Dynamic import to avoid web bundling issues
   const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store');
-  // iOS: the wallet keychain group, not the group every Oxy app reads
+  // iOS: this app's own keychain group, not the group every Oxy app reads
   // (`./keychain-groups`, oxy ADR 0062). Android: the same calls as before.
   return createGroupedKeychainAdapter(SecureStore, resolveKeychainAccess);
 }

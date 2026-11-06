@@ -69,10 +69,11 @@ export const PREFERENCE_PREFIXES = [
 export const IDENTITY_WALLET_ID = 'oxy-identity';
 
 /**
- * Written ONLY to the wallet's own keychain group once the move is complete;
- * never read from, written to or deleted from anywhere else, and not a wallet
- * key — `clearAll` must not reset it, or the next launch would adopt from the
- * shared group again.
+ * Written ONLY to the group the wallet's items live in once the move into it
+ * is complete; read only from there and from the earlier (wallet) group,
+ * where it says the move out of the shared group finished; never written
+ * anywhere else or deleted, and not a wallet key — `clearAll` must not reset
+ * it, or the next launch would adopt from the shared group again.
  */
 export const KEYCHAIN_MOVE_MARKER = 'peable_keychain_split_v1';
 

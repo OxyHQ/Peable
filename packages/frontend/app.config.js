@@ -8,6 +8,11 @@
 // The base config (plugins, scheme, icons, notifications, …) lives in app.json;
 // this file reads it as `config` and overrides only the identity fields and the
 // development-only Noxcturnal flag (it depends on NODE_ENV, which JSON cannot read).
+const {
+  keychainEntries,
+  keychainGroupsFor,
+} = require('@oxy.so/app-preset/plugin/oxyKeychainGroups');
+
 module.exports = ({ config }) => {
   const IS_DEV = process.env.APP_VARIANT === 'development';
   // Moved from `so.oxy.pay` with the Peable rebrand, which was free only because
@@ -18,11 +23,17 @@ module.exports = ({ config }) => {
   // release.
   //
   // The Oxy-family sharing ids do NOT move with it. On iOS the keychain groups
-  // (app.json entitlements) are `so.oxy.wallet` FIRST — the group only Commons
-  // and this wallet hold, where Commons keeps the keys the wallet signs with and
-  // where this app's own items now go (its default group) — then
-  // `group.so.oxy.shared` (public keys, the device session). @oxy.so/app-preset
-  // refuses that layout for any other bundle id (oxy ADR 0062). On Android Peable has its own UID and asks Commons
+  // (`keychain-access-groups` below, from @oxy.so/app-preset's own table so they
+  // cannot be spelled twice) are the wallet group FIRST — the group only Commons
+  // and this wallet hold, where Commons keeps the keys the wallet signs with; it
+  // is the default group, which tells @oxy.so/core this binary is the wallet —
+  // then `group.so.oxy.shared` (public keys, the device session). Production
+  // `to.peable.app` lists `so.oxy.wallet`; the dev build `to.peable.app.dev`
+  // lists `so.oxy.wallet.dev`, so a dev build beside the production app on one
+  // phone never reads production keys. The app's own items live in its own
+  // group (`<TEAM>.<bundle id>`), which needs no entry. @oxy.so/app-preset
+  // refuses any other layout for these bundle ids, and either restricted group
+  // for any other app (oxy ADR 0062). On Android Peable has its own UID and asks Commons
   // over signature-protected IPC (`so.oxy.permission.IDENTITY`, declared by
   // `@oxy.so/services/plugins/withOxySharedPermissions`); Commons allow-lists
   // `to.peable.app` / `to.peable.app.dev` by package name, so renaming either
@@ -42,7 +53,14 @@ module.exports = ({ config }) => {
       // the web bundle. The CLI sets NODE_ENV before it reads this config.
       noxcturnalTransformWorker: process.env.NODE_ENV !== 'production',
     },
-    ios: { ...config.ios, bundleIdentifier: APP_ID },
+    ios: {
+      ...config.ios,
+      bundleIdentifier: APP_ID,
+      entitlements: {
+        ...config.ios?.entitlements,
+        'keychain-access-groups': keychainEntries(keychainGroupsFor(APP_ID)),
+      },
+    },
     android: { ...config.android, package: APP_ID },
   };
 };

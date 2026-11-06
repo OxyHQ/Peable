@@ -70,9 +70,10 @@ const DEFAULT_LANGUAGE = 'en';
 installCrashHandler();
 
 // iOS: move this app's keychain items (imported wallets' phrases, cached seeds,
-// the PIN record) out of the group every Oxy app can read into the wallet group
-// (oxy ADR 0062). Fire-and-forget; whatever cannot move now stays readable and
-// moves on its next read.
+// the PIN record) out of the group every Oxy app can read, and out of the wallet
+// group an earlier build used, into this app's own group (oxy ADR 0062 D6).
+// Fire-and-forget; whatever cannot move now stays readable and moves on a later
+// launch.
 if (Platform.OS === 'ios') {
   void moveWalletItemsToOwnKeychainGroup();
 }
