@@ -391,7 +391,10 @@ quote, never a race of two live payments.
   the watcher has itself seen the transaction missing on every read for an
   hour (a transaction-API outage also answers "missing"), the tip answers, and
   every output address reads unused, or used with the reported txid not among
-  its transactions (`GET /api/address/:a/txs`, a full list); on mainnet any
+  its transactions (`GET /api/address/:a/txs`, every page read — the
+  Explorer serves 50 a page — up to 1 000 transactions, past which a
+  single-use address was filled on purpose and the txid's absence is taken as
+  read); on mainnet any
   `unknown` keeps the payment `processing`. Testnet's node only ever answers
   `unknown`, so there the missing transaction alone decides. A payer who paid
   the address but reported a wrong txid is ADR 0012 D9's residual case: the

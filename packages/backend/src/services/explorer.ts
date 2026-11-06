@@ -203,33 +203,51 @@ export async function getAddressUsage(
   return 'unused';
 }
 
+/** The Explorer's page size for an address's transactions (it caps `limit` at 50, measured 2026-11-06). */
+const ADDRESS_TXS_PAGE = 50;
+/**
+ * Pages read before an address's list counts as read: 1 000 transactions. A
+ * single-use payment address holds a handful; one with more was filled on
+ * purpose, and the reported txid not being among the first thousand is taken
+ * as its absence rather than letting dust buy an unbounded hold.
+ */
+const ADDRESS_TXS_MAX_PAGES = 20;
+
 /**
  * Whether `txid` is among the transactions the Explorer lists for `address`
- * (`GET /api/address/:a/txs`, measured 2026-11-06: `{transactions: [{txid, …}],
- * page, limit, total}`). Asked only of an address the chain shows USED while
- * the reported transaction cannot be read: `no` (a full first page that holds
- * every transaction and not this one) proves the coins there came from
- * something else. Anything short of that — a failed request, a body that does
- * not parse, more transactions than one page — is `unknown`.
+ * (`GET /api/address/:a/txs?page=&limit=`, measured 2026-11-06: `{transactions:
+ * [{txid, …}], page, limit, total}`, `limit` capped at 50). Asked only of an
+ * address the chain shows USED while the reported transaction cannot be read.
+ * `no` once every page has been read without it — or {@link
+ * ADDRESS_TXS_MAX_PAGES} pages have — so that coins someone else sent, however
+ * many times, cannot keep a made-up txid open. Any page that fails or does not
+ * parse is `unknown`.
  */
 export async function addressHasTransaction(
   address: string,
   network: NetworkType,
   txid: string,
 ): Promise<'yes' | 'no' | 'unknown'> {
-  let body: unknown;
-  try {
-    const response = await fetch(
-      `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}/txs?network=${network}`,
-    );
-    if (!response.ok) return 'unknown';
-    body = await response.json();
-  } catch {
-    return 'unknown';
+  let seen = 0;
+  for (let page = 1; page <= ADDRESS_TXS_MAX_PAGES; page += 1) {
+    let body: unknown;
+    try {
+      const response = await fetch(
+        `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}/txs?network=${network}&page=${page}&limit=${ADDRESS_TXS_PAGE}`,
+      );
+      if (!response.ok) return 'unknown';
+      body = await response.json();
+    } catch {
+      return 'unknown';
+    }
+    const parsed = addressTransactionsSchema.safeParse(body);
+    if (!parsed.success) return 'unknown';
+    const { transactions, total } = parsed.data;
+    if (transactions.some((entry) => entry.txid === txid)) return 'yes';
+    seen += transactions.length;
+    if (seen >= total) return 'no';
+    // A short page before the total: the list is not what it says.
+    if (transactions.length === 0) return 'unknown';
   }
-  const parsed = addressTransactionsSchema.safeParse(body);
-  if (!parsed.success) return 'unknown';
-  const { transactions, total } = parsed.data;
-  if (transactions.some((entry) => entry.txid === txid)) return 'yes';
-  return transactions.length >= total ? 'no' : 'unknown';
+  return 'no';
 }

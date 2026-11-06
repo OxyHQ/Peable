@@ -1,6 +1,13 @@
 import { test, expect, afterEach } from 'bun:test';
 import { parseFairToUnits } from '@fairco.in/core';
-import { getTip, getTransaction, verifyPayment, type ExplorerTx } from '../explorer';
+import {
+  addressHasTransaction,
+  getAddressUsage,
+  getTip,
+  getTransaction,
+  verifyPayment,
+  type ExplorerTx,
+} from '../explorer';
 
 // The Explorer response shapes below are pinned against the LIVE endpoints
 // (probed 2026-07-18):
@@ -150,3 +157,74 @@ test('getTip returns a positive tip from the live mainnet explorer', async () =>
   const tip = await getTip('mainnet');
   expect(tip).toBeGreaterThan(0);
 }, 20000);
+
+/** An address with `count` transactions, served 50 a page as the live Explorer does. */
+function addressWithTransactions(count: number, reported?: number): string[] {
+  const asked: string[] = [];
+  const txids = Array.from({ length: count }, (_, i) =>
+    i === reported ? 'reported' : `dust_${i}`,
+  );
+  const handler = async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    asked.push(url.search);
+    const page = Number(url.searchParams.get('page') ?? '1');
+    const limit = Math.min(50, Number(url.searchParams.get('limit') ?? '20'));
+    const slice = txids.slice((page - 1) * limit, page * limit);
+    return new Response(
+      JSON.stringify({
+        transactions: slice.map((txid) => ({ txid, type: 'received' })),
+        page,
+        limit,
+        total: count,
+        network: 'mainnet',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+  globalThis.fetch = Object.assign(handler, { preconnect: realFetch.preconnect });
+  return asked;
+}
+
+test('addressHasTransaction reads every page: dust past the first page cannot hide the absence of the reported txid', async () => {
+  addressWithTransactions(130);
+  expect(await addressHasTransaction('F_addr', 'mainnet', 'reported')).toBe('no');
+  addressWithTransactions(130, 120);
+  expect(await addressHasTransaction('F_addr', 'mainnet', 'reported')).toBe('yes');
+});
+
+test('addressHasTransaction stops at 1 000 transactions and reads that as absent', async () => {
+  const asked = addressWithTransactions(5_000);
+  expect(await addressHasTransaction('F_addr', 'mainnet', 'reported')).toBe('no');
+  expect(asked).toHaveLength(20);
+});
+
+test('addressHasTransaction is unknown when a page fails', async () => {
+  respondWith({ error: 'Internal error' }, 500);
+  expect(await addressHasTransaction('F_addr', 'mainnet', 'reported')).toBe('unknown');
+});
+
+test("getAddressUsage: a full answer is used/unused; testnet's no-index answer is unknown", async () => {
+  respondWith({
+    addressInfo: { txCount: 0, totalReceivedSat: 0, utxos: [] },
+    network: 'mainnet',
+  });
+  expect(await getAddressUsage('F_addr', 'mainnet')).toBe('unused');
+  respondWith({
+    addressInfo: { txCount: 2, totalReceivedSat: 10, utxos: [] },
+    network: 'mainnet',
+  });
+  expect(await getAddressUsage('F_addr', 'mainnet')).toBe('used');
+  respondWith({
+    addressInfo: {
+      txCount: 0,
+      totalReceivedSat: 0,
+      utxos: [],
+      isValid: false,
+      note: 'addressindex not enabled on node; limited data available',
+    },
+    network: 'testnet',
+  });
+  expect(await getAddressUsage('T_addr', 'testnet')).toBe('unknown');
+  respondWith({ error: 'Internal error' }, 500);
+  expect(await getAddressUsage('F_addr', 'mainnet')).toBe('unknown');
+});
