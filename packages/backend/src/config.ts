@@ -412,6 +412,13 @@ function readOrigins(raw: string | undefined): string[] {
       'https://checkout.peable.to',
       // Orbit by Peable, the merchant dashboard (`packages/orbit`).
       'https://orbit.peable.to',
+      // The Oxy apps that open Pay with Peable — the payment sheet,
+      // `@peable.to/sdk/checkout/ui` `PeableSheetCheckout` — in a browser. Its
+      // payer routes are anonymous (the order's own client secret), so these
+      // origins gain nothing but the ability to read the order they were handed.
+      'https://mention.earth',
+      'https://mercaria.co',
+      'https://dashboard.mercaria.co',
       ...(raw ?? '')
         .split(',')
         .map((origin) => origin.trim())
