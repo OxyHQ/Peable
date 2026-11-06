@@ -451,7 +451,7 @@ export function createPaymentIntentsRouter(deps: {
           );
           return;
         }
-        // Every address the recipient can hold open is open (ADR 0021 D9).
+        // Too many of the recipient's addresses of the last day went unpaid (ADR 0021 D9).
         if (err instanceof FaircoinCapacityError) {
           sendError(res, 503, 'api_error', err.message, 'faircoin_capacity_reached');
           return;

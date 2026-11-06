@@ -22,4 +22,3 @@ export * from './identity';
 export * from './merchants';
 export * from './paymentMethodConfigurations';
 export * from './realtime';
-export * from './receiveTree';

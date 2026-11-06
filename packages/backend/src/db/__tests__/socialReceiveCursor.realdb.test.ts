@@ -2,12 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
 import { and, eq } from 'drizzle-orm';
 import { isCheckViolation, isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
-import {
-  ReceiveTreeFullError,
-  readReservedThrough,
-  reserveNextSocialReceiveIndex,
-} from '../social/receiveCursor';
+import { readReservedThrough, reserveNextSocialReceiveIndex } from '../social/receiveCursor';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX as SERVICE_FIRST_FRESH_INDEX } from '../../services/socialReceive';
 
@@ -236,14 +231,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
 });
 
 /**
- * The gateway half of the ceiling (ADR 0021 D9, amended 2026-11-06): no index
- * at or above `SOCIAL_RECEIVE_INDEX_LIMIT` is ever handed out, refused by the
- * reservation's own statement. The wallet half — every index below it is
- * inside the wallet's watched window, gap included — is pinned by
- * `packages/frontend/src/wallet/receive-tree-ceiling.test.ts` against the same
- * constant.
+ * The ceiling is gone (ADR 0021 D9, amended 2026-11-06): the recipient's wallet
+ * watches the addresses handed out (`GET /v1/social/me/receive_addresses`),
+ * whatever their index. The wallet half — an address at any index is watched —
+ * is pinned in `packages/frontend/src/wallet/`.
  */
-describe.skipIf(!POSTGRES_TESTS_ENABLED)('the receive tree ceiling', () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('no ceiling (ADR 0021 D9, amended 2026-11-06)', () => {
   beforeAll(async () => {
     suite = await createSuiteDatabase();
   });
@@ -264,37 +257,32 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the receive tree ceiling', () => {
     return oxyUserId;
   }
 
-  it('hands out the last index below the limit, then refuses and changes nothing', async () => {
-    const oxyUserId = await cursorAt(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
-    expect(await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A)).toBe(
-      SOCIAL_RECEIVE_INDEX_LIMIT - 1,
+  // The wallet watches exactly what was handed out, not `0 .. 1 999`: the
+  // index the old ceiling refused (1 980) and any far beyond it are ordinary.
+  it('hands out indices past the old 1 980 ceiling, consecutively, as numbers', async () => {
+    const oxyUserId = await cursorAt(1_979);
+    const got: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      got.push(await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A));
+    }
+    expect(got).toEqual([1_979, 1_980, 1_981]);
+    const far = await cursorAt(5_000_000);
+    expect(await reserveNextSocialReceiveIndex(must(suite).db, far, 'testnet', KEY_A)).toBe(
+      5_000_000,
     );
-    await expect(
-      reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_B),
-    ).rejects.toBeInstanceOf(ReceiveTreeFullError);
-    const after = await readReservedThrough(must(suite).db, oxyUserId, 'testnet');
-    expect(after.reservedThrough).toBe(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
-    // A refused reservation does not even write its key.
-    expect(after.identityPublicKey).toBe(KEY_A);
-    expect(await nextIndex(oxyUserId)).toBe(SOCIAL_RECEIVE_INDEX_LIMIT);
+    expect(await nextIndex(far)).toBe(5_000_001);
   });
 
-  it('concurrent reservations at the edge: exactly one gets the last index', async () => {
-    const oxyUserId = await cursorAt(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
-    const outcomes = await Promise.allSettled(
+  it('concurrent reservations far up the tree each get a distinct index', async () => {
+    const oxyUserId = await cursorAt(100_000);
+    const got = await Promise.all(
       Array.from({ length: 8 }, () =>
         reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A),
       ),
     );
-    const got = outcomes.flatMap((outcome) =>
-      outcome.status === 'fulfilled' ? [outcome.value] : [],
+    expect([...got].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 8 }, (_, i) => 100_000 + i),
     );
-    expect(got).toEqual([SOCIAL_RECEIVE_INDEX_LIMIT - 1]);
-    for (const outcome of outcomes) {
-      if (outcome.status === 'rejected') {
-        expect(outcome.reason).toBeInstanceOf(ReceiveTreeFullError);
-      }
-    }
-    expect(await nextIndex(oxyUserId)).toBe(SOCIAL_RECEIVE_INDEX_LIMIT);
+    expect(await nextIndex(oxyUserId)).toBe(100_008);
   });
 });

@@ -13,8 +13,8 @@ export type PaymentIntentRail = (typeof PAYMENT_INTENT_RAILS)[number];
 /**
  * The longest a PaymentIntent created through the API may stay payable before
  * it expires (`expires_in_seconds`): 24 hours. A FairCoin payment holds a
- * reserved address in the recipient's wallet for as long as it is payable, so
- * an unbounded expiry is an address nobody can ever recycle (ADR 0021 D9).
+ * reserved address in the recipient's wallet for as long as it is payable, and
+ * the recipient's bound on unpaid addresses looks back over a day (ADR 0021 D9).
  */
 export const PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS = 24 * 60 * 60;
 
@@ -254,6 +254,13 @@ export type EnrichmentKind = (typeof ENRICHMENT_KINDS)[number];
 
 /** How many addresses one `POST /v1/enrich` resolves (and one social history lists). */
 export const ENRICH_MAX_ADDRESSES = 50;
+
+/**
+ * One page of `GET /v1/social/me/receive_addresses` (ADR 0021 D9, amended
+ * 2026-11-06): the default and the most a wallet may ask for at once.
+ */
+export const SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT = 500;
+export const SOCIAL_RECEIVE_ADDRESSES_PAGE_MAX = 1_000;
 
 // ---------------------------------------------------------------------------
 // Test helpers

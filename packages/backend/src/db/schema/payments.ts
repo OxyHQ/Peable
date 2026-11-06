@@ -1151,35 +1151,11 @@ export const paymentIntentOutputs = pgTable(
     identityPublicKey: text(),
     /**
      * The index on the recipient's cursor `address` was derived at (ADR 0021
-     * D9): what lets a later reservation prove, by deriving it again from the
-     * recipient's CURRENT key, that a recycled address is still in the tree
-     * the recipient's wallet scans. NULL only on rows written before it.
+     * D9): what the recipient's wallet derives and signs with, and the order
+     * `GET /v1/social/me/receive_addresses` syncs it in. NULL only on rows
+     * written before it (migration 0105).
      */
     derivationIndex: integer(),
-    /**
-     * When a later payment took this address over (ADR 0021 D9): the row is no
-     * longer the address's holder. Only an output of a `canceled` payment the
-     * chain shows never received anything is ever recycled.
-     */
-    recycledAt: timestamptz(),
-    /**
-     * When this address was found unfit to recycle — the chain shows it
-     * received something, or it no longer derives from the recipient's key. A
-     * retired address stays its payment's and is never offered again.
-     */
-    retiredAt: timestamptz(),
-    /**
-     * When the chain last showed this address unused, read after its
-     * payment's quarantine (ADR 0021 D9, amended 2026-11-06). A reservation
-     * whose planned candidate was taken claims another one checked recently,
-     * under the pool's lock and without an HTTP call. NULL: never checked.
-     */
-    recycleCheckedAt: timestamptz(),
-    /**
-     * Until when one confirm holds this candidate to check and claim it, so
-     * concurrent confirms each check a DIFFERENT one. A lapsed lease is free.
-     */
-    recycleLeaseUntil: timestamptz(),
     createdAt: createdAt(),
   },
   (table) => [
@@ -1188,17 +1164,23 @@ export const paymentIntentOutputs = pgTable(
       table.position,
     ),
     /**
-     * One reservation, one HOLDER: an address has at most one output that has
-     * not been recycled (ADR 0021 D9), and the watcher and enrichment resolve
-     * the holder by it. A recycled row keeps its address for its own history.
+     * One address, one output, for ever (ADR 0021 D9, amended 2026-11-06:
+     * addresses are never recycled). The watcher and enrichment resolve the
+     * payment by it.
      */
-    uniqueIndex('payment_intent_outputs_network_address_key')
-      .on(table.network, table.address)
-      .where(sql`${table.recycledAt} is null`),
-    /** The recipient's address pool (ADR 0021 D9): its open count and its recycle candidates. */
-    index('payment_intent_outputs_recipient_pool_idx')
-      .on(table.recipientAccountId, table.network, table.derivationIndex)
-      .where(sql`${table.recycledAt} is null and ${table.retiredAt} is null`),
+    uniqueIndex('payment_intent_outputs_network_address_key').on(table.network, table.address),
+    /** The recipient's watch set, synced in index order (`GET /v1/social/me/receive_addresses`). */
+    index('payment_intent_outputs_recipient_index_idx').on(
+      table.recipientAccountId,
+      table.network,
+      table.derivationIndex,
+    ),
+    /** The recipient's unpaid addresses of the last day: the per-recipient bound (ADR 0021 D9). */
+    index('payment_intent_outputs_recipient_created_idx').on(
+      table.recipientAccountId,
+      table.network,
+      table.createdAt,
+    ),
     foreignKey({
       name: 'payment_intent_outputs_connected_account_network_fkey',
       columns: [table.connectedAccountId, table.merchantId, table.network],

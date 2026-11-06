@@ -1,7 +1,7 @@
 # ADR 0021 — FairCoin is always offered
 
 **Status:** accepted.
-**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review), both amended 2026-11-06 (review round 2).
+**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review), both amended 2026-11-06 (review rounds 2 and 3); D9 replaced 2026-11-06 by the sparse watch set (owner's decision).
 **Amends:** ADR 0012 (D5 `connected_account` on a fiat order, D12 the platform
 fee), ADR 0015 §5 (the FairCoin ledger entry gains its fiat equivalent), ADR 0018
 ("as built" §3 *the rail follows the currency*, and the "not built" item
@@ -154,7 +154,8 @@ xpub mechanism is removed.
   `INSERT … ON CONFLICT DO UPDATE … RETURNING next - 1`, the identity key written
   on every reservation). Merchant payments, seller payments and `@username`
   payments to the same account share that cursor and that tree — the wallet
-  already scans it — so two payments can never be handed the same address. The
+  watches every address handed out on it (D9) — so two payments can never be
+  handed the same address. The
   gateway handles a PUBLIC key only; the private key lives on the holder's
   devices, and Peable never holds one.
 - **Who receives is recorded, not re-derived.** The merchant row mirrors its
@@ -265,158 +266,177 @@ merchant matches a payment's events to its own records by its own id rather
 than by amount or timing. The session's `client_reference_id` stays on the
 session. Peable keys nothing on that metadata.
 
-### D9. A recipient's tree is bounded: recycle before minting, cap what is open
+### D9. A recipient's addresses are never reused; its wallet watches exactly what was handed out
 
 **Added 2026-11-06** (independent security review, finding F4, which refused
-mainnet). Every FairCoin payment reserves an address on the RECIPIENT's cursor
-(D5), and the recipient's Peable wallet scans every index up to the highest
-reserved (ADR 0002). Before this decision every confirm minted: anyone who can
-open a checkout (payer routes are anonymous), a marketplace platform minting
-on-behalf intents, a Pay with Peable sheet re-confirming on each switch or
-lapsed quote, an orphaned intent of a confirm that lost a race — each pushed a
-stranger's cursor up, and a few dozen addresses a day per attacker IP past
-150 000 froze the wallet's scan. The number of addresses a recipient's tree
-grows by is now bounded by REAL payments, whatever anyone does:
+mainnet). **Amended 2026-11-06, the same day, three times** (review rounds 2
+and 3: a ceiling on the tree, concurrent recycling, recycled addresses below
+the ceiling) and then **replaced at the root on 2026-11-06** by the owner's
+decision ("Fix F5, F1 and D9"): a sparse watch set instead of a bounded
+contiguous tree. What the first versions decided, and why it went, is under
+"History" at the end of this decision.
 
-- **Recycle before minting** (`services/faircoin/addressPool.ts`). An address
-  held by a payment that ended `canceled` at least **1 hour** ago (the
-  quarantine: six quote lives, so a payer who pays a lapsed quote a little late
-  still pays an address no other order holds), that still derives from the
-  recipient's CURRENT key at its recorded index (`payment_intent_outputs.
-  derivation_index`; a rotated key's tree is one nobody scans, ADR 0002), and
-  that the chain shows never received anything (Explorer `GET /api/address/:a`:
-  no transaction, nothing received, no unspent output), is handed to the next
-  payment, lowest index first. The previous holder keeps its row, marked
-  `recycled_at`; an address the chain shows used, or that no longer derives from
-  the key, is marked `retired_at` and never offered again. An Explorer that
-  cannot tell — an outage, or testnet's node, which has no address index and
-  answers `isValid: false` with a note — recycles nothing: `unknown` is never
-  read as unused.
-- **Cap what is open.** A fresh index is minted only while fewer than **500**
-  of the recipient's addresses (per network) are OPEN: held by a payment in
-  `requires_action` or `processing`, or cancelled within the quarantine. At the
-  cap the FairCoin confirm is refused **503 `faircoin_capacity_reached`** and
-  the order shows FairCoin `temporarily_unavailable`; every other method keeps
-  working, so nothing an attacker does can deny the card rail. The count and
-  the mint run in the payment's own transaction under a per-recipient advisory
-  lock (`pg_advisory_xact_lock`), so concurrent confirms cannot both pass it,
-  and a payment that rolls back (including one that loses its idempotency-key
-  race) returns its claim and its index with it. The reservation itself is
-  unchanged: ONE statement on the cursor.
-- **The bound.** A recipient's tree holds at most 500 addresses nobody paid,
-  plus one per address something was actually sent to — a real payment, or
-  coins an attacker spent (at least the network's dust threshold plus a fee)
-  to dirty it. Outside an Explorer outage on mainnet that is a size bound, not a
-  rate. On testnet (no address index) nothing is recycled and the cap bounds
-  the rate instead: at most 500 abandoned addresses per hour.
-- **The holes that fed it are closed.** A confirm that loses its session
+Every FairCoin payment reserves an address on the RECIPIENT's cursor (D5), and
+so does every `@username` request (ADR 0002). F4 found that anyone able to open
+a checkout (payer routes are anonymous), a marketplace platform minting
+on-behalf intents, a Pay with Peable sheet re-confirming on each switch, an
+orphaned intent of a confirm that lost a race — each pushed a stranger's cursor
+up, and the recipient's wallet, which scanned every index from 0 to the highest
+reserved, froze past 150 000. The rules now:
+
+- **Every address is fresh, and handed out once, for ever.** A payment
+  (merchant, seller, invoice, raw intent, each output of a split payment) and an
+  `@username` request each take the NEXT index of the recipient's one cursor —
+  the one-statement reservation, unchanged — through ONE function,
+  `reserveFreshAddress` (`services/faircoin/addressPool.ts`), which also skips
+  an index whose address history already holds (only possible where migration
+  0009 left a cursor behind attributions it had derived). Nothing is recycled:
+  a cancelled payment's address stays that payment's, and a payer who pays a
+  quote late — an hour, a year — pays an address no other order holds. The
+  coins are the recipient's either way; the order is between payer and
+  merchant, as for any late payment of an expired quote (ADR 0012 D9).
+  `payment_intent_outputs (network, address)` is unique again, not partial
+  (migration 0114 drops the recycling columns).
+- **Every address handed out is recorded with its index, network and key, in
+  the reservation's own transaction**: an output in `payment_intent_outputs`
+  (inserted in the intent's transaction), an `@username` address in
+  `social_send_attributions` (since this amendment inserted in the
+  reservation's transaction, under the same lock; before it the attribution was
+  a second write after the cursor had committed). Each row carries the
+  recipient account, `derivation_index` and the `identity_public_key` the
+  address derives from (ADR 0002's amendment). Those two tables ARE the
+  recipient's address set; no third table copies them.
+- **The wallet watches exactly that set** (`GET /v1/social/me/receive_addresses`,
+  a user-session route: for whoever the session acts as, an organization's set
+  when acting as it). Each item is `{ address, derivation_index,
+  identity_public_key, network, created }` — every key the account ever had,
+  each address with its own, so a wallet can watch and spend addresses of a
+  replaced key (ADR 0002's F1 work) — in ascending `derivation_index`, paged by
+  `after` = the previous answer's `sync_cursor`. **The index is the sync
+  cursor, and it is exact:** the cursor upsert's row lock is held until the
+  reserving transaction ends and the address's row is written in that
+  transaction, so for one account an index commits only after every lower one
+  has committed or rolled back; a wallet that has seen everything through `n`
+  misses nothing by asking for `> n` (migration 0113 moved each cursor above
+  the indices already recorded, so this holds for older rows). The wallet also
+  re-reads the whole set once a week, idempotently. Index 0, the stable
+  default address, is never handed out and is always the wallet's own.
+- **What the wallet does with a set that only grows**
+  (`packages/frontend/src/wallet/social-receive-watch.ts`). ACTIVE — in the SPV
+  Bloom filter — are index 0, every address holding coins, every address the
+  Explorer showed coins at in the last 7 days, and the newest addresses handed
+  out in the last 7 days, at most 2 000 in all (the size the contiguous window
+  proved safe; the filter saturates near 15 000 entries). Every other address is
+  DORMANT and read on the Explorer on a doubling schedule: a new address once
+  (unless no historical rescan has begun, whose first pass covers it), then
+  again after as long as it has existed — between a day and a year — so about
+  six reads in its first year and one a year for ever; at most 200 reads per
+  resync (every 2 minutes while the wallet runs, and on foreground, push and the
+  Receive sheet), never-read first, then most overdue, and a batch is recorded
+  only when every read in it answered (an outage records nothing). Coins found
+  at a dormant address make it active and send the SPV rescan back to their
+  block, so they are credited through the same merkle-checked path and are
+  spendable. So a late payment to ANY address ever handed out is found: within
+  minutes while it is recent, within its schedule (at most a year) after that,
+  and immediately when its transaction pays an active address too. The HD
+  (non-social) wallet is untouched.
+- **What bounds the set is a rate per recipient, not a budget it can run out
+  of.** A new PAYMENT address is handed out only while fewer than **500** of
+  the recipient's payment addresses of the last **24 hours** (per network) are
+  unpaid — their payment anything but `succeeded`: waiting, cancelled, or
+  `processing` (a reported txid that never settles still counts, so a made-up
+  one buys nothing) — and a new `@username` address only while fewer than
+  **500** were handed out fresh to the recipient in the last 24 hours (a
+  sender asking again for one it holds and has not paid is handed it back and
+  adds nothing). Both counts and the reservation are one decision under a
+  per-recipient advisory lock in the reservation's transaction, so concurrent
+  confirms cannot both pass. Past either, FairCoin is refused **503
+  `faircoin_capacity_reached`** for that recipient (`temporarily_unavailable`
+  on the order) and every other method keeps working; nothing anyone does to one
+  recipient touches another, and paid addresses never count, so real volume is
+  never limited. **Per payer**, in front of that: a hosted checkout's FairCoin
+  confirm and a hosted invoice's FairCoin pay take at most **20 per client
+  address per hour** (`lib/faircoinPayerLimit.ts`, beside the public limiter's
+  30 requests per 15 minutes); an Oxy account is handed at most **30 fresh
+  `@username` addresses an hour** across all recipients and asks about one
+  recipient at most 6 times in 10 minutes, holding at most one unpaid address
+  per recipient. These are in-memory, so per ECS task.
+- **The bound, written down.** Under a sustained attack that costs nothing but
+  client addresses and Oxy accounts, one recipient's set grows by at most
+  1 000 unpaid addresses a day per network (500 payment, 500 `@username`) —
+  365 000 a year — plus one per real payment. The wallet syncs it a page of up
+  to 1 000 at a time and keeps at most 2 000 of it active; the dormant
+  schedule then costs about 6 000 Explorer reads a day of such an attack in its
+  first year (a few minutes of a running wallet's budget) and one read per
+  address per year after. The cost of the bound is the same trade as before,
+  without the permanence: while an attacker holds a recipient at 500 unpaid
+  addresses a day, FairCoin is `temporarily_unavailable` for that recipient
+  until the window rolls — a fiat order still takes a card, a `FAIR`-priced
+  order waits. No recipient ever runs out: the lifetime budget of 1 979 used
+  addresses (round 3's residual) and the late-payer residual (a late payment
+  settling another order at a recycled address) are gone.
+- **The holes that fed it stay closed.** A confirm that loses its session
   (`moved`) cancels the FairCoin payment it created in the transaction that saw
   it orphaned (`abandoned`). A repeated FairCoin confirm on an order whose
-  linked payment still has more than a minute of quote answers that payment (as
-  before; the invoice page does the same). `expires_in_seconds` is at most
-  86 400 (24 h) in the contract and for every internal caller (F10): an address
-  stays out of the pool only as long as its payment is payable. And a reported
+  linked payment still has more than a minute of quote answers that payment
+  (the invoice page does the same). `expires_in_seconds` is at most 86 400
+  (24 h) in the contract and for every internal caller (F10). And a reported
   broadcast the Explorer has never seen for **24 hours**, that provably pays
   nothing at the payment's addresses (each reads unused, or reads used with the
   reported txid absent from its transaction list), while the Explorer answers,
   is **lost**: the watcher cancels the payment `abandoned` (`broadcast_lost`).
-  Without that, a made-up txid — with or without dust sent to the address — held
-  an address, and a place under the cap, for ever. Coins someone sent there stay
-  the recipient's, and that address is retired, never recycled. **Amended
-  2026-11-06 (N4):** an address that WAS paid in full, under another txid (a
-  malleated or rebroadcast transaction, or a mistyped report), is not lost: the
-  watcher lists the address's transactions, keeps those the list shows moving
-  at least the output's amount no earlier than the payment (less 15 minutes for
-  a staker's clock) — so dust costs no read and cannot push the payment out of
-  reach — and reads at most 10 of them. One that pays every output its amount
-  and is not another payment's `processing`/`succeeded` txid becomes the
-  payment's `txid` and settles it as any observation. One that is another
-  payment's, or more such candidates than are read, leaves it `processing`
-  with a warning for review — never cancelled. Only dust, or nothing, at the
-  address is lost. This narrows ADR 0012 D9
-  ("once broadcast, never expires") to broadcasts that exist: a transaction
-  nobody has seen in a day of two-minute, nearly empty blocks is not moving
-  money.
-- **`@username` addresses** are not payments and are not counted against the
-  cap. A sender asking again for a recipient it has not paid is handed the
-  address it already holds (its latest attribution, when it still derives from
-  the recipient's key and the chain shows it unused), with the request's
-  context written over the old one; so a sender holds at most ONE unpaid
-  address per recipient, beside the per-pair limiter. The residual is distinct
-  authenticated Oxy accounts, each one more address until it pays.
-- **The tree has a ceiling (amended 2026-11-06, review round 2, N1).** The
-  wallet watches indices `0 .. SOCIAL_RECEIVE_MAX_WATCHED − 1` (2 000) and
-  reaches `SOCIAL_RECEIVE_GAP_LIMIT` (20) past the highest index reserved
-  (`planSocialReceiveWindow`); past that it stops offering `@username` and
-  watches nothing new. Before this the gateway kept minting, so once any
-  recipient's tree — and the organization `oxy` has ONE tree for every
-  first-party merchant, renewal and `@username` — passed 2 000, every new
-  FairCoin payment settled `succeeded` at an address its wallet never looks at.
-  Now ONE constant, `SOCIAL_RECEIVE_INDEX_LIMIT = SOCIAL_RECEIVE_MAX_WATCHED −
-  SOCIAL_RECEIVE_GAP_LIMIT` (1 980, `@peable.to/contracts/vocabulary/
-  receiveTree`, the wallet's import too), bounds both sides: an index `i` is
-  minted only when `i + SOCIAL_RECEIVE_GAP_LIMIT ≤ SOCIAL_RECEIVE_MAX_WATCHED − 1`,
-  i.e. `i < SOCIAL_RECEIVE_INDEX_LIMIT`, so the wallet's window always holds it
-  and the gap above it. The refusal is the `WHERE` of the cursor's own `INSERT …
-  ON CONFLICT DO UPDATE` (no row, nothing written; the row lock serializes the
-  edge). A payment past it is refused **503 `faircoin_capacity_reached`** and
-  the order shows FairCoin `temporarily_unavailable` unless an address can be
-  recycled — recycling keeps working on a full tree; `@username` answers **503
-  `faircoin_receive_tree_full`** (not 409: on that route a 409 alone means a
-  keyless recipient to the wallet and `@peable.to/pay`). Cards are untouched. Orbit warns the owners
-  (Home, beside the wallet setup task) once fewer than 200 fresh indices are
-  left. Pinned on both sides: `db/__tests__/socialReceiveCursor.realdb.test.ts`
-  (the gateway never mints `≥` the limit) and `packages/frontend/src/wallet/
-  receive-tree-ceiling.test.ts` (every index below it is watched, gap
-  included, without capping the wallet; the limit itself caps it).
-- **Concurrent confirms recycle (amended 2026-11-06, N2).** The candidate was
-  chosen outside the lock, so every overlapping confirm checked the SAME lowest
-  one, one claimed it and the rest minted — a burst of N confirms spent N − 1
-  indices while candidates sat unused. Now each confirm LEASES a different
-  candidate for 60 s before its chain read (one `UPDATE … WHERE id = (SELECT …
-  FOR UPDATE SKIP LOCKED)`), a read that finds it unused is stamped
-  (`payment_intent_outputs.recycle_checked_at`), and under the pool's lock a
-  confirm whose own candidate was taken claims the lowest one stamped within 10
-  minutes — no HTTP call in the transaction — and mints only when none is
-  left. N parallel confirms against N candidates leave the cursor where it was
-  (`addressPool.realdb.test.ts`). The 10 minutes widen the late-payer residual
-  below by that much: an address checked unused may be paid by a late payer of
-  its old quote before the claim.
-- **A recycled address is below the ceiling too (amended 2026-11-06, review
-  round 3).** The recycling queries (`db/payments/faircoinAddressPool.ts`) and
-  the claim's compare-and-swap carry `derivation_index <
-  SOCIAL_RECEIVE_INDEX_LIMIT`, so an address minted above it before the
-  ceiling existed is never handed out again. Every Explorer read the gateway
-  makes is bounded by a timeout, and one that times out is `unknown` — never
-  `unused`, never a missing transaction.
-- **Not done: a sparse watch set.** The lasting fix is for the wallet to watch
-  the indices the gateway reports HELD (reserved and not recycled away), not a
-  contiguous range from 0, so a tree's size is bounded by what is open rather
-  than by every index ever minted. Until then the ceiling makes a recipient
-  whose tree is full depend on recycling for FairCoin, and the bound is a
-  lifetime one: 1 979 payment and `@username` addresses that were actually used,
-  per recipient per network.
-- **Not done:** a unique `txid` across payments. One address has at most one
-  holder that is not recycled (the unique index on `payment_intent_outputs
-  (network, address)` is now partial on `recycled_at is null`), and a recycled
-  address's previous holder is `canceled`, which is terminal: no transaction can
-  settle both. A unique `txid` would also refuse one transaction paying two
-  orders' outputs, which is legitimate.
+  Coins someone sent there stay the recipient's, at an address its wallet keeps
+  watching. **Amended 2026-11-06 (N4):** an address that WAS paid in full,
+  under another txid (a malleated or rebroadcast transaction, or a mistyped
+  report), is not lost: the watcher lists the address's transactions, keeps
+  those the list shows moving at least the output's amount no earlier than the
+  payment (less 15 minutes for a staker's clock) — so dust costs no read and
+  cannot push the payment out of reach — and reads at most 10 of them. One
+  that pays every output its amount and is not another payment's
+  `processing`/`succeeded` txid becomes the payment's `txid` and settles it as
+  any observation. One that is another payment's, or more such candidates than
+  are read, leaves it `processing` with a warning for review — never
+  cancelled. Only dust, or nothing, at the address is lost. This narrows ADR
+  0012 D9 ("once broadcast, never expires") to broadcasts that exist.
+- **Not done:** a unique `txid` across payments. One address has one output for
+  ever, so no transaction can settle two payments' outputs at one address; a
+  unique `txid` would also refuse one transaction paying two orders' outputs,
+  which is legitimate.
+- **Residual, recorded:** outputs written before migration 0105 have no
+  recorded index and are not in the set (testnet only — mainnet never minted);
+  a wallet upgraded from the contiguous window keeps watching the indices it
+  already watched, a new device does not. During the rolling deploy of this
+  change the previous image still writes an `@username` attribution after its
+  reservation commits; the weekly full re-read covers what an incremental sync
+  could miss in that window.
 
-The cost of the cap, written down: an attacker who keeps 500 of a recipient's
-addresses open (an anonymous payment-link visit plus a confirm each, held for
-the payment's life plus the quarantine) makes FairCoin `temporarily_unavailable`
-for that recipient meanwhile. A fiat order still takes a card; a `FAIR`-priced
-order has no other method and waits. That is the trade the bound requires —
-availability of one rail for a while, instead of a wallet that can never be
-scanned again — and it is the reason the cap is far above real concurrency.
+#### History (superseded 2026-11-06)
 
-The residual risk, written down: a payer who pays a cancelled quote more than an
-hour after it was cancelled, AFTER its address was handed to another order,
-pays that other order's address — the coins are still the recipient's, and the
-later order's payer could report that transaction as their own if it pays at
-least their amount. The quarantine makes this a late payment of an abandoned
-quote, never a race of two live payments.
+What D9 decided before the sparse watch set, each step a fix of the one before:
+
+- *Recycle before minting* (first version): an address of a payment cancelled
+  over an hour ago, still derived from the current key and read unused on the
+  Explorer, was handed to the next payment (`recycled_at`, `retired_at`), and a
+  fresh index was minted only while fewer than 500 of the recipient's addresses
+  were OPEN. It bounded the tree by real payments but left a written residual:
+  a payer paying a quote more than an hour late, after its address was
+  recycled, paid the new holder's order, which could claim that transaction.
+- *A ceiling* (round 2, N1): the wallet watched `0 .. 1 999` and reached 20
+  past the highest reserved, so the gateway stopped minting at index 1 980
+  (`SOCIAL_RECEIVE_INDEX_LIMIT` in `@peable.to/contracts/vocabulary/receiveTree`,
+  in the cursor statement's `WHERE`), answering `faircoin_capacity_reached` to
+  payments and `faircoin_receive_tree_full` to `@username`, and Orbit warned the
+  owners 200 indices before. That made every recipient's FairCoin depend on
+  recycling once full, for life: round 3 named it a lifetime budget of 1 979
+  used addresses, burnable for under 1 FAIR.
+- *Concurrent recycling* (round 2, N2) leased candidates (`recycle_lease_until`,
+  `recycle_checked_at`) so parallel confirms recycled different ones, and
+  *recycled addresses below the ceiling* (round 3) kept an address minted
+  above 1 980 before the ceiling from being handed out again.
+
+The owner's acceptance of the last two residuals was one of the conditions of
+round 3's sign-off (`docs/audits/2026-11-06-mainnet-gate/`, items 1.4 and 1.5);
+this decision removes both instead.
 
 ### D10. A mainnet payment settles at 6 confirmations, and is watched until a reorg cannot undo it
 

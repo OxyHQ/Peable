@@ -15,8 +15,13 @@ mock.module('./oxy-services', () => ({
   },
 }));
 
-const { reserveNextSocialAddress, enrichAddresses, getSocialReceiveCursor, KeylessRecipientError } =
-  await import('./gateway-client');
+const {
+  reserveNextSocialAddress,
+  enrichAddresses,
+  getSocialReceiveCursor,
+  listSocialReceiveAddresses,
+  KeylessRecipientError,
+} = await import('./gateway-client');
 
 beforeEach(() => {
   postMock.mockReset();
@@ -124,5 +129,46 @@ describe('getSocialReceiveCursor', () => {
     const result = await getSocialReceiveCursor('mainnet');
 
     expect(result).toEqual({ reserved_through: 0, identity_public_key: null });
+  });
+});
+
+describe('listSocialReceiveAddresses', () => {
+  test('returns the page directly and sends network, after and limit as query params', async () => {
+    // Naked shape, like the cursor: the route has no `data` envelope.
+    const page = {
+      addresses: [
+        {
+          address: 'TAbC123',
+          derivation_index: 4,
+          identity_public_key: `02${'ab'.repeat(32)}`,
+          network: 'testnet' as const,
+          created: 1_700_000_000,
+        },
+      ],
+      has_more: false,
+      sync_cursor: 4,
+    };
+    getMock.mockImplementationOnce(async () => page);
+
+    const result = await listSocialReceiveAddresses('testnet', 3, 50);
+
+    expect(getMock).toHaveBeenCalledWith('/v1/social/me/receive_addresses', {
+      params: { network: 'testnet', after: 3, limit: 50 },
+    });
+    expect(result).toEqual(page);
+  });
+
+  test('asks for the largest page by default', async () => {
+    getMock.mockImplementationOnce(async () => ({
+      addresses: [],
+      has_more: false,
+      sync_cursor: 0,
+    }));
+
+    await listSocialReceiveAddresses('mainnet', 0);
+
+    expect(getMock).toHaveBeenCalledWith('/v1/social/me/receive_addresses', {
+      params: { network: 'mainnet', after: 0, limit: 1_000 },
+    });
   });
 });

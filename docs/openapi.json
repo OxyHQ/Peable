@@ -31820,7 +31820,7 @@
           "Social payments"
         ],
         "summary": "Reserve an address to pay a person",
-        "description": "A fresh address of the recipient's, derived from their Oxy identity key. Limited per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one whose wallet watches no further address (every index below its watched bound is taken) 503 `faircoin_receive_tree_full`; paying yourself is refused.",
+        "description": "A fresh address of the recipient's, derived from their Oxy identity key — or the one this sender already holds and has not paid. Limited per sender and per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one handed too many fresh `@username` addresses in the last day 503 `faircoin_capacity_reached`; paying yourself is refused.",
         "security": [
           {
             "oxyUserSession": []
@@ -32097,6 +32097,118 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SocialPayments"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/social/me/receive_addresses": {
+      "get": {
+        "operationId": "listSocialReceiveAddresses",
+        "tags": [
+          "Social payments"
+        ],
+        "summary": "List the caller's receive addresses",
+        "description": "Every FairCoin address handed out in the caller's Peable wallet on `network` — payments and `@username` alike, under every key the account has had — after `after`, in ascending index, for whoever the session acts as (an organization's, when acting as it). The wallet watches exactly this set (ADR 0021 D9). Read-only.",
+        "security": [
+          {
+            "oxyUserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "network",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mainnet",
+                "testnet"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "description": "The `sync_cursor` of the previous page or sync; absent (or `0`) lists from the first address.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "At most this many addresses (default 500); a page exceeds it only by addresses sharing its last index.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialReceiveAddresses"
                 }
               }
             }
@@ -57099,7 +57211,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 112 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 111 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -63490,6 +63602,77 @@
         },
         "required": [
           "app"
+        ],
+        "additionalProperties": false
+      },
+      "SocialReceiveAddress": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The FairCoin address."
+          },
+          "derivation_index": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Its index in the account's social-receive tree (`deriveSocialReceiveAddress(key, index)`); index 0, the stable default address, is never handed out."
+          },
+          "identity_public_key": {
+            "description": "The identity public key the address was derived from, in the encoding of the cursor's `identity_public_key` (lowercase hex of the DID `#key-1` bytes). It may be a key the account has since replaced. `null` only for an address handed out before keys were recorded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "mainnet",
+              "testnet"
+            ]
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "When the address was handed out."
+          }
+        },
+        "required": [
+          "address",
+          "derivation_index",
+          "identity_public_key",
+          "network",
+          "created"
+        ],
+        "additionalProperties": false
+      },
+      "SocialReceiveAddresses": {
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SocialReceiveAddress"
+            },
+            "description": "In ascending `derivation_index`, each address once."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "More addresses follow `sync_cursor`: ask again with it."
+          },
+          "sync_cursor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Pass as `after` to continue — the highest `derivation_index` in this page, or `after` when the page is empty. Monotonic: an address handed out later always has a higher index, so a wallet that stored it misses nothing by asking from it."
+          }
+        },
+        "required": [
+          "addresses",
+          "has_more",
+          "sync_cursor"
         ],
         "additionalProperties": false
       },

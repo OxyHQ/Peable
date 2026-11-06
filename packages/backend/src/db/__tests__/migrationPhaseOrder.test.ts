@@ -156,6 +156,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the receive tree migrations `0110`–`0112` merged.
   '0109_customer_locales_validate':
     'released with #260; its post phase applied by the ba1cc838 deploy (run 42175266383)',
+  // The receive tree's validate half shipped with #262, whose deploy of
+  // 0bcb4f5b (Deploy to AWS run 42180376607, 2026-11-06) ran its post phase
+  // successfully before the sparse watch set's `0113`–`0114` merged.
+  '0112_payment_intents_network_closed_reason_validate':
+    'released with #262; its post phase applied by the 0bcb4f5b deploy (run 42180376607)',
 };
 
 interface Migration {

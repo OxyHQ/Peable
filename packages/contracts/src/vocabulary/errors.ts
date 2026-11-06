@@ -164,9 +164,7 @@ export const ERROR_CODE_DESCRIPTIONS = {
   faircoin_network_closed:
     'FairCoin payments on this network are not open on this deployment yet. The other payment methods still work.',
   faircoin_capacity_reached:
-    'Too many FairCoin payments to this recipient are waiting to be paid right now, so no new FairCoin address can be handed out. The other payment methods still work; try FairCoin again shortly.',
-  faircoin_receive_tree_full:
-    "Every FairCoin address the recipient's Peable wallet watches has been handed out, so no new one can be derived for them. Nothing was reserved.",
+    'Too many FairCoin addresses of this recipient were handed out in the last day without being paid, so no new one is handed out right now. Nothing was reserved. The other payment methods still work; try FairCoin again later.',
   faircoin_amount_too_small:
     "One seller's share of this order is below the smallest amount the FairCoin network relays, so it cannot be paid in FairCoin. The other payment methods still work.",
   credit_note_exceeds_invoice:

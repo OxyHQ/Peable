@@ -167,6 +167,17 @@ their variables, so CI never runs them.
       1 FAIR (or free with Oxy accounts, or during an Explorer outage), after
       which FairCoin is permanently unavailable for that recipient until a
       sparse watch set ships; cards are unaffected."
+
+   **Update (2026-11-06, later): items 4 and 5 are fixed, not accepted.** The
+   owner chose to fix them ("Fix F5, F1 and D9"): addresses are never recycled,
+   the tree has no ceiling, and each recipient's wallet watches exactly the
+   addresses the gateway handed out (`GET /v1/social/me/receive_addresses`),
+   with abuse bounded by a daily per-recipient rate and per-payer limits (ADR
+   0021 D9, replaced; ADR 0002's amendment "a sparse watch set replaces the
+   bounded tree"). Items 1–3 still need the owner's acceptance or their own
+   fixes. The canary records the synced set (`receiveAddresses` in the gateway
+   evidence) and the wallet half watches exactly it; it has not been re-run on
+   this change.
 2. **Before opening**, a read-only production check that no mainnet
    `social_receive_cursors` row exists at or above the ceiling (mainnet minting
    was never open, so none should).

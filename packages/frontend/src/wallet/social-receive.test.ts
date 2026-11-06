@@ -56,26 +56,16 @@ mock.module('@oxy.so/core/crypto', () => ({
 }));
 
 const {
-  SOCIAL_RECEIVE_GAP_LIMIT,
   compressedPublicKeyHex,
   getIdentityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
   signSocialReceiveInput,
-  SOCIAL_RECEIVE_INDEX_LIMIT,
-  SOCIAL_RECEIVE_MAX_WATCHED,
   highestIndex,
-  planSocialReceiveWindow,
   judgeSocialReceiveKey,
   accountKeyFromDidDocument,
 } = await import('./social-receive');
 
 const TESTNET = getNetwork('testnet');
-
-describe('SOCIAL_RECEIVE_GAP_LIMIT', () => {
-  test('is 20', () => {
-    expect(SOCIAL_RECEIVE_GAP_LIMIT).toBe(20);
-  });
-});
 
 describe('getIdentityPublicKeyHex', () => {
   test("is the shared identity's public key, compressed", async () => {
@@ -222,67 +212,6 @@ describe('signSocialReceiveInput', () => {
       signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET),
     ).rejects.toThrow(/does not own/);
     holderKey = IDENTITY_KEY_A;
-  });
-});
-
-describe('planSocialReceiveWindow', () => {
-  const plan = (highestWatched: number, highestUsed: number, highestReserved = -1) =>
-    planSocialReceiveWindow({ highestWatched, highestUsed, highestReserved });
-
-  test('first boot watches the gap limit from 0', () => {
-    expect(plan(-1, -1)).toEqual({ extension: { start: 0, count: 20 }, capped: false });
-  });
-
-  test('nothing to do while the window already covers the gap past every use', () => {
-    expect(plan(19, -1)).toEqual({ extension: null, capped: false });
-  });
-
-  test('a payment near the edge restores the full gap', () => {
-    expect(plan(19, 5)).toEqual({ extension: { start: 20, count: 6 }, capped: false });
-    expect(plan(19, 0)).toEqual({ extension: { start: 20, count: 1 }, capped: false });
-  });
-
-  // The F3 scenario: 21 abandoned FairCoin checkouts reserved 1..21 and none
-  // was paid. The window must reach 21 + gap so the 22nd — a real payment —
-  // lands on a watched address.
-  test('reaches the gap past the highest RESERVED index, paid or not', () => {
-    expect(plan(19, -1, 21)).toEqual({ extension: { start: 20, count: 22 }, capped: false });
-  });
-
-  // F4: a cursor of a million must not derive a million addresses, nor crash.
-  test('a huge cursor is bounded, and says so', () => {
-    const result = plan(19, -1, 1_000_000);
-    expect(result.capped).toBe(true);
-    expect(result.extension).toEqual({ start: 20, count: SOCIAL_RECEIVE_MAX_WATCHED - 20 });
-    expect(plan(SOCIAL_RECEIVE_MAX_WATCHED - 1, -1, 1_000_000)).toEqual({
-      extension: null,
-      capped: true,
-    });
-  });
-
-  test('capped once the gap would reach past the bound, before an index is lost', () => {
-    const lastWatched = SOCIAL_RECEIVE_MAX_WATCHED - 1;
-    expect(plan(lastWatched, -1, lastWatched - 20).capped).toBe(false);
-    expect(plan(lastWatched, -1, lastWatched - 19).capped).toBe(true);
-  });
-
-  // Round-3 review: addresses above the gateway's ceiling derive from the
-  // public key, so anyone can dust index 1,980..1,999. A USED index the
-  // gateway never handed out must not pause `@username`; the window still
-  // reaches it (up to the bound), so the dust is watched.
-  test('a used index above the ceiling extends the window but never caps it', () => {
-    for (const used of [SOCIAL_RECEIVE_INDEX_LIMIT, SOCIAL_RECEIVE_MAX_WATCHED - 1]) {
-      expect(plan(19, used, 5)).toEqual({
-        extension: { start: 20, count: SOCIAL_RECEIVE_MAX_WATCHED - 20 },
-        capped: false,
-      });
-      expect(plan(SOCIAL_RECEIVE_MAX_WATCHED - 1, used, 5)).toEqual({
-        extension: null,
-        capped: false,
-      });
-    }
-    // The reservation alone still caps it.
-    expect(plan(19, -1, SOCIAL_RECEIVE_INDEX_LIMIT).capped).toBe(true);
   });
 });
 

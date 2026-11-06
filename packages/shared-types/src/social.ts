@@ -12,6 +12,9 @@ export type {
   SocialPaymentSource,
   SocialPaymentsParams,
   SocialPaymentsResponse,
+  SocialReceiveAddress,
+  SocialReceiveAddressesParams,
+  SocialReceiveAddressesResponse,
   SocialReceiveCursorParams,
   SocialReceiveCursorResponse,
 } from '@peable.to/contracts';
@@ -20,6 +23,8 @@ export {
   ENRICHMENT_KINDS,
   type EnrichmentKind,
   SOCIAL_PAYMENT_DIRECTIONS,
+  SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT,
+  SOCIAL_RECEIVE_ADDRESSES_PAGE_MAX,
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
   type SocialPaymentDirection,

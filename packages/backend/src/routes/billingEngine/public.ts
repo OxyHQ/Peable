@@ -13,6 +13,7 @@
  * is the contract's (`@peable.to/contracts` `publicBillingRoutes`).
  */
 import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { createFaircoinPayerLimit, passesLimit } from '../../lib/faircoinPayerLimit';
 import type { z } from 'zod';
 import {
   completePortalPaymentMethodUpdateParams,
@@ -133,9 +134,14 @@ function body<T>(req: Request, res: Response, schema: z.ZodType<T, unknown>): T 
   return parsed.data;
 }
 
-export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandler }): Router {
+export function createPublicBillingRouter(deps: {
+  publicRateLimit: RequestHandler;
+  /** The per-payer bound on FairCoin pays (`lib/faircoinPayerLimit.ts`); one per router by default. */
+  faircoinPayerLimit?: RequestHandler;
+}): Router {
   const router = Router();
   const limit = deps.publicRateLimit;
+  const faircoinPayerLimit = deps.faircoinPayerLimit ?? createFaircoinPayerLimit();
 
   router.get(
     '/v1/invoices/public/:token',
@@ -154,6 +160,14 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
       if (!invoice) return;
       const parsed = body(req, res, payPublicInvoiceParams);
       if (!parsed) return;
+      // A FairCoin pay may hand out a fresh address in the recipient's wallet:
+      // one payer's share of that is bounded (ADR 0021 D9).
+      if (
+        (parsed.payment_method_type ?? railOf(invoice.currency)) === 'faircoin' &&
+        !(await passesLimit(faircoinPayerLimit, req, res))
+      ) {
+        return;
+      }
       const intent = await payerIntentForInvoice(invoice, parsed.payment_method_type);
       res.status(200).json({
         object: 'public_invoice_payment',

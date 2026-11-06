@@ -47,6 +47,7 @@ import {
   confirmSessionAsPayer,
   faircoinAvailabilityOf,
   createCheckoutSession,
+  payerMethodOf,
   expireSessionForMerchant,
   publishableKeyFor,
   sessionForPayer,
@@ -55,6 +56,7 @@ import {
 } from '../services/checkout/sessionService';
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { type CatalogRoute, createCatalogApiRouter } from './catalogRoutes';
+import { createFaircoinPayerLimit, passesLimit } from '../lib/faircoinPayerLimit';
 
 // The contract's queries on the API; the dashboard's twin adds its environment.
 const listSessionsQuery = {
@@ -351,9 +353,12 @@ function answerPayer(res: Response, body: CheckoutSessionPublic): void {
 export function createCheckoutSessionsRouter(deps: {
   requireMerchant: RequestHandler;
   publicRateLimit: RequestHandler;
+  /** The per-payer bound on FairCoin confirms (`lib/faircoinPayerLimit.ts`); one per router by default. */
+  faircoinPayerLimit?: RequestHandler;
   checkout?: CheckoutDeps;
 }): Router {
   const checkoutDeps = deps.checkout ?? {};
+  const faircoinPayerLimit = deps.faircoinPayerLimit ?? createFaircoinPayerLimit();
   const router = Router();
   router.use(
     createCatalogApiRouter(checkoutSessionRoutes(checkoutDeps), {
@@ -405,6 +410,14 @@ export function createCheckoutSessionsRouter(deps: {
       const parsed = confirmCheckoutSessionPublicParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
+        return;
+      }
+      // A FairCoin confirm may hand out a fresh address in the recipient's
+      // wallet: one payer's share of that is bounded (ADR 0021 D9).
+      if (
+        payerMethodOf(found.session, parsed.data.payment_method_type) === 'faircoin' &&
+        !(await passesLimit(faircoinPayerLimit, req, res))
+      ) {
         return;
       }
       try {

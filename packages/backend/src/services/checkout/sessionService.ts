@@ -1166,13 +1166,26 @@ async function recordPayerLocale(
   return recorded;
 }
 
-function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
-  // A FairCoin-only fiat order defaults to FairCoin; otherwise the currency's rail.
-  const method =
-    choice.paymentMethodType ??
+/**
+ * The method a payer's confirm pays with: the one named, else the order's
+ * default — FairCoin on a FairCoin-only fiat order, otherwise the currency's
+ * rail. Unvalidated (the confirm refuses what the order does not offer); the
+ * payer route reads it to bound FairCoin confirms (ADR 0021 D9).
+ */
+export function payerMethodOf(
+  session: CheckoutSessionRow,
+  paymentMethodType: 'card' | 'faircoin' | undefined,
+): 'card' | 'faircoin' {
+  return (
+    paymentMethodType ??
     (session.rail === 'card' && !session.cardOffered && session.mode !== 'setup'
       ? 'faircoin'
-      : session.rail);
+      : session.rail)
+  );
+}
+
+function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
+  const method = payerMethodOf(session, choice.paymentMethodType);
   if (method === 'card' && session.mode !== 'setup' && !session.cardOffered) {
     throw invalid(
       'parameter_invalid',
@@ -1402,7 +1415,7 @@ export async function confirmSessionAsPayer(
     // The session moved under the confirm: the payment just created is nobody's.
     // A FairCoin one is cancelled HERE, in the transaction that saw it orphaned,
     // so its address is not left payable on an order that will never link it
-    // (and becomes recyclable, ADR 0021 D9); a card one is cancelled at the
+    // (ADR 0021 D9); a card one is cancelled at the
     // provider first, after this commits.
     const moved = async () => {
       if (locked?.paymentIntentId === intent.id) return { kind: 'moved' as const, orphan: null };
@@ -1591,8 +1604,8 @@ async function createSessionPayment(
     if (error instanceof FaircoinNetworkClosedError) {
       throw new CheckoutError(409, 'faircoin_network_closed', error.message, 'payment_method_type');
     }
-    // Every address the recipient can hold open is open (ADR 0021 D9): FairCoin
-    // waits for one to free up; the card does not.
+    // Too many of the recipient's addresses of the last day went unpaid (ADR
+    // 0021 D9): FairCoin waits; the card does not.
     if (error instanceof FaircoinCapacityError) {
       throw new CheckoutError(
         503,

@@ -379,9 +379,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Your account publishes a different identity key than this phone holds, so payments by @username would go where this wallet cannot see them. What this phone already received stays here.',
     'receive.keyMismatch.organization':
       'This phone holds a key the organization has since replaced. Add the current one in Commons (Settings → Organizations → Organization wallets). What the previous key received stays spendable here.',
-    'receive.windowCapped.title': 'Paying by @username is paused on this phone',
-    'receive.windowCapped.description':
-      'More payment addresses have been handed out for this account than this wallet watches ({max}), so a payment to a later one would not appear here. Everything paid to the addresses it watches still arrives.',
     'wallet.strandedBalance':
       "{amount} FAIR was received under a previous identity key. It is not in your balance and can be spent only with that key's recovery phrase.",
     'receive.copy': 'Copy Address',
@@ -1279,9 +1276,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Tu cuenta publica una clave de identidad distinta de la que tiene este tel\u00e9fono, as\u00ed que los pagos por @usuario ir\u00edan adonde este monedero no puede verlos. Lo que este tel\u00e9fono ya recibi\u00f3 sigue aqu\u00ed.',
     'receive.keyMismatch.organization':
       'Este tel\u00e9fono tiene una clave que la organizaci\u00f3n ya reemplaz\u00f3. A\u00f1ade la actual en Commons (Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones). Lo recibido con la clave anterior se puede seguir gastando aqu\u00ed.',
-    'receive.windowCapped.title': 'El pago por @usuario est\u00e1 en pausa en este tel\u00e9fono',
-    'receive.windowCapped.description':
-      'Se han entregado m\u00e1s direcciones de pago para esta cuenta de las que este monedero vigila ({max}), as\u00ed que un pago a una posterior no aparecer\u00eda aqu\u00ed. Todo lo pagado a las direcciones que vigila sigue llegando.',
     'wallet.strandedBalance':
       '{amount} FAIR se recibieron con una clave de identidad anterior. No est\u00e1n en tu saldo y solo se pueden gastar con la frase de recuperaci\u00f3n de esa clave.',
     'receive.copy': 'Copiar Direcci\u00f3n',

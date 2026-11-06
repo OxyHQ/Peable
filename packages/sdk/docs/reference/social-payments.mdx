@@ -13,6 +13,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | [`POST /v1/social/{username}/next_address`](#reserve-an-address-to-pay-a-person) | Reserve an address to pay a person |
 | [`GET /v1/social/me/cursor`](#retrieve-the-callers-receive-cursor) | Retrieve the caller's receive cursor |
 | [`GET /v1/social/me/payments`](#list-the-callers-social-payments) | List the caller's social payments |
+| [`GET /v1/social/me/receive_addresses`](#list-the-callers-receive-addresses) | List the caller's receive addresses |
 
 ## Resolve who is behind addresses
 
@@ -44,7 +45,7 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 
 `POST /v1/social/{username}/next_address`
 
-A fresh address of the recipient's, derived from their Oxy identity key. Limited per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one whose wallet watches no further address (every index below its watched bound is taken) 503 `faircoin_receive_tree_full`; paying yourself is refused.
+A fresh address of the recipient's, derived from their Oxy identity key — or the one this sender already holds and has not paid. Limited per sender and per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one handed too many fresh `@username` addresses in the last day 503 `faircoin_capacity_reached`; paying yourself is refused.
 
 - **Authentication:** [Oxy user session](/reference#oxy-user-session)
 
@@ -107,5 +108,28 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 **Response `200`**
 
 Returns [SocialPayments](/reference/objects/social-payments).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List the caller's receive addresses
+
+`GET /v1/social/me/receive_addresses`
+
+Every FairCoin address handed out in the caller's Peable wallet on `network` — payments and `@username` alike, under every key the account has had — after `after`, in ascending index, for whoever the session acts as (an organization's, when acting as it). The wallet watches exactly this set (ADR 0021 D9). Read-only.
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `network` **required** | query | string | One of `mainnet`, `testnet`. |
+| `after` | query | integer | The `sync_cursor` of the previous page or sync; absent (or `0`) lists from the first address. Between 0 and 2147483647. |
+| `limit` | query | integer | At most this many addresses (default 500); a page exceeds it only by addresses sharing its last index. Between 1 and 1000. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [SocialReceiveAddresses](/reference/objects/social-receive-addresses).
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

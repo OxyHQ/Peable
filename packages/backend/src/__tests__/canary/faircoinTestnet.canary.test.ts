@@ -14,9 +14,11 @@
  *  3. merchant path, organization — a FAIR Checkout Session for a merchant owned
  *     by an ORGANIZATION (oxy ADR 0061) the same way, on the organization's cursor.
  *
- * The wallet half (`packages/frontend/src/wallet/__canary__/`) then derives the
- * watch window from the cursor this half reads back, finds every coin, and
- * spends them with the identity key's holder.
+ * Then each recipient's watch set is read back through
+ * `GET /v1/social/me/receive_addresses` (ADR 0021 D9, amended 2026-11-06) and
+ * recorded as `receiveAddresses`; the wallet half
+ * (`packages/frontend/src/wallet/__canary__/`) watches exactly that set, finds
+ * every coin, and spends them with the identity key's holder.
  *
  * Skipped unless `CANARY_NODE_CONF` (a private testnet node's faircoin.conf)
  * and `CANARY_EVIDENCE_OUT` are set, with `EXPLORER_BASE_URL` pointing at
@@ -353,6 +355,31 @@ test.skipIf(!ENABLED)(
     const orgCursor = await call('GET', `/v1/social/me/cursor?network=${NETWORK}`);
     expect(personCursor.body.reserved_through).toBe(2);
     expect(orgCursor.body.reserved_through).toBe(1);
+
+    // What each recipient's wallet WATCHES (ADR 0021 D9, amended 2026-11-06):
+    // exactly the addresses handed out — the @username one and the payment's
+    // on the person's cursor, the payment's on the organization's — each with
+    // the key it derives from, synced from the start.
+    actingUser = PERSON;
+    const personSet = await call('GET', `/v1/social/me/receive_addresses?network=${NETWORK}`);
+    actingUser = ORG;
+    const orgSet = await call('GET', `/v1/social/me/receive_addresses?network=${NETWORK}`);
+    expect(personSet.status).toBe(200);
+    expect(orgSet.status).toBe(200);
+    expect(personSet.body.addresses.map((row: { address: string }) => row.address)).toEqual([
+      reserved.body.address,
+      fiat.address,
+    ]);
+    expect(orgSet.body.addresses.map((row: { address: string }) => row.address)).toEqual([
+      org.address,
+    ]);
+    expect(personSet.body.has_more).toBe(false);
+    expect(orgSet.body.has_more).toBe(false);
+    step('receive addresses: synced', {
+      person: personSet.body.addresses.length,
+      organization: orgSet.body.addresses.length,
+    });
+    evidence.receiveAddresses = { person: personSet.body, organization: orgSet.body };
     evidence.wallets = {
       person: {
         account: PERSON,

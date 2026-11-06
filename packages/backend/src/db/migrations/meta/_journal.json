@@ -792,6 +792,20 @@
       "when": 1793947496055,
       "tag": "0112_payment_intents_network_closed_reason_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1793960352470,
+      "tag": "0113_faircoin_receive_addresses",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1793960357983,
+      "tag": "0114_faircoin_never_recycled",
+      "breakpoints": true
     }
   ]
 }

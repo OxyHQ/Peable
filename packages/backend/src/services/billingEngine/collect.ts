@@ -295,7 +295,7 @@ async function createInvoiceIntent(
         409,
       );
     }
-    // Every address the recipient can hold open is open (ADR 0021 D9).
+    // Too many of the recipient's addresses of the last day went unpaid (ADR 0021 D9).
     if (error instanceof FaircoinCapacityError) {
       throw new BillingEngineError(
         'faircoin_capacity_reached',

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, or, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import type { SocialPaymentSource } from '@peable.to/shared-types';
@@ -226,4 +226,33 @@ export async function updateAttributionSource(
     .update(socialSendAttributions)
     .set({ sourceApp: source?.app ?? null, sourceRef: source?.ref ?? null })
     .where(eq(socialSendAttributions.id, id));
+}
+
+/**
+ * How many `@username` addresses were handed out FRESH to `recipientUserId` on
+ * `network` in the last `windowSeconds` — the recipient's daily `@username`
+ * bound (ADR 0021 D9, amended 2026-11-06). An address handed again to the
+ * sender that already holds it is not a new row and does not count. The
+ * DATABASE's clock, the one `created_at` was stamped with.
+ */
+export async function countAttributionsSince(
+  db: DatabaseOrTransaction,
+  recipientUserId: string,
+  network: NetworkType,
+  windowSeconds: number,
+): Promise<number> {
+  const [row] = await db
+    .select({ fresh: sql<number>`count(*)::int` })
+    .from(socialSendAttributions)
+    .where(
+      and(
+        eq(socialSendAttributions.recipientUserId, recipientUserId),
+        eq(socialSendAttributions.network, network),
+        gt(
+          socialSendAttributions.createdAt,
+          sql`now() - (${windowSeconds}::integer * interval '1 second')`,
+        ),
+      ),
+    );
+  return Number(row?.fresh ?? 0);
 }

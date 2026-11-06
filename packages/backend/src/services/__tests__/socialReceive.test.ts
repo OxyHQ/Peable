@@ -42,13 +42,17 @@ const didRequests: { url: string; init: RequestInit }[] = [];
 const {
   resolveIdentityPublicKey,
   resolveIdentityPublicKeyHex,
-  reserveNextSocialAddress,
+  reserveSocialSendAddress,
   getReservedThrough,
   IdentityDocumentUnavailableError,
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
   useDidTransport,
   useIdentityKeyResolver,
 } = await import('../socialReceive');
+
+/** One fresh `@username` address of `recipientUserId`'s, as a sender asking for it is handed. */
+const reserveNextSocialAddress = (recipientUserId: string, network: 'testnet' | 'mainnet') =>
+  reserveSocialSendAddress({ senderUserId: 'sender_of_test', recipientUserId, network });
 
 // This suite is about the DID read itself: not the preloaded test keys. The
 // transport is the seam (Oxy's own fetch in production); the gateway's request

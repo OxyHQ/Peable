@@ -12,8 +12,7 @@ import { t } from '../i18n';
  * application — a person or an organization — and nothing in Orbit can create
  * it: only that account's holder can, in Peable (signed in as the account, or
  * acting as the organization). Read from the configuration's `faircoin` entry,
- * the gateway's own answer; once the wallet can receive, it renders only the
- * warning that the wallet's watched addresses are nearly all handed out.
+ * the gateway's own answer; once the wallet can receive, it renders nothing.
  */
 export function FaircoinWalletSetup({ scope }: { scope: DashboardScope }) {
   // The same cache entry as Settings → Payment methods.
@@ -21,28 +20,10 @@ export function FaircoinWalletSetup({ scope }: { scope: DashboardScope }) {
     queryKey: ['orbit', scope.applicationId, scope.environment, 'payment_method_configurations'],
     queryFn: () => dashboardApi.paymentMethodConfigurations.list(scope, { limit: 100 }),
   });
-  // The wallet watches a bounded window (ADR 0021 D9): say so before it fills.
-  const tree = useQuery({
-    queryKey: ['orbit', scope.applicationId, scope.environment, 'faircoin_receive_tree'],
-    queryFn: () => dashboardApi.faircoinReceiveTree.retrieve(scope),
-  });
   const entry =
     query.data?.data.find((configuration) => configuration.is_default)?.faircoin ??
     query.data?.data[0]?.faircoin;
   if (!entry) return null;
-  if (entry.available || entry.unavailable_reason === 'temporarily_unavailable') {
-    if (!tree.data?.recipient || !tree.data.nearly_full) return null;
-    return (
-      <EmptyState
-        testID="faircoin-tree-nearly-full"
-        variant="compact"
-        title={t('faircoinWallet.treeNearlyFullTitle')}
-        description={t('faircoinWallet.treeNearlyFullBody', {
-          remaining: String(tree.data.remaining),
-        })}
-      />
-    );
-  }
   if (entry.unavailable_reason === 'faircoin_wallet_missing') {
     return (
       <EmptyState

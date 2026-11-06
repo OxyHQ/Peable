@@ -150,6 +150,9 @@ its subscription again on the next confirm, exactly as a lapsed quote does.
 
 ## Amendment (2026-11-06): the tree is bounded (ADR 0021 D9)
 
+*Superseded the same day by "a sparse watch set replaces the bounded tree"
+below: nothing is recycled any more, and the cap is a daily rate.*
+
 The cursor grows with real payments, not with requests. A payment's address is
 recycled from the recipient's own cancelled, chain-unused addresses (still
 derived from its current key) before an index is minted, at most 500 of a
@@ -161,7 +164,8 @@ wallet's scan (`reserved_through` plus its window) stays a size it can carry.
 ## Amendment (2026-11-06): the tree stops where the wallet stops, and a closed gate retires
 
 The security review's second round refused mainnet again (ADR 0021 D9, D10,
-amended the same day). Two of its fixes bind this ADR:
+amended the same day). Two of its fixes bind this ADR (the first, the ceiling,
+superseded the same day by the sparse watch set below; the second stands):
 
 - **One bound for both sides.** The wallet watches a contiguous window of
   `SOCIAL_RECEIVE_MAX_WATCHED` indices and reaches `SOCIAL_RECEIVE_GAP_LIMIT`
@@ -196,12 +200,42 @@ The security review's third round (low findings):
   `unknown`, so there the reason alone decides, as for ADR 0021 D10's lost
   broadcast. The residual, recorded: coins someone sends to such an address
   (dust included) keep that payment payable until it expires, at most 24 h.
-- **A used index does not cap the wallet.** Addresses above the gateway's
+- **A used index does not cap the wallet** (superseded the same day: with the
+  sparse watch set nothing caps the wallet or `@username`). Addresses above the gateway's
   ceiling derive from the public key, so anyone can send dust to index
   1 980–1 999. The wallet's window still reaches a used index (up to the
   bound), but `capped` — which hides `@username` — follows the RESERVED index
   only (`planSocialReceiveWindow`), since the gateway never hands out one at or
   above `SOCIAL_RECEIVE_INDEX_LIMIT`.
+
+## Amendment (2026-11-06): a sparse watch set replaces the bounded tree (ADR 0021 D9)
+
+The owner's decision ("Fix F5, F1 and D9"), closing the two residuals round 3
+asked the owner to accept — a late payment to a recycled address settling
+another order, and a lifetime budget of 1 979 used addresses per recipient:
+
+- **No second use of an address, no ceiling.** Every payment and every
+  `@username` request takes a fresh index of the recipient's one cursor; a
+  cancelled payment's address is never handed out again. The cursor's statement
+  no longer carries `SOCIAL_RECEIVE_INDEX_LIMIT`, and
+  `@peable.to/contracts/vocabulary/receiveTree` (`SOCIAL_RECEIVE_MAX_WATCHED`,
+  `SOCIAL_RECEIVE_GAP_LIMIT`, `SOCIAL_RECEIVE_INDEX_LIMIT`), the error code
+  `faircoin_receive_tree_full` and Orbit's "nearly full" warning are removed
+  (contracts, shared-types and the SDK 6.0.0).
+- **The wallet watches exactly the addresses handed out**, synced from
+  `GET /v1/social/me/receive_addresses` — not `0 .. reserved_through + gap`.
+  Each address arrives with the key it derives from, and the wallet watches
+  (and signs for) those of the key it holds; addresses of another key are kept
+  with their key rather than deleted, which is what lets a wallet that holds a
+  previous phrase find what that key received (the F1 work). `GET
+  /v1/social/me/cursor` keeps answering the keys this ADR compares; its
+  `reserved_through` no longer sizes anything.
+- **An `@username` address is recorded in the reservation's own
+  transaction**, under the recipient's lock and its daily bound (ADR 0021 D9).
+  Before, the attribution was written after the cursor had committed, and a
+  failed write left an address handed out with no record.
+
+The design, the wallet's tiers and the abuse bound are ADR 0021 D9.
 
 ## Still required before mainnet
 
@@ -255,6 +289,9 @@ waiver does not touch the other two items: the gate opens only on a
   used addresses, which an attacker can exhaust cheaply, after which FairCoin is
   permanently unavailable for that recipient (ADR 0021 D9). The exact sentences
   are in the audit record.
+  **The last two were closed the same day** by the sparse watch set (amendment
+  above, ADR 0021 D9): no address is recycled and no recipient has a lifetime
+  budget, so they need no acceptance; the other three still do.
 - **Gate: closed** until those acceptances are written down here. Production
   leaves `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet), and the wallet's
   `SOCIAL_PAY_NETWORK` stays `testnet`.

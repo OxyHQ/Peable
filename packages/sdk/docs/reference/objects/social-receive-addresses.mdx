@@ -1,0 +1,20 @@
+---
+title: "SocialReceiveAddresses"
+description: "The SocialReceiveAddresses shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SocialReceiveAddresses
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `addresses` | array of [SocialReceiveAddress](/reference/objects/social-receive-address) | In ascending `derivation_index`, each address once. |
+| `has_more` | boolean | More addresses follow `sync_cursor`: ask again with it. |
+| `sync_cursor` | integer | Pass as `after` to continue — the highest `derivation_index` in this page, or `after` when the page is empty. Monotonic: an address handed out later always has a higher index, so a wallet that stored it misses nothing by asking from it. |
+
+## Returned by
+
+- [`GET /v1/social/me/receive_addresses`](/reference/social-payments#list-the-callers-receive-addresses) — List the caller's receive addresses

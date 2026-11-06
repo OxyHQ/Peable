@@ -58,7 +58,7 @@ export const REORG_CONFIRM_MS = 2 * 60 * 1000;
 /**
  * A reported broadcast the Explorer has not seen for this long, that pays
  * nothing at the payment's addresses, is lost (ADR 0021 D9): the payment is
- * cancelled `abandoned`, and an address that received nothing can be recycled.
+ * cancelled `abandoned` (its address stays the recipient's, never handed out again).
  * FairCoin's blocks are two minutes and nearly empty; a real transaction is
  * seen within minutes.
  */
@@ -363,8 +363,8 @@ export class SettlementWatcher {
    * answers; and for every output the address reads UNUSED, or reads USED with
    * the reported txid absent from its transaction list (coins someone sent
    * there are not the payment that was reported — a made-up txid plus dust
-   * must not hold an address, and a place under the cap, for ever; the coins
-   * stay the recipient's and that address is never recycled). On mainnet an
+   * must not hold a place under the recipient's unpaid bound for ever; the
+   * coins stay the recipient's, as every address does). On mainnet an
    * answer that cannot tell (`unknown`) keeps the payment `processing`.
    * Testnet's node has no address index and only ever answers `unknown`, so
    * there the missing transaction alone decides.
@@ -421,8 +421,8 @@ export class SettlementWatcher {
 
   /**
    * The transaction at `address` that pays every output of `intent` its
-   * amount, seen no earlier than the payment was created (a recycled address
-   * may hold a late payment of its previous holder's quote), and not settling
+   * amount, seen no earlier than the payment was created (less a staker's
+   * clock skew), and not settling
    * another payment. The address's list is filtered by its own `amount` and
    * `time` first, so dust costs no read and cannot push a real payment out of
    * the window. `flagged` when one pays it but is another payment's, or more
