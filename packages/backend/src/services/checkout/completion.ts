@@ -50,6 +50,7 @@ import { commitTaxTransaction } from '../tax/taxService';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { recordLinkUpdated } from './linkService';
 import { subscriptionCheckoutFulfiller } from './subscriptionFulfiller';
+import { isRetiredReservation } from '../faircoin/retired';
 
 type CheckoutEventType =
   | 'checkout.session.completed'
@@ -203,11 +204,12 @@ export async function followIntentForCheckout(
     case 'canceled': {
       // A QUOTED FairCoin payment ends on its quote's clock, not the order's
       // (ADR 0021 D3), and one retired because its recipient's key was
-      // replaced (ADR 0002, amended 2026-11-06) ends on the key's: either way
-      // the open order forgets it and waits for a fresh reservation.
+      // replaced or its network closed (ADR 0002, amended 2026-11-06) ends on
+      // the key's or the gate's: either way the open order forgets it and
+      // waits for a fresh reservation.
       if (
         session.status === 'open' &&
-        (intent.faircoinQuote !== null || intent.cancellationReason === 'recipient_key_changed')
+        (intent.faircoinQuote !== null || isRetiredReservation(intent.cancellationReason))
       ) {
         await unlinkSessionPayment(tx, session.id, intent.id);
         return;

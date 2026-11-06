@@ -104,6 +104,7 @@ export const CANCELLATION_REASON_VALUES = [
   'abandoned',
   'automatic',
   'duplicate',
+  'faircoin_network_closed',
   'fraudulent',
   'recipient_key_changed',
   'requested_by_customer',

@@ -365,6 +365,21 @@ export function isAccountMissing(error: unknown): boolean {
 
 const id = (value: string) => encodeURIComponent(value);
 
+/** `GET /v1/dashboard/applications/:id/faircoin/receive_tree` (Orbit's own surface). */
+export interface FaircoinReceiveTree {
+  readonly object: 'faircoin_receive_tree';
+  readonly network: 'mainnet' | 'testnet';
+  /** Whether the account that receives is known yet. */
+  readonly recipient: boolean;
+  /** The highest index ever handed out (0: none). */
+  readonly reserved_through: number;
+  /** The first index the gateway never hands out. */
+  readonly index_limit: number;
+  /** Fresh indices left; recycled addresses come on top. */
+  readonly remaining: number;
+  readonly nearly_full: boolean;
+}
+
 export function createDashboardApi(transport: OrbitTransport) {
   const get = <T>(path: string) => transport.request<T>('GET', path);
   const list = async <T>(path: string) => assertList<T>(await get<unknown>(path));
@@ -704,6 +719,15 @@ export function createDashboardApi(transport: OrbitTransport) {
           body,
           ...(idempotencyKey ? { idempotencyKey } : {}),
         }),
+    },
+
+    /**
+     * How full the owning account's FairCoin receive tree is (ADR 0021 D9):
+     * its Peable wallet watches a bounded window of addresses.
+     */
+    faircoinReceiveTree: {
+      retrieve: (scope: DashboardScope) =>
+        get<FaircoinReceiveTree>(dashboardPath(scope, '/faircoin/receive_tree')),
     },
 
     /** Which methods payers are offered (`pmc_…`); exactly one is the default. */

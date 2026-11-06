@@ -208,10 +208,12 @@ export function faircoinTransferState(
       return intent.faircoin.confirmations > 0 ? 'processing' : 'detected';
     case 'canceled':
       // Ended without money moving, the order still open: a lapsed request, or
-      // one retired because the recipient's key was replaced (ADR 0002) — the
-      // payer is offered a fresh one either way.
+      // one retired because the recipient's key was replaced or its network
+      // closed (ADR 0002) — the payer is offered a fresh one either way (and a
+      // closed network then answers `faircoin_network_closed`).
       return intent.cancellation_reason === 'abandoned' ||
-        intent.cancellation_reason === 'recipient_key_changed'
+        intent.cancellation_reason === 'recipient_key_changed' ||
+        intent.cancellation_reason === 'faircoin_network_closed'
         ? 'expired'
         : 'failure';
     default: {

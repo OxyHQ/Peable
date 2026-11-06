@@ -125,6 +125,25 @@ the chain showed used (or that no longer derives from the key), never offered
 again. The pool's reads use `payment_intent_outputs_recipient_pool_idx`,
 partial on neither column being set.
 
+`recycle_lease_until` and `recycle_checked_at` (amended 2026-11-06) are hints,
+never the decision: the lease only spreads concurrent confirms over different
+candidates (one `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED)`), and
+the check stamp only spares a reservation under the pool's lock an HTTP call.
+The claim itself is still `claimRecycleCandidate`'s compare-and-swap on
+`recycled_at is null`. No CHECK ties them to anything: a lapsed lease is free,
+and a stale stamp is read again.
+
+### The cursor has a ceiling, in the reservation's own statement (ADR 0021 D9)
+
+`social_receive_cursors.next_derivation_index` never hands out an index at or
+above `SOCIAL_RECEIVE_INDEX_LIMIT` (`@peable.to/contracts/vocabulary/receiveTree`,
+`SOCIAL_RECEIVE_MAX_WATCHED − SOCIAL_RECEIVE_GAP_LIMIT`): the wallet watches a
+bounded window and an address past it is paid where nobody looks. The bound is
+the `WHERE` of the upsert's `DO UPDATE` — same row lock, no read-then-write —
+and deliberately NOT a CHECK: a cursor already past it
+must stay readable, and a CHECK would make the refused reservation an error
+instead of "no row".
+
 ## Composite foreign keys carry the invariants a CHECK cannot
 
 A CHECK sees one row of one table. Three rules here span two tables, so they are

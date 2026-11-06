@@ -36,17 +36,21 @@ export const PAYMENT_INTENT_STATUSES = [
 export type PaymentIntentStatus = (typeof PAYMENT_INTENT_STATUSES)[number];
 
 /**
- * Why an intent was cancelled — Stripe's reasons, plus two FairCoin-only ones:
- * `underpaid` (a transaction paid less than the amount) and
+ * Why an intent was cancelled — Stripe's reasons, plus three FairCoin-only ones:
+ * `underpaid` (a transaction paid less than the amount),
  * `recipient_key_changed` (the recipient's identity key was replaced after the
  * address was reserved, so the address is no longer in the wallet it pays —
  * ADR 0002, amended 2026-11-06; nothing had been broadcast, and the order stays
- * open for a fresh address).
+ * open for a fresh address) and `faircoin_network_closed` (the deployment
+ * closed the payment's FairCoin network — ADR 0002's gate — before anything was
+ * broadcast; the order stays open, and FairCoin on it says the network is
+ * closed).
  */
 export const PAYMENT_INTENT_CANCELLATION_REASONS = [
   'abandoned',
   'automatic',
   'duplicate',
+  'faircoin_network_closed',
   'fraudulent',
   'recipient_key_changed',
   'requested_by_customer',

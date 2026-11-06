@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
 import { and, eq } from 'drizzle-orm';
 import { isCheckViolation, isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { readReservedThrough, reserveNextSocialReceiveIndex } from '../social/receiveCursor';
+import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
+import {
+  ReceiveTreeFullError,
+  readReservedThrough,
+  reserveNextSocialReceiveIndex,
+} from '../social/receiveCursor';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX as SERVICE_FIRST_FRESH_INDEX } from '../../services/socialReceive';
 
@@ -227,5 +232,69 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
     expect(
       (await readReservedThrough(must(suite).db, uuidv7(), 'testnet')).identityPublicKey,
     ).toBeNull();
+  });
+});
+
+/**
+ * The gateway half of the ceiling (ADR 0021 D9, amended 2026-11-06): no index
+ * at or above `SOCIAL_RECEIVE_INDEX_LIMIT` is ever handed out, refused by the
+ * reservation's own statement. The wallet half — every index below it is
+ * inside the wallet's watched window, gap included — is pinned by
+ * `packages/frontend/src/wallet/receive-tree-ceiling.test.ts` against the same
+ * constant.
+ */
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('the receive tree ceiling', () => {
+  beforeAll(async () => {
+    suite = await createSuiteDatabase();
+  });
+
+  afterAll(async () => {
+    await dropSuiteDatabase(suite);
+    suite = undefined;
+  });
+
+  /** A cursor whose NEXT index is `next`, as if every index below had been handed out. */
+  async function cursorAt(next: number): Promise<string> {
+    const oxyUserId = uuidv7();
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
+    await must(suite)
+      .db.update(socialReceiveCursors)
+      .set({ nextDerivationIndex: next })
+      .where(eq(socialReceiveCursors.oxyUserId, oxyUserId));
+    return oxyUserId;
+  }
+
+  it('hands out the last index below the limit, then refuses and changes nothing', async () => {
+    const oxyUserId = await cursorAt(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+    expect(await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A)).toBe(
+      SOCIAL_RECEIVE_INDEX_LIMIT - 1,
+    );
+    await expect(
+      reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_B),
+    ).rejects.toBeInstanceOf(ReceiveTreeFullError);
+    const after = await readReservedThrough(must(suite).db, oxyUserId, 'testnet');
+    expect(after.reservedThrough).toBe(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+    // A refused reservation does not even write its key.
+    expect(after.identityPublicKey).toBe(KEY_A);
+    expect(await nextIndex(oxyUserId)).toBe(SOCIAL_RECEIVE_INDEX_LIMIT);
+  });
+
+  it('concurrent reservations at the edge: exactly one gets the last index', async () => {
+    const oxyUserId = await cursorAt(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A),
+      ),
+    );
+    const got = outcomes.flatMap((outcome) =>
+      outcome.status === 'fulfilled' ? [outcome.value] : [],
+    );
+    expect(got).toEqual([SOCIAL_RECEIVE_INDEX_LIMIT - 1]);
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') {
+        expect(outcome.reason).toBeInstanceOf(ReceiveTreeFullError);
+      }
+    }
+    expect(await nextIndex(oxyUserId)).toBe(SOCIAL_RECEIVE_INDEX_LIMIT);
   });
 });

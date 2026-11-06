@@ -99,8 +99,9 @@ import {
   quoteFaircoin,
   toFaircoinQuoteDTO,
 } from '../faircoin/quote';
-import { retireIfRecipientKeyReplaced } from '../faircoin/keyBinding';
+import { retireIfNoLongerOffered } from '../faircoin/keyBinding';
 import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
+import { isRetiredReservation } from '../faircoin/retired';
 import { FaircoinCapacityError } from '../faircoin/addressPool';
 import {
   FaircoinAmountTooSmallError,
@@ -1237,7 +1238,7 @@ export async function sessionForPayer(session: CheckoutSessionRow): Promise<Chec
   const db = getDb();
   const linked = await findIntentById(db, session.paymentIntentId);
   if (linked?.rail !== 'faircoin' || linked.status !== 'requires_action') return session;
-  const after = await retireIfRecipientKeyReplaced(linked);
+  const after = await retireIfNoLongerOffered(linked);
   if (after.status !== 'canceled') return session;
   return (await findSessionById(db, session.id)) ?? session;
 }
@@ -1528,7 +1529,7 @@ async function createSessionPayment(
           expiresInSeconds: remaining,
           idempotencyKey: key,
         });
-        if (!reused || intent.cancellationReason !== 'recipient_key_changed') return intent;
+        if (!reused || !isRetiredReservation(intent.cancellationReason)) return intent;
         if (attempt >= MAX_KEY_RETIRED_REPLAYS) {
           throw new Error(`session ${current.publicId} replays only retired payments`);
         }

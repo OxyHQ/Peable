@@ -1,7 +1,7 @@
 # ADR 0021 — FairCoin is always offered
 
 **Status:** accepted.
-**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review).
+**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review), both amended 2026-11-06 (review round 2).
 **Amends:** ADR 0012 (D5 `connected_account` on a fiat order, D12 the platform
 fee), ADR 0015 §5 (the FairCoin ledger entry gains its fiat equivalent), ADR 0018
 ("as built" §3 *the rail follows the currency*, and the "not built" item
@@ -322,7 +322,18 @@ grows by is now bounded by REAL payments, whatever anyone does:
   is **lost**: the watcher cancels the payment `abandoned` (`broadcast_lost`).
   Without that, a made-up txid — with or without dust sent to the address — held
   an address, and a place under the cap, for ever. Coins someone sent there stay
-  the recipient's, and that address is retired, never recycled. This narrows ADR 0012 D9
+  the recipient's, and that address is retired, never recycled. **Amended
+  2026-11-06 (N4):** an address that WAS paid in full, under another txid (a
+  malleated or rebroadcast transaction, or a mistyped report), is not lost: the
+  watcher lists the address's transactions, keeps those the list shows moving
+  at least the output's amount no earlier than the payment (less 15 minutes for
+  a staker's clock) — so dust costs no read and cannot push the payment out of
+  reach — and reads at most 10 of them. One that pays every output its amount
+  and is not another payment's `processing`/`succeeded` txid becomes the
+  payment's `txid` and settles it as any observation. One that is another
+  payment's, or more such candidates than are read, leaves it `processing`
+  with a warning for review — never cancelled. Only dust, or nothing, at the
+  address is lost. This narrows ADR 0012 D9
   ("once broadcast, never expires") to broadcasts that exist: a transaction
   nobody has seen in a day of two-minute, nearly empty blocks is not moving
   money.
@@ -333,6 +344,51 @@ grows by is now bounded by REAL payments, whatever anyone does:
   context written over the old one; so a sender holds at most ONE unpaid
   address per recipient, beside the per-pair limiter. The residual is distinct
   authenticated Oxy accounts, each one more address until it pays.
+- **The tree has a ceiling (amended 2026-11-06, review round 2, N1).** The
+  wallet watches indices `0 .. SOCIAL_RECEIVE_MAX_WATCHED − 1` (2 000) and
+  reaches `SOCIAL_RECEIVE_GAP_LIMIT` (20) past the highest index reserved
+  (`planSocialReceiveWindow`); past that it stops offering `@username` and
+  watches nothing new. Before this the gateway kept minting, so once any
+  recipient's tree — and the organization `oxy` has ONE tree for every
+  first-party merchant, renewal and `@username` — passed 2 000, every new
+  FairCoin payment settled `succeeded` at an address its wallet never looks at.
+  Now ONE constant, `SOCIAL_RECEIVE_INDEX_LIMIT = SOCIAL_RECEIVE_MAX_WATCHED −
+  SOCIAL_RECEIVE_GAP_LIMIT` (1 980, `@peable.to/contracts/vocabulary/
+  receiveTree`, the wallet's import too), bounds both sides: an index `i` is
+  minted only when `i + SOCIAL_RECEIVE_GAP_LIMIT ≤ SOCIAL_RECEIVE_MAX_WATCHED − 1`,
+  i.e. `i < SOCIAL_RECEIVE_INDEX_LIMIT`, so the wallet's window always holds it
+  and the gap above it. The refusal is the `WHERE` of the cursor's own `INSERT …
+  ON CONFLICT DO UPDATE` (no row, nothing written; the row lock serializes the
+  edge). A payment past it is refused **503 `faircoin_capacity_reached`** and
+  the order shows FairCoin `temporarily_unavailable` unless an address can be
+  recycled — recycling keeps working on a full tree; `@username` answers **503
+  `faircoin_receive_tree_full`** (not 409: on that route a 409 alone means a
+  keyless recipient to the wallet and `@peable.to/pay`). Cards are untouched. Orbit warns the owners
+  (Home, beside the wallet setup task) once fewer than 200 fresh indices are
+  left. Pinned on both sides: `db/__tests__/socialReceiveCursor.realdb.test.ts`
+  (the gateway never mints `≥` the limit) and `packages/frontend/src/wallet/
+  receive-tree-ceiling.test.ts` (every index below it is watched, gap
+  included, without capping the wallet; the limit itself caps it).
+- **Concurrent confirms recycle (amended 2026-11-06, N2).** The candidate was
+  chosen outside the lock, so every overlapping confirm checked the SAME lowest
+  one, one claimed it and the rest minted — a burst of N confirms spent N − 1
+  indices while candidates sat unused. Now each confirm LEASES a different
+  candidate for 60 s before its chain read (one `UPDATE … WHERE id = (SELECT …
+  FOR UPDATE SKIP LOCKED)`), a read that finds it unused is stamped
+  (`payment_intent_outputs.recycle_checked_at`), and under the pool's lock a
+  confirm whose own candidate was taken claims the lowest one stamped within 10
+  minutes — no HTTP call in the transaction — and mints only when none is
+  left. N parallel confirms against N candidates leave the cursor where it was
+  (`addressPool.realdb.test.ts`). The 10 minutes widen the late-payer residual
+  below by that much: an address checked unused may be paid by a late payer of
+  its old quote before the claim.
+- **Not done: a sparse watch set.** The lasting fix is for the wallet to watch
+  the indices the gateway reports HELD (reserved and not recycled away), not a
+  contiguous range from 0, so a tree's size is bounded by what is open rather
+  than by every index ever minted. Until then the ceiling makes a recipient
+  whose tree is full depend on recycling for FairCoin, and the bound is a
+  lifetime one: 1 979 payment and `@username` addresses that were actually used,
+  per recipient per network.
 - **Not done:** a unique `txid` across payments. One address has at most one
   holder that is not recycled (the unique index on `payment_intent_outputs
   (network, address)` is now partial on `recycled_at is null`), and a recycled
@@ -372,9 +428,19 @@ quote, never a race of two live payments.
 - **Watched to the chain's reorg bound.** The settlement watcher re-reads every
   `succeeded` FairCoin payment with fewer than `maxReorgDepth` (100)
   confirmations, settled within the last 7 days. A deeper count is recorded (no
-  event). Fewer confirmations than the merchant's threshold — or the
+  event). **Amended 2026-11-06 (N3):** a LOWER count is not a reorg — the
+  Explorer is load-balanced, and one node behind its peers answered a block's
+  `confirmations` as 1 and its transaction's as 4 in the same minute — and is
+  neither acted on nor recorded. Only the chain saying so rewinds: the
   transaction missing for 10 minutes (five blocks) while the Explorer's tip
-  answers — rewinds it to `processing` (`reorg_below_threshold`): the merchant
+  answers, or read unconfirmed (0 confirmations, no `blockhash`) — or in a
+  different block than the one it settled in, below the merchant's threshold —
+  on reads at least 2 minutes (a block) apart. Before, one jittery read sent a
+  spurious `payment_intent.processing` and, a minute later, a second
+  `payment_intent.succeeded`, which an integration fulfilling on `succeeded`
+  fulfils twice. The block is remembered per watcher task; after a restart the
+  first read records it. Such a rewind takes it to `processing`
+  (`reorg_below_threshold`): the merchant
   is told `payment_intent.processing`, the ledger posts the reversal, and the
   watcher settles it again when it is mined again, or — if the coins never come
   back — D9's lost-broadcast rule cancels it a day later.

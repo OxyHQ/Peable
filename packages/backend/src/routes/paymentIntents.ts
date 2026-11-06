@@ -86,7 +86,7 @@ import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
 import { requestIdOf } from '../lib/requestId';
 import { expandObjects, parseExpand } from '../lib/expand';
-import { retireIfRecipientKeyReplaced } from '../services/faircoin/keyBinding';
+import { retireIfNoLongerOffered } from '../services/faircoin/keyBinding';
 import { answerList, type ListQuery, parseQuery, resolveListReference } from '../lib/list';
 
 /**
@@ -614,7 +614,7 @@ export function createPaymentIntentsRouter(deps: {
       }
       // A FairCoin payment under a replaced recipient key is never shown to a
       // payer as payable again: it is retired first (ADR 0002, amended 2026-11-06).
-      res.status(200).json(toPaymentIntentDTO(await retireIfRecipientKeyReplaced(intent)));
+      res.status(200).json(toPaymentIntentDTO(await retireIfNoLongerOffered(intent)));
     }),
   );
 

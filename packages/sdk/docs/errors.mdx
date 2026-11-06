@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-111 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+112 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -170,6 +170,10 @@ FairCoin payments on this network are not open on this deployment yet. The other
 ### `faircoin_price_unavailable`
 
 No fresh FairCoin price exists right now, so this order cannot be quoted in FAIR. The other payment methods still work; try FairCoin again shortly.
+
+### `faircoin_receive_tree_full`
+
+Every FairCoin address the recipient's Peable wallet watches has been handed out, so no new one can be derived for them. Nothing was reserved.
 
 ### `faircoin_wallet_missing`
 

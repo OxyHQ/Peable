@@ -173,6 +173,9 @@ export async function resolveIdentityPublicKeyHex(oxyUserId: string): Promise<st
  * the unique index rather than racing between a create and a separate
  * increment. There is no "the cursor vanished" branch to get wrong any more,
  * because there is no window in which it could vanish.
+ *
+ * @throws {ReceiveTreeFullError} every index the recipient's wallet watches is
+ *   taken (`SOCIAL_RECEIVE_INDEX_LIMIT`, ADR 0021 D9 amended); nothing reserved.
  */
 export async function reserveNextSocialAddress(
   oxyUserId: string,

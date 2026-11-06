@@ -158,6 +158,27 @@ recipient's addresses are open at once, and a sender asking again for an
 wallet's scan (`reserved_through` plus its window) stays a size it can carry.
 
 
+## Amendment (2026-11-06): the tree stops where the wallet stops, and a closed gate retires
+
+The security review's second round refused mainnet again (ADR 0021 D9, D10,
+amended the same day). Two of its fixes bind this ADR:
+
+- **One bound for both sides.** The wallet watches a contiguous window of
+  `SOCIAL_RECEIVE_MAX_WATCHED` indices and reaches `SOCIAL_RECEIVE_GAP_LIMIT`
+  past the highest reserved; the gateway never mints an index `≥
+  SOCIAL_RECEIVE_INDEX_LIMIT` (`MAX_WATCHED − GAP_LIMIT`) — refused in the
+  cursor's own statement — so every address handed out, payment or
+  `@username`, is one the recipient's wallet watches. The constants live in
+  `@peable.to/contracts/vocabulary/receiveTree` and the wallet imports them.
+- **Closing the gate retires what it opened.** Setting
+  `PEABLE_SOCIAL_PAY_NETWORK` back to `testnet` used to leave open mainnet
+  payments payable until they expired (up to 24 h). The retire path above now
+  also cancels an identity payment on a network the deployment does not open
+  that nobody has broadcast to, with the new closed reason
+  **`faircoin_network_closed`** — at every payer surface before it answers and
+  in the minute sweep, with no key read — and its order stays open, answering
+  `faircoin_network_closed` on the next confirm. A broadcast payment settles.
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second

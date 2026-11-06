@@ -151,6 +151,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the customer locale migrations `0107`–`0109` merged.
   '0106_mainnet_required_confirmations':
     'released with #255; its post phase applied by the 89942340 deploy (run 42172438009)',
+  // The customer locales' validate half shipped with #260, whose deploy of
+  // ba1cc838 (Deploy to AWS run 42175266383, 2026-11-06) ran its post phase
+  // successfully before the receive tree migrations `0110`–`0112` merged.
+  '0109_customer_locales_validate':
+    'released with #260; its post phase applied by the ba1cc838 deploy (run 42175266383)',
 };
 
 interface Migration {

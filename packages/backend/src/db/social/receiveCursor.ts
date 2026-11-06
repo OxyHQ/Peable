@@ -3,6 +3,20 @@ import type { NetworkType } from '@fairco.in/core';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import { uuidv7 } from '@oxy.so/db';
+import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
+
+/**
+ * The recipient's tree is full: every index the Peable wallet watches with its
+ * gap above has been handed out (ADR 0021 D9, amended 2026-11-06). Nothing was
+ * reserved. A FairCoin payment answers `faircoin_capacity_reached` (and may
+ * still recycle), `@username` answers `faircoin_receive_tree_full`.
+ */
+export class ReceiveTreeFullError extends Error {
+  constructor(oxyUserId: string, network: NetworkType) {
+    super(`the ${network} receive tree of ${oxyUserId} has no index left that its wallet watches`);
+    this.name = 'ReceiveTreeFullError';
+  }
+}
 
 /**
  * Claim the next unused social-receive index for a user on a network,
@@ -33,6 +47,18 @@ import { uuidv7 } from '@oxy.so/db';
  *
  * Index 0 is never reachable through here. It is the recipient's stable
  * default address, computed on-device from their identity key.
+ *
+ * ## The ceiling is in the same statement
+ *
+ * The wallet watches indices `0 .. SOCIAL_RECEIVE_MAX_WATCHED - 1` and reaches
+ * `SOCIAL_RECEIVE_GAP_LIMIT` past the highest reserved; an index at or above
+ * `SOCIAL_RECEIVE_INDEX_LIMIT` (`@peable.to/contracts/vocabulary`) would be
+ * paid where it does not look. The conflict branch's `WHERE` refuses it: the
+ * row lock the upsert takes is the same one the increment needs, so two
+ * callers can never both pass the bound, and a refused call returns no row and
+ * changes nothing. The insert branch hands out `FIRST_FRESH_INDEX`, far below.
+ *
+ * @throws {ReceiveTreeFullError} the next index is `>= SOCIAL_RECEIVE_INDEX_LIMIT`.
  */
 export async function reserveNextSocialReceiveIndex(
   db: DatabaseOrTransaction,
@@ -58,15 +84,14 @@ export async function reserveNextSocialReceiveIndex(
         nextDerivationIndex: sql`${socialReceiveCursors.nextDerivationIndex} + 1`,
         identityPublicKey,
       },
+      // The ceiling (ADR 0021 D9, amended 2026-11-06): the index this branch
+      // hands out is the pre-increment value, so it must be below the limit.
+      setWhere: sql`${socialReceiveCursors.nextDerivationIndex} < ${SOCIAL_RECEIVE_INDEX_LIMIT}`,
     })
     .returning({ index: sql<number>`${socialReceiveCursors.nextDerivationIndex} - 1` });
 
-  if (!row) {
-    // Unreachable: `DO UPDATE` always produces a row, unlike `DO NOTHING`.
-    // Stated rather than asserted with `!`, so a future change to the conflict
-    // action fails loudly here instead of returning `NaN` as an index.
-    throw new Error(`social receive cursor reservation returned no row for user ${oxyUserId}`);
-  }
+  // `DO UPDATE … WHERE` produces no row exactly when the WHERE refused it.
+  if (!row) throw new ReceiveTreeFullError(oxyUserId, network);
   return row.index;
 }
 

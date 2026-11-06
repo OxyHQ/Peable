@@ -271,6 +271,11 @@ The counters are `integer` on purpose (see `CONVENTIONS.md` §Counters) — a
 Any change there must keep the two-consecutive-reservation test, because a single
 reservation cannot tell a number from a string that prints the same.
 
+The social cursor's `DO UPDATE` also carries the tree's ceiling in its `WHERE`
+(`SOCIAL_RECEIVE_INDEX_LIMIT`, `@peable.to/contracts/vocabulary/receiveTree`,
+ADR 0021 D9): the wallet watches a bounded window, and the wallet and the
+gateway read that ONE constant. Never mint past it in a second statement.
+
 ## Chain access: Explorer HTTP, not RPC
 
 The backend talks to the **FairCoin Explorer HTTP API** (`services/explorer.ts`,

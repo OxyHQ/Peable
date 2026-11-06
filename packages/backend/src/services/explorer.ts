@@ -60,6 +60,13 @@ export interface ExplorerTx {
   txid: string;
   confirmations: number;
   outputs: ExplorerOutput[];
+  /**
+   * The block it is in (`blockhash`), `null` while unconfirmed. Absent where a
+   * caller built the transaction itself (tests): read as "not known".
+   */
+  blockHash?: string | null;
+  /** When it was first seen or mined, Unix seconds (`time`); `null` when not answered. */
+  time?: number | null;
 }
 
 const statsResponseSchema = z.object({
@@ -83,6 +90,8 @@ const transactionResponseSchema = z.object({
       txid: z.string(),
       confirmations: z.number(),
       vout: z.array(voutSchema),
+      blockhash: z.string().optional(),
+      time: z.number().optional(),
     })
     .optional(),
 });
@@ -98,9 +107,24 @@ const addressResponseSchema = z.object({
 });
 
 const addressTransactionsSchema = z.object({
-  transactions: z.array(z.object({ txid: z.string() })),
+  transactions: z.array(
+    z.object({ txid: z.string(), amount: z.number().optional(), time: z.number().optional() }),
+  ),
   total: z.number(),
 });
+
+/** One entry of an address's transaction list (`GET /api/address/:a/txs`). */
+export interface AddressTransaction {
+  readonly txid: string;
+  /**
+   * What the transaction moved at this address, in base units, as the
+   * Explorer's float `amount` rounded — a pre-filter only, never a settlement
+   * figure (`verifyPayment` reads the transaction itself). `null` when absent.
+   */
+  readonly amountSat: bigint | null;
+  /** Unix seconds; `null` when absent. */
+  readonly time: number | null;
+}
 
 function addressUrl(address: string, network: NetworkType): string {
   return `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}?network=${network}`;
@@ -151,7 +175,13 @@ export async function getTransaction(
     outputs.push({ address, valueSat });
   }
 
-  return { txid: tx.txid, confirmations: tx.confirmations, outputs };
+  return {
+    txid: tx.txid,
+    confirmations: tx.confirmations,
+    outputs,
+    blockHash: tx.blockhash ?? null,
+    time: tx.time ?? null,
+  };
 }
 
 /**
@@ -228,26 +258,50 @@ export async function addressHasTransaction(
   network: NetworkType,
   txid: string,
 ): Promise<'yes' | 'no' | 'unknown'> {
-  let seen = 0;
+  const listed = await listAddressTransactions(address, network);
+  if (listed === null) return 'unknown';
+  return listed.some((entry) => entry.txid === txid) ? 'yes' : 'no';
+}
+
+/**
+ * Every transaction the Explorer lists for `address` (measured 2026-11-06:
+ * `{txid, blockhash, blockHeight, confirmations, time, amount, type}`), newest
+ * first as it answers — up to {@link ADDRESS_TXS_MAX_PAGES} pages, past which
+ * the list is taken as read (see {@link addressHasTransaction}). `null` when
+ * any page fails, does not parse, or is short before the total.
+ */
+export async function listAddressTransactions(
+  address: string,
+  network: NetworkType,
+): Promise<AddressTransaction[] | null> {
+  const txids: AddressTransaction[] = [];
   for (let page = 1; page <= ADDRESS_TXS_MAX_PAGES; page += 1) {
     let body: unknown;
     try {
       const response = await fetch(
         `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}/txs?network=${network}&page=${page}&limit=${ADDRESS_TXS_PAGE}`,
       );
-      if (!response.ok) return 'unknown';
+      if (!response.ok) return null;
       body = await response.json();
     } catch {
-      return 'unknown';
+      return null;
     }
     const parsed = addressTransactionsSchema.safeParse(body);
-    if (!parsed.success) return 'unknown';
+    if (!parsed.success) return null;
     const { transactions, total } = parsed.data;
-    if (transactions.some((entry) => entry.txid === txid)) return 'yes';
-    seen += transactions.length;
-    if (seen >= total) return 'no';
+    for (const entry of transactions) {
+      txids.push({
+        txid: entry.txid,
+        amountSat:
+          entry.amount === undefined || !Number.isFinite(entry.amount)
+            ? null
+            : BigInt(Math.round(entry.amount * 1e8)),
+        time: entry.time ?? null,
+      });
+    }
+    if (txids.length >= total) return txids;
     // A short page before the total: the list is not what it says.
-    if (transactions.length === 0) return 'unknown';
+    if (transactions.length === 0) return null;
   }
-  return 'no';
+  return txids;
 }

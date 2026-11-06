@@ -33,7 +33,7 @@ Object type: `payment_intent`.
 | `latest_charge` | string \| [Charge](/reference/objects/charge) \| null | `ch_…`, or the Charge with `expand[]=latest_charge`. Card only. Expandable. |
 | `next_action` | [PaymentIntentNextAction](/reference/objects/payment-intent-next-action) \| null |  |
 | `last_payment_error` | [PaymentError](/reference/objects/payment-error) \| null |  |
-| `cancellation_reason` | string \| null | One of `abandoned`, `automatic`, `duplicate`, `fraudulent`, `recipient_key_changed`, `requested_by_customer`, `underpaid`. |
+| `cancellation_reason` | string \| null | One of `abandoned`, `automatic`, `duplicate`, `faircoin_network_closed`, `fraudulent`, `recipient_key_changed`, `requested_by_customer`, `underpaid`. |
 | `canceled_at` | integer \| null | Unix seconds. |
 | `description` | string \| null |  |
 | `receipt_email` | string \| null |  |

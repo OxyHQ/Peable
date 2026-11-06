@@ -22,7 +22,8 @@ import {
   findIntentsByAddresses,
   type PaymentIntentRow,
 } from '../../../db/payments/paymentIntentRepository';
-import { paymentIntentOutputs, paymentIntents } from '../../../db/schema';
+import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
+import { paymentIntentOutputs, paymentIntents, socialReceiveCursors } from '../../../db/schema';
 import { readReservedThrough } from '../../../db/social/receiveCursor';
 import { createIntent } from '../../createIntent';
 import { transitionIntent } from '../../intentTransition';
@@ -220,5 +221,124 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the cap on open addresses', () => {
     const [a, b] = await Promise.all([pay(merchant, 'same-key'), pay(merchant, 'same-key')]);
     expect(must(a).id).toBe(must(b).id);
     expect((await readReservedThrough(gatewayDb(), owner, 'testnet')).reservedThrough).toBe(1);
+  });
+});
+
+describe.skipIf(!POSTGRES_TESTS_ENABLED)(
+  'concurrent confirms recycle (ADR 0021 D9, amended)',
+  () => {
+    test('N parallel confirms with N candidates recycle all N: the cursor does not move', async () => {
+      const merchant = await seedMerchant({ network: 'testnet' });
+      const owner = must(merchant.ownerAccountId);
+      const N = 8;
+      const abandoned: PaymentIntentRow[] = [];
+      for (let i = 0; i < N; i += 1) abandoned.push(await pay(merchant));
+      for (const intent of abandoned) await cancel(intent, 2 * HOUR);
+      const through = (await readReservedThrough(gatewayDb(), owner, 'testnet')).reservedThrough;
+      expect(through).toBe(N);
+
+      chainSays('unused');
+      const made = await Promise.all(Array.from({ length: N }, () => pay(merchant)));
+      const addresses = new Set(made.map((intent) => must(intent.address)));
+      expect(addresses.size).toBe(N);
+      expect(addresses).toEqual(new Set(abandoned.map((intent) => must(intent.address))));
+      expect((await readReservedThrough(gatewayDb(), owner, 'testnet')).reservedThrough).toBe(N);
+    });
+
+    test('more confirms than candidates: the candidates are all used, and only the rest mint', async () => {
+      const merchant = await seedMerchant({ network: 'testnet' });
+      const owner = must(merchant.ownerAccountId);
+      const abandoned = [await pay(merchant), await pay(merchant), await pay(merchant)];
+      for (const intent of abandoned) await cancel(intent, 2 * HOUR);
+      chainSays('unused');
+      const made = await Promise.all(Array.from({ length: 5 }, () => pay(merchant)));
+      const recycled = made.filter((intent) =>
+        abandoned.some((old) => old.address === intent.address),
+      );
+      expect(recycled).toHaveLength(3);
+      expect((await readReservedThrough(gatewayDb(), owner, 'testnet')).reservedThrough).toBe(5);
+    });
+
+    test('a candidate the chain showed unused recently is claimed without another read', async () => {
+      const merchant = await seedMerchant({ network: 'testnet' });
+      const first = await pay(merchant);
+      await cancel(first, 2 * HOUR);
+      await gatewayDb()
+        .update(paymentIntentOutputs)
+        .set({ recycleCheckedAt: sql`now() - interval '1 minute'` })
+        .where(eq(paymentIntentOutputs.paymentIntentId, first.id));
+      const asked = chainSays('unknown');
+      const second = await pay(merchant);
+      expect(second.address).toBe(first.address);
+      expect(asked).toEqual([]);
+    });
+
+    test('a stale check is read again: an Explorer that cannot tell recycles nothing', async () => {
+      const merchant = await seedMerchant({ network: 'testnet' });
+      const first = await pay(merchant);
+      await cancel(first, 2 * HOUR);
+      await gatewayDb()
+        .update(paymentIntentOutputs)
+        .set({ recycleCheckedAt: sql`now() - interval '1 hour'` })
+        .where(eq(paymentIntentOutputs.paymentIntentId, first.id));
+      const asked = chainSays('unknown');
+      const second = await pay(merchant);
+      expect(second.address).not.toBe(first.address);
+      expect(asked).toEqual([must(first.address)]);
+      // The lease it took to look was given back.
+      expect((await outputOf(first)).recycleLeaseUntil).toBeNull();
+    });
+  },
+);
+
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('the tree ceiling (ADR 0021 D9, amended)', () => {
+  /** Move the owner's cursor as if every index below `next` had been handed out. */
+  async function cursorAt(owner: string, next: number) {
+    await gatewayDb()
+      .update(socialReceiveCursors)
+      .set({ nextDerivationIndex: next })
+      .where(eq(socialReceiveCursors.oxyUserId, owner));
+  }
+
+  test('the last watched index is handed out; past it FairCoin is refused as capacity, the cursor unchanged', async () => {
+    const merchant = await seedMerchant({ network: 'testnet' });
+    const owner = must(merchant.ownerAccountId);
+    await pay(merchant);
+    await cursorAt(owner, SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+    chainSays('unknown');
+    const last = await pay(merchant);
+    expect((await outputOf(last)).derivationIndex).toBe(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+    const refusal = await pay(merchant).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(FaircoinCapacityError);
+    expect((refusal as FaircoinCapacityError).full).toBe(true);
+    expect((await readReservedThrough(gatewayDb(), owner, 'testnet')).reservedThrough).toBe(
+      SOCIAL_RECEIVE_INDEX_LIMIT - 1,
+    );
+    expect(
+      await faircoinAvailability({
+        network: 'testnet',
+        currency: 'FAIR',
+        recipientAccountId: owner,
+      }),
+    ).toEqual({ available: false, unavailable_reason: 'temporarily_unavailable' });
+  });
+
+  test('a full tree still recycles', async () => {
+    const merchant = await seedMerchant({ network: 'testnet' });
+    const owner = must(merchant.ownerAccountId);
+    const first = await pay(merchant);
+    await cancel(first, 2 * HOUR);
+    await cursorAt(owner, SOCIAL_RECEIVE_INDEX_LIMIT);
+    chainSays('unused');
+    expect(
+      await faircoinAvailability({
+        network: 'testnet',
+        currency: 'FAIR',
+        recipientAccountId: owner,
+      }),
+    ).toEqual({ available: true, unavailable_reason: null });
+    const second = await pay(merchant);
+    expect(second.address).toBe(first.address);
+    await expect(pay(merchant)).rejects.toBeInstanceOf(FaircoinCapacityError);
   });
 });
