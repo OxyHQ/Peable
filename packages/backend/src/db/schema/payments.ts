@@ -26,6 +26,7 @@ import { customers, paymentMethods } from './customers';
 import { merchants } from './merchants';
 import { paymentMethodConfigurations } from './paymentMethodConfigurations';
 import { setupIntents } from './setupIntents';
+import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX } from './social';
 import {
   AFTER_COMPLETION_TYPES,
   AUTOMATIC_TAX_STATUSES,
@@ -1137,6 +1138,25 @@ export const paymentIntentOutputs = pgTable(
      * were recorded.
      */
     identityPublicKey: text(),
+    /**
+     * The index on the recipient's cursor `address` was derived at (ADR 0021
+     * D9): what lets a later reservation prove, by deriving it again from the
+     * recipient's CURRENT key, that a recycled address is still in the tree
+     * the recipient's wallet scans. NULL only on rows written before it.
+     */
+    derivationIndex: integer(),
+    /**
+     * When a later payment took this address over (ADR 0021 D9): the row is no
+     * longer the address's holder. Only an output of a `canceled` payment the
+     * chain shows never received anything is ever recycled.
+     */
+    recycledAt: timestamptz(),
+    /**
+     * When this address was found unfit to recycle — the chain shows it
+     * received something, or it no longer derives from the recipient's key. A
+     * retired address stays its payment's and is never offered again.
+     */
+    retiredAt: timestamptz(),
     createdAt: createdAt(),
   },
   (table) => [
@@ -1144,8 +1164,18 @@ export const paymentIntentOutputs = pgTable(
       table.paymentIntentId,
       table.position,
     ),
-    /** One reservation, one address: enrichment and the watcher resolve by it. */
-    uniqueIndex('payment_intent_outputs_network_address_key').on(table.network, table.address),
+    /**
+     * One reservation, one HOLDER: an address has at most one output that has
+     * not been recycled (ADR 0021 D9), and the watcher and enrichment resolve
+     * the holder by it. A recycled row keeps its address for its own history.
+     */
+    uniqueIndex('payment_intent_outputs_network_address_key')
+      .on(table.network, table.address)
+      .where(sql`${table.recycledAt} is null`),
+    /** The recipient's address pool (ADR 0021 D9): its open count and its recycle candidates. */
+    index('payment_intent_outputs_recipient_pool_idx')
+      .on(table.recipientAccountId, table.network, table.derivationIndex)
+      .where(sql`${table.recycledAt} is null and ${table.retiredAt} is null`),
     foreignKey({
       name: 'payment_intent_outputs_connected_account_network_fkey',
       columns: [table.connectedAccountId, table.merchantId, table.network],
@@ -1164,6 +1194,12 @@ export const paymentIntentOutputs = pgTable(
       'payment_intent_outputs_identity_key_check',
       sql.raw(
         `identity_public_key is null or identity_public_key ~ '${IDENTITY_PUBLIC_KEY_PATTERN}'`,
+      ),
+    ),
+    check(
+      'payment_intent_outputs_derivation_index_check',
+      sql.raw(
+        `derivation_index is null or derivation_index >= ${SOCIAL_RECEIVE_FIRST_FRESH_INDEX}`,
       ),
     ),
     check('payment_intent_outputs_network_check', sql.raw(`network in (${inList(NETWORK_TYPES)})`)),

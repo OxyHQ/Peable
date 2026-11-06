@@ -112,6 +112,19 @@ Two consequences, both wanted:
   path in `connectedAccountFaircoin.realdb.test.ts`); one reservation cannot
   tell a number from a string that prints the same.
 
+### A payment address has one HOLDER, not one row (ADR 0021 D9)
+
+`payment_intent_outputs (network, address)` is unique only among rows with
+`recycled_at is null`: a recycled address keeps its old row (its payment's
+history) and gains a new holder. Readers that resolve "who is this address
+for" take the holder; the previous one is always a `canceled` payment, which is
+terminal, so no transaction can settle both. `derivation_index` (NULL only on
+rows written before it, CHECKed `>= 1`) is what lets a recycle prove the address
+still derives from the recipient's current key; `retired_at` marks an address
+the chain showed used (or that no longer derives from the key), never offered
+again. The pool's reads use `payment_intent_outputs_recipient_pool_idx`,
+partial on neither column being set.
+
 ## Composite foreign keys carry the invariants a CHECK cannot
 
 A CHECK sees one row of one table. Three rules here span two tables, so they are

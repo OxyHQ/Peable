@@ -141,6 +141,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the payer locale migrations `0102`–`0104` merged.
   '0101_faircoin_identity_key_validate':
     'released with #254; its post phase applied by the 4509a961 deploy (run 42164565508)',
+  // The payer locales' validate half shipped with #259, whose deploy of
+  // 1f7cbf7f (Deploy to AWS run 42167982710, 2026-11-06) ran its post phase
+  // successfully before the address pool's `0105`–`0106` merged.
+  '0104_checkout_locales_validate':
+    'released with #259; its post phase applied by the 1f7cbf7f deploy (run 42167982710)',
 };
 
 interface Migration {

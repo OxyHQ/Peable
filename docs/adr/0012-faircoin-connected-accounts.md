@@ -266,6 +266,11 @@ the chain. `PaymentIntent.canExpire` (and `canExpire(status)` in
   or after its own `reject` call succeeded — never because `expiresAt` passed;
 - treats `reject` answering 409 as "the payer got there first".
 
+**Narrowed by ADR 0021 D9 (2026-11-06):** a reported broadcast the Explorer has
+never seen for 24 hours, that provably pays nothing at the payment's
+addresses, is lost — the payment is cancelled `abandoned`. A transaction that exists is still never
+cancelled on the platform's clock.
+
 The residual case is written down rather than hidden: a payer who pays the
 address WITHOUT reporting the txid (an external wallet scanning the QR) is
 invisible to the settlement watcher, so the intent can expire with the coins

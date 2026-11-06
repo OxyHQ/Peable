@@ -19,9 +19,14 @@ import {
   IdentityDocumentUnavailableError,
   reserveNextSocialAddress,
   resolveIdentityPublicKeyHex,
+  reuseUnpaidSocialAddress,
 } from '../services/socialReceive';
 import { getDb } from '../db/postgres';
-import { insertSendAttribution, listAttributionsForViewer } from '../db/social/sendAttribution';
+import {
+  insertSendAttribution,
+  listAttributionsForViewer,
+  updateAttributionSource,
+} from '../db/social/sendAttribution';
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { toSocialPaymentSource } from '../lib/serialize';
@@ -154,6 +159,18 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         withinPairLimit = true;
       });
       if (!withinPairLimit) return;
+
+      // The same sender asking again before paying is handed the address it
+      // already holds (ADR 0021 D9): one unpaid address per (sender,
+      // recipient), however often it asks — the bound the limiter above
+      // cannot give, being per task and per window.
+      const unpaid = await reuseUnpaidSocialAddress(senderUserId, recipient.id, network);
+      if (unpaid) {
+        await updateAttributionSource(getDb(), unpaid.attributionId, source);
+        const body: SocialNextAddressResponse = { address: unpaid.address, index: unpaid.index };
+        res.status(200).json(body);
+        return;
+      }
 
       // Reservation (Task 5) + attribution write (Task 6) happen together in
       // this handler so an enrichment lookup can never observe a reserved

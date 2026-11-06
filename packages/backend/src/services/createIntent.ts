@@ -12,6 +12,7 @@ import type {
   Shipping,
 } from '@peable.to/shared-types';
 import { isBaseUnitString } from '@peable.to/shared-types';
+import { PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS } from '@peable.to/contracts/vocabulary';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -39,11 +40,20 @@ import { ensureProviderCustomer } from './customers/providerCustomer';
 import { applyProviderPaymentResult } from './intentReconciliation';
 import { recordIntentCreated } from './intentTransition';
 import { selectCardProvider, selectStoredProvider } from './providers/environmentGuard';
-import { faircoinRecipientOf, reserveFaircoinAddress } from './faircoin/recipient';
+import { faircoinRecipientOf, planFaircoinAddress } from './faircoin/recipient';
+import { type PlannedAddress, reservePlannedAddresses } from './faircoin/addressPool';
 import { newId, clientSecretFor } from '../lib/ids';
 
 const DEFAULT_EXPIRY_SECONDS = 15 * 60;
 const MS_PER_SECOND = 1000;
+
+/** Rolls a create back: a concurrent create with the same idempotency key inserted first. */
+class IdempotencyRaceLost extends Error {
+  constructor() {
+    super('a concurrent create won the idempotency key');
+    this.name = 'IdempotencyRaceLost';
+  }
+}
 
 import {
   type CardPaymentMethods,
@@ -821,6 +831,20 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       ? await resolveCardMethodsOrRefuse(merchant, currency, input, paymentMethod !== null)
       : null;
 
+  // A FairCoin payment holds an address of the recipient's for as long as it is
+  // payable, and only a cancelled one can ever be recycled (ADR 0021 D9): the
+  // contract caps `expires_in_seconds`, and so does every internal caller.
+  if (
+    rail === 'faircoin' &&
+    expiresInSeconds !== undefined &&
+    expiresInSeconds > PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS
+  ) {
+    throw new IntentParameterError(
+      `expires_in_seconds is at most ${PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS} (24 hours) for a FairCoin payment`,
+      'expires_in_seconds',
+    );
+  }
+
   // The destination charge (ADR 0015 §2), decided once and stored on the row.
   if (rail !== 'card') {
     for (const [field, param] of [
@@ -888,7 +912,12 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   //
   // A split payment (ADR 0021 D6) reserves ONE address per output, each on its
   // own recipient's cursor — every seller's address is in the seller's own tree.
-  const outputs: InsertFaircoinOutputParams[] = [];
+  //
+  // Each output's address is PLANNED here — the gates, the recipient's key, an
+  // address of theirs to recycle (ADR 0021 D9) — and RESERVED inside the
+  // intent's transaction below, so a payment that is never written holds no
+  // address and the recipient's open-address cap is one decision with the row.
+  const planned: { plan: PlannedAddress; connectedAccountId: string | null; amount: string }[] = [];
   if (rail === 'faircoin' && network !== null) {
     if (split.length > 1) {
       for (const entry of split) {
@@ -902,21 +931,13 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
     }
     const entries = split.length > 1 ? split : [{ account: account ?? null, amount }];
     for (const entry of entries) {
-      const reservedOutput = await reserveFaircoinAddress(
-        faircoinRecipientOf(merchant, entry.account),
-        network,
-      );
-      outputs.push({
+      planned.push({
+        plan: await planFaircoinAddress(faircoinRecipientOf(merchant, entry.account), network),
         connectedAccountId: entry.account?.id ?? null,
-        recipientAccountId: reservedOutput.recipientAccountId,
-        address: reservedOutput.address,
-        identityPublicKey: reservedOutput.identityPublicKey,
         amount: entry.amount,
       });
     }
   }
-  const reserved = outputs[0] ?? null;
-  const address = reserved?.address ?? null;
   const publicId = newId('pi');
   const clientSecret = clientSecretFor(publicId);
   const expiresAt = new Date(
@@ -944,50 +965,75 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // Explicit field whitelist — never spread a caller body (mass-assignment
   // would be an IDOR). The row and its `payment_intent.created` commit
   // together (ADR 0001 D7).
-  const intent = await db.transaction(async (tx) => {
-    const inserted = await insertPaymentIntent(tx, {
-      publicId,
-      paymentLinkId: input.paymentLinkId,
-      merchantId: merchant.id,
-      connectedAccountId,
-      transferDestinationId: routing?.transferDestinationId ?? null,
-      transferAmount: routing?.transferAmount ?? null,
-      onBehalfOfId: routing?.onBehalfOfId ?? null,
-      applicationFeeAmount: routing?.applicationFeeAmount ?? null,
-      rail,
-      amount,
-      currency,
-      network,
-      address,
-      provider: cardProvider?.id ?? null,
-      status,
-      customerId: customer?.id ?? null,
-      paymentMethodId: paymentMethod?.id ?? null,
-      paymentMethodTypes: methods?.types ?? null,
-      paymentMethodConfigurationId: methods?.configuration?.id ?? null,
-      captureMethod: input.captureMethod ?? 'automatic',
-      setupFutureUsage: input.setupFutureUsage ?? null,
-      description: input.description ?? null,
-      receiptEmail: input.receiptEmail ?? null,
-      statementDescriptorSuffix: input.statementDescriptorSuffix ?? null,
-      shipping: input.shipping ?? null,
-      faircoinQuote: input.faircoinQuote ?? null,
-      faircoinRecipientAccountId: reserved?.recipientAccountId ?? null,
-      faircoinIdentityPublicKey: reserved?.identityPublicKey ?? null,
-      clientSecret,
-      idempotencyKey: key,
-      metadata: metadata ?? {},
-      expiresAt,
+  const intent = await db
+    .transaction(async (tx) => {
+      const reservations = await reservePlannedAddresses(
+        tx,
+        planned.map((entry) => entry.plan),
+      );
+      const outputs: InsertFaircoinOutputParams[] = planned.map((entry, position) => {
+        const reservation = reservations[position];
+        if (!reservation) throw new Error('a planned FairCoin output was not reserved');
+        return {
+          connectedAccountId: entry.connectedAccountId,
+          recipientAccountId: reservation.recipientAccountId,
+          address: reservation.address,
+          identityPublicKey: reservation.identityPublicKey,
+          derivationIndex: reservation.derivationIndex,
+          amount: entry.amount,
+        };
+      });
+      const reserved = outputs[0] ?? null;
+      const address = reserved?.address ?? null;
+      const inserted = await insertPaymentIntent(tx, {
+        publicId,
+        paymentLinkId: input.paymentLinkId,
+        merchantId: merchant.id,
+        connectedAccountId,
+        transferDestinationId: routing?.transferDestinationId ?? null,
+        transferAmount: routing?.transferAmount ?? null,
+        onBehalfOfId: routing?.onBehalfOfId ?? null,
+        applicationFeeAmount: routing?.applicationFeeAmount ?? null,
+        rail,
+        amount,
+        currency,
+        network,
+        address,
+        provider: cardProvider?.id ?? null,
+        status,
+        customerId: customer?.id ?? null,
+        paymentMethodId: paymentMethod?.id ?? null,
+        paymentMethodTypes: methods?.types ?? null,
+        paymentMethodConfigurationId: methods?.configuration?.id ?? null,
+        captureMethod: input.captureMethod ?? 'automatic',
+        setupFutureUsage: input.setupFutureUsage ?? null,
+        description: input.description ?? null,
+        receiptEmail: input.receiptEmail ?? null,
+        statementDescriptorSuffix: input.statementDescriptorSuffix ?? null,
+        shipping: input.shipping ?? null,
+        faircoinQuote: input.faircoinQuote ?? null,
+        faircoinRecipientAccountId: reserved?.recipientAccountId ?? null,
+        faircoinIdentityPublicKey: reserved?.identityPublicKey ?? null,
+        clientSecret,
+        idempotencyKey: key,
+        metadata: metadata ?? {},
+        expiresAt,
+      });
+      // A concurrent create won the idempotency key: roll back, so the addresses
+      // reserved above are not spent on a payment that does not exist.
+      if (!inserted) throw new IdempotencyRaceLost();
+      // The outputs in the intent's transaction; the row is read again so the
+      // event's snapshot (and the answer) carry them.
+      await insertFaircoinOutputs(tx, inserted, outputs);
+      const created =
+        outputs.length > 0 ? ((await findIntentById(tx, inserted.id)) ?? inserted) : inserted;
+      await recordIntentCreated(tx, created);
+      return created;
+    })
+    .catch((error: unknown) => {
+      if (error instanceof IdempotencyRaceLost) return null;
+      throw error;
     });
-    if (!inserted) return inserted;
-    // The outputs in the intent's transaction; the row is read again so the
-    // event's snapshot (and the answer) carry them.
-    await insertFaircoinOutputs(tx, inserted, outputs);
-    const created =
-      outputs.length > 0 ? ((await findIntentById(tx, inserted.id)) ?? inserted) : inserted;
-    await recordIntentCreated(tx, created);
-    return created;
-  });
 
   if (intent) {
     // The row exists; now make the payment exist at the provider. This ORDER is

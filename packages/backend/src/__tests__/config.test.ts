@@ -51,3 +51,22 @@ test('the browsers Pay with Peable runs in are admitted with no deployment overr
     loadConfig({ ...DB, PEABLE_ALLOWED_ORIGINS: 'https://dashboard.peable.to' }).allowedOrigins,
   ).toEqual(expect.arrayContaining(['https://mercaria.co', 'https://dashboard.peable.to']));
 });
+
+test('PEABLE_SOCIAL_PAY_NETWORK: unset or empty is the CLOSED default, testnet (ADR 0002)', () => {
+  // `readNetwork`'s default is mainnet; an empty value used to slip past a
+  // `?? 'testnet'` that only catches undefined and open mainnet identity receive.
+  for (const raw of [undefined, '', '   ']) {
+    expect(loadConfig({ ...DB, PEABLE_SOCIAL_PAY_NETWORK: raw }).socialPayNetwork).toBe('testnet');
+  }
+  expect(loadConfig({ ...DB, PEABLE_SOCIAL_PAY_NETWORK: 'mainnet' }).socialPayNetwork).toBe(
+    'mainnet',
+  );
+  expect(loadConfig({ ...DB, PEABLE_SOCIAL_PAY_NETWORK: ' testnet ' }).socialPayNetwork).toBe(
+    'testnet',
+  );
+  expect(() => loadConfig({ ...DB, PEABLE_SOCIAL_PAY_NETWORK: 'main' })).toThrow(
+    /PEABLE_SOCIAL_PAY_NETWORK/,
+  );
+  // PEABLE_NETWORK keeps its own default.
+  expect(loadConfig({ ...DB, PEABLE_NETWORK: '' }).network).toBe('mainnet');
+});

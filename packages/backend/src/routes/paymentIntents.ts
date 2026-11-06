@@ -10,6 +10,7 @@ import {
   FaircoinNetworkClosedError,
   FaircoinWalletMissingError,
 } from '../services/faircoin/recipient';
+import { FaircoinCapacityError } from '../services/faircoin/addressPool';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { verifySecret } from '@oxy.so/core/server';
@@ -448,6 +449,11 @@ export function createPaymentIntentsRouter(deps: {
             'faircoin_network_closed',
             'network',
           );
+          return;
+        }
+        // Every address the recipient can hold open is open (ADR 0021 D9).
+        if (err instanceof FaircoinCapacityError) {
+          sendError(res, 503, 'api_error', err.message, 'faircoin_capacity_reached');
           return;
         }
         if (sendMoneyRefusal(res, err)) return;

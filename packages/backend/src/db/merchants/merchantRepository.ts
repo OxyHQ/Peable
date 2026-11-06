@@ -109,6 +109,14 @@ const MERCHANT_COLUMNS = {
   updatedAt: merchants.updatedAt,
 } as const;
 
+/**
+ * The confirmations a MAINNET merchant's FairCoin payment needs when the
+ * merchant names none (ADR 0021 D10): FairCoin's own coinbase maturity on
+ * mainnet (`coinbaseMaturity: 6` in `@fairco.in/core`), about 12 minutes of
+ * 2-minute blocks. One confirmation is a single staker's say-so.
+ */
+export const MAINNET_DEFAULT_REQUIRED_CONFIRMATIONS = 6;
+
 export interface InsertMerchantParams {
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
@@ -156,9 +164,13 @@ export async function insertMerchant(
           livemode: params.environment === 'production',
           network: params.environment === 'production' ? 'mainnet' : 'testnet',
           ownerAccountId: params.ownerAccountId ?? null,
-          ...(params.requiredConfirmations === undefined
-            ? {}
-            : { requiredConfirmations: params.requiredConfirmations }),
+          // ADR 0021 D10: a mainnet merchant that names no threshold settles
+          // at 6 confirmations; testnet keeps the column's default of 1.
+          ...(params.requiredConfirmations !== undefined
+            ? { requiredConfirmations: params.requiredConfirmations }
+            : params.environment === 'production'
+              ? { requiredConfirmations: MAINNET_DEFAULT_REQUIRED_CONFIRMATIONS }
+              : {}),
           displayName: params.displayName ?? null,
           avatarFileId: params.avatarFileId ?? null,
           avatarFileEventAt: params.avatarFileId ? new Date() : null,

@@ -148,6 +148,16 @@ by `submit_tx` like any payment that ended, with the coins at the previous
 key's address. A subscription checkout whose first payment is retired starts
 its subscription again on the next confirm, exactly as a lapsed quote does.
 
+## Amendment (2026-11-06): the tree is bounded (ADR 0021 D9)
+
+The cursor grows with real payments, not with requests. A payment's address is
+recycled from the recipient's own cancelled, chain-unused addresses (still
+derived from its current key) before an index is minted, at most 500 of a
+recipient's addresses are open at once, and a sender asking again for an
+`@username` it has not paid is handed the address it already holds. The
+wallet's scan (`reserved_through` plus its window) stays a size it can carry.
+
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code:

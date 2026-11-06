@@ -22,6 +22,7 @@ export type BillingEngineErrorCode =
   | 'faircoin_price_unavailable'
   | 'faircoin_wallet_missing'
   | 'faircoin_network_closed'
+  | 'faircoin_capacity_reached'
   | 'credit_note_exceeds_invoice'
   | 'test_mode_only'
   | 'test_clock_unexpected_state'

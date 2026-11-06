@@ -99,7 +99,11 @@ export const socialNextAddressSchema = defineComponent(
   'SocialNextAddress',
   z
     .object({
-      address: z.string().describe("A fresh single-use address of the recipient's."),
+      address: z
+        .string()
+        .describe(
+          "A single-use address of the recipient's: the one this sender already holds and has not paid, or a fresh one.",
+        ),
       index: z.number().int().nonnegative().describe('Its social-receive derivation index.'),
     })
     .strict(),

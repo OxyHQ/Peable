@@ -186,3 +186,44 @@ export async function listAttributionsForViewer(
     .limit(limit);
   return rows.map(toAttributionRow);
 }
+
+/**
+ * The most recent address `senderUserId` reserved for paying `recipientUserId`
+ * on `network` — what a repeated request from the same sender is handed again
+ * while nothing was paid to it (ADR 0021 D9, `services/socialReceive.ts`).
+ */
+export async function findLatestAttributionForPair(
+  db: DatabaseOrTransaction,
+  senderUserId: string,
+  recipientUserId: string,
+  network: NetworkType,
+): Promise<SocialSendAttributionRow | null> {
+  const [row] = await db
+    .select(ATTRIBUTION_COLUMNS)
+    .from(socialSendAttributions)
+    .where(
+      and(
+        eq(socialSendAttributions.senderUserId, senderUserId),
+        eq(socialSendAttributions.recipientUserId, recipientUserId),
+        eq(socialSendAttributions.network, network),
+      ),
+    )
+    .orderBy(desc(socialSendAttributions.derivationIndex))
+    .limit(1);
+  return row ? toAttributionRow(row) : null;
+}
+
+/**
+ * Say what an unpaid address handed out again is now for: the context of the
+ * request that is about to pay it. Display only, like the columns themselves.
+ */
+export async function updateAttributionSource(
+  db: DatabaseOrTransaction,
+  id: string,
+  source: SocialPaymentSource | undefined,
+): Promise<void> {
+  await db
+    .update(socialSendAttributions)
+    .set({ sourceApp: source?.app ?? null, sourceRef: source?.ref ?? null })
+    .where(eq(socialSendAttributions.id, id));
+}

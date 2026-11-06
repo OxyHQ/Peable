@@ -5,6 +5,8 @@ import type { ServiceHttpClient } from '@oxy.so/core/server';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import { readReservedThrough, reserveNextSocialReceiveIndex } from '../db/social/receiveCursor';
+import { findLatestAttributionForPair } from '../db/social/sendAttribution';
+import { addressUsage } from './faircoin/addressPool';
 
 /**
  * First index this reservation flow ever hands out. Index 0 is the
@@ -212,4 +214,40 @@ export async function getReservedThrough(
   network: NetworkType,
 ): Promise<{ reservedThrough: number; identityPublicKey: string | null }> {
   return readReservedThrough(getDb(), oxyUserId, network);
+}
+
+/**
+ * The address `senderUserId` was last handed for paying `recipientUserId`, when
+ * nothing was ever paid to it (ADR 0021 D9) — so a sender asking again, however
+ * often, holds at most ONE unpaid address in the recipient's tree, and the
+ * recipient's cursor grows with real payments and distinct senders rather than
+ * with requests.
+ *
+ * Handed back only when it still derives from the recipient's CURRENT key (a
+ * rotated key's tree is one nobody scans, ADR 0002) and the chain shows it
+ * received nothing. An Explorer that cannot tell (`unknown`, testnet's node)
+ * hands nothing back: the caller reserves a fresh address, as before.
+ */
+export async function reuseUnpaidSocialAddress(
+  senderUserId: string,
+  recipientUserId: string,
+  network: NetworkType,
+): Promise<{ attributionId: string; index: number; address: string } | null> {
+  const latest = await findLatestAttributionForPair(
+    getDb(),
+    senderUserId,
+    recipientUserId,
+    network,
+  );
+  if (!latest) return null;
+  const identityPublicKey = await resolveIdentityPublicKey(recipientUserId);
+  if (!identityPublicKey) return null;
+  const derived = deriveSocialReceiveAddress(
+    identityPublicKey,
+    latest.derivationIndex,
+    getNetwork(network),
+  );
+  if (derived !== latest.address) return null;
+  if ((await addressUsage(latest.address, network)) !== 'unused') return null;
+  return { attributionId: latest.id, index: latest.derivationIndex, address: latest.address };
 }

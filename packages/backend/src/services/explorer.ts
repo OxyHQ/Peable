@@ -36,7 +36,19 @@ import { config } from '../config';
  * 2026-09-06 — an older note here claimed `addressindex` was off and it could
  * not be used, which was false and stopped a feature being built), but the
  * surface that needs address balances is the wallet, and the wallet already
- * talks to the Explorer itself.
+ * talks to the Explorer itself. The gateway's one address read is
+ * {@link getAddressUsage}: whether an address it reserved ever received
+ * anything, before handing it to another payment (ADR 0021 D9).
+ *
+ *   GET /api/address/:a?network=<net>   (measured 2026-11-06)
+ *     mainnet, unused: { "addressInfo": { "txCount": 0, "totalReceivedSat": 0,
+ *                        "utxos": [], … }, "network": "mainnet" }
+ *     testnet (no address index on its node), ANY address:
+ *                      { "addressInfo": { "txCount": 0, …, "isValid": false,
+ *                        "note": "addressindex not enabled on node; limited data available" } }
+ *
+ * The second shape says nothing: `txCount: 0` beside `isValid: false` or a
+ * `note` is not evidence of an unused address, and is read as `unknown`.
  */
 
 export interface ExplorerOutput {
@@ -74,6 +86,25 @@ const transactionResponseSchema = z.object({
     })
     .optional(),
 });
+
+const addressResponseSchema = z.object({
+  addressInfo: z.object({
+    txCount: z.number(),
+    totalReceivedSat: z.number(),
+    utxos: z.array(z.unknown()),
+    isValid: z.boolean().optional(),
+    note: z.string().optional(),
+  }),
+});
+
+const addressTransactionsSchema = z.object({
+  transactions: z.array(z.object({ txid: z.string() })),
+  total: z.number(),
+});
+
+function addressUrl(address: string, network: NetworkType): string {
+  return `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}?network=${network}`;
+}
 
 function statsUrl(network: NetworkType): string {
   return `${config.explorerBaseUrl}/api/stats?network=${network}`;
@@ -140,4 +171,65 @@ export function verifyPayment(
       tx.outputs.some((output) => output.address === address && output.valueSat >= amount),
     );
   return { paid, confirmations: tx.confirmations };
+}
+
+/**
+ * What the chain says about an address the gateway reserved: `used` when it
+ * shows any transaction, anything received or an unspent output; `unused` only
+ * on a FULL answer showing none; `unknown` for everything else — a
+ * failed request, a body that does not parse, or the Explorer saying it cannot
+ * tell (testnet's node has no address index). Recycling an address needs
+ * `unused` (ADR 0021 D9); `unknown` never counts as it.
+ */
+export type AddressUsage = 'unused' | 'used' | 'unknown';
+
+export async function getAddressUsage(
+  address: string,
+  network: NetworkType,
+): Promise<AddressUsage> {
+  let body: unknown;
+  try {
+    const response = await fetch(addressUrl(address, network));
+    if (!response.ok) return 'unknown';
+    body = await response.json();
+  } catch {
+    return 'unknown';
+  }
+  const parsed = addressResponseSchema.safeParse(body);
+  if (!parsed.success) return 'unknown';
+  const info = parsed.data.addressInfo;
+  if (info.txCount !== 0 || info.totalReceivedSat !== 0 || info.utxos.length !== 0) return 'used';
+  if (info.isValid === false || info.note !== undefined) return 'unknown';
+  return 'unused';
+}
+
+/**
+ * Whether `txid` is among the transactions the Explorer lists for `address`
+ * (`GET /api/address/:a/txs`, measured 2026-11-06: `{transactions: [{txid, …}],
+ * page, limit, total}`). Asked only of an address the chain shows USED while
+ * the reported transaction cannot be read: `no` (a full first page that holds
+ * every transaction and not this one) proves the coins there came from
+ * something else. Anything short of that — a failed request, a body that does
+ * not parse, more transactions than one page — is `unknown`.
+ */
+export async function addressHasTransaction(
+  address: string,
+  network: NetworkType,
+  txid: string,
+): Promise<'yes' | 'no' | 'unknown'> {
+  let body: unknown;
+  try {
+    const response = await fetch(
+      `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}/txs?network=${network}`,
+    );
+    if (!response.ok) return 'unknown';
+    body = await response.json();
+  } catch {
+    return 'unknown';
+  }
+  const parsed = addressTransactionsSchema.safeParse(body);
+  if (!parsed.success) return 'unknown';
+  const { transactions, total } = parsed.data;
+  if (transactions.some((entry) => entry.txid === txid)) return 'yes';
+  return transactions.length >= total ? 'no' : 'unknown';
 }

@@ -163,6 +163,9 @@ export function faircoinRefusal(code: string | undefined): FaircoinUnavailableRe
       return 'faircoin_network_closed';
     case 'faircoin_price_unavailable':
       return 'price_unavailable';
+    // Too many open FairCoin payments to this recipient (ADR 0021 D9): a wait, not a fault.
+    case 'faircoin_capacity_reached':
+      return 'temporarily_unavailable';
     default:
       return null;
   }

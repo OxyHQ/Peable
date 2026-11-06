@@ -35,6 +35,7 @@ import {
   PAYMENT_INTENT_SETUP_FUTURE_USAGES,
   PAYMENT_INTENT_STATUSES,
   PAYMENT_METHOD_TYPES,
+  PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS,
 } from '../../vocabulary/payments';
 
 /**
@@ -462,7 +463,15 @@ export const createPaymentIntentParams = z
     ...railParams,
     ...connectedAccountParam,
     metadata: metadataCreateParam.optional(),
-    expires_in_seconds: z.number().int().positive().optional(),
+    expires_in_seconds: z
+      .number()
+      .int()
+      .positive()
+      .max(PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS)
+      .optional()
+      .describe(
+        'How long the payment stays payable, in seconds: at most 86400 (24 hours). Defaults to 900 (15 minutes).',
+      ),
     payment_method_types: z
       .array(z.enum(PAYMENT_METHOD_TYPES))
       .min(1)

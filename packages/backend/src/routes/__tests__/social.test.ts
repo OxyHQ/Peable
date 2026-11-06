@@ -15,6 +15,7 @@ import {
 } from '@peable.to/shared-types';
 import { socialSendAttributions } from '../../db/schema';
 import { must } from '../../__tests__/helpers/must';
+import { useAddressUsageReader } from '../../services/faircoin/addressPool';
 import {
   gatewayDb,
   resetGatewayTables,
@@ -222,6 +223,44 @@ describe('POST /v1/social/:username/next_address', () => {
     await postNextAddress('alice', { network: 'testnet' });
     const { body } = await postNextAddress('alice', { network: 'testnet' });
     expect(body.index).toBe(2);
+  });
+
+  test('a sender asking again before paying is handed the address it holds (ADR 0021 D9)', async () => {
+    const previous = useAddressUsageReader(async () => 'unused');
+    try {
+      const first = await postNextAddress('alice', { network: 'testnet' }, 'user_repeat_sender');
+      const again = await postNextAddress(
+        'alice',
+        { network: 'testnet', source: { app: 'mention', ref: 'post_later' } },
+        'user_repeat_sender',
+      );
+      expect(again.status).toBe(200);
+      expect(again.body).toEqual(first.body);
+      // One row, now saying what the next payment to it is for.
+      const rows = await gatewayDb()
+        .select()
+        .from(socialSendAttributions)
+        .where(eq(socialSendAttributions.senderUserId, 'user_repeat_sender'));
+      expect(rows.map((row) => [row.derivationIndex, row.sourceApp, row.sourceRef])).toEqual([
+        [1, 'mention', 'post_later'],
+      ]);
+      // Another sender is not handed it.
+      const other = await postNextAddress('alice', { network: 'testnet' }, 'user_other_sender');
+      expect(other.body.index).toBe(2);
+    } finally {
+      useAddressUsageReader(previous);
+    }
+  });
+
+  test('once the chain shows the address paid, the sender gets a fresh one', async () => {
+    const previous = useAddressUsageReader(async () => 'used');
+    try {
+      await postNextAddress('alice', { network: 'testnet' }, 'user_paid_sender');
+      const next = await postNextAddress('alice', { network: 'testnet' }, 'user_paid_sender');
+      expect(next.body.index).toBe(2);
+    } finally {
+      useAddressUsageReader(previous);
+    }
   });
 
   test('404s for an unknown username', async () => {

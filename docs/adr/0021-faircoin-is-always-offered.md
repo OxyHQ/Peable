@@ -1,7 +1,7 @@
 # ADR 0021 — FairCoin is always offered
 
 **Status:** accepted.
-**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added.
+**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review).
 **Amends:** ADR 0012 (D5 `connected_account` on a fiat order, D12 the platform
 fee), ADR 0015 §5 (the FairCoin ledger entry gains its fiat equivalent), ADR 0018
 ("as built" §3 *the rail follows the currency*, and the "not built" item
@@ -264,6 +264,138 @@ the session creates (each method the payer confirms, each fresh quote), so a
 merchant matches a payment's events to its own records by its own id rather
 than by amount or timing. The session's `client_reference_id` stays on the
 session. Peable keys nothing on that metadata.
+
+### D9. A recipient's tree is bounded: recycle before minting, cap what is open
+
+**Added 2026-11-06** (independent security review, finding F4, which refused
+mainnet). Every FairCoin payment reserves an address on the RECIPIENT's cursor
+(D5), and the recipient's Peable wallet scans every index up to the highest
+reserved (ADR 0002). Before this decision every confirm minted: anyone who can
+open a checkout (payer routes are anonymous), a marketplace platform minting
+on-behalf intents, a Pay with Peable sheet re-confirming on each switch or
+lapsed quote, an orphaned intent of a confirm that lost a race — each pushed a
+stranger's cursor up, and a few dozen addresses a day per attacker IP past
+150 000 froze the wallet's scan. The number of addresses a recipient's tree
+grows by is now bounded by REAL payments, whatever anyone does:
+
+- **Recycle before minting** (`services/faircoin/addressPool.ts`). An address
+  held by a payment that ended `canceled` at least **1 hour** ago (the
+  quarantine: six quote lives, so a payer who pays a lapsed quote a little late
+  still pays an address no other order holds), that still derives from the
+  recipient's CURRENT key at its recorded index (`payment_intent_outputs.
+  derivation_index`; a rotated key's tree is one nobody scans, ADR 0002), and
+  that the chain shows never received anything (Explorer `GET /api/address/:a`:
+  no transaction, nothing received, no unspent output), is handed to the next
+  payment, lowest index first. The previous holder keeps its row, marked
+  `recycled_at`; an address the chain shows used, or that no longer derives from
+  the key, is marked `retired_at` and never offered again. An Explorer that
+  cannot tell — an outage, or testnet's node, which has no address index and
+  answers `isValid: false` with a note — recycles nothing: `unknown` is never
+  read as unused.
+- **Cap what is open.** A fresh index is minted only while fewer than **500**
+  of the recipient's addresses (per network) are OPEN: held by a payment in
+  `requires_action` or `processing`, or cancelled within the quarantine. At the
+  cap the FairCoin confirm is refused **503 `faircoin_capacity_reached`** and
+  the order shows FairCoin `temporarily_unavailable`; every other method keeps
+  working, so nothing an attacker does can deny the card rail. The count and
+  the mint run in the payment's own transaction under a per-recipient advisory
+  lock (`pg_advisory_xact_lock`), so concurrent confirms cannot both pass it,
+  and a payment that rolls back (including one that loses its idempotency-key
+  race) returns its claim and its index with it. The reservation itself is
+  unchanged: ONE statement on the cursor.
+- **The bound.** A recipient's tree holds at most 500 addresses nobody paid,
+  plus one per address something was actually sent to — a real payment, or
+  coins an attacker spent (at least the network's dust threshold plus a fee)
+  to dirty it. Outside an Explorer outage on mainnet that is a size bound, not a
+  rate. On testnet (no address index) nothing is recycled and the cap bounds
+  the rate instead: at most 500 abandoned addresses per hour.
+- **The holes that fed it are closed.** A confirm that loses its session
+  (`moved`) cancels the FairCoin payment it created in the transaction that saw
+  it orphaned (`abandoned`). A repeated FairCoin confirm on an order whose
+  linked payment still has more than a minute of quote answers that payment (as
+  before; the invoice page does the same). `expires_in_seconds` is at most
+  86 400 (24 h) in the contract and for every internal caller (F10): an address
+  stays out of the pool only as long as its payment is payable. And a reported
+  broadcast the Explorer has never seen for **24 hours**, that provably pays
+  nothing at the payment's addresses (each reads unused, or reads used with the
+  reported txid absent from its transaction list), while the Explorer answers,
+  is **lost**: the watcher cancels the payment `abandoned` (`broadcast_lost`).
+  Without that, a made-up txid — with or without dust sent to the address — held
+  an address, and a place under the cap, for ever. Coins someone sent there stay
+  the recipient's, and that address is retired, never recycled. This narrows ADR 0012 D9
+  ("once broadcast, never expires") to broadcasts that exist: a transaction
+  nobody has seen in a day of two-minute, nearly empty blocks is not moving
+  money.
+- **`@username` addresses** are not payments and are not counted against the
+  cap. A sender asking again for a recipient it has not paid is handed the
+  address it already holds (its latest attribution, when it still derives from
+  the recipient's key and the chain shows it unused), with the request's
+  context written over the old one; so a sender holds at most ONE unpaid
+  address per recipient, beside the per-pair limiter. The residual is distinct
+  authenticated Oxy accounts, each one more address until it pays.
+- **Not done:** a unique `txid` across payments. One address has at most one
+  holder that is not recycled (the unique index on `payment_intent_outputs
+  (network, address)` is now partial on `recycled_at is null`), and a recycled
+  address's previous holder is `canceled`, which is terminal: no transaction can
+  settle both. A unique `txid` would also refuse one transaction paying two
+  orders' outputs, which is legitimate.
+
+The cost of the cap, written down: an attacker who keeps 500 of a recipient's
+addresses open (an anonymous payment-link visit plus a confirm each, held for
+the payment's life plus the quarantine) makes FairCoin `temporarily_unavailable`
+for that recipient meanwhile. A fiat order still takes a card; a `FAIR`-priced
+order has no other method and waits. That is the trade the bound requires —
+availability of one rail for a while, instead of a wallet that can never be
+scanned again — and it is the reason the cap is far above real concurrency.
+
+The residual risk, written down: a payer who pays a cancelled quote more than an
+hour after it was cancelled, AFTER its address was handed to another order,
+pays that other order's address — the coins are still the recipient's, and the
+later order's payer could report that transaction as their own if it pays at
+least their amount. The quarantine makes this a late payment of an abandoned
+quote, never a race of two live payments.
+
+### D10. A mainnet payment settles at 6 confirmations, and is watched until a reorg cannot undo it
+
+**Added 2026-11-06** (security review F9). `required_confirmations` defaulted to
+1 for every merchant, and nothing re-read a payment once it succeeded, though
+`reorg_below_threshold` existed.
+
+- **Default 6 on mainnet.** FairCoin's own coinbase maturity on mainnet is 6
+  blocks (`coinbaseMaturity` in `@fairco.in/core`), about 12 minutes of
+  2-minute proof-of-stake blocks; one confirmation is one staker's say-so.
+  `insertMerchant` writes 6 for a `production` (mainnet) merchant that names
+  none; testnet keeps 1. Migration `0106` (post) raises mainnet merchants still
+  at 1 — the old default, indistinguishable from a choice — to 6; any other
+  value is kept, and a merchant that wants 1 sets it with `POST
+  /v1/merchants/me`.
+- **Watched to the chain's reorg bound.** The settlement watcher re-reads every
+  `succeeded` FairCoin payment with fewer than `maxReorgDepth` (100)
+  confirmations, settled within the last 7 days. A deeper count is recorded (no
+  event). Fewer confirmations than the merchant's threshold — or the
+  transaction missing for 10 minutes (five blocks) while the Explorer's tip
+  answers — rewinds it to `processing` (`reorg_below_threshold`): the merchant
+  is told `payment_intent.processing`, the ledger posts the reversal, and the
+  watcher settles it again when it is mined again, or — if the coins never come
+  back — D9's lost-broadcast rule cancels it a day later.
+- **A rewind does not undo the order.** A Checkout Session stays `complete`
+  and an invoice stays `paid`: the payment's own status and its events
+  (`payment_intent.processing`, then `succeeded` again or `canceled`) are what
+  the merchant is told, the same way a card dispute leaves its charge's order
+  alone. What was delivered against a payment the chain later dropped is the
+  merchant's decision; un-paying an invoice (and the subscription and
+  entitlements behind it) or un-completing a session would also un-commit tax
+  and re-send receipts, and is not decided here. The 6-confirmation default is
+  what makes a rewind rare.
+- **A lost broadcast needs proof, not silence.** D9's rule cancels only after
+  the watcher has itself seen the transaction missing on every read for an
+  hour (a transaction-API outage also answers "missing"), the tip answers, and
+  every output address reads unused, or used with the reported txid not among
+  its transactions (`GET /api/address/:a/txs`, a full list); on mainnet any
+  `unknown` keeps the payment `processing`. Testnet's node only ever answers
+  `unknown`, so there the missing transaction alone decides. A payer who paid
+  the address but reported a wrong txid is ADR 0012 D9's residual case: the
+  coins are the recipient's, and the order is between payer and merchant.
 
 ### D7. The ledger records the fiat equivalent
 
