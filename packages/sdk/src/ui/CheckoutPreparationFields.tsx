@@ -83,7 +83,7 @@ export function CheckoutPreparationFields({
                   onPress={() =>
                     onChange({
                       ...details,
-                      selectedAddressId: saved.id,
+                      selectedAddressId: saved.requiresReview ? null : saved.id,
                       shipping: { ...saved.address },
                     })
                   }
@@ -158,7 +158,7 @@ export function CheckoutPreparationFields({
           </GroupedSection>
         </>
       )}
-      {preparation.renderAdditionalDetails?.({ disabled })}
+      {preparation.renderAdditionalDetails?.({ disabled, details })}
       {error && <Text accessibilityRole="alert">{error}</Text>}
       <Button size="lg" loading={busy} disabled={busy || !canContinue} onPress={onContinue}>
         {label('continue')}

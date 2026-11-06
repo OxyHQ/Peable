@@ -28,6 +28,8 @@ export interface SheetCheckoutDetails {
 export interface SheetSavedAddress {
   readonly id: string;
   readonly label: string;
+  /** Open editable fields after selection when importing incomplete account data. */
+  readonly requiresReview?: boolean;
   readonly address: SheetShippingAddress;
 }
 
@@ -51,7 +53,10 @@ export interface SheetCheckoutPreparation {
   readonly addresses?: readonly SheetSavedAddress[];
   readonly accountSummary?: PeableCheckoutSheetProps['accountSummary'];
   /** Extra prerequisites (pickup or digital consent), inside this sheet's Bloom frame. */
-  readonly renderAdditionalDetails?: (context: { readonly disabled: boolean }) => ReactNode;
+  readonly renderAdditionalDetails?: (context: {
+    readonly disabled: boolean;
+    readonly details: SheetCheckoutDetails;
+  }) => ReactNode;
   readonly canContinue?: boolean;
   /**
    * Creates/retrieves the same order, never charges it. The host owns durable idempotency and
