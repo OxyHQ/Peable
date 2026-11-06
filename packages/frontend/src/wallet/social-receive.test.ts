@@ -37,8 +37,13 @@ const ORG_KEY = 'cc'.repeat(32);
 const ORG_PUB = bytesToHex(getPublicKey(hexToBytes(ORG_KEY), false));
 let orgHolderKey: string | null = ORG_KEY;
 let orgPublicKeyResult: string | null = null;
-const getSharedPublicKey = mock(async () => sharedPublicKeyResult);
-const getOrganizationPublicKey = mock(async (_accountId: string) => orgPublicKeyResult);
+const getIdentityPublicKeyForMoney = mock(async (opts?: { accountId?: string }) =>
+  opts?.accountId !== undefined
+    ? opts.accountId === ORG_ID
+      ? orgPublicKeyResult
+      : null
+    : sharedPublicKeyResult,
+);
 const signSocialReceive = mock(
   async (index: number, digest: string, opts?: { accountId?: string }) => {
     if (opts?.accountId !== undefined) {
@@ -51,8 +56,7 @@ const signSocialReceive = mock(
 );
 mock.module('@oxy.so/core/crypto', () => ({
   ...realOxyCrypto,
-  getOrganizationPublicKey,
-  KeyManager: { getSharedPublicKey, signSocialReceive },
+  KeyManager: { getIdentityPublicKeyForMoney, signSocialReceive },
 }));
 
 const {
@@ -85,7 +89,7 @@ describe('readDeviceKeyHint (an UNTRUSTED hint, R5-1)', () => {
     orgPublicKeyResult = ORG_PUB;
     const subject = { kind: 'organization', accountId: ORG_ID } as const;
     expect(await readDeviceKeyHint(subject)).toBe(compressedPublicKeyHex(ORG_PUB));
-    expect(getOrganizationPublicKey).toHaveBeenLastCalledWith(ORG_ID);
+    expect(getIdentityPublicKeyForMoney).toHaveBeenLastCalledWith({ accountId: ORG_ID });
   });
 
   test("for an organization this phone cannot reach, is null — never the person's key", async () => {
@@ -169,7 +173,9 @@ describe('signSocialReceiveInput', () => {
     const childKey = deriveSocialReceiveSpendingKey(hexToBytes(IDENTITY_KEY_A), 1);
     expect(remote).toEqual(signInput(tx, 0, scriptPubKey, childKey));
     // The holder was asked for child 1 over the input's sighash, never for a key.
-    expect(signSocialReceive).toHaveBeenLastCalledWith(1, expect.stringMatching(/^[0-9a-f]{64}$/));
+    expect(signSocialReceive).toHaveBeenLastCalledWith(1, expect.stringMatching(/^[0-9a-f]{64}$/), {
+      ownerAccountId: PERSON.accountId,
+    });
   });
 
   test('throws when no identity holder answers', async () => {

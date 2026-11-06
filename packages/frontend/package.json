@@ -34,7 +34,7 @@
     "@oxy.so/app-preset": "^6.3.0",
     "@oxy.so/bloom": "17.14.1",
     "@oxy.so/contracts": "6.12.0",
-    "@oxy.so/core": "7.32.0",
+    "@oxy.so/core": "7.33.0",
     "@oxy.so/services": "^14.10.1",
     "@peable.to/contracts": "workspace:6.0.0",
     "@peable.to/pay": "workspace:^",

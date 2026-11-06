@@ -102,9 +102,18 @@ export function isIdentityWalletId(walletId: string): boolean {
   return walletId === LEGACY_IDENTITY_WALLET_ID || identitySubjectOfWalletId(walletId) !== null;
 }
 
-/** The `opts` `@oxy.so/core`'s key reads take for a subject: none for the person. */
-export function identityKeyOptions(subject: IdentitySubject): { accountId: string } | undefined {
-  return subject.kind === 'organization' ? { accountId: subject.accountId } : undefined;
+/**
+ * The `opts` `@oxy.so/core`'s key reads take for a subject: the organization's
+ * `accountId`, or the person's `ownerAccountId` — since core 7.33.0 the
+ * personal retired ring is bound to its owner, and a personal read reaches only
+ * that account's previous keys, never the last person's on this phone (R5-2).
+ */
+export function identityKeyOptions(
+  subject: IdentitySubject,
+): { accountId: string } | { ownerAccountId: string } {
+  return subject.kind === 'organization'
+    ? { accountId: subject.accountId }
+    : { ownerAccountId: subject.accountId };
 }
 
 /**
@@ -156,8 +165,7 @@ export const derivePreviousKeySeed = deriveIdentitySeed;
  */
 export async function listPreviousKeyHints(subject: IdentitySubject): Promise<string[]> {
   try {
-    const options = identityKeyOptions(subject);
-    const keys = options ? await listRetiredIdentityKeys(options) : await listRetiredIdentityKeys();
+    const keys = await listRetiredIdentityKeys(identityKeyOptions(subject));
     return keys.map((entry) => entry.publicKey);
   } catch {
     return [];

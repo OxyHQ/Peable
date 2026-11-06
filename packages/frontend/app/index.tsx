@@ -20,7 +20,7 @@ import { useCallback, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { Redirect, useFocusEffect } from 'expo-router';
 import { useAuth } from '@oxy.so/services/ui/client';
-import { getOrganizationPublicKey } from '@oxy.so/core/crypto';
+import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
 import { useWalletStore, type IdentityInitResult } from '../src/wallet/wallet-store';
 import { useLockStore } from '../src/wallet/lock-store';
 import { hasPin } from '../src/storage/secure-store';
@@ -63,7 +63,9 @@ async function resolveWalletTarget(account: {
   const status = await resolveOrganizationWallet(accountId, {
     hasIdentityKeystore: hasIdentityKeystore(),
     readIdentityKey: (id) => oxyServices.accounts.identityKey.get(id),
-    readDevicePublicKey: (id) => getOrganizationPublicKey(id),
+    // The key this phone can SPEND with (core 7.33.0, R5-1), never the shared
+    // group's public item another app could have written.
+    readDevicePublicKey: (id) => IdentityKeyManager.getIdentityPublicKeyForMoney({ accountId: id }),
   });
   switch (status.status) {
     case 'ready':

@@ -29,7 +29,7 @@ import {
 } from '@fairco.in/core';
 import type { NetworkConfig, Transaction } from '@fairco.in/core';
 import { Point } from '@noble/secp256k1';
-import { KeyManager as IdentityKeyManager, getOrganizationPublicKey } from '@oxy.so/core/crypto';
+import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
 import { identityKeyOptions, type IdentitySubject } from './identity-wallet';
 
 /**
@@ -44,20 +44,20 @@ export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
 }
 
 /**
- * The key this device SAYS it holds for the subject, compressed hex — an
- * UNTRUSTED hint, never the wallet's key on its own (R5-1): the person's comes
- * from the iOS keychain group every Oxy app can write (or Commons' identity
- * host on Android), the organization's likewise. `identity-key.ts` takes it
- * only when the account's own key history names it, and opens it only once
- * `deriveScopedSeed` selecting it proves this device holds it. `null` on web,
- * for a keyless account, or when nothing answers.
+ * The key this device holds for the subject, compressed hex:
+ * `KeyManager.getIdentityPublicKeyForMoney` (core 7.33.0, R5-1), the public
+ * half of exactly the private key `deriveScopedSeed` / `signSocialReceive`
+ * use — on iOS derived from the private key in the restricted keychain groups,
+ * never the shared group's public item every Oxy app can write; on Android
+ * Commons' own key. Still only a candidate: `identity-key.ts` opens it only
+ * when the account's key history names it and a derivation selecting it
+ * succeeds. `null` on web, for a keyless account, or when nothing answers.
  */
 export async function readDeviceKeyHint(subject: IdentitySubject): Promise<string | null> {
   try {
-    const publicKey =
-      subject.kind === 'organization'
-        ? await getOrganizationPublicKey(subject.accountId)
-        : await IdentityKeyManager.getSharedPublicKey();
+    const publicKey = await IdentityKeyManager.getIdentityPublicKeyForMoney(
+      subject.kind === 'organization' ? { accountId: subject.accountId } : undefined,
+    );
     return publicKey ? compressedPublicKeyHex(publicKey) : null;
   } catch {
     return null;
@@ -105,7 +105,7 @@ export function p2pkhSigHash(
 export type SocialReceiveSign = (
   index: number,
   digest: string,
-  opts?: { accountId?: string; publicKey?: string },
+  opts?: { accountId?: string; ownerAccountId?: string; publicKey?: string },
 ) => Promise<{ signature: string; publicKey: string } | null>;
 
 /**
@@ -139,19 +139,12 @@ export async function signSocialReceiveInput(
   // by the organization's key (`{ accountId }`), never by the person's. A
   // previous key is named by its public key, and never falls back to another.
   const sign: SocialReceiveSign =
-    selector.sign ??
-    ((i, digest, opts) =>
-      opts
-        ? IdentityKeyManager.signSocialReceive(i, digest, opts)
-        : IdentityKeyManager.signSocialReceive(i, digest));
+    selector.sign ?? ((i, digest, opts) => IdentityKeyManager.signSocialReceive(i, digest, opts));
   const options = {
     ...identityKeyOptions(subject),
     ...(selector.publicKey !== undefined ? { publicKey: selector.publicKey } : {}),
   };
-  const signed =
-    Object.keys(options).length > 0
-      ? await sign(index, sighash, options)
-      : await sign(index, sighash);
+  const signed = await sign(index, sighash, options);
   if (!signed) {
     throw new Error('Cannot sign for a social-receive address without the Oxy identity');
   }

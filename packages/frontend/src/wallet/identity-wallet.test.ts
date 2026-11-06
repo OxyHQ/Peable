@@ -40,7 +40,11 @@ describe('deriveIdentitySeed', () => {
     const seed = await deriveIdentitySeed(personalSubject(ACCOUNT_A), KEY);
     // Never the unselected read, which takes the keychain group every Oxy app
     // can write: the key the wallet decided on, by its public key.
-    expect(deriveScopedSeed).toHaveBeenLastCalledWith('peable/faircoin/v1', { publicKey: KEY });
+    // Its retired keys are reached only as THIS account's (core 7.33.0, R5-2).
+    expect(deriveScopedSeed).toHaveBeenLastCalledWith('peable/faircoin/v1', {
+      ownerAccountId: ACCOUNT_A,
+      publicKey: KEY,
+    });
     expect(PEABLE_SEED_INFO).toBe('peable/faircoin/v1');
     expect(seed).toEqual(new Uint8Array(32).fill(7));
   });
