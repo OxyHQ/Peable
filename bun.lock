@@ -17,7 +17,7 @@
     },
     "packages/backend": {
       "name": "@peable.to/backend",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@aws-sdk/credential-provider-node": "3.972.84",
         "@fairco.in/core": "0.5.0",

@@ -1138,6 +1138,86 @@ describe('checkout in subscription mode', () => {
     expect((await payer(cs, '')).json.status).toBe('complete');
   });
 
+  test('account-channel subscription collects billing for inclusive tax without requiring email', async () => {
+    await approveTax();
+    const payerCustomer = await ok('POST', '/v1/customers', {
+      metadata: { oxy_account_id: 'account_fixture' },
+    });
+    expect(payerCustomer.email).toBeNull();
+    const product = await ok('POST', '/v1/products', { name: 'Account subscription' });
+    const plan = await ok('POST', '/v1/prices', {
+      product: product.id,
+      currency: 'EUR',
+      unit_amount: '599',
+      recurring: { interval: 'month' },
+      tax_behavior: 'inclusive',
+    });
+    const cs = await session({
+      mode: 'subscription',
+      contact_collection: 'merchant_account',
+      customer: payerCustomer.id,
+      automatic_tax: { enabled: true },
+      billing_address_collection: 'required',
+      success_url: 'https://shop.example/done',
+      line_items: [{ price: plan.id, quantity: 1 }],
+    });
+    const missing = await payer(cs, '/confirm', {});
+    expect(missing.status).toBe(400);
+    expect(missing.json.error.param).toBe('customer_details[address]');
+    const collected = await payer(cs, '', {
+      customer_details: {
+        name: 'Account Buyer',
+        address: {
+          country: 'US',
+          state: 'CA',
+          line1: '1 Main St',
+          city: 'San Francisco',
+          postal_code: '94105',
+        },
+      },
+    });
+    expect(collected.status).toBe(200);
+    expect(collected.json.customer_details.email).toBeNull();
+    expect(collected.json.automatic_tax.status).toBe('complete');
+    expect(collected.json.amount_total).toBe('599');
+    const confirmed = await payer(cs, '/confirm', {});
+    expect(confirmed.json.error).toBeUndefined();
+    expect(confirmed.status).toBe(200);
+    const customerAfter = await ok('GET', `/v1/customers/${payerCustomer.id}`);
+    expect(customerAfter).toMatchObject({
+      email: null,
+      name: null,
+      address: { country: 'US', state: 'CA', postal_code: '94105' },
+    });
+    const retry = await payer(cs, '/confirm', {});
+    expect(retry.status).toBe(200);
+    expect(retry.json.payment_intent.id).toBe(confirmed.json.payment_intent.id);
+    const updatedEvents = (
+      await storedEvents({ merchantId: merchant.id, type: 'customer.updated' })
+    ).filter(({ event }) => (event.data.object as { id?: string }).id === payerCustomer.id);
+    expect(updatedEvents).toHaveLength(1);
+    const intent = must(
+      await findIntentForMerchant(gatewayDb(), confirmed.json.payment_intent.id, merchant.id),
+    );
+    expect(intent.receiptEmail).toBeNull();
+    await applyProviderPaymentResult(intent, {
+      status: 'succeeded',
+      chargeObjectId: `ch_${intent.providerObjectId}`,
+    });
+    const [sub] = (await ok('GET', `/v1/subscriptions?customer=${payerCustomer.id}&status=all`))
+      .data as Json[];
+    const active = await ok('GET', `/v1/subscriptions/${must(sub).id}?expand[]=latest_invoice`);
+    expect(active.status).toBe('active');
+    expect(active.latest_invoice).toMatchObject({
+      status: 'paid',
+      total: '599',
+      amount_paid: '599',
+      customer_email: null,
+    });
+    expect((await payer(cs, '')).json.status).toBe('complete');
+    expect(await sentKinds()).toEqual([]);
+  });
+
   test('a line that is not a licensed recurring price is refused at creation', async () => {
     const payerCustomer = await customer(null, { card: false });
     const once = await ok('POST', '/v1/prices', {
