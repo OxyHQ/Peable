@@ -17,9 +17,12 @@ module.exports = ({ config }) => {
   // upgrade path for existing installs. Treat it as frozen after the first
   // release.
   //
-  // The Oxy-family sharing ids do NOT move with it. On iOS the keychain group
-  // `group.so.oxy.shared` (app.json entitlements) is how this app reads the
-  // identity Commons writes. On Android Peable has its own UID and asks Commons
+  // The Oxy-family sharing ids do NOT move with it. On iOS the keychain groups
+  // (app.json entitlements) are `so.oxy.wallet` FIRST — the group only Commons
+  // and this wallet hold, where Commons keeps the keys the wallet signs with and
+  // where this app's own items now go (its default group) — then
+  // `group.so.oxy.shared` (public keys, the device session). @oxy.so/app-preset
+  // refuses that layout for any other bundle id (oxy ADR 0062). On Android Peable has its own UID and asks Commons
   // over signature-protected IPC (`so.oxy.permission.IDENTITY`, declared by
   // `@oxy.so/services/plugins/withOxySharedPermissions`); Commons allow-lists
   // `to.peable.app` / `to.peable.app.dev` by package name, so renaming either
