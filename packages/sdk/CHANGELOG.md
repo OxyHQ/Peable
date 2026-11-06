@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.1.0 — a FairCoin-only fiat order
+
+Requires `@peable.to/contracts` 4.1.0 and `@peable.to/shared-types` 4.1.0.
+Additive (ADR 0021 D1: the fiat methods are the merchant's to turn off, FairCoin
+never is): a fiat Checkout Session may name `payment_method_types:
+['faircoin']`, which used to be a 400. The payer confirms in FairCoin (the
+default for such a session); the total is quoted in FAIR and, with
+`connected_account`, paid to the seller's own Peable wallet. Confirming with
+`card` on it is a 400; its public view carries no `publishable_key`.
+
 ## 4.0.0 — FairCoin is always offered, into the owner's Peable wallet
 
 Requires `@peable.to/contracts` 4.0.0 and `@peable.to/shared-types` 4.0.0.

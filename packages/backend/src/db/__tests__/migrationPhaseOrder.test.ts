@@ -123,6 +123,13 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // the identity-wallet migrations `0089`–`0094` were authored.
   '0088_faircoin_offered_validate':
     'applied in production; ledger read 2026-11-06 held 0000–0088 before 0089 was authored',
+  // The identity-wallet migrations shipped with #243, whose deploy applied the
+  // post half: a read-only ledger probe on 2026-11-06 counted 95 rows
+  // (`0000`–`0094`) before `0095` was authored.
+  '0093_drop_faircoin_xpub':
+    'applied in production; ledger read 2026-11-06 held 0000–0094 before 0095 was authored',
+  '0094_faircoin_identity_wallet_validate':
+    'applied in production; ledger read 2026-11-06 held 0000–0094 before 0095 was authored',
 };
 
 interface Migration {

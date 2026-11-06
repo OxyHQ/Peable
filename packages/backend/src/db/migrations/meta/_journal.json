@@ -666,6 +666,13 @@
       "when": 1793918292305,
       "tag": "0094_faircoin_identity_wallet_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793923657320,
+      "tag": "0095_checkout_sessions_card_offered",
+      "breakpoints": true
     }
   ]
 }

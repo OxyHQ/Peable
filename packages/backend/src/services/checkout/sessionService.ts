@@ -271,14 +271,11 @@ async function planRail(
         'payment_method_types',
       );
     }
-    if (rail === 'card' && !named.has('card')) {
-      throw invalid(
-        'parameter_invalid',
-        "a fiat order offers its card methods beside FairCoin: name ['card', 'faircoin'], and choose the card methods in the payment method configuration",
-        'payment_method_types',
-      );
-    }
   }
+  // The fiat methods are the merchant's to turn off for an order; FairCoin is
+  // not (ADR 0021 D1). `['faircoin']` on a fiat order is a FairCoin-only one.
+  const cardOffered =
+    rail === 'card' && (!body.payment_method_types || body.payment_method_types.includes('card'));
   try {
     const account =
       body.connected_account !== undefined
@@ -291,18 +288,25 @@ async function planRail(
         { rail, currency, ...(network ? { network } : {}) },
         account,
       );
-      return { ...resolved, connectedAccountId: account?.id ?? null };
+      return { ...resolved, connectedAccountId: account?.id ?? null, cardOffered: false };
     }
     // A fiat order: the card rail settles the currency (a merchant's own
     // charge), FairCoin is offered beside it on the payee's network.
     const resolved = resolveRail(merchant, { rail, currency });
     if (!options.pays) {
       assertRailAvailable(resolved.rail, merchant.environment);
-      return { ...resolved, network: null, connectedAccountId: null };
+      return { ...resolved, network: null, connectedAccountId: null, cardOffered: true };
     }
-    // Nothing could pay an order with neither a card rail nor a FairCoin key.
-    if (network === undefined) assertRailAvailable(resolved.rail, merchant.environment);
-    return { ...resolved, network: network ?? null, connectedAccountId: account?.id ?? null };
+    // Nothing could pay an order with neither a card rail nor a FairCoin network.
+    if (network === undefined && cardOffered) {
+      assertRailAvailable(resolved.rail, merchant.environment);
+    }
+    return {
+      ...resolved,
+      network: network ?? null,
+      connectedAccountId: account?.id ?? null,
+      cardOffered,
+    };
   } catch (error) {
     if (error instanceof CheckoutError) throw error;
     // A seller that is unknown or not ready: the field is `connected_account`.
@@ -579,6 +583,7 @@ export async function createCheckoutSession(
     rail: rail.rail,
     network: rail.network,
     connectedAccountId: rail.connectedAccountId,
+    cardOffered: rail.cardOffered,
     allowPromotionCodes: body.allow_promotion_codes ?? false,
     couponId,
     promotionCodeId,
@@ -1135,7 +1140,19 @@ function describeOrder(lines: readonly CheckoutLineItemRow[]): string | undefine
 export type PayerChoice = { readonly paymentMethodType?: 'card' | 'faircoin' | undefined };
 
 function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
-  const method = choice.paymentMethodType ?? session.rail;
+  // A FairCoin-only fiat order defaults to FairCoin; otherwise the currency's rail.
+  const method =
+    choice.paymentMethodType ??
+    (session.rail === 'card' && !session.cardOffered && session.mode !== 'setup'
+      ? 'faircoin'
+      : session.rail);
+  if (method === 'card' && session.mode !== 'setup' && !session.cardOffered) {
+    throw invalid(
+      'parameter_invalid',
+      'this order is paid in FairCoin only; the merchant turned its card methods off for it',
+      'payment_method_type',
+    );
+  }
   if (session.mode === 'setup' && method !== 'card') {
     throw invalid(
       'parameter_invalid',
@@ -1688,7 +1705,7 @@ export async function expireSessionNow(
 
 /** The card provider's public key for a session's mode, so its fields can mount before the payment exists. */
 export function publishableKeyFor(session: CheckoutSessionRow): string | null {
-  if (session.rail !== 'card') return null;
+  if (session.rail !== 'card' || (!session.cardOffered && session.mode !== 'setup')) return null;
   return config.stripe[session.livemode ? 'live' : 'test']?.publishableKey ?? null;
 }
 
