@@ -57,6 +57,15 @@
  * predates the keychain probe (`ungrouped`), makes exactly the calls it always
  * made.
  *
+ * A DEVELOPMENT build (`variant: '.dev'`, `to.peable.app.dev`) never reads,
+ * moves or deletes anything in the shared group (oxy round-5 review R5-5,
+ * core 7.35.0): the shared group has no dev variant, so what sits there under
+ * the wallet's keys is the production wallet's — or planted. Its sources are
+ * its own earlier group (`so.oxy.wallet.dev`) alone, its writes clear only
+ * that copy, and its deletes name "own" and the earlier group and make no
+ * unscoped call (on iOS that call reaches every entitled group, the shared
+ * one included).
+ *
  * The identity keys the wallet derives and signs with are NOT here: they are
  * Commons' (`spending-key`), read through `@oxy.so/core`'s KeyManager, which
  * stops falling back to the shared group once Commons' migration record is in
@@ -89,7 +98,8 @@ interface Groups {
   own: string;
   /** Where the previous native build kept them (the default group), if not `own`. */
   earlier: string | null;
-  shared: string;
+  /** `null` on a development build: it never touches the shared group (R5-5). */
+  shared: string | null;
 }
 
 /**
@@ -104,12 +114,17 @@ async function groupsOf(resolveAccess: () => Promise<KeychainAccess>): Promise<G
   const plan = ownKeychainItemPlan(access);
   const own = plan.write.accessGroup;
   const shared = keychainAccessGroupValue(access, 'shared');
-  if (!own || !shared || own === shared) return null;
+  if (access.mode !== 'grouped' || !own || !shared || own === shared) return null;
   // The plan reads `own`, then the default group when it is not `own`, then `{}`.
   const earlier = plan.read
     .map((option) => option.accessGroup)
     .find((group) => group !== undefined && group !== own && group !== shared);
-  return { own, earlier: earlier ?? null, shared };
+  return { own, earlier: earlier ?? null, shared: access.variant ? null : shared };
+}
+
+/** The groups other than `own` this build may read, clear or delete in, in order. */
+function otherGroups(groups: Groups): string[] {
+  return [groups.earlier, groups.shared].filter((g): g is string => g !== null);
 }
 
 /** Best effort: a write's superseded copies. Never throws. */
@@ -175,9 +190,11 @@ async function hasMarker(store: KeychainStore, group: string): Promise<boolean> 
 /**
  * Where the wallet's items may still come from, in order: the earlier group,
  * and the shared group unless the earlier group's marker says the move out of
- * it already finished. Throws when the earlier marker cannot be read.
+ * it already finished, or this is a development build (never the shared
+ * group). Throws when the earlier marker cannot be read.
  */
 async function sourcesOf(store: KeychainStore, groups: Groups): Promise<string[]> {
+  if (!groups.shared) return groups.earlier ? [groups.earlier] : [];
   if (!groups.earlier) return [groups.shared];
   return (await hasMarker(store, groups.earlier))
     ? [groups.earlier]
@@ -262,11 +279,7 @@ export function createGroupedKeychainAdapter(
       if (!s.groups) return store.setItemAsync(key, value);
       touched.add(key);
       await store.setItemAsync(key, value, { accessGroup: s.groups.own });
-      await removeCopies(
-        store,
-        key,
-        [s.groups.earlier, s.groups.shared].filter((g): g is string => g !== null),
-      );
+      await removeCopies(store, key, otherGroups(s.groups));
     },
     deleteItem: async (key) => {
       const s = await ready();
@@ -274,11 +287,13 @@ export function createGroupedKeychainAdapter(
       touched.add(key);
       // Every location by name — the app group is not the default group, so
       // the delete must not rest on what an unscoped query reaches — then the
-      // unscoped delete it always made. A thrown delete propagates.
-      for (const group of [s.groups.own, s.groups.earlier, s.groups.shared]) {
-        if (group) await store.deleteItemAsync(key, { accessGroup: group });
+      // unscoped delete it always made, except on a development build, where
+      // it would reach the production wallet's copy in the shared group. A
+      // thrown delete propagates.
+      for (const group of [s.groups.own, ...otherGroups(s.groups)]) {
+        await store.deleteItemAsync(key, { accessGroup: group });
       }
-      await store.deleteItemAsync(key);
+      if (s.groups.shared) await store.deleteItemAsync(key);
     },
   };
 }
