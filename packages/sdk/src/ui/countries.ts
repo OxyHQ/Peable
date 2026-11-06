@@ -9,8 +9,11 @@ const countryCodes =
 /** Every billing country, named and sorted in the payer's language. */
 export function billingCountries(payerLocale: string): { value: string; label: string }[] {
   const locale = intlLocale(payerLocale);
-  const names = new Intl.DisplayNames([locale], { type: 'region' });
+  const names =
+    typeof Intl.DisplayNames === 'function'
+      ? new Intl.DisplayNames([locale], { type: 'region' })
+      : null;
   return countryCodes
-    .map((value) => ({ value, label: names.of(value) ?? value }))
+    .map((value) => ({ value, label: names?.of(value) ?? value }))
     .sort((a, b) => a.label.localeCompare(b.label, locale));
 }

@@ -16,7 +16,10 @@ import { PeableError } from '../core/errors';
 import { createPeableCheckout, type PeableClientAction } from '../browser/payerClient';
 import { isMobileUserAgent, payDeepLinkFor } from '../browser/payDeepLink';
 import { DEFAULT_CHECKOUT_URL } from '../browser/embedProtocol';
-import { PeableCheckoutSheet } from './PeableCheckoutSheet';
+import { PeableCheckoutSheet, type PeableCheckoutSheetProps } from './PeableCheckoutSheet';
+import { CheckoutPreparationFields } from './CheckoutPreparationFields';
+import { useCheckoutPreparation } from './useCheckoutPreparation';
+import type { SheetCheckoutPreparation } from './checkoutPreparation';
 import type { PeableMethodDetails } from './PeableMethodContent';
 import { PeableProviderFields } from './PeableProviderFields';
 import { PeableWalletButtons } from './PeableWalletButtons';
@@ -62,9 +65,7 @@ export const SHEET_POLL_MS = 3000;
 /** How long the confirmed success is shown before the sheet closes itself. */
 const SUCCESS_DISMISS_MS = 1800;
 
-export interface PeableSheetCheckoutProps {
-  /** What to pay, with the payer's capability (`sessionSource`, `intentSource`, `sheetSourceFromUrl`). */
-  source: SheetCheckoutSource;
+interface SheetCheckoutCommonProps {
   /** Gateway base URL. Default `https://api.peable.to`. */
   gatewayUrl?: string;
   /** Peable's hosted checkout, for the card where secure fields cannot mount. */
@@ -88,6 +89,8 @@ export interface PeableSheetCheckoutProps {
   presentation?: SheetPresentation;
   /** A single payment's lines and payee; required for a `payment_intent` source. */
   order?: SheetOrder;
+  /** Signed-in payer identity; the SDK never fetches account data itself. */
+  accountSummary?: PeableCheckoutSheetProps['accountSummary'];
   /** Where a bank's 3-D Secure redirect returns. Default: this page. */
   returnUrl?: string;
   /**
@@ -107,6 +110,20 @@ export interface PeableSheetCheckoutProps {
   /** The order cannot be paid here: unreadable at first read, or not the one reviewed. */
   onUnavailable(reason: 'unreadable' | 'mismatch'): void;
   onClose(): void;
+}
+
+export type PeableSheetCheckoutProps = SheetCheckoutCommonProps &
+  (
+    | { source: SheetCheckoutSource; preparation?: never }
+    | { preparation: SheetCheckoutPreparation; source?: never }
+  );
+
+/** A changed account/cart or payment capability discards every previous private field and callback. */
+export function PeableSheetCheckout(props: PeableSheetCheckoutProps) {
+  const key = props.preparation
+    ? `preparation:${props.preparation.key}`
+    : `${props.source.type}:${props.source.id}:${props.source.clientSecret}`;
+  return <SheetCheckout key={key} {...props} />;
 }
 
 type Order =
@@ -157,8 +174,9 @@ function defaultOpenUrl(url: string, kind: 'wallet' | 'hosted'): Promise<void> {
  * HOST's (`outcome`), which it reads from its own backend — never a closed
  * sheet, a provider callback or a browser returning.
  */
-export function PeableSheetCheckout({
+function SheetCheckout({
   source: sourceProp,
+  preparation,
   gatewayUrl,
   checkoutUrl = DEFAULT_CHECKOUT_URL,
   locale = 'auto',
@@ -166,6 +184,7 @@ export function PeableSheetCheckout({
   expected,
   presentation,
   order: intentOrder,
+  accountSummary,
   returnUrl,
   openUrl = defaultOpenUrl,
   onSettled,
@@ -178,6 +197,9 @@ export function PeableSheetCheckout({
       checkoutMessage(locale, key, values, messages),
     [locale, messages],
   );
+  const preparationState = useCheckoutPreparation(preparation, t('error.connection'));
+  const resolvedSource = sourceProp ?? preparationState.prepared?.source;
+  const resolvedExpected = preparationState.prepared?.expected ?? expected;
   // The FairCoin request is the Peable wallet's, so the external view says Peable.
   const sheetMessages = useMemo(
     () => ({
@@ -187,9 +209,14 @@ export function PeableSheetCheckout({
     [locale, messages],
   );
   // The capability is the source's identity: a re-rendered object is the same order.
-  const { type: sourceType, id: sourceId, clientSecret: sourceSecret } = sourceProp;
-  const source = useMemo<SheetCheckoutSource>(
-    () => ({ type: sourceType, id: sourceId, clientSecret: sourceSecret }),
+  const sourceType = resolvedSource?.type;
+  const sourceId = resolvedSource?.id;
+  const sourceSecret = resolvedSource?.clientSecret;
+  const source = useMemo<SheetCheckoutSource | null>(
+    () =>
+      sourceType && sourceId && sourceSecret
+        ? { type: sourceType, id: sourceId, clientSecret: sourceSecret }
+        : null,
     [sourceType, sourceId, sourceSecret],
   );
   const client = useMemo(
@@ -212,6 +239,7 @@ export function PeableSheetCheckout({
   const [tracked, setTracked] = useState<FaircoinPaymentIntent | null>(null);
   const [now, setNow] = useState(nowSeconds);
   const active = useRef(true);
+  const hasReadOrder = useRef(false);
   const inFlight = useRef(false);
   const settled = useRef(false);
   const refused = useRef(false);
@@ -221,8 +249,8 @@ export function PeableSheetCheckout({
   const authorizationRef = useRef<PreparedCardAuthorization | null>(null);
   const callbacks = useRef({ onSettled, onUnavailable, onClose });
   callbacks.current = { onSettled, onUnavailable, onClose };
-  const latest = useRef({ expected, locale, messages });
-  latest.current = { expected, locale, messages };
+  const latest = useRef({ expected: resolvedExpected, locale, messages });
+  latest.current = { expected: resolvedExpected, locale, messages };
   const cardFields = canMountCardFields();
 
   const go = useCallback((next: CheckoutStep, way: 'forward' | 'backward' = 'forward') => {
@@ -267,6 +295,11 @@ export function PeableSheetCheckout({
       return;
     }
     setOrder(next);
+    if (!hasReadOrder.current) {
+      hasReadOrder.current = true;
+      setDirection('forward');
+      setStep('review');
+    }
     setNow(nowSeconds());
     const current = next.type === 'checkout_session' ? next.session.payment_intent : next.intent;
     if (isFaircoinPayment(current)) setTracked(current);
@@ -313,6 +346,7 @@ export function PeableSheetCheckout({
   }, []);
 
   const read = useCallback(async (): Promise<Order> => {
+    if (!source) throw new Error('Checkout session not created');
     if (source.type === 'checkout_session') {
       return {
         type: 'checkout_session',
@@ -331,18 +365,21 @@ export function PeableSheetCheckout({
 
   useEffect(() => {
     active.current = true;
+    if (!source) return;
+    let disposed = false;
     let loaded = false;
     let gaveUp = false;
     const tick = () => {
       read()
         .then((value) => {
+          if (disposed) return;
           loaded = true;
           accept(value);
         })
         .catch(() => {
           // The first read decides whether this order can be paid here at all;
           // a later failure keeps the last answer and the next tick retries.
-          if (loaded || gaveUp || refused.current || !active.current) return;
+          if (disposed || loaded || gaveUp || refused.current || !active.current) return;
           gaveUp = true;
           refused.current = true;
           callbacks.current.onUnavailable('unreadable');
@@ -351,18 +388,19 @@ export function PeableSheetCheckout({
     tick();
     const poll = setInterval(tick, SHEET_POLL_MS);
     return () => {
+      disposed = true;
       active.current = false;
       clearInterval(poll);
       authorizationRef.current?.dispose();
       authorizationRef.current = null;
     };
-  }, [read, accept]);
+  }, [source, read, accept]);
 
   // A single card payment pays with its own client action, fetched once it is known.
   const intentId = order?.type === 'payment_intent' ? order.intent.id : null;
   const intentRail = order?.type === 'payment_intent' ? order.intent.rail : null;
   useEffect(() => {
-    if (source.type !== 'payment_intent' || !intentId || intentRail !== 'card' || !cardFields)
+    if (source?.type !== 'payment_intent' || !intentId || intentRail !== 'card' || !cardFields)
       return;
     let disposed = false;
     client
@@ -428,7 +466,7 @@ export function PeableSheetCheckout({
 
   /** Confirm the session in a method: creates its payment, or replaces an unpaid one. */
   async function confirmSession(method: 'card' | 'faircoin'): Promise<CheckoutSessionPublic> {
-    if (source.type !== 'checkout_session' || !session) throw new Error(t('error.connection'));
+    if (source?.type !== 'checkout_session' || !session) throw new Error(t('error.connection'));
     // The language the payer reads the sheet in: a customer checkout creates
     // keeps it, and the order's emails are written in it.
     const next = await client.confirmCheckoutSession(source.id, source.clientSecret, {
@@ -441,7 +479,7 @@ export function PeableSheetCheckout({
 
   /** Record the billing location the order needs, while it can still change (no payment yet). */
   async function recordBilling(location: BillingLocation): Promise<void> {
-    if (source.type !== 'checkout_session' || !session || session.payment_intent) return;
+    if (source?.type !== 'checkout_session' || !session || session.payment_intent) return;
     if (!sessionCollection(session).billingAddress) return;
     const address = billingAddressParams(location);
     const known = session.customer_details.address;
@@ -620,6 +658,7 @@ export function PeableSheetCheckout({
         session.payment_intent.status === 'requires_action'
       )
         await confirmSession('card');
+      if (!source) return;
       await openUrl(hostedUrlFor(source, checkoutUrl), 'hosted');
     });
     void refresh().catch(() => undefined);
@@ -631,7 +670,65 @@ export function PeableSheetCheckout({
     });
   }
 
-  if (!order) return null;
+  if (preparation && !order) {
+    const preparing = preparationState.busy || !!preparationState.prepared;
+    return (
+      <PeableCheckoutSheet
+        open
+        locale={locale}
+        messages={sheetMessages}
+        request={preparation.request}
+        accountSummary={preparation.accountSummary}
+        draft={{
+          ...draft,
+          email: preparationState.details.email,
+          shipping: {
+            name: preparationState.details.shipping.name,
+            address: preparationState.details.shipping.line1,
+            city: preparationState.details.shipping.city,
+            postalCode: preparationState.details.shipping.postalCode,
+            country: preparationState.details.shipping.country,
+          },
+        }}
+        step={step === 'review' ? 'review' : 'method'}
+        direction={direction}
+        frameKey="preparation"
+        nextStep="method"
+        methodTitle={t('preparation.title')}
+        interactionBlocked={preparing}
+        continueDisabled={preparing}
+        brandState={preparing ? 'loading' : undefined}
+        methodContent={
+          <CheckoutPreparationFields
+            preparation={preparation}
+            details={preparationState.details}
+            disabled={preparationState.locked}
+            busy={preparing}
+            canContinue={preparationState.canContinue}
+            error={preparationState.error}
+            locale={locale}
+            label={t}
+            onChange={preparationState.change}
+            onContinue={() => {
+              void preparationState.submit();
+            }}
+          />
+        }
+        onDraft={() => {}}
+        onStep={() => go('method')}
+        onBack={() => {
+          if (!preparing) go('review', 'backward');
+        }}
+        onClose={() => {
+          if (!preparing) onClose();
+        }}
+        onAuthorize={() => {}}
+        savedCards={[]}
+        onCard={() => {}}
+      />
+    );
+  }
+  if (!order || !source) return null;
 
   const collection = session ? sessionCollection(session) : null;
   const unsupported = collection?.unsupported ?? null;
@@ -885,6 +982,7 @@ export function PeableSheetCheckout({
       open
       locale={locale}
       messages={sheetMessages}
+      accountSummary={accountSummary ?? preparation?.accountSummary}
       interactionBlocked={busy}
       brandState={busy ? 'loading' : undefined}
       request={request}
@@ -922,7 +1020,7 @@ export function PeableSheetCheckout({
       onDraft={setDraft}
       onContinue={(next) => {
         setDraft(next);
-        if (source.type !== 'checkout_session') {
+        if (source?.type !== 'checkout_session') {
           go('review', 'backward');
           return;
         }

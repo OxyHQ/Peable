@@ -1,6 +1,12 @@
 import type { CheckoutCatalog } from './en';
 
 export default {
+  'preparation.title': 'تفاصيل الدفع',
+  'preparation.selected': 'محدد',
+  'preparation.editAddress': 'تعديل العنوان',
+  'preparation.line2': 'الشقة والطابق وما إلى ذلك (اختياري)',
+  'preparation.state': 'الولاية / المقاطعة (اختياري)',
+  'preparation.phone': 'الهاتف (اختياري)',
   'provider.card.number': 'رقم البطاقة',
   'provider.card.expiry': 'تاريخ انتهاء الصلاحية',
   'provider.card.securityCode': 'رمز الأمان',

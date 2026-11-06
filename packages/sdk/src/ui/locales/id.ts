@@ -1,6 +1,12 @@
 import type { CheckoutCatalog } from './en';
 
 export default {
+  'preparation.title': 'Detail pembayaran',
+  'preparation.selected': 'Dipilih',
+  'preparation.editAddress': 'Edit alamat',
+  'preparation.line2': 'Apartemen, lantai, dll. (opsional)',
+  'preparation.state': 'Negara bagian / provinsi (opsional)',
+  'preparation.phone': 'Telepon (opsional)',
   'provider.card.number': 'Nomor kartu',
   'provider.card.expiry': 'Tanggal kedaluwarsa',
   'provider.card.securityCode': 'Kode keamanan',

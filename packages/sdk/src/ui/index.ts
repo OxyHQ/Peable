@@ -82,3 +82,12 @@ export {
   type SheetSettlement,
 } from './sheetCheckout';
 export { formatFairAmount } from './amount';
+
+export {
+  SheetPreparationError,
+  type SheetCheckoutPreparation,
+  type SheetCheckoutDetails,
+  type SheetShippingAddress,
+  type SheetSavedAddress,
+  type SheetPreparedCheckout,
+} from './checkoutPreparation';

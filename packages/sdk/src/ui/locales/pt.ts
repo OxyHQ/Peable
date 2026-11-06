@@ -1,6 +1,12 @@
 import type { CheckoutCatalog } from './en';
 
 export default {
+  'preparation.title': 'Dados do pagamento',
+  'preparation.selected': 'Selecionado',
+  'preparation.editAddress': 'Editar endereço',
+  'preparation.line2': 'Apartamento, andar, etc. (opcional)',
+  'preparation.state': 'Estado / província (opcional)',
+  'preparation.phone': 'Telefone (opcional)',
   'provider.card.number': 'Número do cartão',
   'provider.card.expiry': 'Data de validade',
   'provider.card.securityCode': 'Código de segurança',

@@ -1,6 +1,12 @@
 import type { CheckoutCatalog } from './en';
 
 export default {
+  'preparation.title': 'भुगतान का विवरण',
+  'preparation.selected': 'चुना गया',
+  'preparation.editAddress': 'पता बदलें',
+  'preparation.line2': 'अपार्टमेंट, मंज़िल आदि (वैकल्पिक)',
+  'preparation.state': 'राज्य / प्रांत (वैकल्पिक)',
+  'preparation.phone': 'फ़ोन (वैकल्पिक)',
   'provider.card.number': 'कार्ड नंबर',
   'provider.card.expiry': 'समाप्ति तिथि',
   'provider.card.securityCode': 'सुरक्षा कोड',

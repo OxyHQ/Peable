@@ -812,6 +812,33 @@ own backend answers `outcome: 'succeeded'`, and `expected` refuses an order
 that is not the reviewed one. Mention Plus and Mercaria (plans and the
 marketplace) use it; there is no host copy of this logic.
 
+An app that needs a delivery destination **before** it can create and price an
+order passes `preparation` instead of `source`. The same sheet opens immediately,
+shows the app's quote and account details, lets the payer choose a structured
+saved address or edit it, and calls `createSession(details, { signal })` only on
+Continue. That callback returns `{ source, expected }` from the authoritative
+new order; the sheet reads it and shows its final total before payment. It never
+creates a session merely by opening, never charges on Continue, and never replaces
+the mounted Bloom sheet during this transition.
+
+`preparation.key` must identify the account and cart attempt. Change it when either
+changes. `initialDetails` may arrive asynchronously from the account's address book;
+it prefills only pristine fields. `addresses` are `{ id, label, address }` with a
+structured `SheetShippingAddress`; a free-text profile location is not an address.
+The host reads account data through its authorized Oxy APIs; the SDK receives no
+Oxy credential. `accountSummary` remains visible when the real order is ready.
+`renderAdditionalDetails({ disabled })` can place merchant-specific Bloom controls
+(pickup, consent) inside the details step, with `canContinue` for their completeness.
+
+The callback owns durable idempotency and order recovery, including any additional
+merchant fields. A timeout or unknown failure freezes the submitted address/contact
+and disables edits; Continue retries the same snapshot. Throw
+`new SheetPreparationError(message, 'not_created')` only when the backend proves
+that no order/session was created and correction is safe. The host must honor the
+abort signal and refuse old account/cart responses too. Once the order exists,
+shipping changes must be priced and synchronized by the merchant's backend, never
+silently applied only to a payer-side payment object.
+
 Its copy is ONE catalog in the SDK (`src/ui/locales/`): ar, bn, ca, de, en,
 es, fr, hi, id, it, ja, pt (Brazil), ru, tr and zh (Simplified) —
 `CHECKOUT_UI_LOCALES`, which is `CHECKOUT_LOCALES`: the one locale set the
