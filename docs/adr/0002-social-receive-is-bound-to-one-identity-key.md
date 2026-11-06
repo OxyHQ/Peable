@@ -710,3 +710,33 @@ waiver does not touch the other two items: the gate opens only on a
   leaves `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet), and the wallet's
   `SOCIAL_PAY_NETWORK` stays `testnet`.
 
+
+## Owner's decision on the round-3 risks (2026-11-06)
+
+**Who and when.** The product owner (Nate I.), explicitly, on 2026-11-06:
+*"Fix F5, F1 and D9; accept F9."*
+
+- **F5, F1 and D9 (both residuals) were fixed, not accepted.** F5: the iOS
+  keychain access-group split (OxyHQ/oxy ADR 0062; oxy#2186, Peable#268). F1:
+  previous keys stay spendable (the amendment above; oxy#2187, Peable#266).
+  D9: the sparse watch set (the amendment above; Peable#265). The security
+  review's later rounds (4–6, `docs/audits/2026-11-06-mainnet-gate/`) found
+  defects in those fixes, which were fixed in turn.
+- **F9 is accepted by the owner, in writing.** The sentence the owner accepts,
+  exactly as the audit record states it:
+
+  > "One third-party Explorer, on a chain with negligible stake weight, alone
+  > decides whether a payment settled or was reorganised, and a rewind never
+  > revokes fulfilment already granted."
+
+  Decided by the owner on 2026-11-06. It covers ADR 0021 D10 as built: one
+  Explorer read decides settlement and reorgs, and a rewind changes the
+  payment's status and events but never un-completes a session or un-pays an
+  invoice.
+
+The acceptance of F9 does not open the gate. It opens only when the security
+review signs off with no condition other than F9; the risks the later rounds
+name that need the owner's own decision are listed, as the sentences the owner
+would sign, in the audit record ("What the owner must still do"). Until then
+production leaves `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet) and the wallet's
+`SOCIAL_PAY_NETWORK` stays `testnet`.

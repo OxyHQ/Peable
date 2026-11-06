@@ -583,4 +583,8 @@ directed that mainnet open once the security review signs off and the testnet
 canary passes. The waiver, its limits and where the gate stands are recorded in
 ADR 0002 ("Owner's mainnet waiver") and `docs/audits/2026-11-06-mainnet-gate/`.
 Until then a live order's FairCoin option answers `faircoin_network_closed`.
+On 2026-11-06 the owner also decided the round-3 risks: F5, F1 and D9 fixed,
+F9 (D10's single Explorer; a rewind never revokes fulfilment) accepted in
+writing — the exact sentence is in ADR 0002 ("Owner's decision on the round-3
+risks").
 
