@@ -53,10 +53,11 @@
  * pre-multi-wallet phrase, never; the index, the active-wallet pointer and
  * every per-wallet key only for a wallet with evidence; the PIN record and the
  * other single keys only with some evidence. Every shared-group read goes
- * through the injected non-prompting reader (`OxyIdentity`'s
- * `readKeychainItemWithoutInteraction`, through `@oxy.so/protocol`), so an
- * item planted with `requireAuthentication` never raises a Face ID prompt; a
- * native build without that reader never reads the shared group at all. A
+ * through the injected non-prompting reader ({@link nonPromptingSharedRead}
+ * over `@oxy.so/core`'s `readSharedWithoutInteraction`, i.e. `OxyIdentity`'s
+ * `readKeychainItemWithoutInteraction`), so an item planted with
+ * `requireAuthentication` never raises a Face ID prompt; a native build
+ * without that reader never reads the shared group at all. A
  * wallet whose phrase or xpub WAS taken from the shared group is listed in
  * {@link KEYCHAIN_ADOPTED_WALLETS}, and offers nothing to receive into until
  * the person confirms it is theirs. What is not taken stays where it is.
@@ -92,6 +93,7 @@
  */
 import type { KeychainAccess } from '@oxy.so/core/crypto';
 import { keychainAccessGroupValue, ownKeychainItemPlan } from '@oxy.so/core/crypto';
+import type { KeychainStoreLike, readSharedWithoutInteraction } from '@oxy.so/core/session';
 import {
   adoptableFromShared,
   type InstallEvidence,
@@ -129,6 +131,35 @@ export interface SharedGroupPolicy {
     | null;
   /** This app's own evidence of an earlier install on this phone (never a keychain read). */
   readonly evidence: () => Promise<InstallEvidence>;
+}
+
+/**
+ * The store core's `readSharedWithoutInteraction` falls back to on a native
+ * module that predates `OxyIdentity.readKeychainItemWithoutInteraction`: it
+ * answers nothing, so such a build reads nothing from the shared group rather
+ * than going through expo-secure-store, whose read would prompt for an item
+ * planted with `requireAuthentication`. Core never writes or deletes through it.
+ */
+const NO_PROMPTING_FALLBACK: KeychainStoreLike = {
+  getItemAsync: async () => null,
+  setItemAsync: async () => {
+    throw new Error('The shared-group reader never writes.');
+  },
+  deleteItemAsync: async () => {
+    throw new Error('The shared-group reader never deletes.');
+  },
+};
+
+/**
+ * {@link SharedGroupPolicy.readWithoutInteraction} over `@oxy.so/core`'s
+ * `readSharedWithoutInteraction` (injected for tests): the native read that
+ * never prompts and skips the `:auth` copy, and nothing at all on a build
+ * without it. A thrown read (a locked keychain, services 14.14) propagates.
+ */
+export function nonPromptingSharedRead(
+  readShared: typeof readSharedWithoutInteraction,
+): (key: string, accessGroup: string) => Promise<string | null> {
+  return (key, accessGroup) => readShared(NO_PROMPTING_FALLBACK, key, {}, { accessGroup });
 }
 
 interface Groups {
