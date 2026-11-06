@@ -1,0 +1,56 @@
+{
+  "started_at": "2026-11-06T06:04:10.570Z",
+  "person": {
+    "at": "2026-11-06T06:04:14.687Z",
+    "account": "canary_person_0001",
+    "reserved_through": 2,
+    "watched_indices": [
+      0,
+      22
+    ],
+    "key_verdict": "match",
+    "checked_through": 22,
+    "rescan_from_height": 54,
+    "spent": [
+      {
+        "address": "TDZy9KXSNu7qUVHW3ttMeh2vSUYkLaxweo",
+        "index": 1,
+        "outpoint": "efc5a1400c05c30481524ccb74c5ed7c017caedd28e14d7473c5abcdb2b22fce:0",
+        "satoshis": 2500000000
+      },
+      {
+        "address": "TFjSdJRfMSAYZwkMepMkrUnNAcpieQSChT",
+        "index": 2,
+        "outpoint": "4593335ca965eb3ffeff7e7d48bacbcb9f3785a73b36918ae64ce86166bf0cc9:0",
+        "satoshis": 2858438045
+      }
+    ],
+    "sweep_txid": "5b1d90757c4a91ca6505056e1821aed494d342aa499cb0a23acb62c98c24ed0c",
+    "confirmations": 1,
+    "tip": 59
+  },
+  "organization": {
+    "at": "2026-11-06T06:04:18.659Z",
+    "account": "canary_org_0001",
+    "reserved_through": 1,
+    "watched_indices": [
+      0,
+      21
+    ],
+    "key_verdict": "match",
+    "checked_through": 21,
+    "rescan_from_height": 57,
+    "spent": [
+      {
+        "address": "TS4H12P3LtEADM8GoF6uBU5GwqQ7bB7K8Q",
+        "index": 1,
+        "outpoint": "7d68508c0f40b933ae29c66b0699469ef5fc896a27f650b0e205f5910bb2c0be:0",
+        "satoshis": 1500000000
+      }
+    ],
+    "sweep_txid": "88865c7c153d0eef066120b0597597b8b3fcb9beb41cb7da434852ab524c2bff",
+    "confirmations": 1,
+    "tip": 60
+  },
+  "finished_at": "2026-11-06T06:04:18.659Z"
+}

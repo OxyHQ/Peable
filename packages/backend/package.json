@@ -36,6 +36,7 @@
     "@noble/hashes": "1.8.0",
     "@noble/secp256k1": "2.3.0",
     "@oxy.so/contracts": "6.11.0",
+    "@peable.to/pay": "*",
     "@peable.to/sdk": "*",
     "@types/bun": "latest",
     "@types/express": "^4.17.21",

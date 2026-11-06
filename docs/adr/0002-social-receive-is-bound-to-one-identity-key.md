@@ -160,7 +160,8 @@ wallet's scan (`reserved_through` plus its window) stays a size it can carry.
 
 ## Still required before mainnet
 
-Unchanged by this ADR, and none of them are code:
+Unchanged by this ADR, and none of them are code (the owner waived the second
+and third on 2026-11-06 — see the next section):
 
 - the `security-reviewer` sign-off the design spec makes mandatory (§7), on the
   identity key being reused for money;
@@ -168,3 +169,44 @@ Unchanged by this ADR, and none of them are code:
 - physical-device verification including a rotation mid-flow, on a device with
   the shared-identity slot and on one without it;
 - an end-to-end testnet canary of the social path.
+
+## Owner's mainnet waiver (2026-11-06)
+
+**Who and when.** The product owner (Nate I.), explicitly, on 2026-11-06:
+*"Do everything and open it."*
+
+**What.** Run the security review and the end-to-end testnet canary now, and
+open mainnet identity receive (`PEABLE_SOCIAL_PAY_NETWORK=mainnet`, which also
+opens ADR 0021's merchant, organization and seller receive) as soon as BOTH
+pass — **without** waiting for:
+
+- the EU crypto/fintech legal opinion, and
+- physical-device verification (including a rotation mid-flow, with and
+  without the shared-identity slot).
+
+Those two are waived by the owner, not done. They stay undone, and opening
+mainnet without them is the owner's accepted risk: no lawyer has said whether
+receiving FairCoin into these wallets needs a licence or registration, and no
+one has watched a real phone keep and spend its keys through a rotation. The
+waiver does not touch the other two items: the gate opens only on a
+`security-reviewer` sign-off and a passing canary.
+
+**Where it stands** (evidence: `docs/audits/2026-11-06-mainnet-gate/`):
+
+- **Canary: passed** — on a private FairCoin testnet, because the public one has
+  no chain (the Explorer reports height 0 with no peers; its DNS seeds do not
+  resolve). Social, EUR-priced merchant and organization-owned merchant
+  payments were reserved, paid, settled by the watcher and spent by the
+  recipients' wallets on Peable `89942340`.
+- **Security review: refused twice.** Round 1's findings were fixed in #253,
+  #254, #255 and OxyHQ/oxy#2183; round 2 found two new blocking defects (the
+  gateway can mint past the wallet's 2,000-index window; concurrent confirms
+  defeat address recycling), being fixed, and conditions sign-off on the
+  owner's written acceptance of risks this waiver does NOT cover: iOS keychain
+  sharing of identity keys and recovery phrases (F5), no path to spend from a
+  previous phrase after a rotation (F1), a single third-party Explorer deciding
+  settlement and a rewind not revoking fulfilment (F9), and a late payment to a
+  recycled address settling the new holder's order (ADR 0021 D9).
+- **Gate: closed.** Production leaves `PEABLE_SOCIAL_PAY_NETWORK` unset
+  (testnet), and the wallet's `SOCIAL_PAY_NETWORK` stays `testnet`.
+

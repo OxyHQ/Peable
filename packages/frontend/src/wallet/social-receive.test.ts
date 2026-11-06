@@ -140,7 +140,7 @@ describe('deriveSocialReceiveWatchWindow', () => {
   });
 
   test('a different identity is a different set of addresses', () => {
-    const other = realOxyCrypto.deriveSocialReceiveKey('bb'.repeat(32), 0).publicKey;
+    const other = bytesToHex(getPublicKey(hexToBytes('bb'.repeat(32)), false));
     const [first] = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 0, 1, TESTNET);
     const [second] = deriveSocialReceiveWatchWindow(other, 0, 1, TESTNET);
     expect(first).toBeDefined();
