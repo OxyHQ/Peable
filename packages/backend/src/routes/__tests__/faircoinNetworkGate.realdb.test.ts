@@ -32,6 +32,8 @@ import {
   runRecipientKeySweep,
 } from '../../services/faircoin/keyBinding';
 import { reportFaircoinBroadcast } from '../../services/faircoinBroadcast';
+import { useAddressUsageReader } from '../../services/faircoin/addressPool';
+import type { AddressUsage } from '../../services/explorer';
 
 type Json = Record<string, unknown>;
 
@@ -128,8 +130,24 @@ afterAll(() => {
   gateway?.httpServer.close();
 });
 
+/** What the Explorer says about every address; the preload's `unknown` is restored after each test. */
+let chain: AddressUsage = 'unused';
+const chainAsked: string[] = [];
+let previousUsageReader: ReturnType<typeof useAddressUsageReader> | null = null;
+
+beforeEach(() => {
+  chain = 'unused';
+  chainAsked.length = 0;
+  previousUsageReader = useAddressUsageReader(async (address) => {
+    chainAsked.push(address);
+    return chain;
+  });
+});
+
 afterEach(() => {
   gate(previousGate);
+  if (previousUsageReader) useAddressUsageReader(previousUsageReader);
+  previousUsageReader = null;
 });
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('closing the mainnet gate retires open payments', () => {
@@ -183,6 +201,54 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('closing the mainnet gate retires open 
       status: 'canceled',
       cancellation_reason: 'faircoin_network_closed',
       next_action: null,
+    });
+  });
+
+  // Round-3 review: "nobody broadcast" meant "nobody reported a txid". A payer
+  // whose wallet broadcast without reporting yet was canceled, and the coins
+  // reached the recipient while the order went unpaid.
+  test('a payment whose address the chain shows paid is not retired, by a payer read or the sweep', async () => {
+    const { id, secret } = await openSession();
+    const confirmed = await call('POST', `/v1/checkout_sessions/${id}/public/confirm`, {}, secret);
+    const payment = must(confirmed.json.payment_intent as Json | null);
+    const row = must(await findIntentByPublicId(gatewayDb(), String(payment.id)));
+
+    gate('testnet');
+    chain = 'used';
+    const read = await call('GET', `/v1/checkout_sessions/${id}/public`, undefined, secret);
+    expect(read.status).toBe(200);
+    expect((read.json.payment_intent as Json | null)?.id).toBe(payment.id);
+    expect(chainAsked).toEqual([must(row.address)]);
+    const sweep = await runRecipientKeySweep();
+    expect(sweep).toMatchObject({ retired: 0, held: 1 });
+    expect(must(await findIntentByPublicId(gatewayDb(), String(payment.id))).status).toBe(
+      'requires_action',
+    );
+
+    // The payer reports the txid it broadcast: the payment is there to take it.
+    const reported = await reportFaircoinBroadcast(
+      must(await findIntentByPublicId(gatewayDb(), String(payment.id))),
+      'b'.repeat(64),
+    );
+    expect(reported.kind).toBe('updated');
+  });
+
+  test('on mainnet an Explorer that cannot tell retires nothing; the next sweep that can, does', async () => {
+    const created = await createApiIntent();
+    gate('testnet');
+    chain = 'unknown';
+    const read = await call(
+      'GET',
+      `/v1/payment_intents/${String(created.id)}?client_secret=${encodeURIComponent(String(created.client_secret))}`,
+    );
+    expect(read.json.status).toBe('requires_action');
+    expect(await runRecipientKeySweep()).toMatchObject({ retired: 0, held: 1 });
+
+    chain = 'unused';
+    expect(await runRecipientKeySweep()).toMatchObject({ retired: 1, held: 0 });
+    expect(must(await findIntentByPublicId(gatewayDb(), String(created.id)))).toMatchObject({
+      status: 'canceled',
+      cancellationReason: 'faircoin_network_closed',
     });
   });
 

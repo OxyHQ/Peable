@@ -61,6 +61,7 @@ const {
   getIdentityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
   signSocialReceiveInput,
+  SOCIAL_RECEIVE_INDEX_LIMIT,
   SOCIAL_RECEIVE_MAX_WATCHED,
   highestIndex,
   planSocialReceiveWindow,
@@ -263,6 +264,25 @@ describe('planSocialReceiveWindow', () => {
     const lastWatched = SOCIAL_RECEIVE_MAX_WATCHED - 1;
     expect(plan(lastWatched, -1, lastWatched - 20).capped).toBe(false);
     expect(plan(lastWatched, -1, lastWatched - 19).capped).toBe(true);
+  });
+
+  // Round-3 review: addresses above the gateway's ceiling derive from the
+  // public key, so anyone can dust index 1,980..1,999. A USED index the
+  // gateway never handed out must not pause `@username`; the window still
+  // reaches it (up to the bound), so the dust is watched.
+  test('a used index above the ceiling extends the window but never caps it', () => {
+    for (const used of [SOCIAL_RECEIVE_INDEX_LIMIT, SOCIAL_RECEIVE_MAX_WATCHED - 1]) {
+      expect(plan(19, used, 5)).toEqual({
+        extension: { start: 20, count: SOCIAL_RECEIVE_MAX_WATCHED - 20 },
+        capped: false,
+      });
+      expect(plan(SOCIAL_RECEIVE_MAX_WATCHED - 1, used, 5)).toEqual({
+        extension: null,
+        capped: false,
+      });
+    }
+    // The reservation alone still caps it.
+    expect(plan(19, -1, SOCIAL_RECEIVE_INDEX_LIMIT).capped).toBe(true);
   });
 });
 

@@ -1,10 +1,12 @@
-import { test, expect, afterEach } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { parseFairToUnits } from '@fairco.in/core';
 import {
   addressHasTransaction,
   getAddressUsage,
   getTip,
   getTransaction,
+  listAddressTransactions,
+  useExplorerTimeout,
   verifyPayment,
   type ExplorerTx,
 } from '../explorer';
@@ -227,4 +229,66 @@ test("getAddressUsage: a full answer is used/unused; testnet's no-index answer i
   expect(await getAddressUsage('T_addr', 'testnet')).toBe('unknown');
   respondWith({ error: 'Internal error' }, 500);
   expect(await getAddressUsage('F_addr', 'mainnet')).toBe('unknown');
+});
+
+// Round-3 review: no Explorer read had a timeout, so a stalled Explorer held a
+// confirm's address check, the watcher's poll and the retire sweep for as long
+// as the socket stayed open. Every read now carries a bounded signal, and an
+// abandoned read is the Explorer not answering — never "missing" or "unused".
+describe('every Explorer read is bounded', () => {
+  let restoreTimeout: (() => void) | null = null;
+  afterEach(() => {
+    restoreTimeout?.();
+    restoreTimeout = null;
+  });
+
+  /** A fetch that never answers (headers, or with `stallBody` the body) until its signal aborts. */
+  function stall(stallBody = false): { signals: (AbortSignal | null | undefined)[] } {
+    const signals: (AbortSignal | null | undefined)[] = [];
+    const handler = (_input: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal;
+      signals.push(signal);
+      if (!stallBody) {
+        return new Promise<never>((_, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      }
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"addressInfo":'));
+          signal?.addEventListener('abort', () => controller.error(signal.reason), {
+            once: true,
+          });
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 200 }));
+    };
+    globalThis.fetch = Object.assign(handler, { preconnect: realFetch.preconnect });
+    return { signals };
+  }
+
+  test('a stalled address read is unknown, never unused', async () => {
+    restoreTimeout = useExplorerTimeout(20);
+    const { signals } = stall();
+    expect(await getAddressUsage('F_addr', 'mainnet')).toBe('unknown');
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+    stall(true);
+    expect(await getAddressUsage('F_addr', 'mainnet')).toBe('unknown');
+  });
+
+  test('a stalled transaction read throws, never answers "missing" (null)', async () => {
+    restoreTimeout = useExplorerTimeout(20);
+    stall();
+    await expect(getTransaction('41bc', 'mainnet')).rejects.toThrow();
+    stall(true);
+    await expect(getTransaction('41bc', 'mainnet')).rejects.toThrow();
+  });
+
+  test('a stalled tip or transaction list is the Explorer not answering', async () => {
+    restoreTimeout = useExplorerTimeout(20);
+    stall();
+    await expect(getTip('mainnet')).rejects.toThrow();
+    expect(await listAddressTransactions('F_addr', 'mainnet')).toBeNull();
+    expect(await addressHasTransaction('F_addr', 'mainnet', 'reported')).toBe('unknown');
+  });
 });

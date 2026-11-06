@@ -184,9 +184,16 @@ export interface SocialReceiveWindowPlan {
   /** The indices to derive and watch next, or `null` when none. */
   readonly extension: { start: number; count: number } | null;
   /**
-   * True when the gateway has handed out (or is within the gap of handing
-   * out) indices beyond {@link SOCIAL_RECEIVE_MAX_WATCHED}: a payment to one
-   * of them would not reach this wallet, so `@username` must not be offered.
+   * True when the gateway has RESERVED an index whose gap reaches past
+   * {@link SOCIAL_RECEIVE_MAX_WATCHED}: a payment to one of them would not
+   * reach this wallet, so `@username` must not be offered.
+   *
+   * Only the reservation decides it, never a USED index. The gateway never
+   * hands out an index at or above {@link SOCIAL_RECEIVE_INDEX_LIMIT}, but the
+   * addresses above it derive from the public key, so anyone can send dust to
+   * index 1,999 — and letting that flip `capped` would let one dust payment
+   * hide a recipient's `@username`. A used index still extends the window (up
+   * to the bound), so whatever was received there is still watched.
    */
   readonly capped: boolean;
 }
@@ -194,7 +201,8 @@ export interface SocialReceiveWindowPlan {
 /**
  * How far the watch window should reach — `SOCIAL_RECEIVE_GAP_LIMIT` past the
  * highest index either PAID (seen on chain) or RESERVED (the gateway's cursor)
- * — bounded by `maxWatched`. Pure.
+ * — bounded by `maxWatched`; whether it is capped is the RESERVED index's
+ * alone (see {@link SocialReceiveWindowPlan.capped}). Pure.
  *
  * @param highestReserved The cursor's `reserved_through`, or -1 when nothing
  *   was reserved (the endpoint's `0` sentinel: index 0 is the stable default
@@ -216,7 +224,7 @@ export function planSocialReceiveWindow(input: {
     target > input.highestWatched
       ? { start: input.highestWatched + 1, count: target - input.highestWatched }
       : null;
-  return { extension, capped: wanted > ceiling };
+  return { extension, capped: input.highestReserved + gapLimit > ceiling };
 }
 
 /**

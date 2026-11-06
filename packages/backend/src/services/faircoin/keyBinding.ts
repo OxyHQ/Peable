@@ -41,6 +41,17 @@
  * canceled `faircoin_network_closed` — by the payer surfaces before they
  * answer and by the sweep — with no Oxy read, and its order stays open. A
  * broadcast one is left to settle: the coins are already on chain.
+ *
+ * "Waiting for the payer" means nobody REPORTED a txid, not that nobody paid:
+ * a payer whose wallet broadcast and has not reported yet has coins on their
+ * way to the address, and canceling then lets them reach the recipient while
+ * the order goes unpaid. So neither retirement happens until the chain shows
+ * every address of the payment UNUSED ({@link chainShowsUnpaid}); one it shows
+ * used is left as it is — payable, its txid reportable, and expiring as any
+ * payment does. On mainnet an Explorer that cannot tell (`unknown`: an outage,
+ * a timeout) retires nothing and the next sweep asks again. Testnet's node has
+ * no address index and only ever answers `unknown`, so there — as for a lost
+ * broadcast (ADR 0021 D10) — the reason alone decides.
  */
 import { applyEvent } from '../intentState';
 import {
@@ -51,7 +62,9 @@ import {
 } from '../../db/payments/paymentIntentRepository';
 import { getDb } from '../../db/postgres';
 import { announceIntentChange, transitionIntent } from '../intentTransition';
+import type { AddressUsage } from '../explorer';
 import { resolveIdentityPublicKeyHex } from '../socialReceive';
+import { addressUsage } from './addressPool';
 import { identityNetworkOpen } from './recipient';
 
 /** What a FairCoin payment's recorded keys say against the recipients' current `#key-1`. */
@@ -104,9 +117,52 @@ export const readCurrentKeyForPayer: CurrentKeyReader = async (accountId) => {
   return freshKey(accountId);
 };
 
-/** Forget every remembered key read (tests). */
+/** Forget every remembered key and chain read (tests). */
 export function forgetRecentIdentityKeys(): void {
   recentKeys.clear();
+  recentUsage.clear();
+}
+
+/**
+ * A payer surface may reuse a chain answer that KEEPS a payment (`used`, or
+ * `unknown`) this long, so a polling checkout page does not read the Explorer
+ * on every poll. An `unused` answer — the one a retirement acts on — is never
+ * reused, and the sweep always reads fresh.
+ */
+const PAYER_USAGE_REUSE_MS = 30_000;
+const recentUsage = new Map<string, { readonly at: number; readonly usage: AddressUsage }>();
+
+async function usageOf(
+  address: string,
+  network: NonNullable<PaymentIntentRow['network']>,
+  reuse: boolean,
+): Promise<AddressUsage> {
+  const key = `${network}:${address}`;
+  const recent = reuse ? recentUsage.get(key) : undefined;
+  if (recent && Date.now() - recent.at < PAYER_USAGE_REUSE_MS) return recent.usage;
+  const usage = await addressUsage(address, network);
+  if (usage === 'unused') recentUsage.delete(key);
+  else recentUsage.set(key, { at: Date.now(), usage });
+  return usage;
+}
+
+/**
+ * Whether the chain lets a payment nobody reported a txid for be retired:
+ * every output address reads `unused`. A `used` one may be the payer's own
+ * transaction, broadcast and not reported yet — retiring it would leave their
+ * coins at the recipient and their order unpaid. On mainnet `unknown` (an
+ * Explorer outage or timeout) is not `unused`; testnet's node can only ever
+ * answer `unknown`, so there it does not hold a payment back.
+ */
+async function chainShowsUnpaid(intent: PaymentIntentRow, reuse: boolean): Promise<boolean> {
+  const { network } = intent;
+  if (network === null) return false;
+  for (const output of faircoinOutputsOf(intent)) {
+    const usage = await usageOf(output.address, network, reuse);
+    if (usage === 'used') return false;
+    if (usage === 'unknown' && network === 'mainnet') return false;
+  }
+  return true;
 }
 
 /** Check every output of `intent` against its recipient's current `#key-1`. */
@@ -164,7 +220,8 @@ type RetireReason = 'recipient_key_changed' | 'faircoin_network_closed';
  * Cancel a FairCoin payment still waiting for the payer whose address must not
  * be offered any more, through `transitionIntent`: its network is closed
  * (`faircoin_network_closed`), or its recipient key was replaced
- * (`recipient_key_changed`). Its order forgets it in the same transaction.
+ * (`recipient_key_changed`) — once the chain shows nothing was sent to it
+ * ({@link chainShowsUnpaid}). Its order forgets it in the same transaction.
  * Answers the row as it stands afterwards — the canceled one, the unchanged
  * one, or whatever a racing write made it.
  */
@@ -173,9 +230,14 @@ export async function retireIfNoLongerOffered(
   readKey: CurrentKeyReader = readCurrentKeyForPayer,
 ): Promise<PaymentIntentRow> {
   if (!awaitingPayer(intent)) return intent;
-  if (onClosedNetwork(intent)) return retire(intent, 'faircoin_network_closed');
-  if (!mustRetire(await checkRecipientKeys(intent, readKey))) return intent;
-  return retire(intent, 'recipient_key_changed');
+  const reason: RetireReason | null = onClosedNetwork(intent)
+    ? 'faircoin_network_closed'
+    : mustRetire(await checkRecipientKeys(intent, readKey))
+      ? 'recipient_key_changed'
+      : null;
+  if (reason === null) return intent;
+  if (!(await chainShowsUnpaid(intent, true))) return intent;
+  return retire(intent, reason);
 }
 
 async function retire(intent: PaymentIntentRow, reason: RetireReason): Promise<PaymentIntentRow> {
@@ -219,6 +281,11 @@ export interface RecipientKeySweepResult {
   readonly examined: number;
   /** `requires_action` payments canceled `recipient_key_changed` or `faircoin_network_closed`. */
   readonly retired: number;
+  /**
+   * `requires_action` payments that would be retired but were kept: the chain
+   * shows something sent to an address, or (mainnet) cannot tell yet.
+   */
+  readonly held: number;
   /** `processing` payments stamped `recipient_key_replaced_at`. */
   readonly stamped: number;
   /** Rows left as they were because Oxy could not be asked. */
@@ -229,8 +296,10 @@ let resumeAfter: string | null = null;
 
 /**
  * One pass over the open identity FairCoin payments: retire the ones waiting
- * for a payer under a replaced (or unrecorded) key, stamp the broadcast ones
- * under a replaced key. Each recipient's key is read once per pass, fresh.
+ * for a payer under a replaced (or unrecorded) key or on a closed network —
+ * each only once the chain shows its addresses unused, read fresh — and stamp
+ * the broadcast ones under a replaced key. Each recipient's key is read once
+ * per pass, fresh.
  */
 export async function runRecipientKeySweep(
   options: { readonly maxPerPass?: number; readonly readKey?: CurrentKeyReader } = {},
@@ -246,7 +315,15 @@ export async function runRecipientKeySweep(
     }
     return read;
   };
-  const result = { examined: 0, retired: 0, stamped: 0, unknown: 0 };
+  const result = { examined: 0, retired: 0, held: 0, stamped: 0, unknown: 0 };
+  /** Retire `intent` for `reason` once the chain shows it unpaid, read fresh. */
+  const retireOnceUnpaid = async (intent: PaymentIntentRow, reason: RetireReason) => {
+    if (!(await chainShowsUnpaid(intent, false))) {
+      result.held += 1;
+      return;
+    }
+    if ((await retire(intent, reason)).status === 'canceled') result.retired += 1;
+  };
   while (result.examined < max) {
     const page = await findKeyBoundFaircoinIntents(
       getDb(),
@@ -262,20 +339,14 @@ export async function runRecipientKeySweep(
       resumeAfter = intent.id;
       // A closed network needs no key read: nothing on it may be offered.
       if (awaitingPayer(intent) && onClosedNetwork(intent)) {
-        if ((await retire(intent, 'faircoin_network_closed')).status === 'canceled') {
-          result.retired += 1;
-        }
+        await retireOnceUnpaid(intent, 'faircoin_network_closed');
         continue;
       }
       const check = await checkRecipientKeys(intent, readKey);
       if (check === 'unknown') {
         result.unknown += 1;
       } else if (awaitingPayer(intent)) {
-        if (
-          mustRetire(check) &&
-          (await retire(intent, 'recipient_key_changed')).status === 'canceled'
-        )
-          result.retired += 1;
+        if (mustRetire(check)) await retireOnceUnpaid(intent, 'recipient_key_changed');
       } else if (intent.status === 'processing' && check === 'replaced') {
         if (await stampReplaced(intent)) result.stamped += 1;
       }

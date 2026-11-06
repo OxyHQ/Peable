@@ -41,6 +41,7 @@ import {
 } from '../../services/faircoin/keyBinding';
 import { reportFaircoinBroadcast } from '../../services/faircoinBroadcast';
 import { applyChainObservation } from '../../services/settlementWatcher';
+import { useAddressUsageReader } from '../../services/faircoin/addressPool';
 
 type Json = Record<string, unknown>;
 
@@ -284,6 +285,27 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a FairCoin address is bound to its key
     expect(must(await findIntentByPublicId(gatewayDb(), String(fresh.id))).status).toBe(
       'requires_action',
     );
+  });
+
+  // Round-3 review: a payer who broadcast to the old key's address and has
+  // not reported the txid yet must not be canceled under them.
+  test('a replaced-key payment whose address the chain shows paid is not retired', async () => {
+    const created = await createApiIntent();
+    rotate('owner_key_binding');
+    const previous = useAddressUsageReader(async () => 'used');
+    try {
+      const read = await call(
+        'GET',
+        `/v1/payment_intents/${String(created.id)}?client_secret=${encodeURIComponent(String(created.client_secret))}`,
+      );
+      expect(read.json.status).toBe('requires_action');
+      expect(await runRecipientKeySweep()).toMatchObject({ retired: 0, held: 1 });
+    } finally {
+      useAddressUsageReader(previous);
+    }
+    // Testnet's node cannot tell (`unknown`, the preload's answer): there the
+    // key change alone decides, as before.
+    expect(await runRecipientKeySweep()).toMatchObject({ retired: 1, held: 0 });
   });
 
   test('broadcast under a replaced key: not canceled, stamped by the sweep, and succeeded says so', async () => {

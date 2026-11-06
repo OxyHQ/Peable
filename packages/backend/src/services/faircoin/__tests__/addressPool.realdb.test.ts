@@ -323,6 +323,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the tree ceiling (ADR 0021 D9, amended
     ).toEqual({ available: false, unavailable_reason: 'temporarily_unavailable' });
   });
 
+  // Round-3 review: the recycling query had no `index < limit` filter, so an
+  // address minted at or above the ceiling before it existed could be handed
+  // out again — to a payer, at an index the wallet may not watch.
+  test('an address at or above the ceiling is never recycled; the chain is not even asked', async () => {
+    const merchant = await seedMerchant({ network: 'testnet' });
+    const owner = must(merchant.ownerAccountId);
+    const first = await pay(merchant);
+    await cancel(first, 2 * HOUR);
+    // As if minted before the ceiling: the address really derives at that index,
+    // so only the ceiling (not the key check) can refuse it.
+    for (const index of [SOCIAL_RECEIVE_INDEX_LIMIT, SOCIAL_RECEIVE_INDEX_LIMIT - 1]) {
+      const address = deriveSocialReceiveAddress(
+        testIdentityPublicKey(owner),
+        index,
+        getNetwork('testnet'),
+      );
+      await gatewayDb()
+        .update(paymentIntentOutputs)
+        .set({ derivationIndex: index, address })
+        .where(eq(paymentIntentOutputs.paymentIntentId, first.id));
+      await gatewayDb()
+        .update(paymentIntents)
+        .set({ address })
+        .where(eq(paymentIntents.id, first.id));
+      const asked = chainSays('unused');
+      const next = await pay(merchant);
+      if (index >= SOCIAL_RECEIVE_INDEX_LIMIT) {
+        expect(asked).toEqual([]);
+        expect(next.address).not.toBe(address);
+        const kept = await outputOf(first);
+        expect(kept.recycledAt).toBeNull();
+        expect(kept.retiredAt).toBeNull();
+        // Free the minted one again so the next round starts the same way.
+        await cancel(next, 10 * 60);
+      } else {
+        // The last index below it is still recycled.
+        expect(asked).toEqual([address]);
+        expect(next.address).toBe(address);
+      }
+    }
+  });
+
   test('a full tree still recycles', async () => {
     const merchant = await seedMerchant({ network: 'testnet' });
     const owner = must(merchant.ownerAccountId);

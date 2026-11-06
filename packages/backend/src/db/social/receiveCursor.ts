@@ -22,10 +22,12 @@ export class ReceiveTreeFullError extends Error {
  * Claim the next unused social-receive index for a user on a network,
  * creating their cursor if this is their first social payment.
  *
- * Carries the same cost as `db/merchants/derivationIndex.ts` — read that
- * function's first paragraph before changing anything here. A wrong index is
- * money at an address the recipient cannot spend from, or two senders sharing
- * one address; single-use is the whole point of a per-payment address.
+ * The ONE counter every FairCoin address comes from (ADR 0021 D5: social,
+ * merchant and seller payments). A wrong index is money at an address the
+ * recipient cannot spend from, or two payers sharing one address the gateway
+ * can then attribute to neither; single-use is the whole point of a
+ * per-payment address. Never split this into a read and a write: two callers
+ * reading the same value derive the same address.
  *
  * ## One statement, including the lazy create
  *

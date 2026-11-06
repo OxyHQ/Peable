@@ -395,7 +395,8 @@ with a test that would fail without it (`faircoinConnect.realdb.test.ts`,
 `connectedAccountFaircoin.realdb.test.ts`).
 
 The xpub firewall (`assertWatchOnly`) that used to be this section's example is
-retired with the key: no column holds a key of any kind.
+retired with the key: no column holds a private or extended key (only the
+PUBLIC identity key each FairCoin address derives from, ADR 0002).
 
 ## Protected columns
 

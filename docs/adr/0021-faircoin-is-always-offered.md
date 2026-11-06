@@ -382,6 +382,13 @@ grows by is now bounded by REAL payments, whatever anyone does:
   (`addressPool.realdb.test.ts`). The 10 minutes widen the late-payer residual
   below by that much: an address checked unused may be paid by a late payer of
   its old quote before the claim.
+- **A recycled address is below the ceiling too (amended 2026-11-06, review
+  round 3).** The recycling queries (`db/payments/faircoinAddressPool.ts`) and
+  the claim's compare-and-swap carry `derivation_index <
+  SOCIAL_RECEIVE_INDEX_LIMIT`, so an address minted above it before the
+  ceiling existed is never handed out again. Every Explorer read the gateway
+  makes is bounded by a timeout, and one that times out is `unknown` — never
+  `unused`, never a missing transaction.
 - **Not done: a sparse watch set.** The lasting fix is for the wallet to watch
   the indices the gateway reports HELD (reserved and not recycled away), not a
   contiguous range from 0, so a tree's size is bounded by what is open rather
