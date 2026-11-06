@@ -1,418 +1,151 @@
-const messages = {
-  en: {
-    'provider.card.number': 'Card number',
-    'provider.card.expiry': 'Expiration date',
-    'provider.card.securityCode': 'Security code',
-    'provider.card.country': 'Country',
-    'provider.card.postcode': 'Postal code',
-    'order.order': 'Order details',
-    'order.reward': 'A thank-you for your order',
-    'order.categories': 'What would you like?',
-    'order.offers': 'Choose your gift',
-    'order.offer': 'Gift details',
-    'order.claimed': 'Gift selected',
-    'order.paid': 'Paid',
-    'order.remaining': 'Remaining',
-    'order.scheduled': 'Scheduled',
-    'order.next': 'Next payment',
-    'order.options': 'Options',
-    'order.early': 'Pay early',
-    'order.explore': 'Explore gifts',
-    'order.skip': 'Not now',
-    'order.continue': 'Continue',
-    'order.select': 'Select this gift',
-    'order.confirm': 'Confirm gift selection',
-    'order.done': 'Done',
-    'order.terms': 'Terms and conditions',
-    'order.unavailable': 'This gift is no longer available.',
-    'order.none': 'No gifts match these categories. Choose different interests.',
-    'order.minimum': 'Choose at least {count} categories.',
-    'order.complete': 'Your selected gift is shown below.',
-    'order.review': 'Review the gift details and conditions before confirming.',
-    'provider.incomplete': 'Complete payment authentication before continuing.',
-    'provider.loading': 'Preparing secure payment fields…',
-    'provider.unavailable': 'Secure payment fields are unavailable.',
-    'provider.busy': 'This payment cannot be confirmed right now.',
-    'provider.closed': 'The payment view was closed.',
-    'provider.failed': 'The payment could not be confirmed. Try again.',
-    'provider.retry': 'Try again',
-    'method.apple_pay': 'Apple Pay',
-    'method.google_pay': 'Google Pay',
-    'method.card': 'Card',
-    'method.sepa_debit': 'SEPA Direct Debit',
-    'method.ideal': 'iDEAL',
-    'method.bancontact': 'Bancontact',
-    'method.eps': 'EPS',
-    'method.unavailable.checking': 'Checking whether this device supports it…',
-    'method.unavailable.device': 'Not available on this device or browser',
-    'method.unavailable.host': 'Available in the browser checkout',
-    'method.unavailable.currency': 'Not available in this currency',
-    'method.unavailable.notOffered': 'Not offered for this payment',
-    'method.unavailable.requiresCard': 'Needs card payments, which this payment does not take',
+/**
+ * The sheet's own copy, in every language its hosts ship: ONE catalog, in the
+ * SDK, selected by the `locale` prop (Stripe's `locale`, `'auto'` included).
+ * A host translates nothing of the sheet; `messages` only overrides product
+ * copy by key.
+ *
+ * Every catalog has exactly the English keys (`CheckoutCatalog`, checked by
+ * `tsc`) and the same placeholders (`__tests__/messages.test.ts`).
+ */
+import ar from './locales/ar';
+import bn from './locales/bn';
+import ca from './locales/ca';
+import de from './locales/de';
+import en, { type CheckoutCatalog } from './locales/en';
+import es from './locales/es';
+import fr from './locales/fr';
+import hi from './locales/hi';
+import id from './locales/id';
+import it from './locales/it';
+import ja from './locales/ja';
+import pt from './locales/pt';
+import ru from './locales/ru';
+import tr from './locales/tr';
+import zh from './locales/zh';
 
-    taxIncluded: 'Tax included',
-    'step.confirmation': 'Confirm payment',
-    'faircoin.transfer.awaiting': 'Waiting for your transfer',
-    'faircoin.transfer.detected': 'Transfer detected',
-    'faircoin.transfer.processing': 'Confirming your payment',
-    'faircoin.transfer.succeeded': 'Payment complete',
-    'faircoin.transfer.failure': 'The payment could not be completed',
-    'faircoin.transfer.expired': 'This payment request has expired',
+export type { CheckoutCatalog, CheckoutMessageKey } from './locales/en';
 
-    'faircoin.copy': 'Copy address',
-    'faircoin.copied': 'Copied',
-    'faircoin.error': 'Could not copy. Try again',
-    'installments.totalRepayable': 'Total to repay',
-    'installments.checking': 'Checking available plans',
-    'installments.pending': 'Your application is being reviewed',
-    'installments.ineligible': 'No plans available for this purchase',
-    'installments.rejected': 'This payment plan was not approved',
-    'installments.unavailable': 'Payment plans are currently unavailable',
-    'installments.error': 'We couldn’t load payment plans',
-    'installments.interest': 'Interest',
-    'installments.apr': 'APR',
-    'installments.repayment': 'Repayment method',
+/** The languages the sheet speaks: the union of its hosts' (Mention's and Mercaria's). */
+export const CHECKOUT_UI_LOCALES = [
+  'ar',
+  'bn',
+  'ca',
+  'de',
+  'en',
+  'es',
+  'fr',
+  'hi',
+  'id',
+  'it',
+  'ja',
+  'pt',
+  'ru',
+  'tr',
+  'zh',
+] as const;
+export type CheckoutUiLocale = (typeof CHECKOUT_UI_LOCALES)[number];
 
-    payMerchant: 'Pay {{merchant}}',
-    dueToday: 'Total due today',
-    quantity: 'Qty {{count}}',
-    tax: 'Tax',
-    included: 'Included',
-    recurring: 'Recurring payment',
-    starts: 'First payment',
-    month: 'month',
-    year: 'year',
-    payAmount: 'Pay {{amount}}',
-    continue: 'Continue',
-    addContact: 'Add email address',
-    addShipping: 'Add shipping address',
-    chooseDelivery: 'Choose delivery',
-    addPayment: 'Add payment method',
-    'section.contact': 'Contact',
-    'section.shipping': 'Ship to',
-    'section.delivery': 'Delivery',
-    'section.payment': 'Payment',
-    'step.contact': 'Contact',
-    'step.shipping': 'Shipping address',
-    'step.delivery': 'Delivery',
-    'step.payment': 'Payment method',
-    'step.card': 'Add a card',
-    'step.method': 'Payment method',
-    'step.terms': 'Terms and conditions',
-    terms: 'Terms and conditions',
-    'terms.renewal': 'Renewal',
-    'terms.cancellation': 'Cancellation',
-    'faircoin.amount': 'Amount to pay',
-    'faircoin.availableBalance': 'Available balance',
-    'faircoin.remaining': 'Balance after payment',
-    'faircoin.amountNeeded': 'Amount needed',
-    'faircoin.addFunds': 'Add funds',
-    'faircoin.useBalance': 'Use Peable balance',
-    'faircoin.receiveTitle': 'Receive into your wallet',
-    'faircoin.receiveHint':
-      'Transfer FairCoin from another wallet to your own receive address. This is separate from the merchant payment.',
-    'faircoin.backToBalance': 'Back to balance',
-    'faircoin.wallet': 'Peable balance',
-    'faircoin.balance.loading': 'Loading balance…',
-    'faircoin.balance.unavailable': 'Balance unavailable',
-    'faircoin.balance.error': 'Could not refresh balance',
-    'faircoin.connectGuidance':
-      'Open Peable on your device to connect your wallet. Your balance can be viewed without sharing a signing key.',
-    'faircoin.authorizationNeeded':
-      'Authorize this payment from a device connected to your wallet.',
-    'faircoin.connect': 'Connect Peable',
-    'faircoin.retry': 'Retry',
-    'faircoin.external': 'FAIRWallet',
-    'faircoin.externalHint': 'Scan the QR or copy the address in FAIRWallet.',
-    'faircoin.qr': 'External wallet payment QR code',
-    'faircoin.useExternal': 'Use this payment method',
-    'step.processing': '',
-    'step.success': '',
-    'step.failure': '',
-    contactHint: 'Enter the email for your receipt and payment updates.',
-    email: 'Email address',
-    save: 'Save and return',
-    shippingHint: 'Where should your order be delivered?',
-    'field.name': 'Full name',
-    'field.address': 'Street address',
-    'field.city': 'City',
-    'field.postalCode': 'Postal code',
-    'field.country': 'Country',
-    deliveryHint: 'Choose an available delivery option.',
-    'delivery.standard': 'Standard delivery',
-    'delivery.express': 'Express delivery',
-    'delivery.standardHint': 'Standard delivery',
-    'delivery.expressHint': 'Express delivery',
-    paymentHint: 'Choose a payment method.',
-    savedCard: 'Saved payment method',
-    addCard: 'Add another card',
-    acceptedCards: 'Visa · Mastercard',
-    secureFields: 'Secure card details',
-    cardNumber: 'Test card',
-    saveCard: 'Save card for next time',
-    useCard: 'Use this card',
-    'result.processing': 'Confirming your payment',
-    'result.processingHint': 'Please wait while your payment is confirmed.',
-    'result.success': 'Payment complete',
-    'result.successHint': 'Your payment has been confirmed.',
-    'result.failure': 'Payment not completed',
-    'result.failureHint': 'Review your payment details and try again.',
-    done: 'Done',
-    tryAgain: 'Review payment',
-    confirmSubscription: 'Confirm subscription',
-    subtotal: 'Subtotal',
-    orderTotal: 'Order total',
-    'installments.fees': 'Fees',
-    'installments.choose': 'Choose this plan',
-    // PeableSheetCheckout
-    'method.faircoin': 'FairCoin',
-    'faircoin.available': 'Pay from your Peable wallet',
-    'faircoin.unavailable.faircoin_wallet_missing': "{{merchant}}'s Peable wallet isn't set up yet",
-    'faircoin.unavailable.faircoin_network_closed':
-      "FairCoin payments aren't open on this network yet",
-    'faircoin.unavailable.price_unavailable': 'No current FairCoin price. Try again in a minute',
-    'faircoin.unavailable.temporarily_unavailable':
-      "FairCoin can't be checked right now. Try again in a minute",
-    'faircoin.unavailable.not_offered': 'Not offered on this payment',
-    'faircoin.title': 'Pay with FairCoin',
-    'faircoin.quote': '{{amount}} at {{rate}} {{currency}} per FAIR.',
-    'faircoin.holdsUntil': 'This price holds until {{time}}.',
-    'faircoin.peableHint': 'Open Peable to pay, or scan this code with Peable on your phone.',
-    'faircoin.peableOnly': 'Paid from the Peable app',
-    'faircoin.newPrice': 'Get a new price',
-    'faircoin.confirming': 'Your FairCoin payment is already confirming and cannot be replaced.',
-    'faircoin.noPeable': "Peable couldn't be opened here. Scan the code with Peable on your phone.",
-    'faircoin.otherMethod': 'Choose another method',
-    'billing.title': 'Billing country',
-    'billing.hint': 'Tax is worked out from the country you pay from.',
-    'card.hosted.title': 'Pay by card',
-    'card.hosted.description':
-      "Peable's secure page opens to take your card. Come back here once you've paid.",
-    'card.hosted.action': 'Open secure page',
-    'hosted.label': 'Continue on Peable',
-    'hosted.detail': "This order needs details that only Peable's secure page collects",
-    'hosted.description': "Peable's secure page opens to finish this order, by card or FairCoin.",
-    'error.connection': "Peable couldn't be reached. Check your connection and try again.",
-    'error.unavailable': "Peable couldn't take this payment right now. Try again in a minute.",
-    'error.declined': 'The card was declined. Try another card.',
-    'error.retry': 'Try again',
-    title: '',
-  },
-  es: {
-    'provider.card.number': 'Número de tarjeta',
-    'provider.card.expiry': 'Fecha de caducidad',
-    'provider.card.securityCode': 'Código de seguridad',
-    'provider.card.country': 'País',
-    'provider.card.postcode': 'Código postal',
-    'order.order': 'Detalles del pedido',
-    'order.reward': 'Un detalle por tu pedido',
-    'order.categories': '¿Qué te gustaría?',
-    'order.offers': 'Elige tu regalo',
-    'order.offer': 'Detalles del regalo',
-    'order.claimed': 'Regalo seleccionado',
-    'order.paid': 'Pagado',
-    'order.remaining': 'Pendiente',
-    'order.scheduled': 'Programado',
-    'order.next': 'Próximo pago',
-    'order.options': 'Opciones',
-    'order.early': 'Pagar antes',
-    'order.explore': 'Ver regalos',
-    'order.skip': 'Ahora no',
-    'order.continue': 'Continuar',
-    'order.select': 'Elegir este regalo',
-    'order.confirm': 'Confirmar elección',
-    'order.done': 'Listo',
-    'order.terms': 'Términos y condiciones',
-    'order.unavailable': 'Este regalo ya no está disponible.',
-    'order.none': 'No hay regalos para estas categorías. Elige otros intereses.',
-    'order.minimum': 'Elige al menos {count} categorías.',
-    'order.complete': 'Tu regalo seleccionado aparece a continuación.',
-    'order.review': 'Revisa los detalles y condiciones antes de confirmar.',
-    'provider.incomplete': 'Completa la autenticación del pago para continuar.',
-    'provider.loading': 'Preparando los campos de pago seguros…',
-    'provider.unavailable': 'Los campos de pago seguros no están disponibles.',
-    'provider.busy': 'No se puede confirmar este pago ahora.',
-    'provider.closed': 'Se ha cerrado la ventana de pago.',
-    'provider.failed': 'No se pudo confirmar el pago. Inténtalo de nuevo.',
-    'provider.retry': 'Intentar de nuevo',
-    'method.apple_pay': 'Apple Pay',
-    'method.google_pay': 'Google Pay',
-    'method.card': 'Tarjeta',
-    'method.sepa_debit': 'Adeudo directo SEPA',
-    'method.ideal': 'iDEAL',
-    'method.bancontact': 'Bancontact',
-    'method.eps': 'EPS',
-    'method.unavailable.checking': 'Comprobando si este dispositivo lo admite…',
-    'method.unavailable.device': 'No disponible en este dispositivo o navegador',
-    'method.unavailable.host': 'Disponible en el checkout del navegador',
-    'method.unavailable.currency': 'No disponible en esta moneda',
-    'method.unavailable.notOffered': 'No se ofrece en este pago',
-    'method.unavailable.requiresCard': 'Requiere pagos con tarjeta, que este pago no acepta',
+/** A BCP 47 tag (`pt-BR`, `zh-Hans`), or `'auto'`: the payer's browser or device. */
+export type CheckoutLocale = 'auto' | (string & {});
 
-    taxIncluded: 'Impuestos incluidos',
-    'step.confirmation': 'Confirmar pago',
-    'faircoin.transfer.awaiting': 'Esperando tu transferencia',
-    'faircoin.transfer.detected': 'Transferencia detectada',
-    'faircoin.transfer.processing': 'Confirmando tu pago',
-    'faircoin.transfer.succeeded': 'Pago completado',
-    'faircoin.transfer.failure': 'No se pudo completar el pago',
-    'faircoin.transfer.expired': 'Esta solicitud de pago ha caducado',
+const CATALOGS: Readonly<Record<CheckoutUiLocale, CheckoutCatalog>> = {
+  ar,
+  bn,
+  ca,
+  de,
+  en,
+  es,
+  fr,
+  hi,
+  id,
+  it,
+  ja,
+  pt,
+  ru,
+  tr,
+  zh,
+};
 
-    'faircoin.copy': 'Copiar dirección',
-    'faircoin.copied': 'Copiado',
-    'faircoin.error': 'No se pudo copiar. Inténtalo de nuevo',
-    'installments.totalRepayable': 'Total a devolver',
-    'installments.checking': 'Comprobando planes disponibles',
-    'installments.pending': 'Tu solicitud está en revisión',
-    'installments.ineligible': 'No hay planes para esta compra',
-    'installments.rejected': 'Este plan de pago no se ha aprobado',
-    'installments.unavailable': 'Los planes de pago no están disponibles',
-    'installments.error': 'No pudimos cargar los planes',
-    'installments.interest': 'Intereses',
-    'installments.apr': 'TAE',
-    'installments.repayment': 'Método de devolución',
+/** The browser's (or the device's) language, `en` when neither says. */
+function deviceLocale(): string {
+  const navigatorLanguage =
+    typeof navigator === 'undefined'
+      ? undefined
+      : (navigator.languages?.[0] ?? (navigator as { language?: string }).language);
+  if (navigatorLanguage) return navigatorLanguage;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || 'en';
+  } catch {
+    return 'en';
+  }
+}
 
-    payMerchant: 'Pagar a {{merchant}}',
-    dueToday: 'Total a pagar hoy',
-    quantity: 'Cant. {{count}}',
-    tax: 'Impuestos',
-    included: 'Incluidos',
-    recurring: 'Pago recurrente',
-    starts: 'Primer pago',
-    month: 'mes',
-    year: 'año',
-    payAmount: 'Pagar {{amount}}',
-    continue: 'Continuar',
-    addContact: 'Añadir correo electrónico',
-    addShipping: 'Añadir dirección de envío',
-    chooseDelivery: 'Elegir envío',
-    addPayment: 'Añadir método de pago',
-    'section.contact': 'Contacto',
-    'section.shipping': 'Enviar a',
-    'section.delivery': 'Envío',
-    'section.payment': 'Pago',
-    'step.contact': 'Contacto',
-    'step.shipping': 'Dirección de envío',
-    'step.delivery': 'Envío',
-    'step.payment': 'Método de pago',
-    'step.card': 'Añadir tarjeta',
-    'step.method': 'Método de pago',
-    'step.terms': 'Términos y condiciones',
-    terms: 'Términos y condiciones',
-    'terms.renewal': 'Renovación',
-    'terms.cancellation': 'Cancelación',
-    'faircoin.amount': 'Importe a pagar',
-    'faircoin.availableBalance': 'Saldo disponible',
-    'faircoin.remaining': 'Saldo después del pago',
-    'faircoin.amountNeeded': 'Importe pendiente',
-    'faircoin.addFunds': 'Añadir fondos',
-    'faircoin.useBalance': 'Usar saldo de Peable',
-    'faircoin.receiveTitle': 'Recibir en tu cartera',
-    'faircoin.receiveHint':
-      'Transfiere FairCoin desde otra cartera a tu propia dirección. Es independiente del pago al comercio.',
-    'faircoin.backToBalance': 'Volver al saldo',
-    'faircoin.wallet': 'Saldo de Peable',
-    'faircoin.balance.loading': 'Cargando saldo…',
-    'faircoin.balance.unavailable': 'Saldo no disponible',
-    'faircoin.balance.error': 'No se pudo actualizar el saldo',
-    'faircoin.connectGuidance':
-      'Abre Peable en tu dispositivo para conectar la cartera. Puedes consultar el saldo sin compartir una clave de firma.',
-    'faircoin.authorizationNeeded':
-      'Autoriza este pago desde un dispositivo conectado a tu cartera.',
-    'faircoin.connect': 'Conectar Peable',
-    'faircoin.retry': 'Reintentar',
-    'faircoin.external': 'FAIRWallet',
-    'faircoin.externalHint': 'Escanea el QR o copia la dirección en FAIRWallet.',
-    'faircoin.qr': 'Código QR para pagar desde otra cartera',
-    'faircoin.useExternal': 'Usar este método de pago',
-    'step.processing': '',
-    'step.success': '',
-    'step.failure': '',
-    contactHint: 'Introduce el correo para el recibo y las actualizaciones del pago.',
-    email: 'Correo electrónico',
-    save: 'Guardar y volver',
-    shippingHint: '¿Dónde enviamos tu pedido?',
-    'field.name': 'Nombre completo',
-    'field.address': 'Dirección',
-    'field.city': 'Ciudad',
-    'field.postalCode': 'Código postal',
-    'field.country': 'País',
-    deliveryHint: 'Elige una opción de envío disponible.',
-    'delivery.standard': 'Envío estándar',
-    'delivery.express': 'Envío exprés',
-    'delivery.standardHint': 'Envío estándar',
-    'delivery.expressHint': 'Envío exprés',
-    paymentHint: 'Elige un método de pago.',
-    savedCard: 'Método de pago guardado',
-    addCard: 'Añadir otra tarjeta',
-    acceptedCards: 'Visa · Mastercard',
-    secureFields: 'Datos de tarjeta seguros',
-    cardNumber: 'Tarjeta de prueba',
-    saveCard: 'Guardar tarjeta para la próxima vez',
-    useCard: 'Usar esta tarjeta',
-    'result.processing': 'Confirmando tu pago',
-    'result.processingHint': 'Espera mientras se confirma tu pago.',
-    'result.success': 'Pago completado',
-    'result.successHint': 'Tu pago se ha confirmado.',
-    'result.failure': 'Pago no completado',
-    'result.failureHint': 'Revisa los datos de pago e inténtalo de nuevo.',
-    done: 'Listo',
-    tryAgain: 'Revisar pago',
-    confirmSubscription: 'Confirmar suscripción',
-    subtotal: 'Subtotal',
-    orderTotal: 'Total del pedido',
-    'installments.fees': 'Comisiones',
-    'installments.choose': 'Elegir este plan',
-    // PeableSheetCheckout
-    'method.faircoin': 'FairCoin',
-    'faircoin.available': 'Paga desde tu monedero Peable',
-    'faircoin.unavailable.faircoin_wallet_missing':
-      'El monedero Peable de {{merchant}} aún no está configurado',
-    'faircoin.unavailable.faircoin_network_closed':
-      'Los pagos con FairCoin aún no están abiertos en esta red',
-    'faircoin.unavailable.price_unavailable':
-      'No hay un precio actual de FairCoin. Vuelve a intentarlo en un minuto',
-    'faircoin.unavailable.temporarily_unavailable':
-      'Ahora no se puede comprobar FairCoin. Vuelve a intentarlo en un minuto',
-    'faircoin.unavailable.not_offered': 'No disponible en este pago',
-    'faircoin.title': 'Pagar con FairCoin',
-    'faircoin.quote': '{{amount}} a {{rate}} {{currency}} por FAIR.',
-    'faircoin.holdsUntil': 'Este precio se mantiene hasta las {{time}}.',
-    'faircoin.peableHint': 'Abre Peable para pagar, o escanea este código con Peable en tu móvil.',
-    'faircoin.peableOnly': 'Se paga desde la app Peable',
-    'faircoin.newPrice': 'Obtener un precio nuevo',
-    'faircoin.confirming': 'Tu pago con FairCoin ya se está confirmando y no se puede sustituir.',
-    'faircoin.noPeable': 'No se pudo abrir Peable aquí. Escanea el código con Peable en tu móvil.',
-    'faircoin.otherMethod': 'Elegir otro método',
-    'billing.title': 'País de facturación',
-    'billing.hint': 'Los impuestos se calculan según el país desde el que pagas.',
-    'card.hosted.title': 'Pagar con tarjeta',
-    'card.hosted.description':
-      'La página segura de Peable se abre para recoger tu tarjeta. Vuelve aquí cuando hayas pagado.',
-    'card.hosted.action': 'Abrir página segura',
-    'hosted.label': 'Continuar en Peable',
-    'hosted.detail': 'Este pedido necesita datos que solo recoge la página segura de Peable',
-    'hosted.description':
-      'La página segura de Peable se abre para completar este pedido, con tarjeta o FairCoin.',
-    'error.connection':
-      'No se pudo conectar con Peable. Comprueba tu conexión y vuelve a intentarlo.',
-    'error.unavailable':
-      'Peable no puede aceptar este pago ahora. Vuelve a intentarlo en un minuto.',
-    'error.declined': 'La tarjeta fue rechazada. Prueba con otra tarjeta.',
-    'error.retry': 'Reintentar',
-    title: '',
-  },
-} as const;
+/**
+ * The tag `Intl` formats amounts, dates and country names in: the host's, or
+ * the device's for `'auto'`, and `en` for one `Intl` refuses.
+ */
+export function intlLocale(locale: CheckoutLocale | undefined): string {
+  const tag = !locale || locale === 'auto' ? deviceLocale() : locale;
+  try {
+    return Intl.getCanonicalLocales(tag)[0] ?? 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+const resolved = new Map<string, CheckoutUiLocale>();
+
+/** The catalog a locale reads from: its language, else English. */
+export function resolveCheckoutLocale(locale: CheckoutLocale | undefined): CheckoutUiLocale {
+  const key = locale ?? 'auto';
+  const known = key === 'auto' ? undefined : resolved.get(key);
+  if (known) return known;
+  const language = intlLocale(locale).toLowerCase().split(/[-_]/)[0] ?? 'en';
+  const answer = (CHECKOUT_UI_LOCALES as readonly string[]).includes(language)
+    ? (language as CheckoutUiLocale)
+    : 'en';
+  // `auto` follows the device, which can change; a named tag cannot.
+  if (key !== 'auto') resolved.set(key, answer);
+  return answer;
+}
+
+/**
+ * The card provider's own field locale (its error lines, its wallet buttons):
+ * the payer's language where the provider has it, else the provider's `auto`.
+ */
+const PROVIDER_LOCALES: ReadonlySet<string> = new Set([
+  'ar',
+  'de',
+  'en',
+  'es',
+  'fr',
+  'id',
+  'it',
+  'ja',
+  'pt',
+  'pt-BR',
+  'ru',
+  'tr',
+  'zh',
+  'zh-HK',
+  'zh-TW',
+]);
+export function providerLocale(locale: CheckoutLocale | undefined): string {
+  const tag = intlLocale(locale);
+  if (PROVIDER_LOCALES.has(tag)) return tag;
+  const language = tag.split('-')[0] ?? '';
+  return PROVIDER_LOCALES.has(language) ? language : 'auto';
+}
 
 export function checkoutMessage(
-  locale: string,
+  locale: CheckoutLocale | undefined,
   key: string,
   values?: Record<string, string | number>,
   overrides?: Readonly<Record<string, string>>,
 ): string {
-  const language = locale.toLowerCase().split(/[-_]/)[0] === 'es' ? 'es' : 'en';
-  const dictionary: Readonly<Record<string, string>> = messages[language];
-  const template = overrides?.[key] ?? dictionary[key] ?? key;
+  const dictionary: Readonly<Record<string, string>> = CATALOGS[resolveCheckoutLocale(locale)];
+  const fallback: Readonly<Record<string, string>> = en;
+  const template = overrides?.[key] ?? dictionary[key] ?? fallback[key] ?? key;
   return template.replace(/\{\{([^}]+)\}\}/g, (placeholder, name: string) =>
     values?.[name] === undefined ? placeholder : String(values[name]),
   );

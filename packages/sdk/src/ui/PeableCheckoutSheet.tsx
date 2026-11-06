@@ -3,14 +3,14 @@ import type { StatusRingProps } from '@oxy.so/bloom/loading';
 import { PeableBrandStatus } from './PeableBrandStatus';
 import { CheckoutSheet, type CheckoutSheetProps } from '@oxy.so/bloom/checkout-sheet';
 import { formatCheckoutAmount } from './amount';
-import { checkoutMessage } from './messages';
+import { type CheckoutLocale, checkoutMessage } from './messages';
 
 export type PeableCheckoutSheetProps = Omit<
   CheckoutSheetProps,
   'label' | 'formatAmount' | 'footer'
 > & {
-  /** Host-resolved language, e.g. the Oxy Services language preference. */
-  locale?: string;
+  /** The sheet's language: a BCP 47 tag or `'auto'` (`PeableSheetCheckout`'s `locale`). */
+  locale?: CheckoutLocale;
   /** Optional rail-specific presentation. The host supplies quote data and action capabilities. */
   methodDetails?: PeableMethodDetails;
   /** Controlled completion presentation; never changes payment state. */
@@ -22,7 +22,7 @@ export type PeableCheckoutSheetProps = Omit<
 /** Controlled payment presentation. Only host-supplied callbacks can start or observe a payment.
  * No credentials, payment requests, persistence or entitlement updates are owned by this component. */
 export function PeableCheckoutSheet({
-  locale = 'en',
+  locale = 'auto',
   messages,
   brandState,
   methodDetails,

@@ -798,14 +798,32 @@ backend hands you Peable's hosted URL) or a single PaymentIntent
 (`intentSource(id, clientSecret)` plus an `order`). It reads the order through
 the anonymous payer client, asks only for what the session collects (an email
 when it has none, a shipping address only with `shipping_address_collection`,
-a billing country when tax needs one), pays the card in the secure fields below
-(Peable's secure page where no DOM can host them) and always lists FairCoin —
+a billing country when tax needs one — before the card, so card and wallets
+pay the taxed total), pays the card in the secure fields below (Peable's secure
+page where no DOM can host them) with Apple Pay and Google Pay above them on the
+web (the provider's Express Checkout element on the order's own card payment:
+offered exactly when the merchant's payment method configuration, a registered
+wallet domain and the device allow; the secure page offers them from a native
+app) and always lists FairCoin —
 quoted, paid through the Peable wallet's `peable://pay` request (button on a
 phone, QR elsewhere), or disabled with the gateway's reason. `onSettled` fires
 once when the gateway closes the order; success is shown only when the host's
 own backend answers `outcome: 'succeeded'`, and `expected` refuses an order
 that is not the reviewed one. Mention Plus and Mercaria (plans and the
 marketplace) use it; there is no host copy of this logic.
+
+Its copy is ONE catalog in the SDK (`src/ui/locales/`): ar, bn, ca, de, en,
+es, fr, hi, id, it, ja, pt (Brazil), ru, tr and zh (Simplified) —
+`CHECKOUT_UI_LOCALES`. `locale` is a BCP 47 tag or `'auto'` (default: the
+browser or device), resolved by `resolveCheckoutLocale`; an unknown language
+reads English. Every catalog has exactly the English keys (`tsc`) and the same
+placeholders (`messages.test.ts`). A host never translates the sheet;
+`messages` overrides product copy by key.
+
+The payer routes it calls answer any origin without credentials
+(`Access-Control-Allow-Origin: *`; the gateway's `lib/payerCors.ts`), because
+their authority is the client secret, so a merchant's own site can host it.
+Merchant and dashboard routes keep the Oxy-only CORS.
 
 ### Checkout presentation primitives
 

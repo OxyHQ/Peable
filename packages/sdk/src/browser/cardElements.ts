@@ -124,8 +124,11 @@ export interface CardElementsOptions {
   readonly sdk: ProviderSdk;
   /** The PROVIDER's client secret, from `POST …/client_action` — never stored. */
   readonly clientSecret: string;
-  /** Where the Payment Element (card and local methods) mounts. */
-  readonly paymentTarget: HTMLElement;
+  /**
+   * Where the Payment Element (card and local methods) mounts; `null` for the
+   * wallets alone (Pay with Peable's sheet, whose card is its own split fields).
+   */
+  readonly paymentTarget: HTMLElement | null;
   /** Where the Express Checkout element (wallets) mounts; omitted for no wallets. */
   readonly walletTarget?: HTMLElement | null;
   /**
@@ -206,11 +209,13 @@ export function mountCardElements(options: CardElementsOptions): CardElementsHan
     express.mount(walletTarget);
   }
 
-  const payment = elements.create('payment', {
-    ...options.paymentOptions,
-    ...(walletTarget !== null ? { wallets: { applePay: 'never', googlePay: 'never' } } : {}),
-  });
-  payment.mount(options.paymentTarget);
+  if (options.paymentTarget !== null) {
+    const payment = elements.create('payment', {
+      ...options.paymentOptions,
+      ...(walletTarget !== null ? { wallets: { applePay: 'never', googlePay: 'never' } } : {}),
+    });
+    payment.mount(options.paymentTarget);
+  }
 
   return {
     elements,

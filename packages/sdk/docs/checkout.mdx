@@ -150,7 +150,7 @@ const source = sessionSource(clientSecret); // cs_…_secret_…, null if it is 
 
 <PeableSheetCheckout
   source={source}
-  locale={language}
+  locale={language} // 'pt-BR', 'zh-Hans', … or 'auto'
   expected={{ amount: '999', currency: 'EUR' }} // the reviewed price, before tax and discount
   presentation={{ recurring: { interval: 'month' } }}
   onSettled={() => refetchFromYourServer()} // the gateway closed the order
@@ -165,8 +165,8 @@ none, a **shipping address only when the session collects one**
 (`shipping_address_collection`) and a billing country when Peable Tax or
 `billing_address_collection: 'required'` needs it — a plan, a download or a
 service is never asked where to deliver. It lists the card (Peable's secure
-fields where they can mount; Peable's secure page from a native app) and
-**FairCoin, always**: chosen, it quotes the order and shows the request the
+fields where they can mount; Peable's secure page from a native app), the
+device's **Apple Pay or Google Pay** and **FairCoin, always**: chosen, it quotes the order and shows the request the
 Peable wallet opens — a button on a phone, a QR code elsewhere; unavailable,
 it is listed disabled with the reason in words. A session that collects
 something the sheet does not (a phone number, a tax id, a required custom
@@ -178,6 +178,32 @@ waits on `outcome`, which your app reads from **its own server** — the sheet
 shows success only when you say so, and never because it was closed or a
 browser came back. `expected` refuses an order that is not the one the payer
 reviewed (`onUnavailable('mismatch')`).
+
+**Wallets.** On the web the card step opens with Apple Pay and Google Pay
+(the provider's Express Checkout element) mounted on the order's own card
+payment, so they appear exactly when your payment method configuration offers
+them, the page's domain is a registered wallet domain (`payment_method_domains`,
+Orbit → Settings → Payment methods) and the payer's device can pay with them —
+at the payment's own amount, tax included. A taxed session asks for the billing
+country before the card step for that reason. From a native app the card opens
+Peable's secure page, which offers the same wallets on Peable's own domain.
+
+**Languages.** `locale` takes a BCP 47 tag (`pt-BR`, `zh-Hans`, `de`) or
+`'auto'` (the payer's browser or device; the default), like Stripe's. The
+sheet's copy ships in the SDK in Arabic, Bengali, Catalan, Chinese
+(Simplified), English, French, German, Hindi, Indonesian, Italian, Japanese,
+Portuguese (Brazil), Russian, Spanish and Turkish (`CHECKOUT_UI_LOCALES`); any
+other language reads English. Do not translate the sheet in your app:
+`messages` is for product copy overrides only.
+
+**Any site, no credentials.** The sheet (and `@peable.to/sdk/checkout`) calls
+the payer routes from the payer's browser. Those routes — a session's
+`…/public` routes, a payment link's, a hosted invoice's and portal's, and a
+payment's or SetupIntent's retrieve and `client_action` with its
+`client_secret` — answer any origin with `Access-Control-Allow-Origin: *` and
+never take cookies: their authority is the client secret, not your domain.
+Every merchant route still refuses a browser on a foreign origin; keep your
+API key on your server.
 
 A single PaymentIntent — one payment on one rail — is paid the same way with
 `source={intentSource(id, clientSecret)}` and an `order` naming its payee and

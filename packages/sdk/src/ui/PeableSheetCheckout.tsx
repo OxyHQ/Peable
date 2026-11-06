@@ -19,8 +19,9 @@ import { DEFAULT_CHECKOUT_URL } from '../browser/embedProtocol';
 import { PeableCheckoutSheet } from './PeableCheckoutSheet';
 import type { PeableMethodDetails } from './PeableMethodContent';
 import { PeableProviderFields } from './PeableProviderFields';
+import { PeableWalletButtons } from './PeableWalletButtons';
 import type { PreparedCardAuthorization, ProviderCardPreparation } from './preparedCard';
-import { checkoutMessage } from './messages';
+import { type CheckoutLocale, checkoutMessage, intlLocale } from './messages';
 import { formatCheckoutAmount, formatFairAmount } from './amount';
 import { billingCountries } from './countries';
 import {
@@ -63,9 +64,14 @@ export interface PeableSheetCheckoutProps {
   gatewayUrl?: string;
   /** Peable's hosted checkout, for the card where secure fields cannot mount. */
   checkoutUrl?: string;
-  /** Host-resolved language (the Oxy Services preference). */
-  locale?: string;
-  /** Product copy overrides, by `checkoutMessage` key. */
+  /**
+   * The sheet's language, like Stripe's `locale`: a BCP 47 tag (the host's
+   * resolved preference — `pt-BR`, `zh-Hans`, `de`) or `'auto'`, the payer's
+   * browser or device. Default `'auto'`. Every string is the SDK's own
+   * catalog (`CHECKOUT_UI_LOCALES`); a language it lacks reads English.
+   */
+  locale?: CheckoutLocale;
+  /** Product copy overrides, by `checkoutMessage` key — never a translation of the sheet. */
   messages?: Readonly<Record<string, string>>;
   /**
    * What the payer reviewed — a session's subtotal (before tax and discount), a
@@ -103,6 +109,12 @@ type Order =
   | { readonly type: 'payment_intent'; readonly intent: PaymentIntent };
 
 type MethodView = 'faircoin' | 'billing' | 'hosted_card' | 'hosted';
+
+/** A card payment's client action, valid only while that payment is the order's. */
+interface CardAction {
+  readonly paymentId: string;
+  readonly action: PeableClientAction;
+}
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
@@ -144,7 +156,7 @@ export function PeableSheetCheckout({
   source: sourceProp,
   gatewayUrl,
   checkoutUrl = DEFAULT_CHECKOUT_URL,
-  locale = 'en',
+  locale = 'auto',
   messages,
   expected,
   presentation,
@@ -180,7 +192,9 @@ export function PeableSheetCheckout({
     [gatewayUrl],
   );
   const [order, setOrder] = useState<Order | null>(null);
-  const [action, setAction] = useState<PeableClientAction | null>(null);
+  const [cardAction, setCardAction] = useState<CardAction | null>(null);
+  // Where the billing view continues: the FairCoin quote, or the card step.
+  const [billingNext, setBillingNext] = useState<'faircoin' | 'card'>('faircoin');
   const [step, setStep] = useState<CheckoutStep>('review');
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
   const [methodView, setMethodView] = useState<MethodView | null>(null);
@@ -219,6 +233,11 @@ export function PeableSheetCheckout({
 
   const payment: PaymentIntent | null =
     order?.type === 'checkout_session' ? order.session.payment_intent : (order?.intent ?? null);
+  // A replaced payment (the payer chose FairCoin) takes its card authority with it.
+  const action =
+    cardAction && payment?.rail === 'card' && payment.id === cardAction.paymentId
+      ? cardAction.action
+      : null;
 
   /** Take the gateway's answer: refuse a different order, follow the payment, report the end once. */
   const accept = useCallback((next: Order) => {
@@ -344,7 +363,7 @@ export function PeableSheetCheckout({
     client
       .getClientAction(source.id, source.clientSecret)
       .then((next) => {
-        if (!disposed && active.current) setAction(next);
+        if (!disposed && active.current) setCardAction({ paymentId: intentId, action: next });
       })
       .catch(() => {
         // A finished payment has no next step; the poll reports how it ended.
@@ -440,8 +459,60 @@ export function PeableSheetCheckout({
     const card = current ?? (await confirmSession('card')).payment_intent;
     if (card?.rail !== 'card') throw new Error(t('error.connection'));
     const next = await client.getClientAction(card.id, card.client_secret);
-    if (active.current) setAction(next);
+    if (active.current) setCardAction({ paymentId: card.id, action: next });
     return next;
+  }
+
+  /**
+   * The session's card payment, made when the payer opens the card step so the
+   * wallets can mount on it (their offer and amount are the payment's). Only
+   * over no payment or a card one: an open FairCoin request is replaced when
+   * the payer pays by card, never because they looked. A failure is silent —
+   * the card's own Continue makes the same call and says why.
+   */
+  async function prepareSessionCard(location: BillingLocation) {
+    if (!session || !cardFields || inFlight.current) return;
+    const current = session.payment_intent;
+    if (current && current.rail !== 'card') return;
+    if (paymentInFlight(current)) return;
+    await authorizeSessionCard(location).catch(() => undefined);
+  }
+
+  /** The billing location the session holds, for the card fields it binds. */
+  function recordedBilling(): BillingLocation | null {
+    const address = session?.customer_details.address;
+    return address?.country
+      ? { country: address.country, postcode: address.postal_code ?? '' }
+      : null;
+  }
+
+  /** Open the card step: the billing location first when the order prices from it. */
+  function openCard() {
+    if (!session) {
+      go('card');
+      return;
+    }
+    if (sessionCollection(session).billingAddress && !session.payment_intent) {
+      const known = recordedBilling();
+      if (known) setBilling(known);
+      setBillingNext('card');
+      setMethodView('billing');
+      go('method');
+      return;
+    }
+    go('card');
+    void prepareSessionCard(recordedBilling() ?? { country: '', postcode: '' });
+  }
+
+  async function continueToCard() {
+    const location = billing;
+    const done = await write(async () => {
+      await recordBilling(location);
+    });
+    if (!done || !active.current) return;
+    setMethodView(null);
+    go('card');
+    void prepareSessionCard(location);
   }
 
   async function prepareCard() {
@@ -513,6 +584,7 @@ export function PeableSheetCheckout({
       return;
     }
     if (needsBillingLocation(order.session)) {
+      setBillingNext('faircoin');
       setMethodView('billing');
       return;
     }
@@ -577,8 +649,16 @@ export function PeableSheetCheckout({
   const methods: CheckoutPaymentMethod[] = unsupported
     ? [{ id: 'hosted', label: t('hosted.label'), kind: 'card', detail: t('hosted.detail') }]
     : [
+        // Peable's secure page takes the card and the device's wallet.
         ...(cardOffered && !cardFields
-          ? [{ id: 'card_hosted', label: t('method.card'), kind: 'card' as const }]
+          ? [
+              {
+                id: 'card_hosted',
+                label: t('method.card'),
+                kind: 'card' as const,
+                detail: t('card.hosted.detail'),
+              },
+            ]
           : []),
         // FairCoin is always listed (ADR 0021); unavailable, it says why.
         {
@@ -629,9 +709,9 @@ export function PeableSheetCheckout({
                   rate: quote.rate,
                   currency: quote.currency,
                 })} ${t('faircoin.holdsUntil', {
-                  time: new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(
-                    new Date(quote.expires_at * 1000),
-                  ),
+                  time: new Intl.DateTimeFormat(intlLocale(locale), {
+                    timeStyle: 'short',
+                  }).format(new Date(quote.expires_at * 1000)),
                 })}`
               : '',
             view: 'external',
@@ -685,9 +765,11 @@ export function PeableSheetCheckout({
           {error && <Text accessibilityRole="alert">{error}</Text>}
           <Button
             size="lg"
-            disabled={busy || !billing.country}
+            disabled={
+              busy || !billing.country || (billingNext === 'card' && !billing.postcode.trim())
+            }
             onPress={() => {
-              void quoteWithBilling();
+              void (billingNext === 'card' ? continueToCard() : quoteWithBilling());
             }}
           >
             {t('continue')}
@@ -738,21 +820,41 @@ export function PeableSheetCheckout({
     return <Loading accessibilityLabel={t('provider.loading')} />;
   })();
 
+  const sheetReturnUrl =
+    returnUrl ?? (typeof window === 'undefined' ? '' : (window.location?.href ?? ''));
+  // A session that prices from the billing location took it before the card step.
+  const boundBilling = collection?.billingAddress ? recordedBilling() : null;
   const cardEntry =
     cardOffered && cardFields ? (
       <>
+        {action && (
+          <PeableWalletButtons
+            action={action}
+            locale={locale}
+            messages={messages}
+            returnUrl={sheetReturnUrl}
+            onAccepted={() => {
+              // Accepted is not paid: the gateway's settlement and the host's outcome decide.
+              accepted.current = true;
+              disposeCard();
+              setError(null);
+              go('processing');
+              void refresh().catch(() => undefined);
+            }}
+            onError={setError}
+          />
+        )}
         <PeableProviderFields
           action={action ?? undefined}
           cardConfiguration={
             session?.publishable_key ? { publishableKey: session.publishable_key } : undefined
           }
           authorize={session ? authorizeSessionCard : undefined}
+          {...(boundBilling ? { billingDetails: boundBilling } : {})}
           requirePostalCode={collection?.billingAddress ?? false}
           disabled={busy}
           locale={locale}
-          returnUrl={
-            returnUrl ?? (typeof window === 'undefined' ? '' : (window.location?.href ?? ''))
-          }
+          returnUrl={sheetReturnUrl}
           onReady={(callback) => {
             prepareRef.current = callback;
             setCardReady(!!callback);
@@ -834,7 +936,8 @@ export function PeableSheetCheckout({
         if (inFlight.current || accepted.current) return;
         if (next === 'card' || next === 'payment') disposeCard();
         setError(null);
-        go(next);
+        if (next === 'card') openCard();
+        else go(next);
       }}
       onBack={() => {
         if (inFlight.current || accepted.current) return;

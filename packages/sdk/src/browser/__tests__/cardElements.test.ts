@@ -56,6 +56,36 @@ const paymentTarget = { id: 'fields' } as unknown as HTMLElement;
 const walletTarget = { id: 'wallets' } as unknown as HTMLElement;
 
 describe('mountCardElements', () => {
+  it('mounts the wallets alone over the payment, and confirms through them', async () => {
+    const provider = fakeProvider();
+    const outcomes: unknown[] = [];
+    const failed: unknown[] = [];
+    mountCardElements({
+      sdk: provider.sdk,
+      clientSecret: 'pi_x_secret_y',
+      paymentTarget: null,
+      walletTarget,
+      returnUrl: 'https://mercaria.example/checkout',
+      onWalletOutcome: (outcome) => outcomes.push(outcome),
+    });
+    // The sheet's card is its own split fields: no Payment Element here.
+    expect(provider.created.map((entry) => entry.type)).toEqual(['expressCheckout']);
+    expect(provider.elementsCalls).toEqual([{ clientSecret: 'pi_x_secret_y' }]);
+    provider.handlers.get('expressCheckout:confirm')?.({
+      paymentFailed: (options) => failed.push(options),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(provider.confirms).toEqual([
+      {
+        elements: expect.anything(),
+        redirect: 'if_required',
+        confirmParams: { return_url: 'https://mercaria.example/checkout' },
+      },
+    ]);
+    expect(outcomes).toEqual([{ kind: 'accepted' }]);
+    expect(failed).toEqual([]);
+  });
+
   it('mounts wallets above the payment fields on one elements instance', () => {
     const provider = fakeProvider();
     mountCardElements({
