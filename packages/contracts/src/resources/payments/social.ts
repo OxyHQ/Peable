@@ -211,7 +211,7 @@ export const socialRoutes = [
     tag: 'Social payments',
     summary: 'Reserve an address to pay a person',
     description:
-      "A fresh address of the recipient's, derived from their Oxy identity key. Limited per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`; paying yourself is refused.",
+      "A fresh address of the recipient's, derived from their Oxy identity key. Limited per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one whose wallet watches no further address (every index below its watched bound is taken) 503 `faircoin_receive_tree_full`; paying yourself is refused.",
     auth: 'user',
     params: { username: 'The recipient’s Oxy username.' },
     body: socialNextAddressParams,

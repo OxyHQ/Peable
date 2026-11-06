@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
+import {
+  SOCIAL_RECEIVE_INDEX_LIMIT,
+  SOCIAL_RECEIVE_NEARLY_FULL_REMAINING,
+} from '@peable.to/contracts/vocabulary';
 import { getDb } from '../db/postgres';
+import { recipientTreeUsage } from '../services/faircoin/addressPool';
+import { faircoinNetworkOf, faircoinRecipientOf } from '../services/faircoin/recipient';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import type { OxyAccess } from '../services/oxyAccess';
 import { oxy } from '../oxy';
@@ -196,6 +202,35 @@ export function createDashboardRouter(deps: {
         return;
       }
       res.status(200).json(toMerchantDTO(result.merchant));
+    }),
+  );
+
+  /**
+   * How full the merchant's FairCoin receive tree is (ADR 0021 D9, amended
+   * 2026-11-06): the owning account's Peable wallet watches a bounded window,
+   * and once every index below `SOCIAL_RECEIVE_INDEX_LIMIT` is taken a new
+   * FairCoin payment can only recycle an address. Orbit warns the owners
+   * before then. `recipient` is false while the owner is not known.
+   */
+  router.get(
+    `${base}/faircoin/receive_tree`,
+    requireOxyUser,
+    gate('read', async (_req, res, merchant) => {
+      const network = faircoinNetworkOf(merchant);
+      const recipient = faircoinRecipientOf(merchant);
+      const usage = recipient
+        ? await recipientTreeUsage(recipient, network)
+        : { reservedThrough: 0, indexLimit: SOCIAL_RECEIVE_INDEX_LIMIT };
+      const remaining = Math.max(0, usage.indexLimit - 1 - usage.reservedThrough);
+      res.status(200).json({
+        object: 'faircoin_receive_tree',
+        network,
+        recipient: recipient !== null,
+        reserved_through: usage.reservedThrough,
+        index_limit: usage.indexLimit,
+        remaining,
+        nearly_full: remaining < SOCIAL_RECEIVE_NEARLY_FULL_REMAINING,
+      });
     }),
   );
 

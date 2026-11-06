@@ -1,5 +1,34 @@
 # Changelog
 
+## 5.6.0 — a recipient's FairCoin tree stops where its wallet stops watching
+
+Requires `@peable.to/contracts` 5.6.0 and `@peable.to/shared-types` 5.6.0 (ADR 0021 D9, D10, amended 2026-11-06).
+
+Changed:
+
+- A FairCoin payment is refused `faircoin_capacity_reached` (503) once every
+  index the recipient's Peable wallet watches (below
+  `SOCIAL_RECEIVE_INDEX_LIMIT`, 1 980) is taken and no unpaid address can be
+  recycled; the other methods still work.
+- A settled FairCoin payment is rewound to `processing` only when the chain
+  says so (its transaction missing, unconfirmed, or in another block below the
+  threshold, on reads a block apart) — never because one Explorer read showed
+  fewer confirmations. Integrations no longer see a spurious
+  `payment_intent.processing` and a second `payment_intent.succeeded`.
+- A broadcast reported under the wrong txid whose address was paid in full by
+  another transaction settles against that transaction (its `txid` changes)
+  instead of being cancelled `abandoned`.
+
+Added:
+
+- Cancellation reason `faircoin_network_closed`: the deployment closed the
+  payment's FairCoin network before anything was broadcast; the order stays
+  open. `PeableSheetCheckout` offers a fresh request, as for a lapsed one.
+- Error code `faircoin_receive_tree_full` (503) on
+  `POST /v1/social/:username/next_address`.
+- `@peable.to/contracts/vocabulary/receiveTree`: `SOCIAL_RECEIVE_MAX_WATCHED`,
+  `SOCIAL_RECEIVE_GAP_LIMIT`, `SOCIAL_RECEIVE_INDEX_LIMIT`.
+
 ## 5.5.0 — a customer's language
 
 Requires `@peable.to/contracts` 5.5.0 and `@peable.to/shared-types` 5.5.0.

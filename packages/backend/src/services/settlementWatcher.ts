@@ -5,12 +5,20 @@ import {
   faircoinOutputsOf,
   findSettlingIntents,
   findWatchableIntents,
+  txidSettlesAnotherIntent,
 } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import { toBaseUnits } from '../lib/money';
 import { applyEvent } from './intentState';
 import { transitionIntent } from './intentTransition';
-import { addressHasTransaction, getAddressUsage, getTip, verifyPayment } from './explorer';
+import {
+  addressHasTransaction,
+  type ExplorerTx,
+  getAddressUsage,
+  getTip,
+  listAddressTransactions,
+  verifyPayment,
+} from './explorer';
 import { checkRecipientKeys, readCurrentKeyFresh } from './faircoin/keyBinding';
 
 /**
@@ -35,6 +43,17 @@ const WATCHABLE_STATUSES: readonly PaymentIntentStatus[] = ['processing'];
  * read never rewinds a payment.
  */
 export const REORG_MISSING_GRACE_MS = 10 * 60 * 1000;
+
+/**
+ * How long a SUCCEEDED payment's transaction must read unconfirmed (0
+ * confirmations, no block) or in a different block, below the threshold,
+ * before it is rewound (ADR 0021 D10, amended 2026-11-06): one block, on two
+ * reads, so an Explorer node behind its peers (the API is load-balanced; a
+ * block's `confirmations` was read at 1 and its transaction's at 4 in the same
+ * minute) never rewinds a payment. A count that merely dips is not a reorg and
+ * is not even recorded.
+ */
+export const REORG_CONFIRM_MS = 2 * 60 * 1000;
 
 /**
  * A reported broadcast the Explorer has not seen for this long, that pays
@@ -64,6 +83,18 @@ const SETTLED_RECHECK_BATCH = 200;
 /** How often one settled payment is re-read. */
 const SETTLED_RECHECK_INTERVAL_MS = 60 * 1000;
 
+/**
+ * Transactions read, at most, when a lost broadcast's address was paid under
+ * another txid (ADR 0021 D9, amended): the address is single-use, so the
+ * payment that filled it is among its few transactions.
+ */
+const SUBSTITUTE_TX_READS = 10;
+/**
+ * How far a block's own timestamp may sit before the payment's creation and
+ * still be its payment: a staker's clock, not Peable's, stamps the block.
+ */
+const SUBSTITUTE_TIME_SLACK_SECONDS = 15 * 60;
+
 export interface WatcherDeps {
   getTransaction: typeof import('./explorer').getTransaction;
   /** The chain tip: proof the Explorer is answering before a missing transaction means anything. */
@@ -72,6 +103,8 @@ export interface WatcherDeps {
   getAddressUsage?: typeof getAddressUsage;
   /** Whether a used address's transactions include the reported one (the same judgement). */
   addressHasTransaction?: typeof addressHasTransaction;
+  /** A used address's transactions, to find the one that paid it under another txid. */
+  listAddressTransactions?: typeof listAddressTransactions;
   /** The clock; tests move it. */
   now?: () => number;
   /**
@@ -202,6 +235,13 @@ export class SettlementWatcher {
     for (const id of this.settledCheckedAt.keys()) {
       if (!live.has(id)) this.settledCheckedAt.delete(id);
     }
+    for (const id of this.rewindSuspectSince.keys()) {
+      if (!live.has(id)) this.rewindSuspectSince.delete(id);
+    }
+    for (const id of this.settledBlock.keys()) {
+      if (!live.has(id) && !intents.some((intent) => intent.id === id))
+        this.settledBlock.delete(id);
+    }
     for (const intent of settling) {
       // A block is two minutes: once a minute is as often as the answer can change.
       const last = this.settledCheckedAt.get(intent.id);
@@ -213,6 +253,14 @@ export class SettlementWatcher {
 
   /** When each settled payment was last re-read. */
   private readonly settledCheckedAt = new Map<string, number>();
+  /**
+   * The block each settled payment's transaction was last read in (per task:
+   * a restart learns it again on the first read). A block that changes is a
+   * reorg; a count that dips in the same block is an Explorer behind its peers.
+   */
+  private readonly settledBlock = new Map<string, string>();
+  /** When a settled payment first read unconfirmed or moved, reset by a read that does not. */
+  private readonly rewindSuspectSince = new Map<string, number>();
 
   private now(): number {
     return this.deps.now?.() ?? Date.now();
@@ -236,19 +284,24 @@ export class SettlementWatcher {
   }
 
   /**
-   * Re-read a SUCCEEDED payment's transaction (ADR 0021 D10). Deeper: record
-   * the count (same status, no event). Below the merchant's threshold, or
-   * missing for {@link REORG_MISSING_GRACE_MS} while the Explorer answers: the
-   * reorg rewinds it to `processing` (`reorg_below_threshold`), where the
-   * watcher settles it again — or cancels it, if the coins never come back.
+   * Re-read a SUCCEEDED payment's transaction (ADR 0021 D10, amended
+   * 2026-11-06). Deeper: record the count (same status, no event). A count that
+   * dips in the same block is an Explorer node behind its peers and changes
+   * nothing. The reorg rewinds it to `processing` (`reorg_below_threshold`) —
+   * where the watcher settles it again, or cancels it if the coins never come
+   * back — only when the chain says so: the transaction missing for {@link
+   * REORG_MISSING_GRACE_MS} while the Explorer answers, or read unconfirmed (0
+   * confirmations, no block) or in a different block below the threshold on
+   * reads {@link REORG_CONFIRM_MS} apart.
    */
   private async recheckSettled(intent: PaymentIntentRow): Promise<void> {
     const { txid, network } = intent;
     if (txid === null || network === null || intent.status !== 'succeeded') return;
     const tx = await this.deps.getTransaction(txid, network);
+    const now = this.now();
     let confirmations: number;
     if (tx === null) {
-      const now = this.now();
+      this.rewindSuspectSince.delete(intent.id);
       const since = this.missingSince.get(intent.id);
       if (since === undefined) {
         this.missingSince.set(intent.id, now);
@@ -259,19 +312,37 @@ export class SettlementWatcher {
       confirmations = 0;
     } else {
       this.missingSince.delete(intent.id);
-      confirmations = tx.confirmations;
-      if (confirmations >= intent.requiredConfirmations) {
-        if (confirmations === intent.confirmations) return;
+      const known = this.settledBlock.get(intent.id);
+      const unconfirmed = tx.confirmations <= 0 || tx.blockHash === null;
+      const moved =
+        known !== undefined &&
+        typeof tx.blockHash === 'string' &&
+        tx.blockHash !== known &&
+        tx.confirmations < intent.requiredConfirmations;
+      if (!unconfirmed && !moved) {
+        this.rewindSuspectSince.delete(intent.id);
+        if (typeof tx.blockHash === 'string') this.settledBlock.set(intent.id, tx.blockHash);
+        // Only ever deeper: a lower count is a lagging node, not news.
+        if (tx.confirmations <= intent.confirmations) return;
         const result = await transitionIntent(intent.id, {
           from: 'succeeded',
           status: 'succeeded',
-          confirmations,
+          confirmations: tx.confirmations,
         });
         if (result.kind === 'updated') await this.deps.onChange(result.row);
         return;
       }
+      const since = this.rewindSuspectSince.get(intent.id);
+      if (since === undefined) {
+        this.rewindSuspectSince.set(intent.id, now);
+        return;
+      }
+      if (now - since < REORG_CONFIRM_MS) return;
+      confirmations = Math.max(0, tx.confirmations);
     }
     this.missingSince.delete(intent.id);
+    this.rewindSuspectSince.delete(intent.id);
+    this.settledBlock.delete(intent.id);
     const result = await transitionIntent(intent.id, {
       from: 'succeeded',
       status: applyEvent('succeeded', 'reorg_below_threshold', 'faircoin'),
@@ -314,10 +385,26 @@ export class SettlementWatcher {
     const holds = this.deps.addressHasTransaction ?? addressHasTransaction;
     const txid = intent.txid;
     if (txid === null) return;
+    let paidUnderAnotherTxid: string | null = null;
     for (const output of faircoinOutputsOf(intent)) {
       const answer = await usage(output.address, network);
       if (answer === 'unknown' && network === 'mainnet') return;
-      if (answer === 'used' && (await holds(output.address, network, txid)) !== 'no') return;
+      if (answer === 'used') {
+        if ((await holds(output.address, network, txid)) !== 'no') return;
+        paidUnderAnotherTxid ??= output.address;
+      }
+    }
+    // The address received coins, just not under the txid the payer reported
+    // (a malleated or rebroadcast transaction, or a mistyped report): if one of
+    // its transactions pays the whole payment, the payment is paid (ADR 0021
+    // D9, amended 2026-11-06), never `abandoned`.
+    if (paidUnderAnotherTxid !== null) {
+      const verdict = await this.findSubstitute(intent, network, paidUnderAnotherTxid);
+      if (verdict === 'unknown' || verdict === 'flagged') return;
+      if (verdict !== 'none') {
+        await this.settleAgainst(intent, verdict);
+        return;
+      }
     }
     const result = await transitionIntent(intent.id, {
       from: 'processing',
@@ -327,6 +414,71 @@ export class SettlementWatcher {
     this.unseenCheckedAt.delete(intent.id);
     this.unseenSince.delete(intent.id);
     if (result.kind === 'updated') await this.deps.onChange(result.row);
+  }
+
+  /**
+   * The transaction at `address` that pays every output of `intent` its
+   * amount, seen no earlier than the payment was created (a recycled address
+   * may hold a late payment of its previous holder's quote), and not settling
+   * another payment. `flagged` when one pays it but is another payment's —
+   * the payment stays `processing` and is reported, never cancelled;
+   * `unknown` when the Explorer cannot answer; `none` when nothing pays it.
+   */
+  private async findSubstitute(
+    intent: PaymentIntentRow,
+    network: NonNullable<PaymentIntentRow['network']>,
+    address: string,
+  ): Promise<ExplorerTx | 'none' | 'flagged' | 'unknown'> {
+    const listed = await (this.deps.listAddressTransactions ?? listAddressTransactions)(
+      address,
+      network,
+    );
+    if (listed === null) return 'unknown';
+    const expected = faircoinOutputsOf(intent).map((output) => ({
+      address: output.address,
+      amount: toBaseUnits(output.amount),
+    }));
+    const created = Math.floor(intent.createdAt.getTime() / 1000) - SUBSTITUTE_TIME_SLACK_SECONDS;
+    let flagged = false;
+    for (const candidate of listed.slice(0, SUBSTITUTE_TX_READS)) {
+      if (candidate === intent.txid) continue;
+      const tx = await this.deps.getTransaction(candidate, network);
+      if (tx === null) return 'unknown';
+      if (!verifyPayment(tx, expected).paid) continue;
+      if (typeof tx.time === 'number' && tx.time < created) continue;
+      if (await txidSettlesAnotherIntent(getDb(), network, tx.txid, intent.id)) {
+        flagged = true;
+        continue;
+      }
+      return tx;
+    }
+    if (flagged) {
+      process.emitWarning(
+        `Peable FairCoin payment ${intent.publicId}: its reported transaction was never seen, and the transaction that paid its address is another payment's; left processing for review`,
+      );
+      return 'flagged';
+    }
+    return 'none';
+  }
+
+  /** Move the payment onto the transaction that paid it, then settle it as any observation. */
+  private async settleAgainst(intent: PaymentIntentRow, tx: ExplorerTx): Promise<void> {
+    const moved = await transitionIntent(intent.id, {
+      from: 'processing',
+      status: 'processing',
+      txid: tx.txid,
+      confirmations: Math.max(0, tx.confirmations),
+    });
+    this.unseenCheckedAt.delete(intent.id);
+    this.unseenSince.delete(intent.id);
+    if (moved.kind !== 'updated') return;
+    await this.deps.onChange(moved.row);
+    const expected = faircoinOutputsOf(moved.row).map((output) => ({
+      address: output.address,
+      amount: toBaseUnits(output.amount),
+    }));
+    const settled = await applyChainObservation(moved.row, verifyPayment(tx, expected));
+    if (settled !== null) await this.deps.onChange(settled);
   }
 
   private async reconcile(intent: PaymentIntentRow): Promise<void> {
@@ -355,6 +507,8 @@ export class SettlementWatcher {
       amount: toBaseUnits(output.amount),
     }));
     const { paid, confirmations } = verifyPayment(tx, expected);
+    // The block it settles in, so a later re-read can tell a reorg from a lag.
+    if (typeof tx.blockHash === 'string') this.settledBlock.set(intent.id, tx.blockHash);
     const row = await applyChainObservation(intent, { paid, confirmations });
     if (row === null) return;
 

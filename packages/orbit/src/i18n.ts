@@ -490,6 +490,9 @@ const en: Record<string, string> = {
   'faircoinWallet.networkClosedTitle': 'FairCoin is not open on this network yet',
   'faircoinWallet.networkClosedBody':
     'Payers see FairCoin as unavailable until Peable opens payments on this FairCoin network. Card payments keep working.',
+  'faircoinWallet.treeNearlyFullTitle': 'FairCoin addresses are running out',
+  'faircoinWallet.treeNearlyFullBody':
+    'The Peable wallet that receives FairCoin watches a fixed number of addresses, and only {remaining} new ones are left. Once they are used, FairCoin is taken only while an unpaid address can be reused, and payers may see it as temporarily unavailable. Card payments keep working.',
 
   'domains.title': 'Wallet domains',
   'domains.intro':
@@ -915,6 +918,7 @@ const en: Record<string, string> = {
   'cancellation.fraudulent': 'Fraudulent',
   'cancellation.requested_by_customer': 'Requested by the customer',
   'cancellation.underpaid': 'Underpaid',
+  'cancellation.faircoin_network_closed': 'FairCoin network closed',
   'cancellation.recipient_key_changed': 'Receiving key replaced',
   'cancellation.none': 'No reason given',
   'deliveryStatus.pending': 'Pending',
@@ -1513,6 +1517,9 @@ const es: Record<string, string> = {
   'faircoinWallet.networkClosedTitle': 'FairCoin aún no está abierto en esta red',
   'faircoinWallet.networkClosedBody':
     'Los pagadores verán FairCoin como no disponible hasta que Peable abra los pagos en esta red de FairCoin. Los pagos con tarjeta siguen funcionando.',
+  'faircoinWallet.treeNearlyFullTitle': 'Se están agotando las direcciones de FairCoin',
+  'faircoinWallet.treeNearlyFullBody':
+    'El monedero de Peable que recibe FairCoin vigila un número fijo de direcciones, y solo quedan {remaining} nuevas. Cuando se agoten, FairCoin solo se aceptará mientras se pueda reutilizar una dirección sin pagar, y los pagadores podrán verlo como no disponible temporalmente. Los pagos con tarjeta siguen funcionando.',
 
   'domains.title': 'Dominios de monederos',
   'domains.intro':
@@ -1542,6 +1549,7 @@ const es: Record<string, string> = {
   'cancellation.fraudulent': 'Fraudulento',
   'cancellation.requested_by_customer': 'A petición del cliente',
   'cancellation.underpaid': 'Pago insuficiente',
+  'cancellation.faircoin_network_closed': 'Red de FairCoin cerrada',
   'cancellation.recipient_key_changed': 'Clave de cobro sustituida',
   'cancellation.none': 'Sin motivo indicado',
   'deliveryStatus.pending': 'Pendiente',

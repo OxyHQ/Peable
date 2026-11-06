@@ -26,7 +26,16 @@
  * payment, or coins an attacker spent to dirty it. The count and the mint are
  * one decision under a per-recipient advisory lock held by the payment's own
  * transaction, so concurrent confirms cannot both pass the cap. The mint itself
- * is unchanged: one statement on the cursor (`db/social/receiveCursor.ts`).
+ * is unchanged: one statement on the cursor (`db/social/receiveCursor.ts`),
+ * which also refuses an index the recipient's wallet would not watch
+ * (`SOCIAL_RECEIVE_INDEX_LIMIT`) — that is `faircoin_capacity_reached` too.
+ *
+ * Concurrent confirms recycle as well as serial ones (amended 2026-11-06).
+ * Each confirm LEASES a different candidate to check against the chain
+ * ({@link RECYCLE_LEASE_SECONDS}), and a check that finds it unused is stamped
+ * (`recycle_checked_at`). Under the lock a confirm whose own candidate was
+ * taken claims another one stamped within {@link RECYCLE_CHECK_FRESH_SECONDS}
+ * — no HTTP call inside the transaction — and mints only when none is left.
  *
  * `@username` addresses (`routes/social.ts`) are not payments and are not
  * counted here: a sender asking again for a recipient it has not paid yet is
@@ -37,15 +46,24 @@ import { bytesToHex, deriveSocialReceiveAddress, getNetwork } from '@fairco.in/c
 import type { NetworkType } from '@fairco.in/core';
 import { getDb } from '../../db/postgres';
 import type { DatabaseOrTransaction } from '../../db/postgres';
+import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
 import {
   claimRecycleCandidate,
   countOpenAddresses,
+  leaseRecycleCandidate,
+  listCheckedRecycleCandidates,
   listRecycleCandidates,
   lockRecipientPool,
+  markRecycleCandidateUnused,
   type RecycleCandidate,
+  releaseRecycleLease,
   retireRecycleCandidate,
 } from '../../db/payments/faircoinAddressPool';
-import { reserveNextSocialReceiveIndex } from '../../db/social/receiveCursor';
+import {
+  readReservedThrough,
+  ReceiveTreeFullError,
+  reserveNextSocialReceiveIndex,
+} from '../../db/social/receiveCursor';
 import { type AddressUsage, getAddressUsage } from '../explorer';
 
 /**
@@ -64,18 +82,37 @@ export const MAX_OPEN_ADDRESSES = 500;
  */
 export const RECYCLE_QUARANTINE_SECONDS = 60 * 60;
 
-/** Candidates read per reservation; a key check is local and cheap. */
+/**
+ * How long a chain read showing a candidate unused lets a reservation claim it
+ * without reading again. The residual this widens is D9's own: a payer paying a
+ * quote cancelled more than the quarantine ago, in the minutes between the read
+ * and the claim, pays an address the next order holds — still the recipient's.
+ */
+export const RECYCLE_CHECK_FRESH_SECONDS = 10 * 60;
+
+/** How long one confirm holds the candidate it is checking: more than a confirm takes. */
+export const RECYCLE_LEASE_SECONDS = 60;
+
+/** Candidates one reservation looks at; a key check is local and cheap. */
 const CANDIDATE_BATCH = 20;
 /** Explorer reads per reservation: a confirm must not wait on many. */
 const MAX_CHAIN_CHECKS = 3;
 
-/** The recipient has {@link MAX_OPEN_ADDRESSES} open: FairCoin waits, the card does not. */
+/**
+ * The recipient cannot be handed a new FairCoin address now: {@link
+ * MAX_OPEN_ADDRESSES} are open, or every index its wallet watches is taken and
+ * nothing can be recycled (`full`). FairCoin waits, the card does not.
+ */
 export class FaircoinCapacityError extends Error {
-  constructor() {
+  readonly full: boolean;
+  constructor(full = false) {
     super(
-      'Too many FairCoin payments to this recipient are waiting to be paid right now; pay another way or try FairCoin again shortly',
+      full
+        ? "Every FairCoin address this recipient's Peable wallet watches is in use; pay another way, or try FairCoin again later"
+        : 'Too many FairCoin payments to this recipient are waiting to be paid right now; pay another way or try FairCoin again shortly',
     );
     this.name = 'FaircoinCapacityError';
+    this.full = full;
   }
 }
 
@@ -128,11 +165,14 @@ export interface ReservedAddress {
 
 /**
  * Find an address of the recipient's to recycle — OUTSIDE any transaction,
- * because the chain read is an HTTP call. What it learns is kept: a candidate
- * that no longer derives from `identityPublicKey` or that the chain shows used
- * is retired here. An Explorer that cannot tell (`unknown`: an outage, or
- * testnet's node, which has no address index) ends the search — nothing is
- * recycled on a guess, and the reservation mints under the cap instead.
+ * because the chain read is an HTTP call — and hold it: each candidate looked
+ * at is LEASED first ({@link RECYCLE_LEASE_SECONDS}), so concurrent confirms
+ * look at different ones. One the chain showed unused within {@link
+ * RECYCLE_CHECK_FRESH_SECONDS} needs no read; otherwise the read's answer is
+ * kept: unused is stamped, used or a key it no longer derives from is retired.
+ * An Explorer that cannot tell (`unknown`: an outage, or testnet's node, which
+ * has no address index) ends the search — nothing is recycled on a guess, and
+ * the reservation mints under the cap instead.
  */
 export async function findRecyclableAddress(
   recipientAccountId: string,
@@ -140,34 +180,76 @@ export async function findRecyclableAddress(
   identityPublicKey: Uint8Array,
 ): Promise<RecycleCandidate | null> {
   const db = getDb();
-  const candidates = await listRecycleCandidates(
-    db,
-    recipientAccountId,
-    network,
-    RECYCLE_QUARANTINE_SECONDS,
-    CANDIDATE_BATCH,
-  );
   const params = getNetwork(network);
   let chainChecks = 0;
-  for (const candidate of candidates) {
+  for (let looked = 0; looked < CANDIDATE_BATCH; looked += 1) {
+    const candidate = await leaseRecycleCandidate(
+      db,
+      recipientAccountId,
+      network,
+      RECYCLE_QUARANTINE_SECONDS,
+      RECYCLE_LEASE_SECONDS,
+      RECYCLE_CHECK_FRESH_SECONDS,
+    );
+    if (candidate === null) return null;
+    const { checkedFresh, ...held } = candidate;
     // A rotated key leaves addresses its wallet no longer derives (ADR 0002):
     // handing one out would pay a tree nobody scans.
     if (
-      deriveSocialReceiveAddress(identityPublicKey, candidate.derivationIndex, params) !==
+      deriveSocialReceiveAddress(identityPublicKey, held.derivationIndex, params) !== held.address
+    ) {
+      await retireRecycleCandidate(db, held.id);
+      continue;
+    }
+    if (checkedFresh) return held;
+    if (chainChecks >= MAX_CHAIN_CHECKS) {
+      await releaseRecycleLease(db, held.id);
+      return null;
+    }
+    chainChecks += 1;
+    const usage = await usageReader(held.address, network);
+    if (usage === 'used') {
+      await retireRecycleCandidate(db, held.id);
+      continue;
+    }
+    if (usage === 'unknown') {
+      await releaseRecycleLease(db, held.id);
+      return null;
+    }
+    await markRecycleCandidateUnused(db, held.id);
+    return held;
+  }
+  return null;
+}
+
+/**
+ * Under the pool's lock, with no HTTP call: claim the planned candidate, or —
+ * when another confirm took it — the lowest one the chain showed unused
+ * recently. `null` when none is left (the caller mints).
+ */
+async function claimUnderLock(
+  tx: DatabaseOrTransaction,
+  plan: PlannedAddress,
+): Promise<RecycleCandidate | null> {
+  if (plan.candidate && (await claimRecycleCandidate(tx, plan.candidate.id))) return plan.candidate;
+  const params = getNetwork(plan.network);
+  const checked = await listCheckedRecycleCandidates(
+    tx,
+    plan.recipientAccountId,
+    plan.network,
+    RECYCLE_QUARANTINE_SECONDS,
+    RECYCLE_CHECK_FRESH_SECONDS,
+    CANDIDATE_BATCH,
+  );
+  for (const candidate of checked) {
+    if (
+      deriveSocialReceiveAddress(plan.identityPublicKey, candidate.derivationIndex, params) !==
       candidate.address
     ) {
-      await retireRecycleCandidate(db, candidate.id);
+      await retireRecycleCandidate(tx, candidate.id);
       continue;
     }
-    if (chainChecks >= MAX_CHAIN_CHECKS) break;
-    chainChecks += 1;
-    const usage = await usageReader(candidate.address, network);
-    if (usage === 'used') {
-      await retireRecycleCandidate(db, candidate.id);
-      continue;
-    }
-    if (usage === 'unknown') break;
-    return candidate;
+    if (await claimRecycleCandidate(tx, candidate.id)) return candidate;
   }
   return null;
 }
@@ -180,7 +262,8 @@ export async function findRecyclableAddress(
  * and its mints back with it, so no address is lost to a payment that never
  * existed.
  *
- * @throws {FaircoinCapacityError} a recipient already has {@link MAX_OPEN_ADDRESSES} open.
+ * @throws {FaircoinCapacityError} a recipient already has {@link MAX_OPEN_ADDRESSES} open,
+ *   or its tree has no index left that its wallet watches.
  */
 export async function reservePlannedAddresses(
   tx: DatabaseOrTransaction,
@@ -196,11 +279,12 @@ export async function reservePlannedAddresses(
 
   const reserved: ReservedAddress[] = [];
   for (const plan of plans) {
-    if (plan.candidate && (await claimRecycleCandidate(tx, plan.candidate.id))) {
+    const recycled = await claimUnderLock(tx, plan);
+    if (recycled) {
       reserved.push({
         recipientAccountId: plan.recipientAccountId,
-        address: plan.candidate.address,
-        derivationIndex: plan.candidate.derivationIndex,
+        address: recycled.address,
+        derivationIndex: recycled.derivationIndex,
         identityPublicKey: bytesToHex(plan.identityPublicKey),
       });
       continue;
@@ -213,12 +297,20 @@ export async function reservePlannedAddresses(
     );
     if (open >= maxOpen) throw new FaircoinCapacityError();
     const identityPublicKey = bytesToHex(plan.identityPublicKey);
-    const index = await reserveNextSocialReceiveIndex(
-      tx,
-      plan.recipientAccountId,
-      plan.network,
-      identityPublicKey,
-    );
+    let index: number;
+    try {
+      index = await reserveNextSocialReceiveIndex(
+        tx,
+        plan.recipientAccountId,
+        plan.network,
+        identityPublicKey,
+      );
+    } catch (error) {
+      // Every index the wallet watches is taken (ADR 0021 D9, amended): an
+      // address past them would be paid where nobody looks.
+      if (error instanceof ReceiveTreeFullError) throw new FaircoinCapacityError(true);
+      throw error;
+    }
     reserved.push({
       recipientAccountId: plan.recipientAccountId,
       address: deriveSocialReceiveAddress(plan.identityPublicKey, index, getNetwork(plan.network)),
@@ -245,7 +337,7 @@ export async function recipientHasAddressRoom(
     network,
     RECYCLE_QUARANTINE_SECONDS,
   );
-  if (open < maxOpen) return true;
+  if (open < maxOpen && !(await recipientTreeFull(recipientAccountId, network))) return true;
   const candidates = await listRecycleCandidates(
     db,
     recipientAccountId,
@@ -254,4 +346,23 @@ export async function recipientHasAddressRoom(
     1,
   );
   return candidates.length > 0;
+}
+
+/**
+ * How much of the recipient's tree is taken: the highest index ever reserved
+ * against the first one the gateway never mints (`SOCIAL_RECEIVE_INDEX_LIMIT`).
+ * Orbit warns the owners from it; recycling does not lower it.
+ */
+export async function recipientTreeUsage(
+  recipientAccountId: string,
+  network: NetworkType,
+): Promise<{ readonly reservedThrough: number; readonly indexLimit: number }> {
+  const { reservedThrough } = await readReservedThrough(getDb(), recipientAccountId, network);
+  return { reservedThrough, indexLimit: SOCIAL_RECEIVE_INDEX_LIMIT };
+}
+
+/** Whether the next mint on the recipient's cursor would be refused. */
+async function recipientTreeFull(recipientAccountId: string, network: NetworkType) {
+  const { reservedThrough, indexLimit } = await recipientTreeUsage(recipientAccountId, network);
+  return reservedThrough + 1 >= indexLimit;
 }

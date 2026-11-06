@@ -180,13 +180,18 @@ async function settledIntent(publicId: string, txid: string, confirmations: numb
   return intent;
 }
 
-function paying(txid: string, confirmations: () => number): WatcherDeps['getTransaction'] {
+function paying(
+  txid: string,
+  confirmations: () => number,
+  blockHash: () => string | null = () => 'block_a',
+): WatcherDeps['getTransaction'] {
   return async (asked) =>
     asked === txid
       ? {
           txid,
           confirmations: confirmations(),
           outputs: [{ address: ADDRESS, valueSat: PAID_VALUE }],
+          blockHash: blockHash(),
         }
       : null;
 }
@@ -194,10 +199,15 @@ function paying(txid: string, confirmations: () => number): WatcherDeps['getTran
 test('a succeeded payment is re-read until final: deeper is recorded, a reorg below the threshold rewinds it (ADR 0021 D10)', async () => {
   const intent = await settledIntent('pi_0000000000000000000000d1', 'tx_reorg', 2);
   let observed = 5;
+  let block = 'block_a';
   let clock = Date.now();
   const changes: string[] = [];
   const watcher = new SettlementWatcher({
-    getTransaction: paying('tx_reorg', () => observed),
+    getTransaction: paying(
+      'tx_reorg',
+      () => observed,
+      () => block,
+    ),
     now: () => clock,
     onChange: (row) => {
       changes.push(`${row.status}:${row.confirmations}`);
@@ -218,8 +228,16 @@ test('a succeeded payment is re-read until final: deeper is recorded, a reorg be
   await watcher.check();
   expect(must(await findIntentById(gatewayDb(), intent.id)).confirmations).toBe(5);
 
-  // The block holding it is replaced: one confirmation, below the threshold of 2.
+  // The block holding it is replaced: one confirmation in ANOTHER block, below
+  // the threshold of 2. One read is not enough; the next, a block later, is.
   observed = 1;
+  block = 'block_b';
+  aMinuteLater();
+  await watcher.check();
+  expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('succeeded');
+  aMinuteLater();
+  await watcher.check();
+  expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('succeeded');
   aMinuteLater();
   await watcher.check();
   const rewound = must(await findIntentById(gatewayDb(), intent.id));
@@ -367,12 +385,22 @@ test('a made-up txid plus dust sent to the address does not hold it for ever: th
   let listed: 'yes' | 'no' | 'unknown' = 'unknown';
   let clock = Date.now() + BROADCAST_UNSEEN_MS + 1;
   const watcher = new SettlementWatcher({
-    getTransaction: async () => null,
+    // The dust transaction is readable; the reported one never was.
+    getTransaction: async (txid) =>
+      txid === 'tx_dust'
+        ? {
+            txid,
+            confirmations: 30,
+            outputs: [{ address: 'FLyY3WG7h7iPFMeGN81hXrAVzWMocDyT7a', valueSat: 1_000n }],
+          }
+        : null,
     getTip: async () => 100,
     // Something arrived at the address…
     getAddressUsage: async () => 'used',
     // …and whether it was the reported transaction is what decides.
     addressHasTransaction: async () => listed,
+    // What did arrive pays less than the payment: not a substitute.
+    listAddressTransactions: async () => ['tx_dust'],
     now: () => clock,
     onChange: () => undefined,
   });
@@ -388,4 +416,160 @@ test('a made-up txid plus dust sent to the address does not hold it for ever: th
   const canceled = must(await findIntentById(gatewayDb(), dusted.id));
   expect(canceled.status).toBe('canceled');
   expect(canceled.cancellationReason).toBe('abandoned');
+});
+
+test('a confirmation count that dips in the same block is a lagging Explorer node: nothing rewinds, nothing is recorded (ADR 0021 D10)', async () => {
+  const intent = await settledIntent('pi_0000000000000000000000d3', 'tx_jitter', 6);
+  let observed = 6;
+  let clock = Date.now();
+  const changes: string[] = [];
+  const watcher = new SettlementWatcher({
+    getTransaction: paying('tx_jitter', () => observed),
+    now: () => clock,
+    onChange: (row) => {
+      changes.push(`${row.status}:${row.confirmations}`);
+    },
+  });
+  for (const count of [1, 1, 1, 3, 1]) {
+    observed = count;
+    clock += 61_000;
+    await watcher.check();
+  }
+  const kept = must(await findIntentById(gatewayDb(), intent.id));
+  expect(kept.status).toBe('succeeded');
+  expect(kept.confirmations).toBe(6);
+  expect(changes).toEqual([]);
+});
+
+test('a block that moves and moves back between reads rewinds nothing', async () => {
+  const intent = await settledIntent('pi_0000000000000000000000d4', 'tx_flap', 3);
+  let block = 'block_a';
+  let clock = Date.now();
+  const watcher = new SettlementWatcher({
+    getTransaction: paying(
+      'tx_flap',
+      () => 1,
+      () => block,
+    ),
+    now: () => clock,
+    onChange: () => undefined,
+  });
+  await watcher.check();
+  block = 'block_b';
+  clock += 61_000;
+  await watcher.check();
+  block = 'block_a';
+  clock += 61_000;
+  await watcher.check();
+  block = 'block_b';
+  clock += 61_000;
+  await watcher.check();
+  expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('succeeded');
+});
+
+test('a transaction back in the mempool (0 confirmations, no block) on two reads a block apart is rewound', async () => {
+  const intent = await settledIntent('pi_0000000000000000000000d5', 'tx_mempool', 3);
+  let clock = Date.now();
+  const watcher = new SettlementWatcher({
+    getTransaction: paying(
+      'tx_mempool',
+      () => 0,
+      () => null,
+    ),
+    now: () => clock,
+    onChange: () => undefined,
+  });
+  await watcher.check();
+  clock += 61_000;
+  await watcher.check();
+  expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('succeeded');
+  clock += 61_000;
+  await watcher.check();
+  const rewound = must(await findIntentById(gatewayDb(), intent.id));
+  expect(rewound.status).toBe('processing');
+  expect(rewound.confirmations).toBe(0);
+});
+
+/** A mainnet payment reported with `reported` that the Explorer never shows. */
+async function lostBroadcast(reported: string, publicId?: string) {
+  const merchant = await seedMerchant({ network: 'mainnet', requiredConfirmations: 6 });
+  const intent = await seedIntent(merchant, {
+    ...(publicId ? { publicId } : {}),
+    amount: AMOUNT,
+    network: 'mainnet',
+    address: 'FLyY3WG7h7iPFMeGN81hXrAVzWMocDyT7a',
+  });
+  await updateIntentState(gatewayDb(), intent.id, {
+    from: 'requires_action',
+    status: 'processing',
+    txid: reported,
+  });
+  return { merchant, intent };
+}
+
+const MAINNET_PAID = 'FLyY3WG7h7iPFMeGN81hXrAVzWMocDyT7a';
+
+test('an address paid in full under another txid settles against that transaction, never abandoned (ADR 0021 D9)', async () => {
+  const { intent } = await lostBroadcast('tx_misreported');
+  let clock = Date.now() + BROADCAST_UNSEEN_MS + 1;
+  const changes: string[] = [];
+  const watcher = new SettlementWatcher({
+    getTransaction: async (txid) =>
+      txid === 'tx_real'
+        ? {
+            txid,
+            confirmations: 9,
+            outputs: [{ address: MAINNET_PAID, valueSat: PAID_VALUE }],
+            blockHash: 'block_real',
+            time: Math.floor(Date.now() / 1000),
+          }
+        : null,
+    getTip: async () => 100,
+    getAddressUsage: async () => 'used',
+    addressHasTransaction: async () => 'no',
+    listAddressTransactions: async () => ['tx_real'],
+    now: () => clock,
+    onChange: (row) => {
+      changes.push(`${row.status}:${row.txid}`);
+    },
+  });
+  await watcher.check();
+  clock += 61 * 60 * 1000;
+  await watcher.check();
+  const settled = must(await findIntentById(gatewayDb(), intent.id));
+  expect(settled.status).toBe('succeeded');
+  expect(settled.txid).toBe('tx_real');
+  expect(settled.cancellationReason).toBeNull();
+  expect(changes).toEqual(['processing:tx_real', 'succeeded:tx_real']);
+});
+
+test("a paying transaction that is another payment's is flagged, not taken and not cancelled", async () => {
+  const { intent } = await lostBroadcast('tx_misreported_2');
+  // Another payment already settled against the transaction that paid the address.
+  const other = await lostBroadcast('tx_taken', 'pi_0000000000000000000000e2');
+  let clock = Date.now() + BROADCAST_UNSEEN_MS + 1;
+  const watcher = new SettlementWatcher({
+    getTransaction: async (txid) =>
+      txid === 'tx_taken'
+        ? {
+            txid,
+            confirmations: 1,
+            outputs: [{ address: MAINNET_PAID, valueSat: PAID_VALUE }],
+            blockHash: 'block_taken',
+          }
+        : null,
+    getTip: async () => 100,
+    getAddressUsage: async () => 'used',
+    addressHasTransaction: async () => 'no',
+    listAddressTransactions: async () => ['tx_taken'],
+    now: () => clock,
+    onChange: () => undefined,
+  });
+  await watcher.check();
+  clock += 61 * 60 * 1000;
+  await watcher.check();
+  const kept = must(await findIntentById(gatewayDb(), intent.id));
+  expect(kept.status).toBe('processing');
+  expect(kept.txid).toBe('tx_misreported_2');
+  expect(must(await findIntentById(gatewayDb(), other.intent.id)).txid).toBe('tx_taken');
 });

@@ -17,7 +17,7 @@
  *   the order wrapping it (a Checkout Session, an invoice) forgets it and stays
  *   open for a fresh reservation under the new key — the path a lapsed quote
  *   already takes (ADR 0021 D3). The payer surfaces check before they answer
- *   (`retireIfRecipientKeyReplaced`) and a periodic sweep catches the rest;
+ *   (`retireIfNoLongerOffered`) and a periodic sweep catches the rest;
  * - a payment the payer already broadcast is NOT canceled — the coins are on
  *   chain at the reserved address and nothing Peable does moves them — but it is
  *   stamped (`faircoin.recipient_key_replaced_at`) in the transition's own
@@ -34,6 +34,13 @@
  * When Oxy cannot be asked (`unknown`) nothing is changed: a payer read answers
  * the payment as it is and the next sweep looks again; the watcher defers the
  * settlement to its next poll.
+ *
+ * The same retire path closes ADR 0002's network gate again: while the
+ * deployment does not open a payment's network (`PEABLE_SOCIAL_PAY_NETWORK`
+ * back at `testnet`), an identity payment on it still waiting for the payer is
+ * canceled `faircoin_network_closed` — by the payer surfaces before they
+ * answer and by the sweep — with no Oxy read, and its order stays open. A
+ * broadcast one is left to settle: the coins are already on chain.
  */
 import { applyEvent } from '../intentState';
 import {
@@ -45,6 +52,7 @@ import {
 import { getDb } from '../../db/postgres';
 import { announceIntentChange, transitionIntent } from '../intentTransition';
 import { resolveIdentityPublicKeyHex } from '../socialReceive';
+import { identityNetworkOpen } from './recipient';
 
 /** What a FairCoin payment's recorded keys say against the recipients' current `#key-1`. */
 export type RecipientKeyCheck =
@@ -136,25 +144,45 @@ function awaitingPayer(intent: PaymentIntentRow): boolean {
 }
 
 /**
- * Cancel a FairCoin payment still waiting for the payer whose recipient key was
- * replaced, through `transitionIntent` (`recipient_key_changed`): its order
- * forgets it in the same transaction. Answers the row as it stands afterwards —
- * the canceled one, the unchanged one, or whatever a racing write made it.
+ * An identity FairCoin payment on a network this deployment does not open
+ * (ADR 0002's gate, closed again after it was opened): its address must not be
+ * offered. A payment to a registered xpub (no recipient account) is outside it.
  */
-export async function retireIfRecipientKeyReplaced(
+function onClosedNetwork(intent: PaymentIntentRow): boolean {
+  return (
+    intent.rail === 'faircoin' &&
+    intent.network !== null &&
+    !identityNetworkOpen(intent.network) &&
+    faircoinOutputsOf(intent).some((output) => output.recipientAccountId !== null)
+  );
+}
+
+/** Why a payment still waiting for its payer is retired: the cancellation reason. */
+type RetireReason = 'recipient_key_changed' | 'faircoin_network_closed';
+
+/**
+ * Cancel a FairCoin payment still waiting for the payer whose address must not
+ * be offered any more, through `transitionIntent`: its network is closed
+ * (`faircoin_network_closed`), or its recipient key was replaced
+ * (`recipient_key_changed`). Its order forgets it in the same transaction.
+ * Answers the row as it stands afterwards — the canceled one, the unchanged
+ * one, or whatever a racing write made it.
+ */
+export async function retireIfNoLongerOffered(
   intent: PaymentIntentRow,
   readKey: CurrentKeyReader = readCurrentKeyForPayer,
 ): Promise<PaymentIntentRow> {
   if (!awaitingPayer(intent)) return intent;
+  if (onClosedNetwork(intent)) return retire(intent, 'faircoin_network_closed');
   if (!mustRetire(await checkRecipientKeys(intent, readKey))) return intent;
-  return retire(intent);
+  return retire(intent, 'recipient_key_changed');
 }
 
-async function retire(intent: PaymentIntentRow): Promise<PaymentIntentRow> {
+async function retire(intent: PaymentIntentRow, reason: RetireReason): Promise<PaymentIntentRow> {
   const result = await transitionIntent(intent.id, {
     from: intent.status,
     status: applyEvent(intent.status, 'cancel', intent.rail),
-    cancellationReason: 'recipient_key_changed',
+    cancellationReason: reason,
   });
   if (result.kind === 'updated') {
     announceIntentChange(result.row);
@@ -189,7 +217,7 @@ const DEFAULT_MAX_PER_PASS = 2_000;
 
 export interface RecipientKeySweepResult {
   readonly examined: number;
-  /** `requires_action` payments canceled `recipient_key_changed`. */
+  /** `requires_action` payments canceled `recipient_key_changed` or `faircoin_network_closed`. */
   readonly retired: number;
   /** `processing` payments stamped `recipient_key_replaced_at`. */
   readonly stamped: number;
@@ -232,11 +260,22 @@ export async function runRecipientKeySweep(
     for (const intent of page) {
       result.examined += 1;
       resumeAfter = intent.id;
+      // A closed network needs no key read: nothing on it may be offered.
+      if (awaitingPayer(intent) && onClosedNetwork(intent)) {
+        if ((await retire(intent, 'faircoin_network_closed')).status === 'canceled') {
+          result.retired += 1;
+        }
+        continue;
+      }
       const check = await checkRecipientKeys(intent, readKey);
       if (check === 'unknown') {
         result.unknown += 1;
       } else if (awaitingPayer(intent)) {
-        if (mustRetire(check) && (await retire(intent)).status === 'canceled') result.retired += 1;
+        if (
+          mustRetire(check) &&
+          (await retire(intent, 'recipient_key_changed')).status === 'canceled'
+        )
+          result.retired += 1;
       } else if (intent.status === 'processing' && check === 'replaced') {
         if (await stampReplaced(intent)) result.stamped += 1;
       }

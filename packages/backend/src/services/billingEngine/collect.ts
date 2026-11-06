@@ -58,7 +58,7 @@ import { renderInvoice } from '../../lib/serializeBilling';
 import { cancelCardPaymentAtProvider } from '../cardCancellation';
 import { confirmCardIntent } from '../confirmIntent';
 import { createIntent } from '../createIntent';
-import { retireIfRecipientKeyReplaced } from '../faircoin/keyBinding';
+import { retireIfNoLongerOffered } from '../faircoin/keyBinding';
 import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
 import { FaircoinCapacityError } from '../faircoin/addressPool';
 import { announceIntentChange, transitionIntent, transitionIntentIn } from '../intentTransition';
@@ -468,7 +468,7 @@ export async function payerIntentForInvoice(
   // payer again (ADR 0002, amended 2026-11-06): it is retired, the invoice
   // forgets it in that transaction, and the payer is answered a fresh one.
   if (linked?.rail === 'faircoin' && linked.status === 'requires_action') {
-    const after = await retireIfRecipientKeyReplaced(linked);
+    const after = await retireIfNoLongerOffered(linked);
     if (after.status === 'canceled') {
       current = (await findInvoiceById(db, invoice.id)) ?? invoice;
       linked = null;

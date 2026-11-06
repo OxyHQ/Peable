@@ -1168,6 +1168,18 @@ export const paymentIntentOutputs = pgTable(
      * retired address stays its payment's and is never offered again.
      */
     retiredAt: timestamptz(),
+    /**
+     * When the chain last showed this address unused, read after its
+     * payment's quarantine (ADR 0021 D9, amended 2026-11-06). A reservation
+     * whose planned candidate was taken claims another one checked recently,
+     * under the pool's lock and without an HTTP call. NULL: never checked.
+     */
+    recycleCheckedAt: timestamptz(),
+    /**
+     * Until when one confirm holds this candidate to check and claim it, so
+     * concurrent confirms each check a DIFFERENT one. A lapsed lease is free.
+     */
+    recycleLeaseUntil: timestamptz(),
     createdAt: createdAt(),
   },
   (table) => [

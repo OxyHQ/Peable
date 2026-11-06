@@ -13,7 +13,8 @@ import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
 } from '@peable.to/shared-types';
-import { socialSendAttributions } from '../../db/schema';
+import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
+import { socialReceiveCursors, socialSendAttributions } from '../../db/schema';
 import { must } from '../../__tests__/helpers/must';
 import { useAddressUsageReader } from '../../services/faircoin/addressPool';
 import {
@@ -267,6 +268,34 @@ describe('POST /v1/social/:username/next_address', () => {
     const { status, body } = await postNextAddress('nobody', { network: 'testnet' });
     expect(status).toBe(404);
     expect(body.error?.type).toBe('invalid_request_error');
+  });
+
+  test("503s with code faircoin_receive_tree_full once the recipient's wallet watches no further index (ADR 0021 D9)", async () => {
+    // Index 1 creates the cursor; then every index below the limit is taken.
+    await postNextAddress('alice', { network: 'testnet' }, 'user_tree_sender_1');
+    await gatewayDb()
+      .update(socialReceiveCursors)
+      .set({ nextDerivationIndex: SOCIAL_RECEIVE_INDEX_LIMIT - 1 })
+      .where(eq(socialReceiveCursors.oxyUserId, 'user_alice'));
+    const last = await postNextAddress('alice', { network: 'testnet' }, 'user_tree_sender_2');
+    expect(last.status).toBe(200);
+    expect(last.body.index).toBe(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+
+    const { status, body } = await postNextAddress(
+      'alice',
+      { network: 'testnet' },
+      'user_tree_sender_3',
+    );
+    // Not 409: that status alone means a keyless recipient to the wallet.
+    expect(status).toBe(503);
+    expect(body.error?.type).toBe('api_error');
+    expect(body.error?.code).toBe('faircoin_receive_tree_full');
+    expect(body.address).toBeUndefined();
+    const attributions = await gatewayDb()
+      .select()
+      .from(socialSendAttributions)
+      .where(eq(socialSendAttributions.senderUserId, 'user_tree_sender_3'));
+    expect(attributions).toEqual([]);
   });
 
   test('409s with code keyless_recipient for a keyless recipient', async () => {

@@ -27,14 +27,33 @@ import {
 import type { NetworkConfig, Transaction } from '@fairco.in/core';
 import { Point } from '@noble/secp256k1';
 import { KeyManager as IdentityKeyManager, getOrganizationPublicKey } from '@oxy.so/core/crypto';
+// One module, not the vocabulary barrel: Metro ships every module it reaches.
+import {
+  SOCIAL_RECEIVE_GAP_LIMIT,
+  SOCIAL_RECEIVE_INDEX_LIMIT,
+  SOCIAL_RECEIVE_MAX_WATCHED,
+} from '@peable.to/contracts/vocabulary/receiveTree';
 import { PERSONAL_SUBJECT, identityKeyOptions, type IdentitySubject } from './identity-wallet';
 
 /**
  * How many unused social-receive addresses stay watched beyond the highest
- * USED index — mirrors the FairCoin BIP44 external-chain gap limit
- * (`EXTERNAL_GAP_LIMIT` in `key-manager.ts`).
+ * USED or RESERVED index — the FairCoin BIP44 external-chain gap limit
+ * (`EXTERNAL_GAP_LIMIT` in `key-manager.ts`). The gateway's ceiling is derived
+ * from it, so it is the contract's constant, not this wallet's.
+ *
+ * {@link SOCIAL_RECEIVE_MAX_WATCHED}: the most indices this device watches,
+ * `0 .. MAX - 1`. Every index the gateway hands out is watched forever (a paid
+ * address can be paid again), so the window only grows. It has to stop
+ * somewhere: each index is an elliptic-curve derivation, a row, a Bloom-filter
+ * entry (the filter caps at 36,000 bytes, ~15,000 entries at its
+ * false-positive rate, and saturates beyond) and, the first time, an Explorer
+ * read. The gateway never hands out an index at or above
+ * {@link SOCIAL_RECEIVE_INDEX_LIMIT} (`MAX - GAP`), so with the plan below
+ * every address it reserves is inside this window; past the bound the wallet
+ * says so ({@link SocialReceiveWindowPlan.capped}) rather than pretend it still
+ * watches what payers are sent to.
  */
-export const SOCIAL_RECEIVE_GAP_LIMIT = 20;
+export { SOCIAL_RECEIVE_GAP_LIMIT, SOCIAL_RECEIVE_INDEX_LIMIT, SOCIAL_RECEIVE_MAX_WATCHED };
 
 /**
  * The compressed, lowercase hex form of a secp256k1 public key, whatever
@@ -145,19 +164,6 @@ export async function signSocialReceiveInput(
   signature[der.length] = SIGHASH_ALL;
   return createP2PKHScriptSig(signature, childPublicKey);
 }
-
-/**
- * The most social-receive indices this device watches: `0 .. MAX - 1`.
- *
- * Every index the gateway hands out is watched forever (a paid address can be
- * paid again), so the window only grows. It has to stop somewhere: each index
- * is an elliptic-curve derivation, a row, a Bloom-filter entry (the filter
- * caps at 36,000 bytes, ~15,000 entries at its false-positive rate, and
- * saturates beyond) and, the first time, an Explorer read. Past the bound the
- * wallet says so ({@link SocialReceiveWindowPlan.capped}) rather than pretend
- * it still watches what payers are sent to.
- */
-export const SOCIAL_RECEIVE_MAX_WATCHED = 2_000;
 
 /**
  * The highest of `values`, or -1 when there is none. A loop, never

@@ -22,6 +22,7 @@ import {
   reuseUnpaidSocialAddress,
 } from '../services/socialReceive';
 import { getDb } from '../db/postgres';
+import { ReceiveTreeFullError } from '../db/social/receiveCursor';
 import {
   insertSendAttribution,
   listAttributionsForViewer,
@@ -175,7 +176,25 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
       // Reservation (Task 5) + attribution write (Task 6) happen together in
       // this handler so an enrichment lookup can never observe a reserved
       // address with no attribution row.
-      const reservation = await reserveNextSocialAddress(recipient.id, network);
+      let reservation: Awaited<ReturnType<typeof reserveNextSocialAddress>>;
+      try {
+        reservation = await reserveNextSocialAddress(recipient.id, network);
+      } catch (err) {
+        // Every index the recipient's wallet watches is taken (ADR 0021 D9,
+        // amended 2026-11-06): an address past them would be paid where the
+        // wallet never looks, so none is handed out.
+        if (!(err instanceof ReceiveTreeFullError)) throw err;
+        // 503, not 409: a 409 on this route is the keyless recipient, and the
+        // wallet and `@peable.to/pay` read it so from the status alone.
+        sendError(
+          res,
+          503,
+          'api_error',
+          "the recipient's Peable wallet has no FairCoin address left to hand out",
+          'faircoin_receive_tree_full',
+        );
+        return;
+      }
       if (!reservation) {
         sendError(
           res,

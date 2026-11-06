@@ -840,6 +840,35 @@ export async function findIntentsByAddresses(
 }
 
 /**
+ * Whether a FairCoin payment OTHER than `exceptId` is settling, or settled,
+ * against `txid` on `network` (`processing` or `succeeded`) — so the watcher
+ * never hands one transaction to a second payment it did not report (ADR 0021
+ * D9, amended 2026-11-06). Asked only of a broadcast lost for a day whose
+ * address was paid under another txid: rare enough for an unindexed `txid`.
+ */
+export async function txidSettlesAnotherIntent(
+  db: DatabaseOrTransaction,
+  network: NetworkType,
+  txid: string,
+  exceptId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: paymentIntents.id })
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.rail, 'faircoin'),
+        eq(paymentIntents.network, network),
+        eq(paymentIntents.txid, txid),
+        inArray(paymentIntents.status, ['processing', 'succeeded']),
+        sql`${paymentIntents.id} <> ${exceptId}`,
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * What the settlement watcher polls: in-flight intents carrying a payer-reported
  * txid. Terminal and pre-broadcast intents are never watched, and an intent with
  * no txid has nothing to look up on chain.
