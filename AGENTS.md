@@ -241,7 +241,7 @@ separate product. **No extensions** (an explicit empty list in
   `useGatewayDatabase()` (`src/__tests__/helpers/gatewayTestDatabase.ts`), which
   also points `getDb()` at it so production code works unchanged. Seed state
   with the `seedX()` helpers rather than raw inserts — they go through the real
-  repositories, so the non-custody firewall runs on every seeded merchant.
+  repositories, so every invariant a repository enforces runs on seeded rows.
   `db/__tests__/schemaGates.realdb.test.ts` turns a missing `TEST_DATABASE_URL`
   into a red build when `CI` is set.
 
@@ -249,20 +249,35 @@ separate product. **No extensions** (an explicit empty list in
 
 `db/social/receiveCursor.ts` decides which address a payer sends money to — for
 EVERY FairCoin payment: an `@username` payment, a merchant's (its owner's
-wallet) and a seller's (ADR 0021 D5). It is ONE statement, `INSERT … ON
-CONFLICT DO UPDATE … RETURNING next - 1`, which folds the lazy create into the
-claim and records the identity key the address derives from. Never split it
-into a read followed by a write: two callers reading the same value derive the
-same address, and two payments land where the gateway can tell only one of them
-apart. One account has ONE cursor per network, so merchant, seller and social
+wallet) and a seller's (ADR 0021 D5). There is no other counter: the
+per-merchant and per-seller xpub counters are gone with the xpubs. It is ONE
+statement, `INSERT … ON CONFLICT DO UPDATE … RETURNING next_derivation_index -
+1`, which folds the lazy create into the claim, takes the row lock, and records
+the identity key the address derives from. Never split it into a read followed
+by a write: two callers reading the same value derive the same address, and two
+payments land where the gateway can tell only one of them apart. The `- 1` is
+load-bearing: the column holds the NEXT index, so the statement returns exactly
+the index that call owns; dropping it hands out an index one past the one
+recorded. One account has ONE cursor per network, so merchant, seller and social
 payments to it can never collide.
+
+**Every address is bound to its key (ADR 0002, amended).** The PUBLIC key an
+address derives from is stored beside it (`payment_intent_outputs.
+identity_public_key`, `payment_intents.faircoin_identity_public_key`,
+`social_send_attributions.identity_public_key`), and
+`services/faircoin/keyBinding.ts` is the one place that compares it with the
+recipient's current `#key-1`: a payment nobody reported a txid for under a
+replaced key (or on a network the deployment closed) is retired — only once the
+Explorer shows its addresses unused, because "no txid" is not "not paid".
 
 **Before the cursor, the pool (ADR 0021 D9).** A payment's address is reserved
 in the payment's OWN transaction by `services/faircoin/addressPool.ts`: an
 address of the recipient's whose payment was cancelled over an hour ago, that
 still derives from its key and that the Explorer shows unused, is recycled;
 otherwise the cursor mints — only while fewer than 500 of the recipient's
-addresses are open, counted under a per-recipient advisory lock. Never mint for
+addresses are open, counted under a per-recipient advisory lock
+(`pg_advisory_xact_lock`, `db/payments/faircoinAddressPool.ts`). A recycled
+address is always below the tree's ceiling, like a minted one. Never mint for
 a payment outside that function, and never read `unknown` from the Explorer as
 unused: that bound is what keeps a recipient's wallet scannable.
 
@@ -271,10 +286,12 @@ The counters are `integer` on purpose (see `CONVENTIONS.md` §Counters) — a
 Any change there must keep the two-consecutive-reservation test, because a single
 reservation cannot tell a number from a string that prints the same.
 
-The social cursor's `DO UPDATE` also carries the tree's ceiling in its `WHERE`
+The cursor's `DO UPDATE` also carries the tree's ceiling in its `WHERE`
 (`SOCIAL_RECEIVE_INDEX_LIMIT`, `@peable.to/contracts/vocabulary/receiveTree`,
 ADR 0021 D9): the wallet watches a bounded window, and the wallet and the
-gateway read that ONE constant. Never mint past it in a second statement.
+gateway read that ONE constant. Never mint past it in a second statement, and
+never let the wallet's `capped` follow a USED index above it — anyone can dust
+an address there, and the gateway never handed it out.
 
 ## Chain access: Explorer HTTP, not RPC
 
@@ -287,7 +304,10 @@ and no RPC node dependency anywhere in this repo. `@fairco.in/core` is the only
 Only FairCoin `processing` intents carrying a payer-reported txid are watchable
 (it verifies EVERY output of `faircoinOutputsOf`, ADR 0021 D6)
 (`submit_tx` moves `requires_action → processing` with the txid in one write);
-`requires_action` and the terminal statuses are never polled. While a paid
+`requires_action` and the terminal statuses are never polled. Every Explorer
+read is bounded (`AbortSignal.timeout`, one `explorerFetch`); a read that times
+out is the Explorer not answering — a throw, `unknown` or `null` list — never a
+missing transaction or an unused address. While a paid
 transaction confirms it writes the live `confirmations` count (same status, no
 event); at the merchant's threshold it is `succeeded`, and a transaction that pays LESS
 is `canceled` with `cancellation_reason: 'underpaid'`. Its timer is
@@ -317,13 +337,15 @@ account that OWNS its application — a person or an organization
 `syncMerchantAuthority`) — and an on-behalf payment to the wallet of the
 seller's own account (`connected_accounts.faircoin_oxy_user_id`).
 `services/faircoin/recipient.ts` is the ONE place that decides who receives,
-on which network (the merchant's environment's) and the address
-(`reserveFaircoinAddress` → `reserveNextSocialAddress`: the account's DID
-`#key-1` PUBLIC key, `deriveSocialReceiveAddress`, the one-statement cursor).
+on which network (the merchant's environment's) and how the address is
+reserved (`planFaircoinAddress`, then `addressPool.ts`'s
+`reservePlannedAddresses` in the payment's transaction: the account's DID
+`#key-1` PUBLIC key, `deriveSocialReceiveAddress`, a recycled address or the
+one-statement cursor).
 The payment stores the account it pays (`faircoin_recipient_account_id`).
-There is no column for a key of any kind, no xpub registration and no
-`assertWatchOnly` left to guard — the private key lives on the holder's
-devices only. Mainnet identity addresses are ADR 0002's deployment gate
+No column holds a private or extended key — only the PUBLIC identity key
+each address derives from — and there is no xpub registration: the private key
+lives on the holder's devices only. Mainnet identity addresses are ADR 0002's deployment gate
 (`PEABLE_SOCIAL_PAY_NETWORK`).
 
 **A seller still CONFIRMS, in their own Oxy session.** `POST
@@ -517,7 +539,7 @@ rules, each of which is easy to undo:
   the INJECTED `Mailer` (`services/email/mailer.ts`); no shared Oxy mail
   client exists, so production registers an adapter over the outbound relay
   (`~/Oxy/docs/outbound-mail-relay.md`). Receipt numbers are claimed by one
-  upsert (`claimReceiptNumber`), the derivation index's pattern.
+  upsert (`claimReceiptNumber`), the receive cursor's pattern.
 
 ### The billing engine (ADR 0018)
 
@@ -1054,7 +1076,7 @@ gateway, and on a permission string spelled out in the gateway.
 | `read` | `app:read` | every GET, search, a report run (membership itself) |
 | `configure` | `app:update` | branding and customer emails, catalog, checkout sessions, payment links, contribution links, payment methods and wallet domains, a `business_logo` upload |
 | `webhooks` | `webhooks:update` | webhook endpoints, secrets, test events, redelivery |
-| `money` | `billing:manage` | the merchant (its watch-only key, confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, evidence/identity/tax uploads |
+| `money` | `billing:manage` | the merchant (its confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, evidence/identity/tax uploads |
 | `taxRead` | `billing:read` | Peable Tax reads and previews (`billing:manage` contains it) |
 
 A new route names its action; `routes/__tests__/dashboardPermissions.realdb.test.ts`

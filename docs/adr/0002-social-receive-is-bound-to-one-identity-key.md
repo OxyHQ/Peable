@@ -179,6 +179,30 @@ amended the same day). Two of its fixes bind this ADR:
   in the minute sweep, with no key read — and its order stays open, answering
   `faircoin_network_closed` on the next confirm. A broadcast payment settles.
 
+## Amendment (2026-11-06): retiring needs the chain's word; dust cannot pause `@username`
+
+The security review's third round (low findings):
+
+- **"Nobody broadcast" was "nobody reported a txid".** Both retire paths above
+  — a replaced key and a closed network — canceled a payment with no reported
+  txid, though its payer's wallet may have broadcast and not reported yet; the
+  coins then reached the recipient while the order went unpaid. Now neither
+  retires until the Explorer shows every address of the payment unused
+  (`getAddressUsage`, `services/faircoin/keyBinding.ts`). One it shows used is
+  left payable, its txid reportable, until it expires as any payment does. On
+  mainnet an Explorer that cannot tell — an outage, or a read past its timeout
+  (every Explorer read is now bounded) — retires nothing, and the next sweep
+  asks again. Testnet's node has no address index and can only answer
+  `unknown`, so there the reason alone decides, as for ADR 0021 D10's lost
+  broadcast. The residual, recorded: coins someone sends to such an address
+  (dust included) keep that payment payable until it expires, at most 24 h.
+- **A used index does not cap the wallet.** Addresses above the gateway's
+  ceiling derive from the public key, so anyone can send dust to index
+  1 980–1 999. The wallet's window still reaches a used index (up to the
+  bound), but `capped` — which hides `@username` — follows the RESERVED index
+  only (`planSocialReceiveWindow`), since the gateway never hands out one at or
+  above `SOCIAL_RECEIVE_INDEX_LIMIT`.
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second

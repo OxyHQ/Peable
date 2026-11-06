@@ -2,6 +2,7 @@ import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { paymentIntentOutputs, paymentIntents } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
+import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
 
 /**
  * A recipient's FairCoin address pool (ADR 0021 D9): the addresses reserved on
@@ -88,11 +89,21 @@ export interface LeasedRecycleCandidate extends RecycleCandidate {
   readonly checkedFresh: boolean;
 }
 
+/**
+ * Below the tree's ceiling (`SOCIAL_RECEIVE_INDEX_LIMIT`, ADR 0021 D9): the
+ * only indices the recipient's wallet is sure to watch with its gap above. The
+ * cursor never mints at or above it, but an address minted before the ceiling
+ * existed can sit there, and recycling it would hand a payer an address the
+ * wallet may not see — exactly what the ceiling forbids the mint.
+ */
+const belowTreeCeiling = sql`${paymentIntentOutputs.derivationIndex} < ${SOCIAL_RECEIVE_INDEX_LIMIT}`;
+
 /** The SQL half of "recyclable": the holder of a payment cancelled before the quarantine. */
 const recyclable = (recipientAccountId: string, network: NetworkType, quarantineSeconds: number) =>
   and(
     holderOf(recipientAccountId, network),
     isNotNull(paymentIntentOutputs.derivationIndex),
+    belowTreeCeiling,
     eq(paymentIntents.status, 'canceled'),
     sql`${paymentIntents.canceledAt} <= now() - ${seconds(quarantineSeconds)}`,
   );
@@ -101,7 +112,8 @@ const recyclable = (recipientAccountId: string, network: NetworkType, quarantine
  * Addresses the recipient owns that may be handed out again, lowest index
  * first (a compact tree is a cheaper one to scan): held by a `canceled`
  * payment, cancelled at least `quarantineSeconds` ago, never recycled or
- * retired, with the index they derive at recorded. Whether the chain agrees
+ * retired, with the index they derive at recorded and below the tree's
+ * ceiling. Whether the chain agrees
  * they never received anything is the caller's check — this is the SQL half.
  */
 export async function listRecycleCandidates(
@@ -258,6 +270,7 @@ export async function claimRecycleCandidate(
         eq(paymentIntentOutputs.id, outputId),
         isNull(paymentIntentOutputs.recycledAt),
         isNull(paymentIntentOutputs.retiredAt),
+        belowTreeCeiling,
         sql`exists (select 1 from ${paymentIntents} where ${paymentIntents.id} = ${paymentIntentOutputs.paymentIntentId} and ${paymentIntents.status} = 'canceled')`,
       ),
     )

@@ -126,6 +126,31 @@ export interface AddressTransaction {
   readonly time: number | null;
 }
 
+/**
+ * How long one Explorer read may take, headers and body, before it is
+ * abandoned. Without a bound a stalled Explorer held a confirm's address
+ * check, the settlement watcher's poll and the retire sweep for as long as
+ * the socket stayed open. An abandoned read is the Explorer not answering: it
+ * throws (or answers `unknown` / `null` where a read already says "cannot
+ * tell"), exactly like a refused connection — never "missing" or "unused".
+ */
+const DEFAULT_EXPLORER_TIMEOUT_MS = 10_000;
+let explorerTimeoutMs = DEFAULT_EXPLORER_TIMEOUT_MS;
+
+/** Replace the read timeout (tests); answers a function that restores the previous one. */
+export function useExplorerTimeout(ms: number): () => void {
+  const previous = explorerTimeoutMs;
+  explorerTimeoutMs = ms;
+  return () => {
+    explorerTimeoutMs = previous;
+  };
+}
+
+/** The one way this module reads the Explorer: bounded by {@link explorerTimeoutMs}. */
+function explorerFetch(url: string): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(explorerTimeoutMs) });
+}
+
 function addressUrl(address: string, network: NetworkType): string {
   return `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}?network=${network}`;
 }
@@ -140,7 +165,7 @@ function transactionUrl(txid: string, network: NetworkType): string {
 
 /** Current confirmed chain tip (block height) for the given network. */
 export async function getTip(network: NetworkType): Promise<number> {
-  const response = await fetch(statsUrl(network));
+  const response = await explorerFetch(statsUrl(network));
   if (!response.ok) {
     throw new Error(`Explorer stats request failed: ${response.status} ${response.statusText}`);
   }
@@ -158,7 +183,9 @@ export async function getTransaction(
   txid: string,
   network: NetworkType,
 ): Promise<ExplorerTx | null> {
-  const response = await fetch(transactionUrl(txid, network));
+  // A failed or abandoned read throws: `null` says the Explorer does not know
+  // the transaction, and the watcher's lost-broadcast and reorg rules read it so.
+  const response = await explorerFetch(transactionUrl(txid, network));
   if (!response.ok) return null;
 
   const body: unknown = await response.json();
@@ -219,7 +246,7 @@ export async function getAddressUsage(
 ): Promise<AddressUsage> {
   let body: unknown;
   try {
-    const response = await fetch(addressUrl(address, network));
+    const response = await explorerFetch(addressUrl(address, network));
     if (!response.ok) return 'unknown';
     body = await response.json();
   } catch {
@@ -278,7 +305,7 @@ export async function listAddressTransactions(
   for (let page = 1; page <= ADDRESS_TXS_MAX_PAGES; page += 1) {
     let body: unknown;
     try {
-      const response = await fetch(
+      const response = await explorerFetch(
         `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}/txs?network=${network}&page=${page}&limit=${ADDRESS_TXS_PAGE}`,
       );
       if (!response.ok) return null;
