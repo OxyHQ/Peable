@@ -3,6 +3,16 @@ import { useParams } from 'react-router-dom';
 import type { PortalCustomerUpdate, PublicPortalSession } from '@peable.to/shared-types';
 import { PortalPaymentMethod } from '../components/PortalPaymentMethod';
 import { GatewayError, getPortal, portalAction, type PortalAction } from '../lib/billingClient';
+import {
+  browserLanguages,
+  I18nProvider,
+  type MessageKey,
+  queryLocale,
+  resolveLocale,
+  type Translate,
+  useI18n,
+} from '../i18n';
+import { INVOICE_STATUS_LABEL, intervalLabel } from '../lib/billingLabels';
 import type { LoadState } from '../lib/loadState';
 import { formatBillingAmount, formatDate } from '../lib/money';
 
@@ -12,17 +22,36 @@ import { formatBillingAmount, formatDate } from '../lib/money';
 // never shows a state it inferred. What it offers is the merchant's portal
 // configuration (`features`), nothing more.
 
-const EXPIRED =
-  'This billing link has expired. Return to the site you came from to open a new one.';
-
-const FIELD_LABEL: Record<PortalCustomerUpdate, string> = {
-  email: 'Email',
-  name: 'Name',
-  phone: 'Phone',
-  address: 'Address',
+const FIELD_LABEL: Record<PortalCustomerUpdate, MessageKey> = {
+  email: 'email',
+  name: 'name',
+  phone: 'phone',
+  address: 'address',
 };
 
+/** ` / month` after a price, in the page's language; nothing for no interval. */
+function perInterval(t: Translate, interval: string | null): string {
+  if (!interval) return '';
+  const key = intervalLabel(interval);
+  return ` / ${key ? t(key) : interval}`;
+}
+
+/**
+ * The portal speaks the customer's language: `?locale=` when the merchant's
+ * link names one, else the browser's.
+ */
 export function PortalRoute() {
+  const locale = resolveLocale({ override: queryLocale(), browser: browserLanguages() });
+  return (
+    <I18nProvider locale={locale}>
+      <PortalPage />
+    </I18nProvider>
+  );
+}
+
+function PortalPage() {
+  const { t } = useI18n();
+  const expired = t('billingExpired');
   const { token } = useParams<{ token: string }>();
   const [state, setState] = useState<LoadState<PublicPortalSession>>({ status: 'loading' });
   const [busy, setBusy] = useState(false);
@@ -32,7 +61,7 @@ export function PortalRoute() {
 
   useEffect(() => {
     if (!token) {
-      setState({ status: 'error', message: EXPIRED });
+      setState({ status: 'error', message: expired });
       return;
     }
     let cancelled = false;
@@ -46,14 +75,14 @@ export function PortalRoute() {
           status: 'error',
           message:
             cause instanceof GatewayError && cause.status === 404
-              ? EXPIRED
-              : 'Your billing details could not be loaded. Please try again.',
+              ? expired
+              : t('billingLoadFailed'),
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, expired, t]);
 
   async function act(action: PortalAction, body: Record<string, unknown>): Promise<void> {
     if (!token) return;
@@ -65,9 +94,9 @@ export function PortalRoute() {
       setEditingDetails(false);
     } catch (cause) {
       if (cause instanceof GatewayError && cause.status === 404) {
-        setState({ status: 'error', message: EXPIRED });
+        setState({ status: 'error', message: expired });
       } else {
-        setError(cause instanceof Error ? cause.message : 'That could not be done right now.');
+        setError(cause instanceof Error ? cause.message : t('billingActionFailed'));
       }
     } finally {
       setBusy(false);
@@ -77,7 +106,7 @@ export function PortalRoute() {
   if (state.status === 'loading') {
     return (
       <main className="checkout-page">
-        <p className="checkout-page__pending">Loading your billing…</p>
+        <p className="checkout-page__pending">{t('loadingBilling')}</p>
       </main>
     );
   }
@@ -85,7 +114,7 @@ export function PortalRoute() {
     return (
       <main className="checkout-page">
         <p className="checkout-page__pending">
-          {state.status === 'error' ? state.message : EXPIRED}
+          {state.status === 'error' ? state.message : expired}
         </p>
       </main>
     );
@@ -98,9 +127,9 @@ export function PortalRoute() {
   return (
     <main className="checkout-page portal">
       <header className="portal__header">
-        <h1>{session.merchant.name ?? 'Billing'}</h1>
+        <h1>{session.merchant.name ?? t('billingTitle')}</h1>
         {session.business_profile.headline ? <p>{session.business_profile.headline}</p> : null}
-        {session.return_url ? <a href={session.return_url}>← Return</a> : null}
+        {session.return_url ? <a href={session.return_url}>{t('returnToSite')}</a> : null}
       </header>
 
       {error ? (
@@ -110,8 +139,8 @@ export function PortalRoute() {
       ) : null}
 
       <section className="portal__section">
-        <h2>Subscriptions</h2>
-        {session.subscriptions.length === 0 ? <p>No active subscriptions.</p> : null}
+        <h2>{t('subscriptions')}</h2>
+        {session.subscriptions.length === 0 ? <p>{t('noSubscriptions')}</p> : null}
         {session.subscriptions.map((subscription) => (
           <article
             key={subscription.id}
@@ -123,18 +152,18 @@ export function PortalRoute() {
                 <strong>{item.product_name}</strong>
                 {item.quantity > 1 ? ` × ${item.quantity}` : ''}
                 {item.unit_amount !== null
-                  ? ` · ${formatBillingAmount(item.unit_amount, subscription.currency)}${item.interval ? ` / ${item.interval}` : ''}`
+                  ? ` · ${formatBillingAmount(item.unit_amount, subscription.currency)}${perInterval(t, item.interval)}`
                   : ''}
               </p>
             ))}
             <p>
               {subscription.status === 'trialing' && subscription.trial_end
-                ? `Trial ends ${formatDate(subscription.trial_end)}`
+                ? t('trialEnds', { date: formatDate(subscription.trial_end) })
                 : subscription.cancel_at_period_end
-                  ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                  ? t('cancelsOn', { date: formatDate(subscription.current_period_end) })
                   : subscription.cancel_at
-                    ? `Cancels on ${formatDate(subscription.cancel_at)}`
-                    : `Renews on ${formatDate(subscription.current_period_end)}`}
+                    ? t('cancelsOn', { date: formatDate(subscription.cancel_at) })
+                    : t('renewsOn', { date: formatDate(subscription.current_period_end) })}
             </p>
             {features.subscription_cancel.enabled && !subscription.cancel_at_period_end ? (
               <button
@@ -143,8 +172,8 @@ export function PortalRoute() {
                 onClick={() => void act('cancel', { subscription: subscription.id })}
               >
                 {features.subscription_cancel.mode === 'immediately'
-                  ? 'Cancel now'
-                  : 'Cancel subscription'}
+                  ? t('cancelNow')
+                  : t('cancelSubscription')}
               </button>
             ) : null}
             {features.subscription_cancel.enabled && subscription.cancel_at_period_end ? (
@@ -153,7 +182,7 @@ export function PortalRoute() {
                 disabled={busy}
                 onClick={() => void act('renew', { subscription: subscription.id })}
               >
-                Keep subscription
+                {t('keepSubscription')}
               </button>
             ) : null}
             {features.subscription_update.enabled &&
@@ -179,11 +208,11 @@ export function PortalRoute() {
                           })
                         }
                       >
-                        Switch to {plan.product_name}
+                        {t('switchTo', { plan: plan.product_name })}
                         {price.unit_amount !== null
                           ? ` · ${formatBillingAmount(price.unit_amount, price.currency)}`
                           : ''}
-                        {price.interval ? ` / ${price.interval}` : ''}
+                        {perInterval(t, price.interval)}
                       </button>
                     )),
                 )}
@@ -195,11 +224,16 @@ export function PortalRoute() {
 
       {features.payment_method_update.enabled ? (
         <section className="portal__section">
-          <h2>Payment method</h2>
+          <h2>{t('paymentMethod')}</h2>
           <p data-testid="payment-method">
             {method?.card
-              ? `${method.card.brand} •••• ${method.card.last4} (expires ${method.card.exp_month}/${method.card.exp_year})`
-              : 'No card on file.'}
+              ? t('cardOnFile', {
+                  brand: method.card.brand,
+                  last4: method.card.last4,
+                  month: method.card.exp_month,
+                  year: method.card.exp_year,
+                })
+              : t('noCardOnFile')}
           </p>
           {editingCard ? (
             <PortalPaymentMethod
@@ -212,7 +246,7 @@ export function PortalRoute() {
             />
           ) : (
             <button type="button" onClick={() => setEditingCard(true)}>
-              {method ? 'Update card' : 'Add a card'}
+              {method ? t('updateCard') : t('addCard')}
             </button>
           )}
         </section>
@@ -220,7 +254,7 @@ export function PortalRoute() {
 
       {features.customer_update.enabled ? (
         <section className="portal__section">
-          <h2>Billing details</h2>
+          <h2>{t('billingDetails')}</h2>
           {editingDetails ? (
             <DetailsForm
               session={session}
@@ -246,7 +280,7 @@ export function PortalRoute() {
                 </p>
               ) : null}
               <button type="button" onClick={() => setEditingDetails(true)}>
-                Edit billing details
+                {t('editBillingDetails')}
               </button>
             </>
           )}
@@ -255,17 +289,18 @@ export function PortalRoute() {
 
       {features.invoice_history.enabled ? (
         <section className="portal__section">
-          <h2>Invoices</h2>
-          {session.invoices.length === 0 ? <p>No invoices yet.</p> : null}
+          <h2>{t('invoices')}</h2>
+          {session.invoices.length === 0 ? <p>{t('noInvoices')}</p> : null}
           <ul className="portal__invoices">
             {session.invoices.map((invoice) => (
               <li key={invoice.id}>
                 {formatDate(invoice.created)} · {invoice.number ?? ''} ·{' '}
-                {formatBillingAmount(invoice.total, invoice.currency)} · {invoice.status}
+                {formatBillingAmount(invoice.total, invoice.currency)} ·{' '}
+                {t(INVOICE_STATUS_LABEL[invoice.status])}
                 {invoice.hosted_invoice_url ? (
                   <>
                     {' · '}
-                    <a href={invoice.hosted_invoice_url}>View</a>
+                    <a href={invoice.hosted_invoice_url}>{t('viewInvoice')}</a>
                   </>
                 ) : null}
                 {invoice.invoice_pdf ? (
@@ -284,10 +319,10 @@ export function PortalRoute() {
 
       <footer className="portal__footer">
         {session.business_profile.privacy_policy_url ? (
-          <a href={session.business_profile.privacy_policy_url}>Privacy</a>
+          <a href={session.business_profile.privacy_policy_url}>{t('privacy')}</a>
         ) : null}
         {session.business_profile.terms_of_service_url ? (
-          <a href={session.business_profile.terms_of_service_url}>Terms</a>
+          <a href={session.business_profile.terms_of_service_url}>{t('terms')}</a>
         ) : null}
       </footer>
     </main>
@@ -307,6 +342,7 @@ function DetailsForm({
   onSave: (body: Record<string, unknown>) => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const [email, setEmail] = useState(session.customer.email ?? '');
   const [name, setName] = useState(session.customer.name ?? '');
   const [phone, setPhone] = useState(session.customer.phone ?? '');
@@ -346,22 +382,22 @@ function DetailsForm({
         submit();
       }}
     >
-      {allowed.includes('name') ? field(FIELD_LABEL.name, name, setName) : null}
-      {allowed.includes('email') ? field(FIELD_LABEL.email, email, setEmail) : null}
-      {allowed.includes('phone') ? field(FIELD_LABEL.phone, phone, setPhone) : null}
+      {allowed.includes('name') ? field(t(FIELD_LABEL.name), name, setName) : null}
+      {allowed.includes('email') ? field(t(FIELD_LABEL.email), email, setEmail) : null}
+      {allowed.includes('phone') ? field(t(FIELD_LABEL.phone), phone, setPhone) : null}
       {allowed.includes('address') ? (
         <>
-          {field('Address', line1, setLine1)}
-          {field('City', city, setCity)}
-          {field('Postal code', postalCode, setPostalCode)}
-          {field('Country (2 letters)', country, setCountry)}
+          {field(t(FIELD_LABEL.address), line1, setLine1)}
+          {field(t('city'), city, setCity)}
+          {field(t('postalCode'), postalCode, setPostalCode)}
+          {field(t('country'), country, setCountry)}
         </>
       ) : null}
       <button type="submit" disabled={busy}>
-        Save
+        {t('save')}
       </button>
       <button type="button" onClick={onCancel}>
-        Cancel
+        {t('cancel')}
       </button>
     </form>
   );

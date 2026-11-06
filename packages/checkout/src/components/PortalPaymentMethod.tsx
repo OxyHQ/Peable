@@ -5,6 +5,7 @@ import {
   getSetupClientAction,
   startPaymentMethodUpdate,
 } from '../lib/billingClient';
+import { providerLocale, useI18n } from '../i18n';
 import { loadProviderSdk, type ProviderElements, type ProviderSdk } from '../lib/providerJs';
 
 /**
@@ -39,6 +40,7 @@ export function PortalPaymentMethod({
   onUpdated: (session: PublicPortalSession) => void;
   onCancel: () => void;
 }) {
+  const { t, locale } = useI18n();
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sdkRef = useRef<SetupCapableSdk | null>(null);
   const elementsRef = useRef<ProviderElements | null>(null);
@@ -48,6 +50,7 @@ export function PortalPaymentMethod({
   >('loading');
   const [error, setError] = useState<string | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the fields mount once per portal session; `t` and the locale are read at mount
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -60,10 +63,12 @@ export function PortalPaymentMethod({
         if (cancelled) return;
         if (action.kind !== 'client_secret' || !action.publishable_key) {
           setPhase('unavailable');
-          setError('Your card cannot be updated on this page right now.');
+          setError(t('cardUpdateUnavailable'));
           return;
         }
-        const sdk = factory(action.publishable_key) as SetupCapableSdk;
+        const sdk = factory(action.publishable_key, {
+          locale: providerLocale(locale),
+        }) as SetupCapableSdk;
         const elements = sdk.elements({ clientSecret: action.value });
         const element = elements.create('payment');
         if (!mountRef.current) return;
@@ -75,7 +80,7 @@ export function PortalPaymentMethod({
       } catch (cause) {
         if (cancelled) return;
         setPhase('unavailable');
-        setError(cause instanceof Error ? cause.message : 'The card form could not be prepared.');
+        setError(cause instanceof Error ? cause.message : t('cardFormFailed'));
       }
     })();
     return () => {
@@ -93,7 +98,7 @@ export function PortalPaymentMethod({
     if (!sdk || !elements || !setupIntent) return;
     if (!sdk.confirmSetup) {
       setPhase('unavailable');
-      setError('Your card cannot be updated on this page right now.');
+      setError(t('cardUpdateUnavailable'));
       return;
     }
     setPhase('confirming');
@@ -106,7 +111,7 @@ export function PortalPaymentMethod({
       });
       if (result.error) {
         setPhase('ready');
-        setError(result.error.message ?? 'This card could not be saved.');
+        setError(result.error.message ?? t('cardSaveFailed'));
         return;
       }
       const finished = await finishPaymentMethodUpdate(token, setupIntent);
@@ -119,17 +124,17 @@ export function PortalPaymentMethod({
       setPhase('pending');
     } catch (cause) {
       setPhase('ready');
-      setError(cause instanceof Error ? cause.message : 'This card could not be saved.');
+      setError(cause instanceof Error ? cause.message : t('cardSaveFailed'));
     }
   }
 
   return (
     <div className="card-payment">
       <div ref={mountRef} className="card-payment__fields" data-testid="setup-fields" />
-      {phase === 'loading' && <p className="card-payment__hint">Preparing a secure card form…</p>}
+      {phase === 'loading' && <p className="card-payment__hint">{t('cardPreparing')}</p>}
       {phase === 'pending' && (
         <p className="card-payment__hint" aria-live="polite">
-          Your card is being confirmed. Reload this page in a moment to see it.
+          {t('cardConfirmingReload')}
         </p>
       )}
       {error !== null && (
@@ -146,11 +151,11 @@ export function PortalPaymentMethod({
             void save();
           }}
         >
-          {phase === 'confirming' ? 'Saving…' : 'Save card'}
+          {phase === 'confirming' ? t('saving') : t('saveCard')}
         </button>
       )}
       <button type="button" className="portal__link-button" onClick={onCancel}>
-        Cancel
+        {t('cancel')}
       </button>
     </div>
   );

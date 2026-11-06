@@ -20,7 +20,7 @@ Object type: `checkout_session`.
 | `status` | string | One of `open`, `complete`, `expired`. |
 | `payment_status` | string | One of `paid`, `unpaid`, `no_payment_required`. |
 | `ui_mode` | string | One of `hosted`, `embedded`. |
-| `locale` | string \| null | The language checkout renders in; `null` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
+| `locale` | string \| null | The language checkout renders in; `null` follows the payer's browser. One of `ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`. |
 | `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
 | `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
 | `rail` | string | The rail that settles the order's currency: `faircoin` for a FAIR order, `card` for a fiat one. FairCoin is offered on every order beside it (`payment_method_types`, ADR 0021). |

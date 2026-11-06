@@ -5,7 +5,11 @@
 // `locale=` in the embedded frame's fragment), the locale the merchant set on
 // the session or link, the payer's browser languages, English.
 import { createContext, type ReactNode, useContext, useEffect, useMemo } from 'react';
-import { CHECKOUT_LOCALES, type CheckoutLocale } from '@peable.to/shared-types';
+import {
+  CHECKOUT_LOCALES,
+  type CheckoutLocale,
+  checkoutLocaleDirection,
+} from '@peable.to/shared-types';
 import { CATALOGS, type MessageKey } from './messages';
 
 export type { MessageKey } from './messages';
@@ -51,6 +55,35 @@ export function queryLocale(): string | null {
   }
 }
 
+/**
+ * The card provider's own field locale (its error lines, its wallet buttons)
+ * for a page locale: the provider's code where it has the language, else its
+ * `auto`. Portuguese is Brazilian, as the catalog is (`pt-BR`); Bengali,
+ * Catalan and Hindi have no provider translation. The Pay with Peable sheet
+ * makes the same choice (`providerLocale` in `@peable.to/sdk/checkout/ui`).
+ */
+const PROVIDER_LOCALES: Readonly<Record<CheckoutLocale, string>> = {
+  ar: 'ar',
+  bn: 'auto',
+  ca: 'auto',
+  de: 'de',
+  en: 'en',
+  es: 'es',
+  fr: 'fr',
+  hi: 'auto',
+  id: 'id',
+  it: 'it',
+  ja: 'ja',
+  pt: 'pt-BR',
+  ru: 'ru',
+  tr: 'tr',
+  zh: 'zh',
+};
+
+export function providerLocale(locale: CheckoutLocale): string {
+  return PROVIDER_LOCALES[locale];
+}
+
 export type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
 
 export function translator(locale: CheckoutLocale): Translate {
@@ -80,9 +113,11 @@ export function I18nProvider({
 }) {
   const value = useMemo(() => ({ locale, t: translator(locale) }), [locale]);
   // The document's language follows the page's, for screen readers and
-  // hyphenation.
+  // hyphenation, and so does its direction: Arabic lays the page out right to
+  // left.
   useEffect(() => {
     document.documentElement.lang = locale;
+    document.documentElement.dir = checkoutLocaleDirection(locale);
   }, [locale]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

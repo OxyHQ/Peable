@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { CHECKOUT_LOCALES } from '@peable.to/contracts/vocabulary/checkout';
 import en from '../locales/en';
 import {
   CHECKOUT_UI_LOCALES,
@@ -12,6 +15,14 @@ const placeholders = (text: string) =>
   [...text.matchAll(/\{\{[^}]+\}\}|\{[a-z]+\}/g)].map((match) => match[0]).sort();
 
 describe('the catalog', () => {
+  test('the sheet speaks exactly the payer locale set every Peable surface shares', () => {
+    expect([...CHECKOUT_UI_LOCALES]).toEqual([...CHECKOUT_LOCALES]);
+    const files = readdirSync(join(import.meta.dir, '..', 'locales'))
+      .map((file) => file.replace(/\.ts$/, ''))
+      .sort();
+    expect(files).toEqual([...CHECKOUT_LOCALES].sort());
+  });
+
   test.each(CHECKOUT_UI_LOCALES.map((locale) => [locale]))(
     '%s has every key, with the same placeholders, and translates',
     async (locale) => {

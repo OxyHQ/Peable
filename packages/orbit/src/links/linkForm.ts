@@ -23,12 +23,21 @@ import type {
  */
 
 export const ORBIT_CHECKOUT_LOCALES: readonly CheckoutLocale[] = [
+  'ar',
+  'bn',
+  'ca',
+  'de',
   'en',
   'es',
   'fr',
-  'de',
+  'hi',
+  'id',
   'it',
+  'ja',
   'pt',
+  'ru',
+  'tr',
+  'zh',
 ];
 export const ORBIT_SUBMIT_TYPES: readonly CheckoutSubmitType[] = ['auto', 'pay', 'book', 'donate'];
 export const ORBIT_CUSTOM_FIELD_TYPES: readonly CheckoutCustomFieldType[] = [

@@ -95,7 +95,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `automatic_tax` | object |  |
 | `automatic_tax[enabled]` **required** | boolean |  |
 | `payment_method_types` | array of string | Must include `faircoin`, which is always offered (ADR 0021; leaving it out is 400 `payment_method_locked`). On a fiat order `['card', 'faircoin']` (the default) or `['faircoin']` — a FairCoin-only order, the fiat methods being the merchant's to turn off; on a FAIR order `['faircoin']`. Which card methods are offered comes from the payment method configuration. At most 2 items. At least 1 item. |
-| `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
+| `locale` | string | `auto` follows the payer's browser. One of `ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`, `auto`. |
 | `ui_mode` | string | One of `hosted`, `embedded`. |
 | `success_url` | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |
 | `cancel_url` | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |

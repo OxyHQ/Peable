@@ -7,6 +7,10 @@
  * Every catalog has exactly the English keys (`CheckoutCatalog`, checked by
  * `tsc`) and the same placeholders (`__tests__/messages.test.ts`).
  */
+import {
+  CHECKOUT_LOCALES,
+  type CheckoutLocale as CheckoutLocaleCode,
+} from '@peable.to/contracts/vocabulary/checkout';
 import ar from './locales/ar';
 import bn from './locales/bn';
 import ca from './locales/ca';
@@ -25,25 +29,14 @@ import zh from './locales/zh';
 
 export type { CheckoutCatalog, CheckoutMessageKey } from './locales/en';
 
-/** The languages the sheet speaks: the union of its hosts' (Mention's and Mercaria's). */
-export const CHECKOUT_UI_LOCALES = [
-  'ar',
-  'bn',
-  'ca',
-  'de',
-  'en',
-  'es',
-  'fr',
-  'hi',
-  'id',
-  'it',
-  'ja',
-  'pt',
-  'ru',
-  'tr',
-  'zh',
-] as const;
-export type CheckoutUiLocale = (typeof CHECKOUT_UI_LOCALES)[number];
+/**
+ * The languages the sheet speaks: Peable's ONE payer locale set
+ * (`CHECKOUT_LOCALES`), shared with the hosted checkout, the invoice and
+ * portal pages and the customer emails. `CATALOGS` below is typed over it, so
+ * a language added there does not compile here until it is translated.
+ */
+export const CHECKOUT_UI_LOCALES = CHECKOUT_LOCALES;
+export type CheckoutUiLocale = CheckoutLocaleCode;
 
 /** A BCP 47 tag (`pt-BR`, `zh-Hans`), or `'auto'`: the payer's browser or device. */
 export type CheckoutLocale = 'auto' | (string & {});

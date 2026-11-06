@@ -268,6 +268,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('create', () => {
     expect(String(body.client_secret)).toMatch(/^cs_[0-9a-f]{24}_secret_/);
   });
 
+  test('a session takes every payer locale, and refuses one Peable does not speak', async () => {
+    const price = await seedPrice(merchant, { currency: 'FAIR' });
+    for (const locale of ['ar', 'zh', 'pt']) {
+      const { status, body } = await createSession({
+        locale,
+        line_items: [{ price: price.publicId, quantity: 1 }],
+      });
+      expect([locale, status, body.locale]).toEqual([locale, 201, locale]);
+    }
+    const refused = await createSession({
+      locale: 'nl',
+      line_items: [{ price: price.publicId, quantity: 1 }],
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.param).toBe('locale');
+  });
+
   test('refuses what is not an order, naming the field', async () => {
     const price = await seedPrice(merchant, { currency: 'FAIR' });
     const recurring = await seedPrice(merchant, { currency: 'FAIR', recurring: 'month' });
@@ -576,6 +593,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('confirm and completion', () => {
     expect(receipt.text).toContain('2.5 FAIR');
     expect(receipt.text).toMatch(/R-\d{6}/);
     expect(receipt.html).toContain('#aa0000');
+    expect(receipt.html).toContain('<html lang="en" dir="ltr">');
     expect(receipt.html).not.toContain(intent.client_secret);
     expect(receipt.html).not.toContain(row.address ?? 'no-address');
     // Sent once: a second pass sends nothing.

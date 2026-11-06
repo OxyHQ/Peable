@@ -131,3 +131,16 @@ test('an unknown token says the invoice was not found', async () => {
   renderRoute();
   expect(await screen.findByText(/could not be found/)).toBeDefined();
 });
+
+test('the page speaks the language its link names', async () => {
+  window.history.replaceState(null, '', '/invoice/inv_tok_x?locale=ja');
+  try {
+    renderRoute();
+    expect(await screen.findByText('PDF をダウンロード')).toBeDefined();
+    expect(screen.getByTestId('invoice-status').textContent).toBe('未払い');
+    expect(document.documentElement.lang).toBe('ja');
+    expect(document.documentElement.dir).toBe('ltr');
+  } finally {
+    window.history.replaceState(null, '', '/');
+  }
+});

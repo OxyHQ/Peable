@@ -80,7 +80,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `after_completion[hosted_confirmation]` | object |  |
 | `after_completion[hosted_confirmation][custom_message]` | string | 1–500 characters. |
 | `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
-| `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
+| `locale` | string | `auto` follows the payer's browser. One of `ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`, `auto`. |
 | `restrictions` | object |  |
 | `restrictions[completed_sessions]` **required** | object |  |
 | `restrictions[completed_sessions][limit]` **required** | integer | Between 1 and 1000000. |
@@ -345,7 +345,7 @@ Everything but the line items. `""` clears a field; `metadata` is a patch.
 | `after_completion[hosted_confirmation]` | object |  |
 | `after_completion[hosted_confirmation][custom_message]` | string | 1–500 characters. |
 | `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
-| `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
+| `locale` | string | `auto` follows the payer's browser. One of `ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`, `auto`. |
 | `restrictions` | object \| `""` |  |
 | `restrictions[completed_sessions]` **required** | object |  |
 | `restrictions[completed_sessions][limit]` **required** | integer | Between 1 and 1000000. |
