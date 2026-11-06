@@ -5,7 +5,7 @@ import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
 } from '@peable.to/shared-types';
-import { NETWORK_TYPES } from './valueSets';
+import { IDENTITY_PUBLIC_KEY_PATTERN, NETWORK_TYPES } from './valueSets';
 
 /**
  * First index the social-receive reservation flow ever hands out. Index 0 is
@@ -121,6 +121,13 @@ export const socialSendAttributions = pgTable(
      * can name itself without having a single thing to point at.
      */
     sourceRef: text(),
+    /**
+     * The recipient's identity public key the address was derived from — its
+     * DID `#key-1`, read fresh at the reservation (ADR 0002, amended
+     * 2026-11-06), lowercase hex. NULL only on attributions written before keys
+     * were recorded.
+     */
+    identityPublicKey: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -158,6 +165,12 @@ export const socialSendAttributions = pgTable(
     // in a `sql` template: that renders as a BOUND PARAMETER, which drizzle-kit
     // writes into the migration as the literal `$1`, and a CHECK cannot carry
     // one. See the note on the cursor's index CHECK above.
+    check(
+      'social_send_attributions_identity_key_check',
+      sql.raw(
+        `identity_public_key is null or identity_public_key ~ '${IDENTITY_PUBLIC_KEY_PATTERN}'`,
+      ),
+    ),
     check(
       'social_send_attributions_source_app_length_check',
       sql.raw(

@@ -43,6 +43,7 @@ const INTENT: PaymentIntent = paymentIntentFixture({
     confirmations: 0,
     required_confirmations: 1,
     quote: null,
+    recipient_key_replaced_at: null,
   },
   client_secret: 'pi_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff',
   expires_at: 1784505600,

@@ -12,7 +12,7 @@
  * | `succeeded`                               | `complete`, `paid` — or, already complete unpaid, `paid` + `async_payment_succeeded` |
  * | `requires_capture` (manual capture)       | `complete`, `unpaid`                               |
  * | FairCoin `processing` (broadcast, confirming) | `complete`, `unpaid`; the chain decides later  |
- * | `canceled`                                | open → `expired` (a quoted FairCoin payment: open, unlinked); complete-unpaid FairCoin → `async_payment_failed` |
+ * | `canceled`                                | open → `expired` (a quoted FairCoin payment, or one canceled `recipient_key_changed`: open, unlinked); complete-unpaid FairCoin → `async_payment_failed` |
  *
  * On completion: the discount's redemption is counted (one guarded statement
  * each, `redeemCoupon` / `redeemPromotionCode`), a payment link's completed
@@ -188,8 +188,13 @@ export async function followIntentForCheckout(
     }
     case 'canceled': {
       // A QUOTED FairCoin payment ends on its quote's clock, not the order's
-      // (ADR 0021 D3): the open order forgets it and waits for a fresh quote.
-      if (session.status === 'open' && intent.faircoinQuote !== null) {
+      // (ADR 0021 D3), and one retired because its recipient's key was
+      // replaced (ADR 0002, amended 2026-11-06) ends on the key's: either way
+      // the open order forgets it and waits for a fresh reservation.
+      if (
+        session.status === 'open' &&
+        (intent.faircoinQuote !== null || intent.cancellationReason === 'recipient_key_changed')
+      ) {
         await unlinkSessionPayment(tx, session.id, intent.id);
         return;
       }

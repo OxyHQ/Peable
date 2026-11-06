@@ -10,6 +10,8 @@
   (2026-11-06):** merchant and marketplace-seller payments now derive from the
   same identity key and the same cursor — the owning account's Peable wallet —
   and the registered-xpub path is removed, so every rule below binds them too.
+  **Amended 2026-11-06 (below):** every address records its key, a payment
+  under a replaced key is never offered again, and keys are resolved fresh.
 
 ## Context
 
@@ -79,6 +81,72 @@ heuristics.
   no funds it is recorded rather than engineered around. When there is money at
   stake the honest fix is to say so before the rotation ("move your funds first,
   keep the previous phrase"), not to silently maintain two trees.
+
+## Amendment (2026-11-06): every address is bound to its key
+
+An independent security review refused mainnet sign-off on three gaps the
+cursor key above does not close: after a key rotation (a person's) or a key
+replacement (an organization's, whose previous key a departed admin may hold),
+open FairCoin payments kept their pre-rotation addresses and settled to
+`succeeded` into a key the recipient no longer holds; reservations for up to a
+minute after a rotation derived from the old key (the SDK caches the DID
+document) and wrote it back onto the cursor; and the wallet could only compare
+its key with the cursor's last-recorded one.
+
+- **Every address records its key.** The key a FairCoin address was derived
+  from is stored with it: `payment_intent_outputs.identity_public_key` per
+  output, `payment_intents.faircoin_identity_public_key` for output 0, and
+  `social_send_attributions.identity_public_key` (lowercase hex of the DID's
+  `#key-1`, migrations `0099`–`0101`). Rows written before have none.
+- **Keys are resolved fresh.** `resolveIdentityPublicKey`
+  (`services/socialReceive.ts`) no longer calls `oxy.identity.resolveDid`, whose
+  60 s cache the SDK cannot bypass: it fetches `GET /u/:id/did.json` itself
+  through Oxy's workload transport, `cache: 'no-store'` and `Cache-Control:
+  no-cache`, with the same `#key-1`-by-name rule. Every reservation, the
+  settlement check and the sweep read it fresh; only a payer READ may reuse a
+  read up to 5 s old (`services/faircoin/keyBinding.ts`).
+- **A payment under a replaced key is never offered again.** One module,
+  `services/faircoin/keyBinding.ts`, compares each output's recorded key with
+  its recipient's current `#key-1`. A payment still waiting for the payer
+  (`requires_action`, nothing broadcast) whose key was replaced — or which
+  predates recorded keys and so cannot show it is current — is canceled
+  through `transitionIntent` with the new closed reason
+  **`recipient_key_changed`**. The Checkout Session or invoice wrapping it
+  forgets it in the same transaction and stays open (the path ADR 0021 D3 gives
+  a lapsed quote), so the payer's next confirm reserves a fresh address from the
+  new key. Every payer surface checks before it answers — the session's payer
+  routes (read, edit, confirm; a payment link's visits are sessions), the
+  invoice's `/pay`, the intent's client-secret read — and a sweep every minute
+  (`.unref()`-ed) retires the rest. When Oxy cannot be asked, nothing changes
+  and the next sweep looks again.
+- **A payment already broadcast under a replaced key settles, and says so.** The
+  watcher reads the keys fresh before it ever writes `succeeded` (and waits for
+  its next poll while Oxy cannot answer); the sweep checks `processing` ones
+  too. Either stamps `faircoin_recipient_key_replaced_at` in a transition's own
+  statement, on the wire as `faircoin.recipient_key_replaced_at`, so the
+  payment's later events — `payment_intent.succeeded` included — carry it.
+  *Why settle rather than hold or cancel:* the payer paid exactly the address
+  Peable handed out, the transaction is final, and Peable holds nothing it
+  could return. The coins are at an address of the recipient's PREVIOUS key —
+  spendable with that key's phrase, by whoever still has it. Withholding
+  `succeeded` would leave a completed payment in a state nothing resolves and
+  move no coin; canceling it would tell the payer they did not pay. What must
+  not happen is saying so silently: the stamp is what lets the merchant decide
+  about fulfilment and the recipient recover the funds with the previous phrase
+  (or, for an organization, treat the former key holder as having received
+  them).
+- **The wallet compares against the published key.** `GET /v1/social/me/cursor`
+  also answers `account_identity_public_key`: the caller's current `#key-1`, read
+  fresh, in the same encoding as `identity_public_key` (which stays the key of
+  the LAST reservation). A device compares its key with the new field; a 503
+  means Oxy could not be asked, never "keyless".
+
+Residual windows, recorded rather than hidden: a payer who broadcasts in the
+seconds between a rotation and the next check pays the previous key (the
+stamp above), and one who broadcasts after the payment was retired is refused
+by `submit_tx` like any payment that ended, with the coins at the previous
+key's address. A subscription checkout whose first payment is retired starts
+its subscription again on the next confirm, exactly as a lapsed quote does.
 
 ## Still required before mainnet
 

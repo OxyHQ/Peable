@@ -97,6 +97,7 @@ import {
   quoteFaircoin,
   toFaircoinQuoteDTO,
 } from '../faircoin/quote';
+import { retireIfRecipientKeyReplaced } from '../faircoin/keyBinding';
 import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
 import {
   FaircoinAmountTooSmallError,
@@ -1174,6 +1175,12 @@ const REPLACEABLE: ReadonlySet<PaymentIntentRow['status']> = new Set([
   'requires_action',
 ]);
 
+/**
+ * How many recipient-key retirements a FAIR order's payment key walks past
+ * before giving up — far more rotations than one checkout can see.
+ */
+const MAX_KEY_RETIRED_REPLAYS = 16;
+
 /** A quote lapsing within this long is not handed to a payer: they would not have time to pay it. */
 const QUOTE_MIN_REMAINING_MS = 60_000;
 
@@ -1187,6 +1194,23 @@ function linkedAnswers(intent: PaymentIntentRow, method: 'card' | 'faircoin', no
   if (intent.rail !== method) return false;
   const quote = intent.faircoinQuote;
   return quote === null || quote.expires_at * 1000 - now.getTime() > QUOTE_MIN_REMAINING_MS;
+}
+
+/**
+ * The session as a payer may be shown it (ADR 0002, amended 2026-11-06): an
+ * open session whose FairCoin payment is still waiting for the payer under a
+ * recipient key that was replaced has that payment retired first — the session
+ * forgets it in the same transaction and stays open for a fresh reservation —
+ * so no payer surface ever offers its address again.
+ */
+export async function sessionForPayer(session: CheckoutSessionRow): Promise<CheckoutSessionRow> {
+  if (session.status !== 'open' || session.paymentIntentId === null) return session;
+  const db = getDb();
+  const linked = await findIntentById(db, session.paymentIntentId);
+  if (linked?.rail !== 'faircoin' || linked.status !== 'requires_action') return session;
+  const after = await retireIfRecipientKeyReplaced(linked);
+  if (after.status !== 'canceled') return session;
+  return (await findSessionById(db, session.id)) ?? session;
 }
 
 /**
@@ -1424,18 +1448,29 @@ async function createSessionPayment(
   };
   try {
     if (current.currency === 'FAIR') {
-      return (
-        await createIntent({
+      const payees = await faircoinPayees(BigInt(current.amount));
+      // The session and its amount name the payment, so a retried confirm finds
+      // it. A payment retired because its recipient's key was replaced (ADR
+      // 0002, amended 2026-11-06) is not an answer: the next one is named after
+      // it, which keeps a retried confirm on the SAME fresh payment.
+      let key = `checkout:${current.publicId}:${current.amount}`;
+      for (let attempt = 0; ; attempt += 1) {
+        const { intent, reused } = await createIntent({
           ...common,
           amount: current.amount,
           rail: current.rail,
           currency: current.currency,
           ...(current.network ? { network: current.network } : {}),
-          ...(await faircoinPayees(BigInt(current.amount))),
+          ...payees,
           expiresInSeconds: remaining,
-          idempotencyKey: `checkout:${current.publicId}:${current.amount}`,
-        })
-      ).intent;
+          idempotencyKey: key,
+        });
+        if (!reused || intent.cancellationReason !== 'recipient_key_changed') return intent;
+        if (attempt >= MAX_KEY_RETIRED_REPLAYS) {
+          throw new Error(`session ${current.publicId} replays only retired payments`);
+        }
+        key = `checkout:${current.publicId}:${current.amount}:after:${intent.publicId}`;
+      }
     }
     if (method === 'card') {
       return (

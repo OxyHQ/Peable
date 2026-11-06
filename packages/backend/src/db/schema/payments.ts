@@ -38,6 +38,7 @@ import {
   CHECKOUT_SUBMIT_TYPES,
   CHECKOUT_UI_MODES,
   BASE_UNIT_STRING_PATTERN,
+  IDENTITY_PUBLIC_KEY_PATTERN,
   CARD_RAIL_PAYMENT_METHOD_TYPES,
   CANCELLATION_REASON_VALUES,
   CAPTURE_METHOD_VALUES,
@@ -230,6 +231,27 @@ export const paymentIntents = pgTable(
      * on FairCoin payments made before identity receive (to a registered xpub).
      */
     faircoinRecipientAccountId: text(),
+    /**
+     * The identity public key output 0's address was derived from (ADR 0002,
+     * amended 2026-11-06): the recipient's DID `#key-1` as read FRESH at the
+     * reservation, lowercase hex as the DID publishes it. Every output keeps its
+     * own in `payment_intent_outputs.identity_public_key`; this is output 0's,
+     * beside its `address` and `faircoin_recipient_account_id`. A payment whose
+     * key is no longer the recipient's `#key-1` is never offered to a payer
+     * again (`services/faircoin/keyBinding.ts`).
+     *
+     * NULL on a card payment and on every FairCoin payment written before keys
+     * were recorded — no CHECK requires it, because a NOT VALID CHECK is still
+     * enforced on the UPDATE that moves such a payment's status.
+     */
+    faircoinIdentityPublicKey: text(),
+    /**
+     * When Peable found a recipient's key replaced on a payment the payer had
+     * already broadcast — the coins are at an address of the PREVIOUS key. Set
+     * once (never cleared, a reorg included) and on the wire as
+     * `faircoin.recipient_key_replaced_at`. NULL otherwise.
+     */
+    faircoinRecipientKeyReplacedAt: timestamptz(),
     /**
      * Why the last attempt failed, in Peable's words (ADR 0019). Written in the
      * same statement as the transition that the failure caused; cleared by any
@@ -487,6 +509,17 @@ export const paymentIntents = pgTable(
     check(
       'payment_intents_faircoin_recipient_check',
       sql`${table.faircoinRecipientAccountId} is null or ${table.rail} = 'faircoin'`,
+    ),
+    /** The key an address derives from: a FairCoin payment's, lowercase hex. */
+    check(
+      'payment_intents_faircoin_identity_key_check',
+      sql.raw(
+        `faircoin_identity_public_key is null or (rail = 'faircoin' and faircoin_identity_public_key ~ '${IDENTITY_PUBLIC_KEY_PATTERN}')`,
+      ),
+    ),
+    check(
+      'payment_intents_faircoin_key_replaced_check',
+      sql`${table.faircoinRecipientKeyReplacedAt} is null or ${table.rail} = 'faircoin'`,
     ),
     /** A quote prices a FairCoin payment; a card payment is charged in its own currency. */
     check(
@@ -1097,6 +1130,13 @@ export const paymentIntentOutputs = pgTable(
     recipientAccountId: text().notNull(),
     address: text().notNull(),
     amount: text().notNull(),
+    /**
+     * The recipient's identity public key this address was derived from — its
+     * DID `#key-1`, read fresh at the reservation (ADR 0002, amended
+     * 2026-11-06), lowercase hex. NULL only on the outputs written before keys
+     * were recorded.
+     */
+    identityPublicKey: text(),
     createdAt: createdAt(),
   },
   (table) => [
@@ -1120,6 +1160,12 @@ export const paymentIntentOutputs = pgTable(
       sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}' and amount <> '0'`),
     ),
     check('payment_intent_outputs_position_check', sql`${table.position} >= 0`),
+    check(
+      'payment_intent_outputs_identity_key_check',
+      sql.raw(
+        `identity_public_key is null or identity_public_key ~ '${IDENTITY_PUBLIC_KEY_PATTERN}'`,
+      ),
+    ),
     check('payment_intent_outputs_network_check', sql.raw(`network in (${inList(NETWORK_TYPES)})`)),
   ],
 );

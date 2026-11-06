@@ -49,6 +49,7 @@ import {
   createCheckoutSession,
   expireSessionForMerchant,
   publishableKeyFor,
+  sessionForPayer,
   setupClientSecretOf,
   updateSessionAsPayer,
 } from '../services/checkout/sessionService';
@@ -287,7 +288,9 @@ async function payerSession(
     sendError(res, 404, 'invalid_request_error', 'checkout session not found');
     return null;
   }
-  return { session, merchant };
+  // Every payer route — read, edit, confirm — sees the session only after a
+  // FairCoin payment under a replaced recipient key is retired (ADR 0002).
+  return { session: await sessionForPayer(session), merchant };
 }
 
 /** The discount as the payer sees it: the code they typed, or the coupon's name, and its terms. */

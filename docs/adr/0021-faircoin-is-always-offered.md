@@ -164,6 +164,9 @@ xpub mechanism is removed.
   the account it pays (`payment_intents.faircoin_recipient_account_id`) beside
   the address it was reserved at; a key rotation afterwards does not move that
   address (ADR 0002: funds received under a key are spendable with that key).
+  Since ADR 0002's 2026-11-06 amendment the address also records the key it was
+  derived from, and a payment nobody has paid yet under a replaced key is
+  canceled `recipient_key_changed` so the order takes a fresh address.
 - **Network.** A merchant's FairCoin network is its environment's: `mainnet` in
   live mode, `testnet` otherwise (rows that already chose one keep it — their
   payments reference it). Minting a mainnet identity address is ADR 0002's

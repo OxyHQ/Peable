@@ -204,7 +204,13 @@ export function faircoinTransferState(
     case 'processing':
       return intent.faircoin.confirmations > 0 ? 'processing' : 'detected';
     case 'canceled':
-      return intent.cancellation_reason === 'abandoned' ? 'expired' : 'failure';
+      // Ended without money moving, the order still open: a lapsed request, or
+      // one retired because the recipient's key was replaced (ADR 0002) — the
+      // payer is offered a fresh one either way.
+      return intent.cancellation_reason === 'abandoned' ||
+        intent.cancellation_reason === 'recipient_key_changed'
+        ? 'expired'
+        : 'failure';
     default: {
       const quote = intent.faircoin.quote;
       return quote && quote.expires_at <= nowSeconds ? 'expired' : 'awaiting';

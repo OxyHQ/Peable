@@ -6,6 +6,7 @@ import { toBaseUnits } from '../lib/money';
 import { applyEvent } from './intentState';
 import { transitionIntent } from './intentTransition';
 import { verifyPayment } from './explorer';
+import { checkRecipientKeys, readCurrentKeyFresh } from './faircoin/keyBinding';
 
 /**
  * How often the fallback poller re-checks the chain for in-flight intents. The
@@ -90,10 +91,23 @@ export async function applyChainObservation(
     if (confirmations === intent.confirmations) return null;
   }
 
+  // Before `succeeded` is ever written, the recipients' keys are read FRESH
+  // (ADR 0002, amended 2026-11-06): coins at an address of a replaced key are
+  // received, and say so — the stamp lands in this transition's own statement,
+  // so `payment_intent.succeeded` carries it. When Oxy cannot be asked the
+  // settlement waits for the next poll rather than claim the key held.
+  let recipientKeyReplaced = false;
+  if (next === 'succeeded' && !intent.faircoinRecipientKeyReplacedAt) {
+    const check = await checkRecipientKeys(intent, readCurrentKeyFresh);
+    if (check === 'unknown') return null;
+    recipientKeyReplaced = check === 'replaced';
+  }
+
   const result = await transitionIntent(intent.id, {
     from: 'processing',
     status: next,
     confirmations,
+    ...(recipientKeyReplaced ? { recipientKeyReplaced: true as const } : {}),
     ...(next === 'canceled'
       ? { cancellationReason: 'underpaid' as const, lastPaymentError: UNDERPAID_ERROR }
       : {}),

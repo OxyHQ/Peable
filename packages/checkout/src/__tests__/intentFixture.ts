@@ -23,6 +23,7 @@ export function intentFixture(
           confirmations: 0,
           required_confirmations: 6,
           quote: null,
+          recipient_key_replaced_at: null,
           ...chain,
         }
       : null;

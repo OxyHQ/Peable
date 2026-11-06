@@ -132,7 +132,13 @@ export const socialReceiveCursorSchema = defineComponent(
         .string()
         .nullable()
         .describe(
-          'The identity public key (hex) those addresses derive from; `null` exactly when no address was ever reserved.',
+          'The identity public key (hex) those addresses derive from — the key recorded at the LAST reservation; `null` exactly when no address was ever reserved.',
+        ),
+      account_identity_public_key: z
+        .string()
+        .nullable()
+        .describe(
+          "The caller's CURRENT identity public key: their DID's `#key-1`, read from Oxy at request time (never cached), as lowercase hex of the key exactly as the DID publishes it (`publicKeyHex`, the compressed secp256k1 key) — the same encoding as `identity_public_key`. Compare the device's key with THIS, not with `identity_public_key`, which only says what the last reservation used. `null` for a keyless (custodial) account.",
         ),
     })
     .strict(),
@@ -213,6 +219,8 @@ export const socialRoutes = [
     path: '/v1/social/me/cursor',
     tag: 'Social payments',
     summary: "Retrieve the caller's receive cursor",
+    description:
+      "How far the caller's receive tree has been reserved, the key the last reservation used, and the caller's current `#key-1` read fresh from Oxy (ADR 0002). A 503 when Oxy cannot be asked for the current key.",
     auth: 'user',
     query: socialReceiveCursorQuery,
     response: socialReceiveCursorSchema,

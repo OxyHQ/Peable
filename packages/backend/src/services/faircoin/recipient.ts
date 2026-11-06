@@ -87,7 +87,9 @@ async function hasIdentityKey(accountId: string): Promise<boolean> {
 
 /**
  * Reserve the next address in the recipient's Peable wallet — one statement on
- * its cursor (`db/social/receiveCursor.ts`), the identity key recorded with it.
+ * its cursor (`db/social/receiveCursor.ts`), the identity key recorded with it
+ * and answered, so the payment records it beside the address (ADR 0002,
+ * amended 2026-11-06). The key is read fresh, never from a cache.
  *
  * @throws {FaircoinWalletMissingError} no recipient, or no identity key.
  * @throws {FaircoinNetworkClosedError} the deployment does not open `network`.
@@ -95,12 +97,16 @@ async function hasIdentityKey(accountId: string): Promise<boolean> {
 export async function reserveFaircoinAddress(
   recipientAccountId: string | null,
   network: NetworkType,
-): Promise<{ address: string; recipientAccountId: string }> {
+): Promise<{ address: string; recipientAccountId: string; identityPublicKey: string }> {
   if (!identityNetworkOpen(network)) throw new FaircoinNetworkClosedError(network);
   if (recipientAccountId === null) throw new FaircoinWalletMissingError();
   const reserved = await reserveNextSocialAddress(recipientAccountId, network);
   if (!reserved) throw new FaircoinWalletMissingError();
-  return { address: reserved.address, recipientAccountId };
+  return {
+    address: reserved.address,
+    recipientAccountId,
+    identityPublicKey: reserved.identityPublicKey,
+  };
 }
 
 /**

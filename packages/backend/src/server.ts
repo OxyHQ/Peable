@@ -98,6 +98,7 @@ import { getTransaction } from './services/explorer';
 import type { SafeFetchFn } from './services/webhookDispatcher';
 import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from './services/webhookOutbox';
 import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper';
+import { startRecipientKeySweeper, stopRecipientKeySweeper } from './services/faircoin/keyBinding';
 import { startIdempotencySweeper, stopIdempotencySweeper } from './services/idempotencySweeper';
 import { startEventSweeper, stopEventSweeper } from './services/eventSweeper';
 import { startRequestLogSweeper, stopRequestLogSweeper } from './services/requestLogSweeper';
@@ -436,6 +437,7 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
     gateway.watcher.stop();
     stopWebhookOutbox();
     stopExpirySweeper();
+    stopRecipientKeySweeper();
     stopIdempotencySweeper();
     stopEventSweeper();
     stopRequestLogSweeper();
@@ -466,6 +468,9 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
   gateway.watcher.start();
   startWebhookOutbox({ safeFetch: undefined });
   startExpirySweeper();
+  // ADR 0002 (amended 2026-11-06): no FairCoin payment stays payable under a
+  // recipient key that was replaced.
+  startRecipientKeySweeper();
   startIdempotencySweeper();
   startEventSweeper();
   startRequestLogSweeper();

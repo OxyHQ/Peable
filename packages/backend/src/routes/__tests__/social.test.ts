@@ -14,6 +14,7 @@ import {
   SOCIAL_SOURCE_REF_MAX_LENGTH,
 } from '@peable.to/shared-types';
 import { socialSendAttributions } from '../../db/schema';
+import { must } from '../../__tests__/helpers/must';
 import {
   gatewayDb,
   resetGatewayTables,
@@ -99,17 +100,22 @@ const getUsersByIdsMock = mock(
 mock.module('../../oxy', () => ({
   oxy: overrideOxy(realOxy, {
     users: { byUsername: getProfileByUsernameMock, getMany: getUsersByIdsMock },
-    identity: { resolveDid: resolveDidMock },
   }),
 }));
 
 const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX } = await import('../social');
-const { useIdentityKeyResolver } = await import('../../services/socialReceive');
+const { useDidTransport, useIdentityKeyResolver } = await import('../../services/socialReceive');
 
-// This suite mocks the DID read itself: not the preloaded test keys.
+// This suite serves the DID document itself (the gateway reads it fresh,
+// through its transport): not the preloaded test keys.
 const previousResolver = useIdentityKeyResolver(null);
+const previousTransport = useDidTransport(async (url) => {
+  const userId = decodeURIComponent(must(must(/\/u\/([^/]+)\/did\.json$/.exec(url))[1]));
+  return Response.json(await resolveDidMock(userId));
+});
 afterAll(() => {
   useIdentityKeyResolver(previousResolver);
+  useDidTransport(previousTransport);
 });
 
 const TEST_SENDER_ID = 'user_test_sender';
@@ -135,6 +141,8 @@ interface NextAddressResponse {
 
 interface CursorResponse {
   reserved_through?: number;
+  identity_public_key?: string | null;
+  account_identity_public_key?: string | null;
   error?: { type: string; message: string };
 }
 
@@ -206,6 +214,8 @@ describe('POST /v1/social/:username/next_address', () => {
     expect(attribution?.senderUserId).toBe(TEST_SENDER_ID);
     expect(attribution?.recipientUserId).toBe('user_alice');
     expect(attribution?.derivationIndex).toBe(1);
+    // The key the address was derived from, recorded with it (ADR 0002, amended 2026-11-06).
+    expect(attribution?.identityPublicKey).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
   });
 
   test('second call for the same recipient reserves the next index', async () => {
@@ -439,6 +449,46 @@ describe('GET /v1/social/me/cursor', () => {
     const { status, body } = await getCursor('mainnet', 'user_alice');
     expect(status).toBe(200);
     expect(body.reserved_through).toBe(0);
+  });
+
+  // F7 (ADR 0002, amended 2026-11-06): the cursor's own key says only what the
+  // LAST reservation used. The device compares against the account's current
+  // `#key-1`, read fresh, which the answer now carries beside it.
+  test("carries the caller's CURRENT #key-1 beside the key the last reservation used", async () => {
+    await postNextAddress('alice', { network: 'testnet' }, 'user_cursor_key_sender');
+    const rotated = `02${'5'.repeat(64)}`;
+    resolveDidMock.mockImplementation(async (userId: string) => {
+      const doc = didFor(userId);
+      return {
+        ...doc,
+        verificationMethod: doc.verificationMethod.map((vm) => ({ ...vm, publicKeyHex: rotated })),
+      };
+    });
+    try {
+      const { status, body } = await getCursor('testnet', 'user_alice');
+      expect(status).toBe(200);
+      expect(body.identity_public_key).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+      expect(body.account_identity_public_key).toBe(rotated);
+    } finally {
+      resolveDidMock.mockImplementation(async (userId: string) => didFor(userId));
+    }
+  });
+
+  test('answers account_identity_public_key: null for a keyless caller, even with no cursor', async () => {
+    const { status, body } = await getCursor('testnet', 'user_keylessbob');
+    expect(status).toBe(200);
+    expect(body.identity_public_key).toBeNull();
+    expect(body.account_identity_public_key).toBeNull();
+  });
+
+  test('a 503 when Oxy cannot be asked for the current key — never a guessed null', async () => {
+    const previous = useDidTransport(async () => new Response('down', { status: 502 }));
+    try {
+      const { status } = await getCursor('testnet', 'user_alice');
+      expect(status).toBe(503);
+    } finally {
+      useDidTransport(previous);
+    }
   });
 
   test('400s on a missing network query param', async () => {

@@ -55,6 +55,12 @@ export interface InsertAttributionParams {
   readonly recipientUserId: string;
   readonly derivationIndex: number;
   /**
+   * The recipient's identity key the address was derived from, read fresh at
+   * the reservation (ADR 0002, amended 2026-11-06). Optional only so a fixture
+   * written before the column still describes an attribution.
+   */
+  readonly identityPublicKey?: string;
+  /**
    * What the paying app said this payment was for, when it said anything.
    *
    * The wire shape itself (`SocialPaymentSource`), not two loose strings: the
@@ -93,6 +99,7 @@ export async function insertSendAttribution(
         // `?? null` on both, so "the payer named no context" is written as NULL
         // rather than left to drizzle's default — and so a `source` carrying no
         // `ref` cannot store `undefined` beside a filled `source_app`.
+        identityPublicKey: params.identityPublicKey ?? null,
         sourceApp: params.source?.app ?? null,
         sourceRef: params.source?.ref ?? null,
       })

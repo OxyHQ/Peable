@@ -12,7 +12,8 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | Field | Type | Description |
 | --- | --- | --- |
 | `reserved_through` | integer | The highest social-receive index ever reserved for the caller on this network; `0` when none was. |
-| `identity_public_key` | string \| null | The identity public key (hex) those addresses derive from; `null` exactly when no address was ever reserved. |
+| `identity_public_key` | string \| null | The identity public key (hex) those addresses derive from — the key recorded at the LAST reservation; `null` exactly when no address was ever reserved. |
+| `account_identity_public_key` | string \| null | The caller's CURRENT identity public key: their DID's `#key-1`, read from Oxy at request time (never cached), as lowercase hex of the key exactly as the DID publishes it (`publicKeyHex`, the compressed secp256k1 key) — the same encoding as `identity_public_key`. Compare the device's key with THIS, not with `identity_public_key`, which only says what the last reservation used. `null` for a keyless (custodial) account. |
 
 ## Returned by
 

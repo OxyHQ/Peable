@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.1.0 — a FairCoin address is bound to the key it was derived from
+
+Requires `@peable.to/contracts` 5.1.0 and `@peable.to/shared-types` 5.1.0 (ADR 0002,
+amended 2026-11-06).
+
+Added:
+
+- Cancellation reason `recipient_key_changed`: a FairCoin payment still waiting for
+  the payer whose recipient replaced its identity key (a rotation, or an
+  organization's new key) is canceled and never offered again; the Checkout Session
+  or invoice that wrapped it stays open and the payer's next confirm reserves a
+  fresh address from the new key. `PeableSheetCheckout` treats it like a lapsed
+  request (`expired`), not a failure.
+- `PaymentIntent.faircoin.recipient_key_replaced_at` (Unix seconds or `null`): set
+  when a payment the payer had already broadcast turns out to pay an address of a
+  replaced key. The payment still settles — the coins are on chain — and the stamp
+  is on `payment_intent.succeeded` so the merchant can decide about fulfilment.
+- `GET /v1/social/me/cursor` answers `account_identity_public_key`: the caller's
+  current `#key-1`, read fresh, to compare a device key against (the existing
+  `identity_public_key` is the key of the LAST reservation).
+
 ## 5.0.0 — a marketplace order pays every seller in ONE FairCoin transaction
 
 Requires `@peable.to/contracts` 5.0.0 and `@peable.to/shared-types` 5.0.0 (ADR 0021 D6, D8).

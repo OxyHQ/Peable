@@ -279,6 +279,14 @@ describe('FairCoin', () => {
         0,
       ),
     ).toBe('expired');
+    // Retired because the recipient's key was replaced (ADR 0002): the order
+    // takes a fresh request, exactly as after a lapsed one.
+    expect(
+      faircoinTransferState(
+        faircoinIntent({ status: 'canceled', cancellation_reason: 'recipient_key_changed' }),
+        0,
+      ),
+    ).toBe('expired');
     expect(
       faircoinTransferState(
         faircoinIntent({ status: 'canceled', cancellation_reason: 'underpaid' }),
