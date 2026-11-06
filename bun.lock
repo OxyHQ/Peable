@@ -305,7 +305,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "6.0.0",
+      "version": "6.1.0",
       "dependencies": {
         "@peable.to/contracts": "workspace:6.0.0",
         "@peable.to/shared-types": "workspace:6.0.0",
@@ -317,6 +317,9 @@
         "@types/bun": "latest",
         "@types/node": "^20.0.0",
         "@types/react": "^19.2.17",
+        "@types/react-dom": "^19.2.3",
+        "happy-dom": "^20.14.0",
+        "react-dom": "19.3.0",
         "typescript": "~5.9.2",
         "zod": "^4.6.7",
       },

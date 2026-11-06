@@ -1,6 +1,13 @@
 import type { CheckoutCatalog } from './en';
 
 export default {
+  'preparation.title': 'পেমেন্টের তথ্য',
+  'preparation.selected': 'নির্বাচিত',
+  'preparation.editAddress': 'ঠিকানা সম্পাদনা করুন',
+  'preparation.line2': 'অ্যাপার্টমেন্ট, তলা ইত্যাদি (ঐচ্ছিক)',
+  'preparation.state': 'রাজ্য / প্রদেশ (ঐচ্ছিক)',
+  'preparation.billingMatchesShipping': 'বিলের জন্য ডেলিভারির ঠিকানা ব্যবহার করুন',
+  'preparation.phone': 'ফোন (ঐচ্ছিক)',
   'provider.card.number': 'কার্ড নম্বর',
   'provider.card.expiry': 'মেয়াদ শেষের তারিখ',
   'provider.card.securityCode': 'সিকিউরিটি কোড',

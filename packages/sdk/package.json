@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/sdk",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Peable server SDK — resource methods generated from the API contracts (`@peable.to/contracts`), with automatic idempotency keys, retries, timeouts and typed errors; `@peable.to/sdk/checkout` is the anonymous payer-side browser client, `/checkout/ui` its optional Bloom sheet, `/display` read-only display rates.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -102,7 +102,10 @@
     "@types/node": "^20.0.0",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "happy-dom": "^20.14.0",
+    "react-dom": "19.3.0",
+    "@types/react-dom": "^19.2.3"
   },
   "peerDependencies": {
     "@oxy.so/bloom": ">=16.10.0",

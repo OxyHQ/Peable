@@ -3,6 +3,13 @@
  * exactly these keys (`CheckoutCatalog`), with the same `{{placeholders}}`.
  */
 const en = {
+  'preparation.title': 'Checkout details',
+  'preparation.selected': 'Selected',
+  'preparation.editAddress': 'Edit address',
+  'preparation.line2': 'Apartment, suite, etc. (optional)',
+  'preparation.state': 'State / province (optional)',
+  'preparation.billingMatchesShipping': 'Use shipping address for billing',
+  'preparation.phone': 'Phone (optional)',
   'provider.card.number': 'Card number',
   'provider.card.expiry': 'Expiration date',
   'provider.card.securityCode': 'Security code',

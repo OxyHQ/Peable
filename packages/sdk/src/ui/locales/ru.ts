@@ -1,6 +1,13 @@
 import type { CheckoutCatalog } from './en';
 
 export default {
+  'preparation.title': 'Данные заказа',
+  'preparation.selected': 'Выбрано',
+  'preparation.editAddress': 'Изменить адрес',
+  'preparation.line2': 'Квартира, этаж и т. д. (необязательно)',
+  'preparation.state': 'Регион / область (необязательно)',
+  'preparation.billingMatchesShipping': 'Использовать адрес доставки для выставления счёта',
+  'preparation.phone': 'Телефон (необязательно)',
   'provider.card.number': 'Номер карты',
   'provider.card.expiry': 'Срок действия',
   'provider.card.securityCode': 'Код безопасности',
