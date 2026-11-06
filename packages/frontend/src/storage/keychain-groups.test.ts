@@ -231,6 +231,108 @@ describe('after the marker', () => {
   });
 });
 
+describe("a native build with the app's own group (core 7.31+, ADR 0062 D6)", () => {
+  const APP = 'ABCDE12345.to.peable.app';
+  const WITH_APP: KeychainAccess = { ...PEABLE, appGroup: APP };
+  const withApp = async () => WITH_APP;
+  /** A keychain as the wallet-group build left it, plus anything still shared. */
+  function walletGroupBuild(wallet: Record<string, string>, shared: Record<string, string> = {}) {
+    const k = keychain([WALLET, SHARED, APP]);
+    for (const [key, value] of Object.entries(wallet)) k.items.set(`${WALLET}|${key}`, value);
+    for (const [key, value] of Object.entries(shared)) k.items.set(`${SHARED}|${key}`, value);
+    return k;
+  }
+
+  test('what the wallet group holds moves to the app group; a planted shared item does not', async () => {
+    const k = walletGroupBuild(
+      {
+        [KEYCHAIN_MOVE_MARKER]: '1',
+        fairwallet_wallets_index: INDEX,
+        fairwallet_mnemonic_w1: 'words',
+        fairwallet_pin: 'pin record',
+      },
+      { fairwallet_seed_w1: 'planted seed', fairwallet_currency: 'XXX' },
+    );
+    const kv = createGroupedKeychainAdapter(k.store, withApp);
+    expect(await kv.getItem('fairwallet_mnemonic_w1')).toBe('words');
+    expect(await kv.getItem('fairwallet_seed_w1')).toBeNull();
+    expect(await kv.getItem('fairwallet_currency')).toBeNull();
+    expect(k.items.get(`${APP}|fairwallet_wallets_index`)).toBe(INDEX);
+    expect(k.items.get(`${APP}|fairwallet_pin`)).toBe('pin record');
+    expect(k.items.has(`${WALLET}|fairwallet_mnemonic_w1`)).toBe(false);
+    expect(k.items.has(`${WALLET}|fairwallet_pin`)).toBe(false);
+    expect(k.items.has(`${APP}|fairwallet_seed_w1`)).toBe(false);
+    expect(k.items.get(`${APP}|${KEYCHAIN_MOVE_MARKER}`)).toBe('1');
+  });
+
+  test('straight from a pre-split build: the shared items move to the app group', async () => {
+    const k = walletGroupBuild({}, { fairwallet_wallets_index: INDEX, fairwallet_seed_w1: 'ab' });
+    const kv = createGroupedKeychainAdapter(k.store, withApp);
+    expect(await kv.getItem('fairwallet_seed_w1')).toBe('ab');
+    expect(k.items.get(`${APP}|fairwallet_seed_w1`)).toBe('ab');
+    expect(k.items.has(`${SHARED}|fairwallet_seed_w1`)).toBe(false);
+    expect(k.items.get(`${APP}|${KEYCHAIN_MOVE_MARKER}`)).toBe('1');
+  });
+
+  test('an unfinished wallet-group move: its value wins over the shared one', async () => {
+    const k = walletGroupBuild(
+      { fairwallet_pin: 'newer' },
+      { fairwallet_pin: 'older', fairwallet_wallets_index: INDEX },
+    );
+    const kv = createGroupedKeychainAdapter(k.store, withApp);
+    expect(await kv.getItem('fairwallet_pin')).toBe('newer');
+    expect(k.items.has(`${WALLET}|fairwallet_pin`)).toBe(false);
+    expect(k.items.has(`${SHARED}|fairwallet_pin`)).toBe(false);
+    expect(await kv.getItem('fairwallet_wallets_index')).toBe(INDEX);
+  });
+
+  test('a failed move falls back to the wallet group, never to a closed shared group', async () => {
+    const k = walletGroupBuild(
+      { [KEYCHAIN_MOVE_MARKER]: '1', fairwallet_wallets_index: INDEX },
+      { fairwallet_mnemonic_w1: 'planted' },
+    );
+    k.setFailWrites(true);
+    const kv = createGroupedKeychainAdapter(k.store, withApp);
+    expect(await kv.getItem('fairwallet_wallets_index')).toBe(INDEX);
+    expect(await kv.getItem('fairwallet_mnemonic_w1')).toBeNull();
+    expect(k.items.has(`${APP}|${KEYCHAIN_MOVE_MARKER}`)).toBe(false);
+  });
+
+  test('after the marker neither earlier group is read; a write clears both copies', async () => {
+    const k = walletGroupBuild({ [KEYCHAIN_MOVE_MARKER]: '1' });
+    await createGroupedKeychainAdapter(k.store, withApp).getItem('fairwallet_pin');
+    k.items.set(`${WALLET}|fairwallet_pin`, 'stale');
+    k.items.set(`${SHARED}|fairwallet_pin`, 'planted');
+    k.calls.length = 0;
+    const nextLaunch = createGroupedKeychainAdapter(k.store, withApp);
+    expect(await nextLaunch.getItem('fairwallet_pin')).toBeNull();
+    expect(k.calls.filter((c) => c.op === 'get' && c.options?.accessGroup !== APP)).toEqual([]);
+    await nextLaunch.setItem('fairwallet_pin', 'new');
+    expect(k.items.get(`${APP}|fairwallet_pin`)).toBe('new');
+    expect(k.items.has(`${WALLET}|fairwallet_pin`)).toBe(false);
+    expect(k.items.has(`${SHARED}|fairwallet_pin`)).toBe(false);
+  });
+
+  test('the dev build uses its own groups: to.peable.app.dev, then so.oxy.wallet.dev', async () => {
+    const DEV_WALLET = 'ABCDE12345.so.oxy.wallet.dev';
+    const DEV_APP = 'ABCDE12345.to.peable.app.dev';
+    const dev: KeychainAccess = {
+      mode: 'grouped',
+      prefix: 'ABCDE12345.',
+      defaultGroup: DEV_WALLET,
+      role: 'wallet',
+      appGroup: DEV_APP,
+      variant: '.dev',
+    };
+    const k = keychain([DEV_WALLET, SHARED, DEV_APP]);
+    k.items.set(`${DEV_WALLET}|fairwallet_pin`, 'dev pin');
+    const kv = createGroupedKeychainAdapter(k.store, async () => dev);
+    expect(await kv.getItem('fairwallet_pin')).toBe('dev pin');
+    expect(k.items.get(`${DEV_APP}|fairwallet_pin`)).toBe('dev pin');
+    expect(k.calls.some((c) => c.options?.accessGroup === WALLET)).toBe(false);
+  });
+});
+
 describe('other platforms', () => {
   test('Android, web and a build without the probe make the calls they always made', async () => {
     const k = keychain([SHARED]);

@@ -1,14 +1,22 @@
 /**
  * iOS: where Peable's own SecureStore items live since the keychain
- * access-group split (oxy ADR 0062, docs/identity/ios-keychain-access-groups.md).
+ * access-group split (oxy ADR 0062 D3, D6; docs/identity/ios-keychain-access-groups.md).
  *
  * Until build 1.2.0 Peable's only keychain group was `group.so.oxy.shared`, so
  * every item written without a group — imported wallets' phrases, cached
  * wallet seeds, the PIN record — landed where EVERY Oxy iOS app can read it.
- * The app now lists `[so.oxy.wallet, group.so.oxy.shared]`: the wallet group,
- * which only Commons and Peable hold, is the default ("own" below).
+ * Their home ("own" below) is `@oxy.so/core`'s `ownKeychainItemPlan` write
+ * group, never a spelling of our own:
  *
- * The move out of the shared group is ONE-SHOT and runs before anything else:
+ * - a native build with the app-group probe (`@oxy.so/services` 14.10+):
+ *   the app's own group, `<TEAM>.to.peable.app` (`.dev` for the dev build),
+ *   which no other app can read — not even Commons. The wallet group the
+ *   previous build moved them into (`so.oxy.wallet`, `so.oxy.wallet.dev`: the
+ *   default group, which Commons also holds) is then an EARLIER location;
+ * - a native build without that probe: the default (wallet) group itself,
+ *   with no earlier location — exactly what that build did before.
+ *
+ * The move into "own" is ONE-SHOT and runs before anything else:
  *
  * - Every operation of the adapter first awaits the one move of this process,
  *   so the app's own reads, writes and deletes never interleave with it: the
@@ -16,32 +24,43 @@
  *   deleted.
  * - The move covers exactly the wallet's keys (`./wallet-keys`: the secret
  *   keys `clearAll` deletes, plus the preferences), for the wallets the stored
- *   index and active-wallet keys name. For each: a value already in the own
- *   group is kept (never overwritten); otherwise the shared value is copied
- *   and read back; then the shared copy is deleted and its absence read back.
+ *   indexes and active-wallet keys name. Its SOURCES are the earlier group
+ *   first (a post-split value, so the newer one) and the shared group — but
+ *   NOT the shared group once the earlier group carries
+ *   {@link KEYCHAIN_MOVE_MARKER}: the move out of it finished then, and what
+ *   sits there now was planted afterwards. For each key: a value already in
+ *   "own" is kept (never overwritten); otherwise the first source's value is
+ *   copied and read back; then every source's copy is deleted and its absence
+ *   read back.
  * - Only when every key is done is {@link KEYCHAIN_MOVE_MARKER} written — to
- *   the own group, and read only from there. From then on the shared group is
- *   NEVER read again, for any key: an item another app plants there later is
- *   ignored, and a deleted key has nothing to come back from.
+ *   "own", and read only from there (and, as above, from the earlier group).
+ *   From then on no source is read again, for any key: an item another app
+ *   plants in the shared group later is ignored, and a deleted key has
+ *   nothing to come back from.
  * - If any step fails (a locked keychain), no marker: this process reads the
- *   shared group as a read-only fallback for the wallet's keys it has not
- *   written or deleted itself, copies nothing, and the next launch runs the
- *   move again.
+ *   sources as a read-only fallback for the wallet's keys it has not written
+ *   or deleted itself, copies nothing, and the next launch runs the move again.
  *
- * What this cannot prove: BEFORE the marker exists, an item another Oxy app
- * planted in the shared group is indistinguishable from the wallet's own
+ * What this cannot prove: BEFORE the shared group's move finished, an item
+ * another Oxy app planted there is indistinguishable from the wallet's own
  * pre-split item — same key, same group, no provenance on either. The move
- * adopts it if the own group has nothing under that key (an empty wallet
- * index, a missing PIN record). The marker bounds that window to the launches
- * before the first complete move; it cannot close it. Wallet keys the move
- * cannot enumerate (an organization wallet's Pockets when it is not the
- * active wallet) are not adopted and, after the marker, revert to defaults.
+ * adopts it if neither "own" nor the earlier group has anything under that
+ * key (an empty wallet index, a missing PIN record). The marker bounds that
+ * window to the launches before the first complete move; it cannot close it.
+ * Wallet keys the move cannot enumerate (an organization wallet's Pockets
+ * when it is not the active wallet) are not adopted and, after the marker,
+ * revert to defaults.
  *
- * Writes name the own group explicitly and then remove any copy from the
- * shared group (best effort; deleting is not reading). A delete reaches every
- * group, as it always did. Every other platform, and an iOS build whose native
- * module predates the keychain probe (`ungrouped`), makes exactly the calls it
- * always made.
+ * Writes name "own" explicitly and then remove any copy from the sources
+ * (best effort; deleting is not reading). A delete reaches every group, as it
+ * always did. Every other platform, and an iOS build whose native module
+ * predates the keychain probe (`ungrouped`), makes exactly the calls it always
+ * made.
+ *
+ * The identity keys the wallet derives and signs with are NOT here: they are
+ * Commons' (`spending-key`), read through `@oxy.so/core`'s KeyManager, which
+ * stops falling back to the shared group once Commons' migration record is in
+ * the wallet group, and which never lets the wallet write one.
  */
 import type { KeychainAccess } from '@oxy.so/core/crypto';
 import { keychainAccessGroupValue, ownKeychainItemPlan } from '@oxy.so/core/crypto';
@@ -66,81 +85,136 @@ export interface KeyValueAdapter {
 }
 
 interface Groups {
+  /** Where the wallet's items live and are written. */
   own: string;
+  /** Where the previous native build kept them (the default group), if not `own`. */
+  earlier: string | null;
   shared: string;
 }
 
-/** The outcome of this process's one move: `null` groups → the pre-split calls. */
-type Setup = { groups: null } | { groups: Groups; moved: boolean };
+/**
+ * The outcome of this process's one move: `null` groups → the pre-split calls.
+ * `sources` are the groups a no-marker fallback may still read, in order.
+ */
+type Setup = { groups: null } | { groups: Groups; moved: boolean; sources: string[] };
 
-/** The two groups that matter here, or `null` for the calls made before the split. */
+/** The groups that matter here, from core's plan, or `null` for the pre-split calls. */
 async function groupsOf(resolveAccess: () => Promise<KeychainAccess>): Promise<Groups | null> {
   const access = await resolveAccess();
-  const own = ownKeychainItemPlan(access).write.accessGroup;
+  const plan = ownKeychainItemPlan(access);
+  const own = plan.write.accessGroup;
   const shared = keychainAccessGroupValue(access, 'shared');
-  return own && shared && own !== shared ? { own, shared } : null;
+  if (!own || !shared || own === shared) return null;
+  // The plan reads `own`, then the default group when it is not `own`, then `{}`.
+  const earlier = plan.read
+    .map((option) => option.accessGroup)
+    .find((group) => group !== undefined && group !== own && group !== shared);
+  return { own, earlier: earlier ?? null, shared };
 }
 
-/** Best effort: a write's superseded shared copy. Never throws. */
-async function removeSharedCopy(store: KeychainStore, key: string, shared: string): Promise<void> {
-  try {
-    await store.deleteItemAsync(key, { accessGroup: shared });
-  } catch {
-    // The marker stops it being read; the next write of this key tries again.
+/** Best effort: a write's superseded copies. Never throws. */
+async function removeCopies(store: KeychainStore, key: string, groups: string[]): Promise<void> {
+  for (const group of groups) {
+    try {
+      await store.deleteItemAsync(key, { accessGroup: group });
+    } catch {
+      // The marker stops it being read; the next write of this key tries again.
+    }
   }
 }
 
 /**
- * Move one key: keep an own value (never overwrite), else copy the shared one
- * and read it back; then delete the shared copy and read back its absence.
- * `true` once the shared group holds nothing under `key`. Never throws.
+ * Move one key into `own`: keep an own value (never overwrite), else copy the
+ * first source's and read it back; then delete every source's copy and read
+ * back its absence. `true` once no source holds anything under `key`. Never
+ * throws.
  */
-async function moveKey(store: KeychainStore, key: string, groups: Groups): Promise<boolean> {
+async function moveKey(
+  store: KeychainStore,
+  key: string,
+  own: string,
+  sources: string[],
+): Promise<boolean> {
   try {
-    const shared = await store.getItemAsync(key, { accessGroup: groups.shared });
-    if (shared === null) return true;
-    const own = await store.getItemAsync(key, { accessGroup: groups.own });
-    if (own === null) {
-      await store.setItemAsync(key, shared, { accessGroup: groups.own });
-      if ((await store.getItemAsync(key, { accessGroup: groups.own })) !== shared) return false;
+    const found: Array<{ group: string; value: string }> = [];
+    for (const group of sources) {
+      const value = await store.getItemAsync(key, { accessGroup: group });
+      if (value !== null) found.push({ group, value });
     }
-    await store.deleteItemAsync(key, { accessGroup: groups.shared });
-    return (await store.getItemAsync(key, { accessGroup: groups.shared })) === null;
+    const first = found[0];
+    if (!first) return true;
+    if ((await store.getItemAsync(key, { accessGroup: own })) === null) {
+      await store.setItemAsync(key, first.value, { accessGroup: own });
+      if ((await store.getItemAsync(key, { accessGroup: own })) !== first.value) return false;
+    }
+    for (const { group } of found) {
+      await store.deleteItemAsync(key, { accessGroup: group });
+      if ((await store.getItemAsync(key, { accessGroup: group })) !== null) return false;
+    }
+    return true;
   } catch {
     return false;
   }
 }
 
-/** Both groups' values of `key`, own first. Throws when either cannot be read. */
-async function bothValues(store: KeychainStore, key: string, groups: Groups): Promise<string[]> {
-  const own = await store.getItemAsync(key, { accessGroup: groups.own });
-  const shared = await store.getItemAsync(key, { accessGroup: groups.shared });
-  return [own, shared].filter((v): v is string => v !== null);
+/** Every group's value of `key`, in order. Throws when one cannot be read. */
+async function valuesIn(store: KeychainStore, key: string, groups: string[]): Promise<string[]> {
+  const values: string[] = [];
+  for (const group of groups) {
+    const value = await store.getItemAsync(key, { accessGroup: group });
+    if (value !== null) values.push(value);
+  }
+  return values;
+}
+
+/** Whether `group` carries the move's marker. Throws when it cannot be read. */
+async function hasMarker(store: KeychainStore, group: string): Promise<boolean> {
+  return (await store.getItemAsync(KEYCHAIN_MOVE_MARKER, { accessGroup: group })) !== null;
 }
 
 /**
- * The one move (see the module comment). `true` when the marker exists — found
- * or written now — and `false` when this launch could not finish. Never throws.
+ * Where the wallet's items may still come from, in order: the earlier group,
+ * and the shared group unless the earlier group's marker says the move out of
+ * it already finished. Throws when the earlier marker cannot be read.
  */
-async function moveOnce(store: KeychainStore, groups: Groups): Promise<boolean> {
+async function sourcesOf(store: KeychainStore, groups: Groups): Promise<string[]> {
+  if (!groups.earlier) return [groups.shared];
+  return (await hasMarker(store, groups.earlier))
+    ? [groups.earlier]
+    : [groups.earlier, groups.shared];
+}
+
+/**
+ * The one move (see the module comment). `moved` when the marker exists in
+ * `own` — found or written now — and `false` when this launch could not
+ * finish. The marker reads decide what may be read at all, so a failure there
+ * is the caller's (storage unavailable; the next call asks again); a failure
+ * while moving is not: no marker, and the sources stay a read-only fallback.
+ */
+async function moveOnce(
+  store: KeychainStore,
+  groups: Groups,
+): Promise<{ moved: boolean; sources: string[] }> {
+  if (await hasMarker(store, groups.own)) return { moved: true, sources: [] };
+  const sources = await sourcesOf(store, groups);
   try {
-    if ((await store.getItemAsync(KEYCHAIN_MOVE_MARKER, { accessGroup: groups.own })) !== null) {
-      return true;
-    }
-    // Which wallets' keys to move: every wallet either group's index names,
-    // and either group's active wallet (an identity wallet is never indexed).
-    const indexes = await bothValues(store, SECRET_KEYS.walletsIndex, groups);
-    const active = await bothValues(store, SECRET_KEYS.activeWallet, groups);
+    // Which wallets' keys to move: every wallet any location's index names,
+    // and any location's active wallet (an identity wallet is never indexed).
+    const everywhere = [groups.own, ...sources];
+    const indexes = await valuesIn(store, SECRET_KEYS.walletsIndex, everywhere);
+    const active = await valuesIn(store, SECRET_KEYS.activeWallet, everywhere);
     const ids = [...indexes.flatMap(walletIdsOfIndex), ...active];
     let complete = true;
     for (const key of keychainMoveKeys(ids)) {
-      if (!(await moveKey(store, key, groups))) complete = false;
+      if (!(await moveKey(store, key, groups.own, sources))) complete = false;
     }
-    if (!complete) return false;
+    if (!complete) return { moved: false, sources };
     await store.setItemAsync(KEYCHAIN_MOVE_MARKER, '1', { accessGroup: groups.own });
-    return (await store.getItemAsync(KEYCHAIN_MOVE_MARKER, { accessGroup: groups.own })) === '1';
+    const moved =
+      (await store.getItemAsync(KEYCHAIN_MOVE_MARKER, { accessGroup: groups.own })) === '1';
+    return { moved, sources };
   } catch {
-    return false;
+    return { moved: false, sources };
   }
 }
 
@@ -161,9 +235,10 @@ export function createGroupedKeychainAdapter(
     if (!setup) {
       const pending = (async (): Promise<Setup> => {
         const groups = await groupsOf(resolveAccess);
-        return groups ? { groups, moved: await moveOnce(store, groups) } : { groups: null };
+        return groups ? { groups, ...(await moveOnce(store, groups)) } : { groups: null };
       })();
-      // The access probe failed: the caller sees it, and the next call asks again.
+      // The access probe or a marker read failed: the caller sees it, and the
+      // next call asks again.
       pending.catch(() => {
         if (setup === pending) setup = null;
       });
@@ -179,15 +254,19 @@ export function createGroupedKeychainAdapter(
       const own = await store.getItemAsync(key, { accessGroup: s.groups.own });
       if (own !== null || s.moved || touched.has(key) || !isWalletKey(key)) return own;
       // No marker yet (this launch's move failed): read, never copy.
-      const shared = await store.getItemAsync(key, { accessGroup: s.groups.shared });
-      return touched.has(key) ? store.getItemAsync(key, { accessGroup: s.groups.own }) : shared;
+      const [earlier = null] = await valuesIn(store, key, s.sources);
+      return touched.has(key) ? store.getItemAsync(key, { accessGroup: s.groups.own }) : earlier;
     },
     setItem: async (key, value) => {
       const s = await ready();
       if (!s.groups) return store.setItemAsync(key, value);
       touched.add(key);
       await store.setItemAsync(key, value, { accessGroup: s.groups.own });
-      await removeSharedCopy(store, key, s.groups.shared);
+      await removeCopies(
+        store,
+        key,
+        [s.groups.earlier, s.groups.shared].filter((g): g is string => g !== null),
+      );
     },
     deleteItem: async (key) => {
       const s = await ready();
