@@ -1,3 +1,4 @@
+import type { CheckoutContactCollection } from '@peable.to/contracts/vocabulary/checkout';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
@@ -637,6 +638,8 @@ export const paymentIntents = pgTable(
  * `lib/serializeCheckout.ts`, so a wire change never reaches storage.
  */
 export interface StoredCheckoutCollection {
+  /** Missing on older rows: collect email. Only the merchant creates this policy. */
+  readonly contactCollection?: CheckoutContactCollection;
   readonly billingAddressCollection: (typeof CHECKOUT_BILLING_ADDRESS_COLLECTIONS)[number];
   /** ISO 3166-1 alpha-2 codes; `null` when no shipping address is collected. */
   readonly shippingCountries: readonly string[] | null;

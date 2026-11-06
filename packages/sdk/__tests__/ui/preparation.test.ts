@@ -1,6 +1,8 @@
+import { publicSessionFixture } from '../support/checkoutFixture';
 import { describe, expect, test } from 'bun:test';
 import {
   canPrepareCheckout,
+  preparedContactEmail,
   freezeCheckoutDetails,
   initialCheckoutDetails,
 } from '../../src/ui/checkoutPreparation';
@@ -77,4 +79,31 @@ describe('checkout prerequisites', () => {
       if (descriptor) Object.defineProperty(Intl, 'DisplayNames', descriptor);
     }
   });
+});
+
+test('guest preparation contact is collected once on the authoritative session', () => {
+  const session = {
+    ...publicSessionFixture,
+    customer_details: { ...publicSessionFixture.customer_details, email: null },
+    customer_email_locked: false,
+  };
+  expect(preparedContactEmail(session, ' guest@example.test ')).toBe('guest@example.test');
+  expect(
+    preparedContactEmail(
+      { ...session, contact_collection: 'merchant_account' },
+      'guest@example.test',
+    ),
+  ).toBeNull();
+  expect(
+    preparedContactEmail({ ...session, customer_email_locked: true }, 'guest@example.test'),
+  ).toBeNull();
+  expect(
+    preparedContactEmail(
+      {
+        ...session,
+        customer_details: { ...session.customer_details, email: 'fixed@example.test' },
+      },
+      'guest@example.test',
+    ),
+  ).toBeNull();
 });

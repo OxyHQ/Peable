@@ -1,3 +1,4 @@
+import { preparedContactEmail } from './checkoutPreparation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
 import { Button } from '@oxy.so/bloom/button';
@@ -359,19 +360,35 @@ function SheetCheckout({
     }
   }, []);
 
+  const preparedEmail = preparationState.prepared ? preparationState.details.email : undefined;
   const read = useCallback(async (): Promise<Order> => {
     if (!source) throw new Error('Checkout session not created');
     if (source.type === 'checkout_session') {
-      return {
-        type: 'checkout_session',
-        session: await client.getCheckoutSession(source.id, source.clientSecret),
-      };
+      let session = await client.getCheckoutSession(source.id, source.clientSecret);
+      const email = preparedContactEmail(session, preparedEmail);
+      // Validate the host's reviewed order before sending any payer contact.
+      if (
+        email &&
+        matchesExpectation(
+          {
+            amount: session.amount_subtotal,
+            currency: session.currency,
+            livemode: session.livemode,
+          },
+          latest.current.expected,
+        )
+      ) {
+        session = await client.updateCheckoutSession(source.id, source.clientSecret, {
+          customer_details: { email },
+        });
+      }
+      return { type: 'checkout_session', session };
     }
     return {
       type: 'payment_intent',
       intent: await client.getPaymentIntent(source.id, source.clientSecret),
     };
-  }, [client, source]);
+  }, [client, source, preparedEmail]);
 
   const refresh = useCallback(async () => {
     accept(await read());

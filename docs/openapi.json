@@ -5387,6 +5387,14 @@
                     "format": "email",
                     "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
                   },
+                  "contact_collection": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "merchant_account"
+                    ],
+                    "description": "Defaults to email. merchant_account delegates contact and payment notifications to the merchant, which must have its own authenticated account channel. This is not identity verification by Peable. Payers cannot change this policy."
+                  },
                   "customer_creation": {
                     "type": "string",
                     "enum": [
@@ -53891,6 +53899,14 @@
             "type": "string",
             "const": "checkout_session"
           },
+          "contact_collection": {
+            "type": "string",
+            "enum": [
+              "email",
+              "merchant_account"
+            ],
+            "description": "Contact policy fixed by the merchant at creation. Absent means email. merchant_account delegates contact and notifications to the merchant account channel; it does not assert a Peable-verified identity."
+          },
           "livemode": {
             "type": "boolean",
             "description": "`true` in live mode, `false` in test mode."
@@ -54439,6 +54455,14 @@
           "object": {
             "type": "string",
             "const": "checkout_session"
+          },
+          "contact_collection": {
+            "type": "string",
+            "enum": [
+              "email",
+              "merchant_account"
+            ],
+            "description": "Contact policy fixed by the merchant at creation. Absent means email. merchant_account delegates contact and notifications to the merchant account channel; it does not assert a Peable-verified identity."
           },
           "livemode": {
             "type": "boolean",

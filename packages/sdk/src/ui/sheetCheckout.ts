@@ -268,7 +268,7 @@ export function sessionCollection(session: CheckoutSessionPublic): SessionCollec
                 ? 'amount'
                 : null;
   return {
-    contact: !session.customer_details.email,
+    contact: session.contact_collection !== 'merchant_account' && !session.customer_details.email,
     shipping: session.shipping_address_collection !== null,
     billingAddress,
     unsupported,

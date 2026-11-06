@@ -22,6 +22,7 @@ import {
 import { defineRoute } from '../../route';
 import {
   CHECKOUT_CUSTOMER_CREATIONS,
+  CHECKOUT_CONTACT_COLLECTIONS,
   CHECKOUT_LIMITS,
   CHECKOUT_LOCALES,
   CHECKOUT_PAYMENT_STATUSES,
@@ -67,6 +68,12 @@ import {
 const sessionFields = {
   id: z.string(),
   object: z.literal('checkout_session'),
+  contact_collection: z
+    .enum(CHECKOUT_CONTACT_COLLECTIONS)
+    .optional()
+    .describe(
+      'Contact policy fixed by the merchant at creation. Absent means email. merchant_account delegates contact and notifications to the merchant account channel; it does not assert a Peable-verified identity.',
+    ),
   livemode,
   mode: z.enum(CHECKOUT_SESSION_MODES),
   status: z.enum(CHECKOUT_SESSION_STATUSES),
@@ -399,6 +406,12 @@ export const createCheckoutSessionParams = z
       .optional()
       .describe('`cus_…`; mutually exclusive with `customer_email`.'),
     customer_email: checkoutEmailParam.optional(),
+    contact_collection: z
+      .enum(CHECKOUT_CONTACT_COLLECTIONS)
+      .optional()
+      .describe(
+        'Defaults to email. merchant_account delegates contact and payment notifications to the merchant, which must have its own authenticated account channel. This is not identity verification by Peable. Payers cannot change this policy.',
+      ),
     customer_creation: z
       .enum(CHECKOUT_CUSTOMER_CREATIONS)
       .optional()

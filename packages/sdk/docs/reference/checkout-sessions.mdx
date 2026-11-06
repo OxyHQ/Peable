@@ -65,6 +65,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `allow_promotion_codes` | boolean |  |
 | `customer` | string | `cus_…`; mutually exclusive with `customer_email`. 1–255 characters. |
 | `customer_email` | string (email) | At most 254 characters. |
+| `contact_collection` | string | Defaults to email. merchant_account delegates contact and payment notifications to the merchant, which must have its own authenticated account channel. This is not identity verification by Peable. Payers cannot change this policy. One of `email`, `merchant_account`. |
 | `customer_creation` | string | Default `if_required` (a customer is created only when something needs one). One of `always`, `if_required`. |
 | `billing_address_collection` | string | One of `auto`, `required`. |
 | `shipping_address_collection` | object |  |

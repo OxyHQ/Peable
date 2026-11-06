@@ -135,7 +135,10 @@ export function paramsFromDraft(
 
 /** Every field name this form renders, as the gateway's dotted `param`. */
 export function detailsFieldNames(session: CheckoutSessionPublic): string[] {
-  const names = ['customer_details.email', 'customer_details.name'];
+  const names = ['customer_details.name'];
+  if (session.contact_collection !== 'merchant_account' || session.customer_details.email) {
+    names.push('customer_details.email');
+  }
   const address = (prefix: string) =>
     ['line1', 'line2', 'city', 'state', 'postal_code', 'country'].map(
       (part) => `${prefix}.${part}`,
@@ -315,19 +318,21 @@ export function DetailsForm({
         <h2 id="contact-heading" className="section-heading">
           {t('contactInfo')}
         </h2>
-        <Field label={t('email')} error={errorFor('customer_details.email')}>
-          {(props) => (
-            <input
-              {...props}
-              type="email"
-              autoComplete="email"
-              value={draft.email}
-              readOnly={session.customer_email_locked}
-              disabled={disabled}
-              onChange={(event) => set('email', event.target.value)}
-            />
-          )}
-        </Field>
+        {(session.contact_collection !== 'merchant_account' || session.customer_details.email) && (
+          <Field label={t('email')} error={errorFor('customer_details.email')}>
+            {(props) => (
+              <input
+                {...props}
+                type="email"
+                autoComplete="email"
+                value={draft.email}
+                readOnly={session.customer_email_locked}
+                disabled={disabled}
+                onChange={(event) => set('email', event.target.value)}
+              />
+            )}
+          </Field>
+        )}
         <Field
           label={t('name')}
           optional={!collectsBillingAddress(session)}
