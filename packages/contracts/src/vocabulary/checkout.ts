@@ -34,9 +34,43 @@ export type CheckoutSessionPaymentStatus = (typeof CHECKOUT_PAYMENT_STATUSES)[nu
 export const CHECKOUT_UI_MODES = ['hosted', 'embedded'] as const;
 export type CheckoutUiMode = (typeof CHECKOUT_UI_MODES)[number];
 
-/** The languages the hosted and embedded checkout speak. */
-export const CHECKOUT_LOCALES = ['en', 'es', 'fr', 'de', 'it', 'pt'] as const;
+/**
+ * The languages every payer surface speaks — ONE set: the Pay with Peable
+ * sheet (`@peable.to/sdk/checkout/ui`), the hosted and embedded checkout, the
+ * hosted invoice and portal pages, and the customer emails. Each surface keeps
+ * its own catalog (their strings differ, and Metro does not tree-shake), typed
+ * `Record<CheckoutLocale, …>`, so a language added here is a compile error on
+ * every surface until it is translated.
+ *
+ * Language codes: `pt` is Brazilian Portuguese (`pt-BR`), `zh` Simplified
+ * Chinese (`zh-Hans`). A BCP 47 tag resolves to its language.
+ */
+export const CHECKOUT_LOCALES = [
+  'ar',
+  'bn',
+  'ca',
+  'de',
+  'en',
+  'es',
+  'fr',
+  'hi',
+  'id',
+  'it',
+  'ja',
+  'pt',
+  'ru',
+  'tr',
+  'zh',
+] as const;
 export type CheckoutLocale = (typeof CHECKOUT_LOCALES)[number];
+
+/** The locales written right to left: a surface sets `dir="rtl"` for them. */
+export const CHECKOUT_RTL_LOCALES: readonly CheckoutLocale[] = ['ar'];
+
+/** The text direction a locale is written in. */
+export function checkoutLocaleDirection(locale: CheckoutLocale): 'ltr' | 'rtl' {
+  return CHECKOUT_RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr';
+}
 
 export const CHECKOUT_SUBMIT_TYPES = ['auto', 'pay', 'book', 'donate'] as const;
 export type CheckoutSubmitType = (typeof CHECKOUT_SUBMIT_TYPES)[number];

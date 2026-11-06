@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { PublicInvoice } from '@peable.to/shared-types';
 import { GatewayError, getPublicInvoice, payPublicInvoice } from '../lib/billingClient';
+import { browserLanguages, I18nProvider, queryLocale, resolveLocale, useI18n } from '../i18n';
+import { INVOICE_STATUS_LABEL } from '../lib/billingLabels';
 import type { LoadState } from '../lib/loadState';
 import { formatBillingAmount, formatDate } from '../lib/money';
 
@@ -14,15 +16,21 @@ import { formatBillingAmount, formatDate } from '../lib/money';
 
 const PAYABLE = new Set(['open', 'uncollectible']);
 
-const STATUS_LABEL: Record<PublicInvoice['status'], string> = {
-  draft: 'Draft',
-  open: 'Due',
-  paid: 'Paid',
-  void: 'Void',
-  uncollectible: 'Past due',
-};
-
+/**
+ * The page speaks the payer's language: `?locale=` when the link names one,
+ * else the browser's. An invoice names no locale of its own.
+ */
 export function InvoiceRoute() {
+  const locale = resolveLocale({ override: queryLocale(), browser: browserLanguages() });
+  return (
+    <I18nProvider locale={locale}>
+      <InvoicePage />
+    </I18nProvider>
+  );
+}
+
+function InvoicePage() {
+  const { t } = useI18n();
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<LoadState<PublicInvoice>>({ status: 'loading' });
@@ -31,7 +39,7 @@ export function InvoiceRoute() {
 
   useEffect(() => {
     if (!token) {
-      setState({ status: 'error', message: 'This invoice link is incomplete.' });
+      setState({ status: 'error', message: t('invoiceLinkIncomplete') });
       return;
     }
     let cancelled = false;
@@ -46,14 +54,14 @@ export function InvoiceRoute() {
           status: 'error',
           message:
             error instanceof GatewayError && error.status === 404
-              ? 'This invoice could not be found. Check the link you were sent.'
-              : 'This invoice could not be loaded. Please try again.',
+              ? t('invoiceNotFound')
+              : t('invoiceLoadFailed'),
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, t]);
 
   async function pay(method?: 'card' | 'faircoin'): Promise<void> {
     if (!token) return;
@@ -67,16 +75,14 @@ export function InvoiceRoute() {
       });
     } catch (error) {
       setPaying(false);
-      setPayError(
-        error instanceof Error ? error.message : 'This invoice could not be paid right now.',
-      );
+      setPayError(error instanceof Error ? error.message : t('invoicePayFailed'));
     }
   }
 
   if (state.status === 'loading') {
     return (
       <main className="checkout-page">
-        <p className="checkout-page__pending">Loading invoice…</p>
+        <p className="checkout-page__pending">{t('loadingInvoice')}</p>
       </main>
     );
   }
@@ -93,25 +99,27 @@ export function InvoiceRoute() {
   return (
     <main className="checkout-page invoice-page">
       <header className="invoice-page__header">
-        <h1>{invoice.merchant.name ?? 'Invoice'}</h1>
+        <h1>{invoice.merchant.name ?? t('invoiceTitle')}</h1>
         <p>
-          Invoice {invoice.number ?? ''} ·{' '}
-          <span data-testid="invoice-status">{STATUS_LABEL[invoice.status]}</span>
+          {t('invoiceNumber', { number: invoice.number ?? '' })} ·{' '}
+          <span data-testid="invoice-status">{t(INVOICE_STATUS_LABEL[invoice.status])}</span>
         </p>
-        {invoice.livemode ? null : <p className="invoice-page__test">Test mode</p>}
+        {invoice.livemode ? null : <p className="invoice-page__test">{t('testMode')}</p>}
       </header>
 
       <section className="invoice-page__summary">
         <p className="invoice-page__amount">{money(invoice.amount_remaining)}</p>
         <p>
           {invoice.status === 'paid'
-            ? `Paid on ${formatDate(invoice.paid_at)}`
+            ? t('invoicePaidOn', { date: formatDate(invoice.paid_at) })
             : invoice.due_date
-              ? `Due ${formatDate(invoice.due_date)}`
-              : `Issued ${formatDate(invoice.finalized_at ?? invoice.created)}`}
+              ? t('invoiceDueOn', { date: formatDate(invoice.due_date) })
+              : t('invoiceIssuedOn', {
+                  date: formatDate(invoice.finalized_at ?? invoice.created),
+                })}
         </p>
         {invoice.customer_name || invoice.customer_email ? (
-          <p>Billed to {invoice.customer_name ?? invoice.customer_email}</p>
+          <p>{t('billedTo', { name: invoice.customer_name ?? invoice.customer_email ?? '' })}</p>
         ) : null}
         {invoice.description ? <p>{invoice.description}</p> : null}
       </section>
@@ -119,9 +127,9 @@ export function InvoiceRoute() {
       <table className="invoice-page__lines">
         <thead>
           <tr>
-            <th scope="col">Description</th>
-            <th scope="col">Qty</th>
-            <th scope="col">Amount</th>
+            <th scope="col">{t('columnDescription')}</th>
+            <th scope="col">{t('columnQuantity')}</th>
+            <th scope="col">{t('columnAmount')}</th>
           </tr>
         </thead>
         <tbody>
@@ -131,7 +139,7 @@ export function InvoiceRoute() {
             <tr key={index}>
               <td>
                 {line.description ?? ''}
-                {line.proration ? ' (prorated)' : ''}
+                {line.proration ? ` ${t('prorated')}` : ''}
                 <br />
                 <small>
                   {formatDate(line.period.start)} – {formatDate(line.period.end)}
@@ -145,21 +153,21 @@ export function InvoiceRoute() {
       </table>
 
       <dl className="invoice-page__totals">
-        <dt>Subtotal</dt>
+        <dt>{t('subtotal')}</dt>
         <dd>{money(invoice.subtotal)}</dd>
         {invoice.total_discount !== '0' ? (
           <>
-            <dt>Discount</dt>
+            <dt>{t('discount')}</dt>
             <dd>-{money(invoice.total_discount)}</dd>
           </>
         ) : null}
-        <dt>Tax</dt>
+        <dt>{t('tax')}</dt>
         <dd>{invoice.tax === null ? '—' : money(invoice.tax)}</dd>
-        <dt>Total</dt>
+        <dt>{t('invoiceTotal')}</dt>
         <dd>{money(invoice.total)}</dd>
-        <dt>Amount paid</dt>
+        <dt>{t('amountPaid')}</dt>
         <dd>{money(invoice.amount_paid)}</dd>
-        <dt>Amount remaining</dt>
+        <dt>{t('amountRemaining')}</dt>
         <dd data-testid="invoice-remaining">{money(invoice.amount_remaining)}</dd>
       </dl>
 
@@ -174,7 +182,9 @@ export function InvoiceRoute() {
                 void pay('card');
               }}
             >
-              {paying ? 'Preparing payment…' : `Pay ${money(invoice.amount_remaining)} by card`}
+              {paying
+                ? t('preparingPayment')
+                : t('payByCardAmount', { amount: money(invoice.amount_remaining) })}
             </button>
           ) : null}
           {/* FairCoin is always offered (ADR 0021): shown with its reason when it cannot be paid. */}
@@ -186,17 +196,17 @@ export function InvoiceRoute() {
               void pay('faircoin');
             }}
           >
-            {paying ? 'Preparing payment…' : 'Pay with FairCoin'}
+            {paying ? t('preparingPayment') : t('payWithFaircoin')}
           </button>
           {invoice.faircoin.available ? null : (
             <p className="checkout-hint">
               {invoice.faircoin.unavailable_reason === 'faircoin_wallet_missing'
-                ? 'This merchant’s Peable wallet isn’t set up yet, so it cannot receive FairCoin.'
+                ? t('faircoinUnavailableWallet')
                 : invoice.faircoin.unavailable_reason === 'faircoin_network_closed'
-                  ? 'FairCoin payments are not open on this network yet.'
+                  ? t('faircoinUnavailableNetwork')
                   : invoice.faircoin.unavailable_reason === 'temporarily_unavailable'
-                    ? 'FairCoin could not be checked just now. Try again in a moment.'
-                    : 'FairCoin cannot be priced right now. Try again in a moment.'}
+                    ? t('faircoinUnavailableTemporary')
+                    : t('faircoinUnavailablePriceRetry')}
             </p>
           )}
         </div>
@@ -209,7 +219,7 @@ export function InvoiceRoute() {
 
       <p>
         <a href={invoice.invoice_pdf} target="_blank" rel="noreferrer">
-          Download PDF
+          {t('downloadPdf')}
         </a>
       </p>
     </main>

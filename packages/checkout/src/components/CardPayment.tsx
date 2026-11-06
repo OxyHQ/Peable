@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PaymentIntent } from '@peable.to/shared-types';
-import { useI18n } from '../i18n';
+import { providerLocale, useI18n } from '../i18n';
 import { getClientAction } from '../lib/intentClient';
 import {
   type CardElementsHandle,
@@ -115,7 +115,7 @@ export function CardPayment({
         }
         if (!fieldsRef.current) return;
         handleRef.current = mountCardElements({
-          sdk: factory(action.publishable_key, { locale }),
+          sdk: factory(action.publishable_key, { locale: providerLocale(locale) }),
           clientSecret: action.value,
           paymentTarget: fieldsRef.current,
           walletTarget: walletsRef.current,

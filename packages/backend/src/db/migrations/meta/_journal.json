@@ -715,6 +715,27 @@
       "when": 1793937680775,
       "tag": "0101_faircoin_identity_key_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793940324235,
+      "tag": "0102_checkout_locales",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793940325301,
+      "tag": "0103_payment_link_locales",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793940326401,
+      "tag": "0104_checkout_locales_validate",
+      "breakpoints": true
     }
   ]
 }

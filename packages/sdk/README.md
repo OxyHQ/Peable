@@ -814,7 +814,9 @@ marketplace) use it; there is no host copy of this logic.
 
 Its copy is ONE catalog in the SDK (`src/ui/locales/`): ar, bn, ca, de, en,
 es, fr, hi, id, it, ja, pt (Brazil), ru, tr and zh (Simplified) —
-`CHECKOUT_UI_LOCALES`. `locale` is a BCP 47 tag or `'auto'` (default: the
+`CHECKOUT_UI_LOCALES`, which is `CHECKOUT_LOCALES`: the one locale set the
+hosted checkout, the invoice and portal pages and the customer emails speak too
+(each in its own catalog). `locale` is a BCP 47 tag or `'auto'` (default: the
 browser or device), resolved by `resolveCheckoutLocale`; an unknown language
 reads English. Every catalog has exactly the English keys (`tsc`) and the same
 placeholders (`messages.test.ts`). A host never translates the sheet;

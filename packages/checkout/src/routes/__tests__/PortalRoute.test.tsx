@@ -180,3 +180,18 @@ test('an expired session says so', async () => {
   renderRoute();
   expect(await screen.findByText(/has expired/)).toBeDefined();
 });
+
+test('an Arabic portal is laid out right to left, in Arabic', async () => {
+  window.history.replaceState(null, '', '/portal/bps_tok_x?locale=ar');
+  try {
+    renderRoute();
+    expect(await screen.findByText('الاشتراكات')).toBeDefined();
+    expect(screen.getByText('عرض').getAttribute('href')).toBe(
+      'https://checkout.peable.to/invoice/inv_tok_1',
+    );
+    expect(document.documentElement.lang).toBe('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+  } finally {
+    window.history.replaceState(null, '', '/');
+  }
+});

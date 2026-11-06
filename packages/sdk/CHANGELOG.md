@@ -1,5 +1,27 @@
 # Changelog
 
+## 5.3.0 — every payer surface speaks the sheet's fifteen languages
+
+Requires `@peable.to/contracts` 5.3.0 and `@peable.to/shared-types` 5.3.0.
+
+Added:
+
+- `CheckoutLocale` (`CHECKOUT_LOCALES`) widens from six languages to the Pay with
+  Peable sheet's fifteen: `ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`,
+  `ja`, `pt` (Brazilian Portuguese), `ru`, `tr`, `zh` (Simplified Chinese). A Checkout
+  Session's or Payment Link's `locale` accepts every one of them, and the hosted and
+  embedded checkout, the hosted invoice and portal pages and the customer emails
+  render in it.
+- `CHECKOUT_RTL_LOCALES` and `checkoutLocaleDirection(locale)`: the text direction
+  a locale is written in (`rtl` for Arabic).
+
+Changed:
+
+- `CHECKOUT_UI_LOCALES` (`@peable.to/sdk/checkout/ui`) IS `CHECKOUT_LOCALES` now — one
+  locale set for every payer surface, read from `@peable.to/contracts/vocabulary/checkout`.
+  Its members are unchanged.
+- The checkout's Portuguese is Brazilian (`pt-BR`), the sheet's; it was European.
+
 ## 5.2.0 — live payment updates on a merchant's own site
 
 Requires `@peable.to/contracts` 5.2.0 and `@peable.to/shared-types` 5.2.0.

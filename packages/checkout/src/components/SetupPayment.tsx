@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useI18n } from '../i18n';
+import { providerLocale, useI18n } from '../i18n';
 import {
   confirmSetupOf,
   loadProviderSdk,
@@ -51,7 +51,7 @@ export function SetupPayment({
           setError(t('cardUnavailable'));
           return;
         }
-        const sdk = factory(action.publishable_key, { locale });
+        const sdk = factory(action.publishable_key, { locale: providerLocale(locale) });
         const elements = sdk.elements({
           clientSecret: action.value,
           ...(appearanceRef.current ? { appearance: appearanceRef.current } : {}),

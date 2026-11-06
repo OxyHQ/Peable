@@ -116,6 +116,7 @@ const ENTRIES: Readonly<Record<string, Entry>> = {
   '@peable.to/sdk/checkout/ui': {
     source: 'packages/sdk/src/ui/index.ts',
     peable: [
+      'contracts/vocabulary/checkout.js',
       'contracts/vocabulary/errors.js',
       'contracts/vocabulary/money.js',
       'contracts/vocabulary/paymentMethodConfigurations.js',

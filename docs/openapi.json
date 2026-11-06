@@ -5599,12 +5599,21 @@
                   "locale": {
                     "type": "string",
                     "enum": [
+                      "ar",
+                      "bn",
+                      "ca",
+                      "de",
                       "en",
                       "es",
                       "fr",
-                      "de",
+                      "hi",
+                      "id",
                       "it",
+                      "ja",
                       "pt",
+                      "ru",
+                      "tr",
+                      "zh",
                       "auto"
                     ],
                     "description": "`auto` follows the payer's browser."
@@ -21317,12 +21326,21 @@
                   "locale": {
                     "type": "string",
                     "enum": [
+                      "ar",
+                      "bn",
+                      "ca",
+                      "de",
                       "en",
                       "es",
                       "fr",
-                      "de",
+                      "hi",
+                      "id",
                       "it",
+                      "ja",
                       "pt",
+                      "ru",
+                      "tr",
+                      "zh",
                       "auto"
                     ],
                     "description": "`auto` follows the payer's browser."
@@ -22055,12 +22073,21 @@
                   "locale": {
                     "type": "string",
                     "enum": [
+                      "ar",
+                      "bn",
+                      "ca",
+                      "de",
                       "en",
                       "es",
                       "fr",
-                      "de",
+                      "hi",
+                      "id",
                       "it",
+                      "ja",
                       "pt",
+                      "ru",
+                      "tr",
+                      "zh",
                       "auto"
                     ],
                     "description": "`auto` follows the payer's browser."
@@ -53710,12 +53737,21 @@
               {
                 "type": "string",
                 "enum": [
+                  "ar",
+                  "bn",
+                  "ca",
+                  "de",
                   "en",
                   "es",
                   "fr",
-                  "de",
+                  "hi",
+                  "id",
                   "it",
-                  "pt"
+                  "ja",
+                  "pt",
+                  "ru",
+                  "tr",
+                  "zh"
                 ]
               },
               {
@@ -54250,12 +54286,21 @@
               {
                 "type": "string",
                 "enum": [
+                  "ar",
+                  "bn",
+                  "ca",
+                  "de",
                   "en",
                   "es",
                   "fr",
-                  "de",
+                  "hi",
+                  "id",
                   "it",
-                  "pt"
+                  "ja",
+                  "pt",
+                  "ru",
+                  "tr",
+                  "zh"
                 ]
               },
               {
@@ -59634,12 +59679,21 @@
               {
                 "type": "string",
                 "enum": [
+                  "ar",
+                  "bn",
+                  "ca",
+                  "de",
                   "en",
                   "es",
                   "fr",
-                  "de",
+                  "hi",
+                  "id",
                   "it",
-                  "pt"
+                  "ja",
+                  "pt",
+                  "ru",
+                  "tr",
+                  "zh"
                 ]
               },
               {
@@ -61811,12 +61865,21 @@
               {
                 "type": "string",
                 "enum": [
+                  "ar",
+                  "bn",
+                  "ca",
+                  "de",
                   "en",
                   "es",
                   "fr",
-                  "de",
+                  "hi",
+                  "id",
                   "it",
-                  "pt"
+                  "ja",
+                  "pt",
+                  "ru",
+                  "tr",
+                  "zh"
                 ]
               },
               {
