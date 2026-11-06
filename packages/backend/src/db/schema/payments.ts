@@ -670,7 +670,14 @@ export const checkoutSessions = pgTable(
     currency: text().notNull().default('FAIR'),
     /** The rail that settles the order's currency; FairCoin is offered beside it (ADR 0021). */
     rail: text().notNull().default('faircoin'),
-    /** The payee's FairCoin network: a FAIR order's, and a fiat order's when the payee has a key. */
+    /**
+     * Whether a FIAT order also offers the merchant's card methods (ADR 0021
+     * D1: the fiat methods are the merchant's to turn off, FairCoin never is).
+     * `false` is a FairCoin-only fiat order — `payment_method_types:
+     * ['faircoin']`. Meaningless on a FAIR order, which is FairCoin by its rail.
+     */
+    cardOffered: boolean().notNull().default(true),
+    /** The payee's FairCoin network: the merchant's (its environment's), or the seller's. */
     network: text(),
     /** The seller the session's payment pays (ADR 0012). */
     connectedAccountId: text(),

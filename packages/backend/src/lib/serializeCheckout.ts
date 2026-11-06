@@ -88,10 +88,10 @@ function expiresAtOf(row: CheckoutSessionRow): number {
  * card rail on a fiat one. A `setup` session saves a card and pays nothing.
  */
 export function sessionPaymentMethodTypes(
-  row: Pick<CheckoutSessionRow, 'mode' | 'rail'>,
+  row: Pick<CheckoutSessionRow, 'mode' | 'rail' | 'cardOffered'>,
 ): CheckoutSession['payment_method_types'] {
   if (row.mode === 'setup') return ['card'];
-  return row.rail === 'faircoin' ? ['faircoin'] : ['card', 'faircoin'];
+  return row.rail === 'faircoin' || !row.cardOffered ? ['faircoin'] : ['card', 'faircoin'];
 }
 
 export function toCheckoutSessionDTO(row: CheckoutSessionRow): CheckoutSession {

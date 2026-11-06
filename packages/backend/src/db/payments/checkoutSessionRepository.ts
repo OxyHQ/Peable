@@ -58,6 +58,8 @@ export interface CheckoutSessionRow {
   /** Its public `pi_…`. */
   readonly paymentIntentPublicId: string | null;
   readonly setupIntentId: string | null;
+  /** A fiat order also offers the card methods (`false`: FairCoin only, ADR 0021 D1). */
+  readonly cardOffered: boolean;
   readonly setupIntentPublicId: string | null;
   /** `amount_total` (the column is `amount`, see the table). */
   readonly amount: string;
@@ -138,6 +140,7 @@ const SESSION_COLUMNS = {
   rail: checkoutSessions.rail,
   network: checkoutSessions.network,
   connectedAccountId: checkoutSessions.connectedAccountId,
+  cardOffered: checkoutSessions.cardOffered,
   connectedAccountPublicId: publicIdOf('connected_accounts', 'connected_account_id'),
   customerId: checkoutSessions.customerId,
   customerPublicId: publicIdOf('customers', 'customer_id'),
@@ -286,6 +289,7 @@ export interface InsertCheckoutSessionParams {
   readonly rail: PaymentIntentRail;
   readonly network: NetworkType | null;
   readonly connectedAccountId?: string | null;
+  readonly cardOffered?: boolean;
   readonly metadata: Record<string, string>;
   readonly successUrl?: string | undefined;
   readonly cancelUrl?: string | undefined;
@@ -361,6 +365,7 @@ export async function insertCheckoutSession(
         rail: params.rail,
         network: params.network,
         connectedAccountId: params.connectedAccountId ?? null,
+        cardOffered: params.cardOffered ?? true,
         customerId: params.customerId ?? null,
         customerEmail: params.customerEmail ?? null,
         customerCreation: params.customerCreation ?? 'if_required',

@@ -89,7 +89,7 @@ const sessionFields = {
   payment_method_types: z
     .array(railSchema)
     .describe(
-      "What the payer may choose: `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); `['card']` in `setup` mode.",
+      "What the payer may choose: `['card', 'faircoin']` on a fiat order (`['faircoin']` when the merchant offered FairCoin only), `['faircoin']` on a FAIR one. FairCoin is always offered (ADR 0021); `['card']` in `setup` mode.",
     ),
   amount_subtotal: amount,
   amount_total: amount,
@@ -406,7 +406,7 @@ export const createCheckoutSessionParams = z
       .max(2)
       .optional()
       .describe(
-        "Must include `faircoin`, which is always offered (ADR 0021; leaving it out is 400 `payment_method_locked`): `['card', 'faircoin']` on a fiat order, `['faircoin']` on a FAIR one. Omit it for exactly that. The fiat methods are chosen in the payment method configuration.",
+        "Must include `faircoin`, which is always offered (ADR 0021; leaving it out is 400 `payment_method_locked`). On a fiat order `['card', 'faircoin']` (the default) or `['faircoin']` — a FairCoin-only order, the fiat methods being the merchant's to turn off; on a FAIR order `['faircoin']`. Which card methods are offered comes from the payment method configuration.",
       ),
     locale: localeParam.optional(),
     ui_mode: z.enum(CHECKOUT_UI_MODES).optional(),

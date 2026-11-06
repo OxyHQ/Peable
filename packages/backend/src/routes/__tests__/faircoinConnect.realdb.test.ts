@@ -668,6 +668,79 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(intent.faircoinQuote).toMatchObject({ currency: 'USD', amount: '1000', rate: '0.5' });
   });
 
+  test('a FairCoin-only USD order for a seller: the card is off, FairCoin pays the seller (ADR 0021 D1)', async () => {
+    const seller = await onboardSeller('store_fair_only', 61);
+    const res = await call('POST', '/v1/checkout_sessions', {
+      line_items: [
+        {
+          price_data: { currency: 'USD', unit_amount: '1000', product_data: { name: 'Mug' } },
+          quantity: 1,
+        },
+      ],
+      connected_account: seller.id,
+      payment_method_types: ['faircoin'],
+      customer_email: 'b@example.com',
+      success_url: 'https://platform.example/ok',
+    });
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({ currency: 'USD', payment_method_types: ['faircoin'] });
+    const secret = {
+      'X-Peable-Client-Secret': decodeURIComponent(String(res.json.url).split('#cs=')[1] ?? ''),
+    };
+    const publicView = await call(
+      'GET',
+      `/v1/checkout_sessions/${String(res.json.id)}/public`,
+      undefined,
+      secret,
+    );
+    expect(publicView.json).toMatchObject({
+      payment_method_types: ['faircoin'],
+      publishable_key: null,
+    });
+    const byCard = await call(
+      'POST',
+      `/v1/checkout_sessions/${String(res.json.id)}/public/confirm`,
+      { payment_method_type: 'card' },
+      secret,
+    );
+    expect(byCard.status).toBe(400);
+    // No choice named: a FairCoin-only order confirms in FairCoin.
+    const confirmed = await call(
+      'POST',
+      `/v1/checkout_sessions/${String(res.json.id)}/public/confirm`,
+      {},
+      secret,
+    );
+    expect(confirmed.status).toBe(200);
+    const intent = must(
+      await findIntentByPublicId(gatewayDb(), (confirmed.json.payment_intent as { id: string }).id),
+    );
+    expect(intent).toMatchObject({ rail: 'faircoin', amount: '2000000000' });
+    expect(intent.address).toBe(sellerAddress(61, 1));
+    expect(intent.faircoinQuote).toMatchObject({ currency: 'USD', amount: '1000' });
+  });
+
+  test('a FAIR order cannot offer the card, and FairCoin cannot be left out', async () => {
+    const seller = await onboardSeller('store_fair_rules', 62);
+    const lines = (currency: string, amount: string) => [
+      { price_data: { currency, unit_amount: amount, product_data: { name: 'X' } }, quantity: 1 },
+    ];
+    const cardOnFair = await call('POST', '/v1/checkout_sessions', {
+      line_items: lines('FAIR', '100000000'),
+      connected_account: seller.id,
+      payment_method_types: ['card', 'faircoin'],
+      success_url: 'https://platform.example/ok',
+    });
+    expect(cardOnFair.status).toBe(400);
+    const noFaircoin = await call('POST', '/v1/checkout_sessions', {
+      line_items: lines('USD', '1000'),
+      payment_method_types: ['card'],
+      success_url: 'https://platform.example/ok',
+    });
+    expect(noFaircoin.status).toBe(400);
+    expect((noFaircoin.json.error as Json).code).toBe('payment_method_locked');
+  });
+
   test("delivers the payment's events to the PLATFORM, tagged with the seller", async () => {
     const seller = await onboardSeller('store_events', 45);
     const created = await call(

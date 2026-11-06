@@ -425,7 +425,9 @@ rules, each of which is easy to undo:
 - **FairCoin is always offered, and nothing turns it off (ADR 0021).** A fiat
   order's `payment_method_types` is `['card', 'faircoin']` (a FAIR one's
   `['faircoin']`) and the session carries the payee's `network`; a session
-  `payment_method_types` without `faircoin` is 400 `payment_method_locked`.
+  `payment_method_types` without `faircoin` is 400 `payment_method_locked`, and
+  `['faircoin']` on a fiat order is a FairCoin-only one (`card_offered = false`:
+  the fiat methods are the merchant's to turn off, FairCoin never is).
   The payer chooses at confirm (`payment_method_type`). FairCoin on a FIAT
   order is a FairCoin PaymentIntent for the QUOTED FAIR amount
   (`services/faircoin/quote.ts`, the ONE reader: Explorer FAIR/USD `wfair-base`
