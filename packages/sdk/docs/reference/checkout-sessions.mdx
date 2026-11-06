@@ -59,6 +59,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `line_items[][adjustable_quantity][enabled]` **required** | boolean |  |
 | `line_items[][adjustable_quantity][minimum]` | integer | Between 0 and 999999. |
 | `line_items[][adjustable_quantity][maximum]` | integer | Between 1 and 999999. |
+| `line_items[][connected_account]` | string | The seller (`ca_…`) this line is sold by (ADR 0021 D6). A FairCoin payment pays every seller of the order its share directly, in one transaction, split by each seller's lines' `amount_subtotal`; a line without one is the merchant's own sale. The card payment stays the merchant's charge. Exclusive with the session's `connected_account`. 1–255 characters. |
 | `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
 | `discounts` | array of object | At most one; mutually exclusive with `allow_promotion_codes`. At most 1 items. |
 | `allow_promotion_codes` | boolean |  |
@@ -102,7 +103,9 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `client_reference_id` | string | 1–200 characters. |
 | `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
 | `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
-| `connected_account` | string | Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only. 1–255 characters. |
+| `connected_account` | string | Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only. Exclusive with `line_items[].connected_account`. 1–255 characters. |
+| `payment_intent_data` | object |  |
+| `payment_intent_data[metadata]` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
 | `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
 
 **Response `201`**

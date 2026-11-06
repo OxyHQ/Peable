@@ -33,13 +33,19 @@ import {
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
-import { connectedAccountLinks, connectedAccounts, idempotencyKeys } from '../../db/schema';
+import {
+  balanceTransactions,
+  connectedAccountLinks,
+  connectedAccounts,
+  idempotencyKeys,
+} from '../../db/schema';
 import { findAccountByPublicId } from '../../db/accounts/connectedAccountRepository';
 import { createFaircoinAccountLink } from '../../services/accounts/faircoinOnboarding';
 import { config } from '../../config';
 import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import { transitionIntent } from '../../services/intentTransition';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
+import { reportFaircoinBroadcast } from '../../services/faircoinBroadcast';
 import { createCheckoutSessionsRouter } from '../checkoutSessions';
 import { sendError } from '../../lib/http';
 import { createConnectRouter } from '../connect';
@@ -818,5 +824,218 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     expect(refused.status).toBe(409);
     expect((refused.json.error as Json).code).toBe('faircoin_wallet_missing');
+  });
+
+  describe('a multi-seller order (ADR 0021 D6)', () => {
+    const usd = (unit: string, name: string, seller?: unknown) => ({
+      price_data: { currency: 'USD', unit_amount: unit, product_data: { name } },
+      quantity: 1,
+      ...(seller ? { connected_account: seller } : {}),
+    });
+    const secretOf = (session: Json) => ({
+      'X-Peable-Client-Secret': decodeURIComponent(String(session.url).split('#cs=')[1] ?? ''),
+    });
+    const platformAddress = (index: number) =>
+      deriveSocialReceiveAddress(testIdentityPublicKey('acct_platform'), index, getNetwork('testnet'));
+
+    async function multiSellerOrder(a: number, b: number) {
+      const sellerA = await onboardSeller(`store_split_a_${String(a)}`, a);
+      const sellerB = await onboardSeller(`store_split_b_${String(b)}`, b);
+      const res = await call('POST', '/v1/checkout_sessions', {
+        // Seller A sells 30.00 + 10.00, seller B 10.00: weights 4:1.
+        line_items: [usd('3000', 'Lamp', sellerA.id), usd('1000', 'Mug', sellerB.id), usd('1000', 'Shade', sellerA.id)],
+        payment_intent_data: { metadata: { mercaria_payment_id: `pay_${String(a)}` } },
+        customer_email: 'b@example.com',
+        success_url: 'https://platform.example/ok',
+      });
+      expect(res.status).toBe(201);
+      expect(res.json).toMatchObject({ connected_account: null, payment_method_types: ['card', 'faircoin'] });
+      return { sellerA, sellerB, session: res.json };
+    }
+
+    test('ONE FairCoin payment pays every seller its share, from its own wallet tree', async () => {
+      const { sellerA, sellerB, session } = await multiSellerOrder(80, 81);
+      const view = await call('GET', `/v1/checkout_sessions/${String(session.id)}/public`, undefined, secretOf(session));
+      expect(view.json.faircoin).toMatchObject({ available: true, unavailable_reason: null });
+
+      const confirmed = await call(
+        'POST',
+        `/v1/checkout_sessions/${String(session.id)}/public/confirm`,
+        { payment_method_type: 'faircoin' },
+        secretOf(session),
+      );
+      expect(confirmed.status).toBe(200);
+      const wire = confirmed.json.payment_intent as Json;
+      // 50.00 USD at 0.5 USD/FAIR: 100 FAIR, split 4:1 by subtotal.
+      expect(wire).toMatchObject({
+        rail: 'faircoin',
+        amount: '10000000000',
+        connected_account: null,
+        metadata: { mercaria_payment_id: 'pay_80' },
+      });
+      const outputs = [
+        { address: sellerAddress(80, 1), amount: '8000000000' },
+        { address: sellerAddress(81, 1), amount: '2000000000' },
+      ];
+      expect(wire.next_action).toEqual({
+        type: 'faircoin_payment',
+        faircoin_payment: {
+          address: null,
+          network: 'testnet',
+          amount: '10000000000',
+          currency: 'FAIR',
+          uri: null,
+          outputs,
+        },
+      });
+      expect((wire.faircoin as Json).address).toBeNull();
+      expect((wire.faircoin as Json).outputs).toEqual([
+        { ...outputs[0], connected_account: sellerA.id },
+        { ...outputs[1], connected_account: sellerB.id },
+      ]);
+
+      // The payer broadcasts; the watcher verifies EVERY output.
+      const row = must(await findIntentByPublicId(gatewayDb(), String(wire.id)));
+      const txid = 'c'.repeat(64);
+      expect((await reportFaircoinBroadcast(row, txid)).kind).toBe('updated');
+      const { SettlementWatcher } = await import('../../services/settlementWatcher');
+      const changed: string[] = [];
+      const watcher = new SettlementWatcher({
+        getTransaction: async (id) =>
+          id === txid
+            ? {
+                txid,
+                confirmations: 99,
+                outputs: [
+                  { address: outputs[0].address, valueSat: 8_000_000_000n },
+                  { address: outputs[1].address, valueSat: 2_000_000_000n },
+                  { address: 'TChangeChangeChange', valueSat: 1n },
+                ],
+              }
+            : null,
+        onChange: (intent) => {
+          changed.push(intent.publicId);
+        },
+      });
+      await watcher.check();
+      expect(changed).toContain(String(wire.id));
+      const settled = must(await findIntentByPublicId(gatewayDb(), String(wire.id)));
+      expect(settled.status).toBe('succeeded');
+
+      // The informational ledger: one entry per seller, never the platform's.
+      const entries = await gatewayDb()
+        .select()
+        .from(balanceTransactions)
+        .where(eq(balanceTransactions.paymentIntentId, settled.id));
+      expect(
+        entries
+          .map((entry) => [entry.connectedAccountId, entry.amount, entry.fee])
+          .sort((x, y) => String(x[1]).localeCompare(String(y[1]))),
+      ).toEqual([
+        [must(await findAccountByPublicId(gatewayDb(), platform.id, String(sellerB.id))).id, '2000000000', '0'],
+        [must(await findAccountByPublicId(gatewayDb(), platform.id, String(sellerA.id))).id, '8000000000', '0'],
+      ]);
+    });
+
+    test('one output short cancels the whole payment as underpaid', async () => {
+      const { session } = await multiSellerOrder(82, 83);
+      const confirmed = await call(
+        'POST',
+        `/v1/checkout_sessions/${String(session.id)}/public/confirm`,
+        { payment_method_type: 'faircoin' },
+        secretOf(session),
+      );
+      const id = String((confirmed.json.payment_intent as Json).id);
+      const row = must(await findIntentByPublicId(gatewayDb(), id));
+      const txid = 'd'.repeat(64);
+      await reportFaircoinBroadcast(row, txid);
+      const { SettlementWatcher } = await import('../../services/settlementWatcher');
+      const watcher = new SettlementWatcher({
+        getTransaction: async (requested) =>
+          requested === txid
+            ? {
+                txid,
+                confirmations: 99,
+                // Seller A overpaid, seller B one unit short: not a payment.
+                outputs: [
+                  { address: sellerAddress(82, 1), valueSat: 9_000_000_000n },
+                  { address: sellerAddress(83, 1), valueSat: 1_999_999_999n },
+                ],
+              }
+            : null,
+        onChange: () => undefined,
+      });
+      await watcher.check();
+      expect(must(await findIntentByPublicId(gatewayDb(), id))).toMatchObject({
+        status: 'canceled',
+        cancellationReason: 'underpaid',
+      });
+    });
+
+    test("the merchant's own lines pay its owner's wallet beside the sellers", async () => {
+      const seller = await onboardSeller('store_split_mixed', 84);
+      const res = await call('POST', '/v1/checkout_sessions', {
+        line_items: [usd('1000', 'Own', undefined), usd('3000', 'Theirs', seller.id)],
+        customer_email: 'b@example.com',
+        success_url: 'https://platform.example/ok',
+      });
+      const confirmed = await call(
+        'POST',
+        `/v1/checkout_sessions/${String(res.json.id)}/public/confirm`,
+        { payment_method_type: 'faircoin' },
+        secretOf(res.json),
+      );
+      expect(confirmed.json.error).toBeUndefined();
+      expect(confirmed.status).toBe(200);
+      const faircoin = (confirmed.json.payment_intent as Json).faircoin as Json;
+      const outputs = faircoin.outputs as Json[];
+      expect(outputs.map((o) => [o.amount, o.connected_account])).toEqual([
+        ['2000000000', null],
+        ['6000000000', seller.id],
+      ]);
+      expect(outputs[1]?.address).toBe(sellerAddress(84, 1));
+      expect(String(outputs[0]?.address)).not.toBe(String(outputs[1]?.address));
+      // The owner's address is on the owner's own cursor.
+      const ownerAddresses = [1, 2, 3, 4, 5, 6, 7, 8].map(platformAddress);
+      expect(ownerAddresses).toContain(String(outputs[0]?.address));
+    });
+
+    test('a seller not ready for FairCoin makes FairCoin unavailable, never refuses the order', async () => {
+      const ready = await onboardSeller('store_split_ready', 85);
+      const pending = await call('POST', '/v1/connected_accounts', {
+        external_ref: 'store_split_pending',
+        faircoin: { network: 'testnet', oxy_user_id: sellerUser(86) },
+      });
+      const res = await call('POST', '/v1/checkout_sessions', {
+        line_items: [usd('1000', 'A', ready.id), usd('1000', 'B', pending.json.id)],
+        success_url: 'https://platform.example/ok',
+      });
+      expect(res.status).toBe(201);
+      const view = await call('GET', `/v1/checkout_sessions/${String(res.json.id)}/public`, undefined, secretOf(res.json));
+      expect(view.json.faircoin).toMatchObject({
+        available: false,
+        unavailable_reason: 'faircoin_wallet_missing',
+      });
+    });
+
+    test('a line seller is one of THIS merchant’s, and exclusive with the session seller', async () => {
+      const seller = await onboardSeller('store_split_excl', 87);
+      const both = await call('POST', '/v1/checkout_sessions', {
+        line_items: [usd('1000', 'A', seller.id)],
+        connected_account: seller.id,
+        success_url: 'https://platform.example/ok',
+      });
+      expect(both.status).toBe(400);
+      expect((both.json.error as Json).param).toBe('connected_account');
+      const unknown = await call('POST', '/v1/checkout_sessions', {
+        line_items: [usd('1000', 'A', 'ca_nobody')],
+        success_url: 'https://platform.example/ok',
+      });
+      expect(unknown.status).toBe(400);
+      expect(unknown.json.error).toMatchObject({
+        code: 'resource_missing',
+        param: 'line_items[0][connected_account]',
+      });
+    });
   });
 });

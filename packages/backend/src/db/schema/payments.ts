@@ -714,6 +714,11 @@ export const checkoutSessions = pgTable(
      */
     linkOperationKey: text(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
+    /**
+     * `payment_intent_data.metadata` (ADR 0021 D8): copied to every payment
+     * the session creates. NULL when the merchant sent none.
+     */
+    paymentIntentMetadata: jsonb().$type<Record<string, string>>(),
     successUrl: text(),
     cancelUrl: text(),
     /** NULL only on a row that predates the order model, until its backfill. */
@@ -1056,5 +1061,65 @@ export const paymentLinks = pgTable(
         `customer_creation in (${inList(CHECKOUT_CUSTOMER_CREATIONS)}) and submit_type in (${inList(CHECKOUT_SUBMIT_TYPES)}) and (locale is null or locale in (${inList(CHECKOUT_LOCALES)}))`,
       ),
     ),
+  ],
+);
+
+/**
+ * The outputs of a FairCoin payment's ONE transaction (ADR 0021 D6), in order.
+ *
+ * A payment to one payee is the one-output case — every FairCoin intent created
+ * since this table writes its rows in the intent's own transaction. Each output
+ * pays one account's Peable wallet: `connected_account_id` names the seller
+ * (NULL: the merchant's own owner), `recipient_account_id` the Oxy account whose
+ * identity key the address derives from, reserved on THAT account's cursor
+ * (ADR 0002, ADR 0021 D5). `payment_intents.address` keeps output 0; an intent
+ * written before this table has no rows and reads as its one output from it.
+ *
+ * Not a hot table, and its references are the intent's own firewall: the seller
+ * belongs to the merchant and is on the payment's network (the composite key),
+ * exactly as `payment_intents_connected_account_network_fkey` binds an
+ * on-behalf payment.
+ */
+export const paymentIntentOutputs = pgTable(
+  'payment_intent_outputs',
+  {
+    id: generatedId(),
+    paymentIntentId: text()
+      .notNull()
+      .references(() => paymentIntents.id, { onDelete: 'cascade' }),
+    merchantId: text()
+      .notNull()
+      .references(() => merchants.id, { onDelete: 'restrict' }),
+    position: integer().notNull(),
+    connectedAccountId: text(),
+    network: text().notNull(),
+    /** An Oxy account id (another service's key space: no foreign key). */
+    recipientAccountId: text().notNull(),
+    address: text().notNull(),
+    amount: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('payment_intent_outputs_intent_position_key').on(
+      table.paymentIntentId,
+      table.position,
+    ),
+    /** One reservation, one address: enrichment and the watcher resolve by it. */
+    uniqueIndex('payment_intent_outputs_network_address_key').on(table.network, table.address),
+    foreignKey({
+      name: 'payment_intent_outputs_connected_account_network_fkey',
+      columns: [table.connectedAccountId, table.merchantId, table.network],
+      foreignColumns: [
+        connectedAccounts.id,
+        connectedAccounts.merchantId,
+        connectedAccounts.network,
+      ],
+    }).onDelete('restrict'),
+    check(
+      'payment_intent_outputs_amount_check',
+      sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}' and amount <> '0'`),
+    ),
+    check('payment_intent_outputs_position_check', sql`${table.position} >= 0`),
+    check('payment_intent_outputs_network_check', sql.raw(`network in (${inList(NETWORK_TYPES)})`)),
   ],
 );

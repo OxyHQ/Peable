@@ -19,6 +19,7 @@ import {
   findProductsByPublicIds,
   type ProductRow,
 } from '../../db/catalog/productRepository';
+import { findAccountByPublicId } from '../../db/accounts/connectedAccountRepository';
 import type { DatabaseOrTransaction } from '../../db/postgres';
 import type { NewLineItem } from '../../db/payments/checkoutSessionRepository';
 import type { PaymentLinkLineItemRow } from '../../db/payments/paymentLinkRepository';
@@ -61,6 +62,8 @@ export interface RequestedLine {
         readonly maximum?: number | undefined;
       }
     | undefined;
+  /** The seller's PUBLIC `ca_…` (ADR 0021 D6). */
+  readonly connected_account?: string | undefined;
 }
 
 /** A line before pricing: what it sells and how it is priced. */
@@ -76,6 +79,8 @@ export interface ResolvedLine {
   readonly recurring: boolean;
   readonly quantity: number;
   readonly adjustable: { readonly minimum: number; readonly maximum: number } | null;
+  /** The seller this line is sold by (INTERNAL id, ADR 0021 D6); absent: the merchant's own. */
+  readonly connectedAccountId?: string | null;
 }
 
 export function linePriceOf(price: PriceRow): StoredLinePrice {
@@ -125,6 +130,20 @@ export async function resolveRequestedLines(
   const lines: ResolvedLine[] = [];
   for (const [index, line] of requested.entries()) {
     const param = `line_items[${index}]`;
+    // The seller a line is sold by (ADR 0021 D6): one of THIS merchant's
+    // sellers. Its FairCoin readiness is the order's availability, never a refusal.
+    let connectedAccountId: string | null = null;
+    if (line.connected_account !== undefined) {
+      const account = await findAccountByPublicId(db, merchantId, line.connected_account);
+      if (!account) {
+        throw invalid(
+          'resource_missing',
+          `no such connected account: '${line.connected_account}'`,
+          `${param}[connected_account]`,
+        );
+      }
+      connectedAccountId = account.id;
+    }
     const adjustable = adjustableBoundsOf(line.adjustable_quantity);
     if (line.price !== undefined) {
       const price = await findPriceForMerchant(db, line.price, merchantId);
@@ -141,7 +160,10 @@ export async function resolveRequestedLines(
       if (!product?.active) {
         throw invalid('parameter_invalid', 'the price’s product is archived', `${param}[price]`);
       }
-      lines.push(catalogLine(price, product, line.quantity, adjustable));
+      lines.push({
+        ...catalogLine(price, product, line.quantity, adjustable),
+        connectedAccountId,
+      });
       continue;
     }
     const data = line.price_data;
@@ -197,6 +219,7 @@ export async function resolveRequestedLines(
       recurring: data.recurring !== undefined,
       quantity: line.quantity,
       adjustable,
+      connectedAccountId,
     });
   }
   const currency = lines[0]?.currency;
@@ -238,6 +261,7 @@ export function toNewLineItems(
       amountDiscount: fromBaseUnits(amounts.amountDiscount),
       amountTax: fromBaseUnits(amounts.amountTax),
       amountTotal: fromBaseUnits(amounts.amountTotal),
+      connectedAccountId: line.connectedAccountId ?? null,
     };
   });
 }

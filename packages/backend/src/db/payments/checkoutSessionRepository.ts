@@ -95,6 +95,8 @@ export interface CheckoutSessionRow {
   readonly confirmationMessage: string | null;
   readonly linkOperationKey: string | null;
   readonly metadata: Record<string, string>;
+  /** `payment_intent_data.metadata` (ADR 0021 D8); `null` when none was sent. */
+  readonly paymentIntentMetadata: Record<string, string> | null;
   readonly successUrl: string | null;
   readonly cancelUrl: string | null;
   readonly expiresAt: Date | null;
@@ -165,6 +167,7 @@ const SESSION_COLUMNS = {
   confirmationMessage: checkoutSessions.confirmationMessage,
   linkOperationKey: checkoutSessions.linkOperationKey,
   metadata: checkoutSessions.metadata,
+  paymentIntentMetadata: checkoutSessions.paymentIntentMetadata,
   successUrl: checkoutSessions.successUrl,
   cancelUrl: checkoutSessions.cancelUrl,
   expiresAt: checkoutSessions.expiresAt,
@@ -206,6 +209,8 @@ export interface CheckoutLineItemRow {
   readonly amountDiscount: string;
   readonly amountTax: string;
   readonly amountTotal: string;
+  /** The seller this line is sold by (INTERNAL id, ADR 0021 D6); `null`: the merchant's own. */
+  readonly connectedAccountId: string | null;
   readonly createdAt: Date;
 }
 
@@ -236,6 +241,7 @@ const LINE_COLUMNS = {
   amountDiscount: checkoutSessionLineItems.amountDiscount,
   amountTax: checkoutSessionLineItems.amountTax,
   amountTotal: checkoutSessionLineItems.amountTotal,
+  connectedAccountId: checkoutSessionLineItems.connectedAccountId,
   createdAt: checkoutSessionLineItems.createdAt,
 } as const;
 
@@ -259,6 +265,8 @@ export interface NewLineItem {
   readonly amountDiscount: string;
   readonly amountTax: string;
   readonly amountTotal: string;
+  /** The seller this line is sold by (INTERNAL id); absent/`null`: the merchant's own. */
+  readonly connectedAccountId?: string | null;
 }
 
 // ---- Insert ----------------------------------------------------------------------
@@ -291,6 +299,7 @@ export interface InsertCheckoutSessionParams {
   readonly connectedAccountId?: string | null;
   readonly cardOffered?: boolean;
   readonly metadata: Record<string, string>;
+  readonly paymentIntentMetadata?: Record<string, string> | null;
   readonly successUrl?: string | undefined;
   readonly cancelUrl?: string | undefined;
   readonly mode?: CheckoutSessionMode;
@@ -381,6 +390,7 @@ export async function insertCheckoutSession(
         confirmationMessage: params.confirmationMessage ?? null,
         linkOperationKey: params.linkOperationKey ?? null,
         metadata: params.metadata,
+        paymentIntentMetadata: params.paymentIntentMetadata ?? null,
         successUrl: params.successUrl ?? null,
         cancelUrl: params.cancelUrl ?? null,
         expiresAt: params.expiresAt ?? new Date(Date.now() + DEFAULT_SESSION_LIFETIME_MS),
@@ -414,6 +424,7 @@ export async function insertCheckoutSession(
           amountDiscount: line.amountDiscount,
           amountTax: line.amountTax,
           amountTotal: line.amountTotal,
+          connectedAccountId: line.connectedAccountId ?? null,
         })),
       );
     }

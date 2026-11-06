@@ -11,6 +11,7 @@ import type {
   FaircoinQuote,
   Shipping,
 } from '@peable.to/shared-types';
+import { isBaseUnitString } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -21,8 +22,10 @@ import {
 import {
   findIntentById,
   findIntentByIdempotencyKey,
+  insertFaircoinOutputs,
   insertPaymentIntent,
   linkProviderObject,
+  type InsertFaircoinOutputParams,
 } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { Database } from '../db/postgres';
@@ -158,6 +161,13 @@ export async function resolveConnectedAccountForPayment(
   return account;
 }
 
+/** One output of a split FairCoin payment, before its address is reserved. */
+export interface FaircoinSplitEntry {
+  readonly connectedAccount: string | null;
+  /** Base units, positive. */
+  readonly amount: string;
+}
+
 export interface CreateIntentInput {
   paymentLinkId?: string;
   merchant: MerchantRow;
@@ -208,6 +218,14 @@ export interface CreateIntentInput {
    * `amount` must be its FAIR amount; the payment expires with the quote.
    */
   faircoinQuote?: FaircoinQuote;
+  /**
+   * FairCoin only, set only by the order surfaces (a Checkout Session whose
+   * lines name their sellers, ADR 0021 D6): the outputs of the ONE transaction,
+   * in order — each seller's (`connectedAccount`, its PUBLIC `ca_…`) or the
+   * merchant owner's (`null`) share, summing to `amount`. Exclusive with
+   * `connectedAccount`. One entry is exactly a `connectedAccount` payment.
+   */
+  faircoinSplit?: readonly FaircoinSplitEntry[];
   returnUrl?: string;
   /**
    * Card only — a platform acting for one of its connected accounts
@@ -736,14 +754,60 @@ function cardRailUnavailable(environment: MerchantEnvironment): string {
   return `the card rail is not configured for ${environment === 'production' ? 'live' : 'test'} mode on this deployment`;
 }
 
+/**
+ * A split's sellers, resolved and ready, in order. `[]` when the payment is not
+ * split. A one-entry split is a `connectedAccount` payment (or the merchant's
+ * own); several entries must sum to `amount`, with no account named twice.
+ */
+async function resolveFaircoinSplit(
+  merchant: MerchantRow,
+  input: CreateIntentInput,
+): Promise<readonly { account: ConnectedAccountRow | null; amount: string }[]> {
+  const split = input.faircoinSplit;
+  if (split === undefined || split.length === 0) return [];
+  if (input.connectedAccount !== undefined) {
+    throw new Error('a split payment names its sellers per output, not as connectedAccount');
+  }
+  if ((input.rail ?? 'faircoin') !== 'faircoin') {
+    throw new RailMismatchError('a split payment is FairCoin only');
+  }
+  let sum = 0n;
+  const seen = new Set<string | null>();
+  const resolved: { account: ConnectedAccountRow | null; amount: string }[] = [];
+  for (const entry of split) {
+    if (!isBaseUnitString(entry.amount) || BigInt(entry.amount) <= 0n) {
+      throw new Error(`a split output must be a positive base-unit amount, not '${entry.amount}'`);
+    }
+    if (seen.has(entry.connectedAccount)) {
+      throw new Error('a split payment names each recipient once');
+    }
+    seen.add(entry.connectedAccount);
+    sum += BigInt(entry.amount);
+    resolved.push({
+      account:
+        entry.connectedAccount === null
+          ? null
+          : await resolveConnectedAccountForPayment(merchant, entry.connectedAccount),
+      amount: entry.amount,
+    });
+  }
+  if (sum !== BigInt(input.amount)) {
+    throw new Error(`a split payment's outputs sum to ${sum}, not its amount ${input.amount}`);
+  }
+  return resolved;
+}
+
 export async function createIntent(input: CreateIntentInput): Promise<CreateIntentResult> {
   const { merchant, amount, metadata, expiresInSeconds, idempotencyKey } = input;
-  // The seller first: an unknown or unready one is refused before anything —
+  // The sellers first: an unknown or unready one is refused before anything —
   // a reservation, a row, a provider call — happens.
+  const split = await resolveFaircoinSplit(merchant, input);
   const account =
-    input.connectedAccount !== undefined
-      ? await resolveConnectedAccountForPayment(merchant, input.connectedAccount)
-      : undefined;
+    split.length === 1
+      ? (split[0]?.account ?? undefined)
+      : input.connectedAccount !== undefined
+        ? await resolveConnectedAccountForPayment(merchant, input.connectedAccount)
+        : undefined;
   const { rail, currency, network } = resolveRail(merchant, input, account);
   if (input.faircoinQuote !== undefined && rail !== 'faircoin') {
     throw new Error('a FairCoin quote prices a FairCoin payment only');
@@ -821,10 +885,36 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // owner's, or — on behalf of a seller — the seller's own, on that account's
   // one cursor, derived from its public identity key (ADR 0002). The coins go
   // straight to their wallet.
-  const reserved =
-    rail === 'faircoin' && network !== null
-      ? await reserveFaircoinAddress(faircoinRecipientOf(merchant, account), network)
-      : null;
+  //
+  // A split payment (ADR 0021 D6) reserves ONE address per output, each on its
+  // own recipient's cursor — every seller's address is in the seller's own tree.
+  const outputs: InsertFaircoinOutputParams[] = [];
+  if (rail === 'faircoin' && network !== null) {
+    if (split.length > 1) {
+      for (const entry of split) {
+        const accountNetwork = entry.account?.network;
+        if (entry.account && accountNetwork !== network) {
+          if (!accountNetwork)
+            throw new AccountNotReadyError('this seller has no FairCoin account');
+          throw new NetworkMismatchError(network, accountNetwork, 'connected account');
+        }
+      }
+    }
+    const entries = split.length > 1 ? split : [{ account: account ?? null, amount }];
+    for (const entry of entries) {
+      const reservedOutput = await reserveFaircoinAddress(
+        faircoinRecipientOf(merchant, entry.account),
+        network,
+      );
+      outputs.push({
+        connectedAccountId: entry.account?.id ?? null,
+        recipientAccountId: reservedOutput.recipientAccountId,
+        address: reservedOutput.address,
+        amount: entry.amount,
+      });
+    }
+  }
+  const reserved = outputs[0] ?? null;
   const address = reserved?.address ?? null;
   const publicId = newId('pi');
   const clientSecret = clientSecretFor(publicId);
@@ -887,8 +977,14 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       metadata: metadata ?? {},
       expiresAt,
     });
-    if (inserted) await recordIntentCreated(tx, inserted);
-    return inserted;
+    if (!inserted) return inserted;
+    // The outputs in the intent's transaction; the row is read again so the
+    // event's snapshot (and the answer) carry them.
+    await insertFaircoinOutputs(tx, inserted, outputs);
+    const created =
+      outputs.length > 0 ? ((await findIntentById(tx, inserted.id)) ?? inserted) : inserted;
+    await recordIntentCreated(tx, created);
+    return created;
   });
 
   if (intent) {

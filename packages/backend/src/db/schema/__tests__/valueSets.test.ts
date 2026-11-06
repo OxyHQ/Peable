@@ -200,6 +200,7 @@ describe('the base-unit amount pattern', () => {
     // item's `unit_amount`; a credit note's six totals and its lines' `amount`
     // and `tax_amount`; a meter event's `value`. (Its SIGNED amounts carry
     // `SIGNED_BASE_UNIT_STRING_PATTERN` instead.)
-    expect(occurrences).toBe(45);
+    // ADR 0021 D6: a FairCoin output's `amount` (`payment_intent_outputs`).
+    expect(occurrences).toBe(46);
   });
 });

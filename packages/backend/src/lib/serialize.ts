@@ -24,7 +24,7 @@ import { UNITS_PER_COIN, canExpire, normalizeDisputeReason } from '@peable.to/sh
 import type { ContributionDetails } from '@peable.to/contracts/contributions';
 import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
-import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import { faircoinOutputsOf, type PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { ChargeRow } from '../db/payments/chargeRepository';
 import type { CustomerRow } from '../db/customers/customerRepository';
 import type { PaymentMethodRow } from '../db/customers/paymentMethodRepository';
@@ -61,14 +61,19 @@ export function fairDecimal(baseUnits: string): string {
 function nextActionFor(row: PaymentIntentRow): PaymentIntentNextAction | null {
   if (row.status !== 'requires_action') return null;
   if (row.rail === 'faircoin' && row.address !== null && row.network !== null) {
+    // ADR 0021 D6: one transaction with every output. A `faircoin:` URI names
+    // ONE address, so a payment of several outputs has no `address`/`uri`.
+    const outputs = faircoinOutputsOf(row);
+    const single = outputs.length === 1 ? outputs[0] : undefined;
     return {
       type: 'faircoin_payment',
       faircoin_payment: {
-        address: row.address,
+        address: single?.address ?? null,
         network: row.network,
         amount: row.amount,
         currency: 'FAIR',
-        uri: buildFairCoinURI(row.address, fairDecimal(row.amount)),
+        uri: single ? buildFairCoinURI(single.address, fairDecimal(single.amount)) : null,
+        outputs: outputs.map((output) => ({ address: output.address, amount: output.amount })),
       },
     };
   }
@@ -122,7 +127,12 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
       row.rail === 'faircoin' && row.network !== null && row.address !== null
         ? {
             network: row.network,
-            address: row.address,
+            address: faircoinOutputsOf(row).length === 1 ? row.address : null,
+            outputs: faircoinOutputsOf(row).map((output) => ({
+              address: output.address,
+              amount: output.amount,
+              connected_account: output.connectedAccountPublicId,
+            })),
             txid: row.txid,
             confirmations: row.confirmations,
             required_confirmations: row.requiredConfirmations,

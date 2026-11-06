@@ -1,6 +1,6 @@
 import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
-import { findWatchableIntents } from '../db/payments/paymentIntentRepository';
+import { faircoinOutputsOf, findWatchableIntents } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import { toBaseUnits } from '../lib/money';
 import { applyEvent } from './intentState';
@@ -35,7 +35,7 @@ export interface WatcherDeps {
 /**
  * The status a watched intent should be in for the observed on-chain fact:
  *
- *  - the tx is present but does not pay the amount  → `underpaid` → `canceled`
+ *  - the tx is present but does not pay every output its amount → `underpaid` → `canceled`
  *  - paid, confirmations below the threshold        → still `processing`
  *  - paid, confirmations at/above the threshold     → `confirmed` → `succeeded`
  */
@@ -59,7 +59,7 @@ const UNDERPAID_ERROR = {
 
 /** What the chain says about a watched intent's transaction. */
 export interface ChainObservation {
-  /** The transaction pays the intent's address at least its amount. */
+  /** The transaction pays every output of the intent at least its amount (ADR 0021 D6). */
   readonly paid: boolean;
   readonly confirmations: number;
 }
@@ -140,7 +140,11 @@ export class SettlementWatcher {
     const tx = await this.deps.getTransaction(txid, network);
     if (tx === null) return;
 
-    const { paid, confirmations } = verifyPayment(tx, address, toBaseUnits(intent.amount));
+    const expected = faircoinOutputsOf(intent).map((output) => ({
+      address: output.address,
+      amount: toBaseUnits(output.amount),
+    }));
+    const { paid, confirmations } = verifyPayment(tx, expected);
     const row = await applyChainObservation(intent, { paid, confirmations });
     if (row === null) return;
 

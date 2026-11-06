@@ -51,6 +51,7 @@ import {
 import { findPayoutByProviderObject } from '../../db/money/payoutRepository';
 import { recordMismatch } from '../../db/money/reconciliationRepository';
 import {
+  faircoinOutputsOf,
   findIntentByProviderCharge,
   type PaymentIntentRow,
 } from '../../db/payments/paymentIntentRepository';
@@ -403,49 +404,60 @@ export async function recordFaircoinLedger(
   const rewound = from === 'succeeded' && intent.status !== 'succeeded';
   if (!reached && !rewound) return;
   const entries = await listFaircoinEntriesForIntent(tx, intent.id);
-  // Payments are positive and reversals negative: the sum is what is recorded now.
-  const net = entries.reduce((sum, row) => sum + BigInt(row.amount), 0n);
-  // Idempotent by the running sum, not by a flag: posting only when the sum
-  // says the payment is not yet (or no longer) recorded.
-  if (reached && net !== 0n) return;
-  if (rewound && net === 0n) return;
-  const type: BalanceTransactionType = reached ? 'faircoin_payment' : 'faircoin_payment_reversal';
-  const amount = reached ? intent.amount : `-${intent.amount}`;
-  const row = await insertBalanceTransaction(tx, {
-    publicId: newId('txn'),
-    merchantId: intent.merchantId,
-    connectedAccountId: intent.connectedAccountId ?? null,
-    ingestionKey: `faircoin:${intent.id}:${String(entries.length)}`,
-    provider: null,
-    providerObjectId: null,
-    amount,
-    // Orbit takes nothing on FairCoin (ADR 0012 D12): the payee receives the
-    // whole amount, and the payer pays the network fee.
-    fee: '0',
-    net: amount,
-    currency: 'FAIR',
-    type,
-    reportingCategory: 'faircoin',
-    status: 'informational',
-    availableOn: null,
-    occurredAt: intent.updatedAt,
-    description: null,
-    exchangeRate: null,
-    // A fiat order paid in FairCoin: the fiat equivalent it was priced at
-    // (ADR 0021 D7), beside the FAIR figures — never a conversion.
-    faircoinQuote: intent.faircoinQuote ?? null,
-    feeDetails: [],
-    sourceType: 'payment_intent',
-    sourceId: intent.publicId,
-    paymentIntentId: intent.id,
-    payoutId: null,
-  });
-  if (!row) return;
-  const signed = BigInt(amount);
-  await postJournal(tx, row, 'recognized', [
-    { balanceType: 'informational', amount: signed },
-    { balanceType: 'external', amount: -signed },
-  ]);
+  // One entry per OUTPUT (ADR 0021 D6), against the account it paid: a
+  // multi-seller payment is each seller's coins, never the merchant's.
+  for (const output of faircoinOutputsOf(intent)) {
+    const own = entries.filter(
+      (row) => (row.connectedAccountId ?? null) === output.connectedAccountId,
+    );
+    // Payments are positive and reversals negative: the sum is what is recorded now.
+    const net = own.reduce((sum, row) => sum + BigInt(row.amount), 0n);
+    // Idempotent by the running sum, not by a flag: posting only when the sum
+    // says the output is not yet (or no longer) recorded.
+    if (reached && net !== 0n) continue;
+    if (rewound && net === 0n) continue;
+    const type: BalanceTransactionType = reached ? 'faircoin_payment' : 'faircoin_payment_reversal';
+    const amount = reached ? output.amount : `-${output.amount}`;
+    const row = await insertBalanceTransaction(tx, {
+      publicId: newId('txn'),
+      merchantId: intent.merchantId,
+      connectedAccountId: output.connectedAccountId,
+      // Output 0 keeps the key every earlier (one-output) entry was posted under.
+      ingestionKey:
+        output.position === 0
+          ? `faircoin:${intent.id}:${String(own.length)}`
+          : `faircoin:${intent.id}:${String(output.position)}:${String(own.length)}`,
+      provider: null,
+      providerObjectId: null,
+      amount,
+      // Orbit takes nothing on FairCoin (ADR 0012 D12, ADR 0021 D6): the payee
+      // receives its whole share, and the payer pays the network fee.
+      fee: '0',
+      net: amount,
+      currency: 'FAIR',
+      type,
+      reportingCategory: 'faircoin',
+      status: 'informational',
+      availableOn: null,
+      occurredAt: intent.updatedAt,
+      description: null,
+      exchangeRate: null,
+      // A fiat order paid in FairCoin: the ORDER's quote it was priced at
+      // (ADR 0021 D7), beside the FAIR figures — never a conversion.
+      faircoinQuote: intent.faircoinQuote ?? null,
+      feeDetails: [],
+      sourceType: 'payment_intent',
+      sourceId: intent.publicId,
+      paymentIntentId: intent.id,
+      payoutId: null,
+    });
+    if (!row) continue;
+    const signed = BigInt(amount);
+    await postJournal(tx, row, 'recognized', [
+      { balanceType: 'informational', amount: signed },
+      { balanceType: 'external', amount: -signed },
+    ]);
+  }
 }
 
 export interface BalanceFigures {

@@ -673,6 +673,27 @@
       "when": 1793923657320,
       "tag": "0095_checkout_sessions_card_offered",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793933792379,
+      "tag": "0096_payment_intent_outputs",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793933819494,
+      "tag": "0097_checkout_sessions_payment_intent_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793933821209,
+      "tag": "0098_faircoin_outputs_validate",
+      "breakpoints": true
     }
   ]
 }

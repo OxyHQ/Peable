@@ -124,17 +124,20 @@ export async function getTransaction(
 }
 
 /**
- * Pure settlement check: `paid` is true iff some output of `tx` pays exactly
- * `address` with at least `expectedSat` base units. Returns the transaction's
- * confirmation count so the caller can decide `confirming` vs `settled`.
+ * Pure settlement check (ADR 0021 D6): `paid` is true iff EVERY expected output
+ * is in `tx` — some output pays exactly its `address` with at least its amount.
+ * One output short is not paid: the payment is underpaid as a whole. Returns
+ * the transaction's confirmation count so the caller can decide `confirming`
+ * vs `settled`.
  */
 export function verifyPayment(
   tx: ExplorerTx,
-  address: string,
-  expectedSat: bigint,
+  expected: readonly { readonly address: string; readonly amount: bigint }[],
 ): { paid: boolean; confirmations: number } {
-  const paid = tx.outputs.some(
-    (output) => output.address === address && output.valueSat >= expectedSat,
-  );
+  const paid =
+    expected.length > 0 &&
+    expected.every(({ address, amount }) =>
+      tx.outputs.some((output) => output.address === address && output.valueSat >= amount),
+    );
   return { paid, confirmations: tx.confirmations };
 }

@@ -59,6 +59,13 @@ export const paymentErrorSchema = defineComponent(
 );
 export type PaymentIntentLastPaymentError = z.output<typeof paymentErrorSchema>;
 
+/** One output of a FairCoin payment, as the payer pays it (ADR 0021 D6). */
+export const faircoinPaymentOutputSchema = defineComponent(
+  'FaircoinPaymentOutput',
+  z.object({ address: z.string(), amount }).strict(),
+);
+export type FaircoinPaymentOutput = z.output<typeof faircoinPaymentOutputSchema>;
+
 /**
  * What the payer must do next (`status: 'requires_action'`).
  *
@@ -76,11 +83,27 @@ export const paymentIntentNextActionSchema = defineComponent(
         type: z.literal('faircoin_payment'),
         faircoin_payment: z
           .object({
-            address: z.string(),
+            address: z
+              .string()
+              .nullable()
+              .describe(
+                "The one output's address; `null` when the payment has several outputs (read `outputs`).",
+              ),
             network,
-            amount,
+            amount: amount.describe('The sum of every output, in base units.'),
             currency: z.literal('FAIR'),
-            uri: z.string().describe('The `faircoin:` URI a wallet scans.'),
+            uri: z
+              .string()
+              .nullable()
+              .describe(
+                'The `faircoin:` URI a wallet scans; `null` when the payment has several outputs (a `faircoin:` URI names one address, so only the Peable wallet can pay it).',
+              ),
+            outputs: z
+              .array(faircoinPaymentOutputSchema)
+              .min(1)
+              .describe(
+                'Every output the ONE transaction must carry (ADR 0021 D6): each address receives at least its amount, or the whole payment is `canceled` `underpaid`.',
+              ),
           })
           .strict(),
       })
@@ -142,8 +165,26 @@ export const paymentIntentFaircoinSchema = defineComponent(
       network,
       address: z
         .string()
+        .nullable()
         .describe(
-          "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5).",
+          "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5); `null` when the payment pays several accounts (read `outputs`).",
+        ),
+      outputs: z
+        .array(
+          z
+            .object({
+              address: z.string(),
+              amount,
+              connected_account: z
+                .string()
+                .nullable()
+                .describe("The seller (`ca_…`) this output pays; `null` for the merchant's owner."),
+            })
+            .strict(),
+        )
+        .min(1)
+        .describe(
+          "Every output of the payment's ONE transaction, in order (ADR 0021 D6). Each pays one account's Peable wallet; the watcher verifies each.",
         ),
       txid: nullableString,
       confirmations: z.number().int().nonnegative(),
@@ -327,6 +368,7 @@ export const paymentIntentSchema = defineObject(
             amount: '150000000',
             currency: 'FAIR',
             uri: 'faircoin:fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG?amount=1.5',
+            outputs: [{ address: 'fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG', amount: '150000000' }],
           },
         },
         last_payment_error: null,
@@ -339,6 +381,13 @@ export const paymentIntentSchema = defineObject(
         faircoin: {
           network: 'testnet',
           address: 'fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG',
+          outputs: [
+            {
+              address: 'fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG',
+              amount: '150000000',
+              connected_account: null,
+            },
+          ],
           txid: null,
           confirmations: 0,
           required_confirmations: 6,

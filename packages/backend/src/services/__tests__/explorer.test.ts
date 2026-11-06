@@ -93,20 +93,55 @@ const PAID_TX: ExplorerTx = {
 };
 
 test('verifyPayment: paid when an output matches the address and value >= expected', () => {
-  expect(verifyPayment(PAID_TX, 'FRwfgBQzXt3NTVxJ7YAMVZz9i84S9ZESi4', 100n)).toEqual({
+  expect(
+    verifyPayment(PAID_TX, [{ address: 'FRwfgBQzXt3NTVxJ7YAMVZz9i84S9ZESi4', amount: 100n }]),
+  ).toEqual({
     paid: true,
     confirmations: 3,
   });
 });
 
 test('verifyPayment: not paid when the matching output underpays', () => {
-  const result = verifyPayment(PAID_TX, 'FRwfgBQzXt3NTVxJ7YAMVZz9i84S9ZESi4', 101n);
+  const result = verifyPayment(PAID_TX, [
+    { address: 'FRwfgBQzXt3NTVxJ7YAMVZz9i84S9ZESi4', amount: 101n },
+  ]);
   expect(result.paid).toBe(false);
   expect(result.confirmations).toBe(3);
 });
 
 test('verifyPayment: not paid when no output pays the address', () => {
-  expect(verifyPayment(PAID_TX, 'FSomeOtherAddress00000000000000000000', 1n).paid).toBe(false);
+  expect(
+    verifyPayment(PAID_TX, [{ address: 'FSomeOtherAddress00000000000000000000', amount: 1n }]).paid,
+  ).toBe(false);
+});
+
+const SPLIT_TX: ExplorerTx = {
+  txid: 'def',
+  confirmations: 1,
+  outputs: [
+    { address: 'FSellerA', valueSat: 700n },
+    { address: 'FSellerB', valueSat: 300n },
+    { address: 'FChange', valueSat: 5n },
+  ],
+};
+
+test('verifyPayment: a split payment is paid only when EVERY output is (ADR 0021 D6)', () => {
+  const both = [
+    { address: 'FSellerA', amount: 700n },
+    { address: 'FSellerB', amount: 300n },
+  ];
+  expect(verifyPayment(SPLIT_TX, both)).toEqual({ paid: true, confirmations: 1 });
+  // One seller short, the other overpaid: still underpaid as a whole.
+  expect(
+    verifyPayment(SPLIT_TX, [
+      { address: 'FSellerA', amount: 600n },
+      { address: 'FSellerB', amount: 301n },
+    ]).paid,
+  ).toBe(false);
+  // An output missing from the transaction.
+  expect(verifyPayment(SPLIT_TX, [...both, { address: 'FSellerC', amount: 1n }]).paid).toBe(false);
+  // Nothing expected is never paid.
+  expect(verifyPayment(SPLIT_TX, []).paid).toBe(false);
 });
 
 // One real-network assertion: mainnet has a live, advancing tip (testnet is

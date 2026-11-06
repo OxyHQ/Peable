@@ -2,7 +2,7 @@ import { getNormalizedUserHandle } from '@oxy.so/core';
 import { oxy } from '../oxy';
 import type { EnrichmentResult } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
-import { findIntentsByAddresses } from '../db/payments/paymentIntentRepository';
+import { faircoinOutputsOf, findIntentsByAddresses } from '../db/payments/paymentIntentRepository';
 import { findMerchantsByIds } from '../db/merchants/merchantRepository';
 import { findAttributionsForViewer } from '../db/social/sendAttribution';
 
@@ -43,13 +43,12 @@ export async function enrichAddresses(
   const intents = await findIntentsByAddresses(db, addresses);
   const merchantIdByAddress = new Map<string, string>();
   for (const intent of intents) {
-    // `address` is nullable since ADR 0001 D6, and every row this query returns
-    // matched one of the requested addresses — so a null here is unreachable
-    // rather than an unhandled case. Skipping is still the right shape: a
-    // non-null assertion would turn an impossible row into a crash on a
-    // read-only display path a wallet calls to render a transaction list.
-    if (intent.address === null) continue;
-    merchantIdByAddress.set(intent.address, intent.merchantId);
+    // Every output of a multi-seller payment is "Paid at <merchant>" (ADR 0021 D6).
+    for (const output of faircoinOutputsOf(intent)) {
+      if (addresses.includes(output.address)) {
+        merchantIdByAddress.set(output.address, intent.merchantId);
+      }
+    }
   }
   const merchants = await findMerchantsByIds(db, [...new Set(merchantIdByAddress.values())]);
   const merchantById = new Map(merchants.map((m) => [m.id, m]));

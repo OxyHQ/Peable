@@ -13,6 +13,7 @@ import {
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import type { PriceRecurring } from '@peable.to/shared-types';
 import { prices, products } from './catalog';
+import { connectedAccounts } from './connectedAccounts';
 import { merchants } from './merchants';
 import { invoices } from './billingEngine';
 import { checkoutSessions, paymentIntents, paymentLinks } from './payments';
@@ -83,11 +84,22 @@ export const checkoutSessionLineItems = pgTable(
     amountDiscount: text().notNull().default('0'),
     amountTax: text().notNull().default('0'),
     amountTotal: text().notNull(),
+    /**
+     * The seller this line is sold by (ADR 0021 D6), INTERNAL id; NULL for the
+     * merchant's own sale. A FairCoin payment of the order pays each seller its
+     * share; the card payment stays the merchant's charge.
+     */
+    connectedAccountId: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex('checkout_session_line_items_public_id_key').on(table.publicId),
+    foreignKey({
+      name: 'checkout_session_line_items_connected_account_fkey',
+      columns: [table.connectedAccountId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
     uniqueIndex('checkout_session_line_items_session_position_key').on(
       table.sessionId,
       table.position,

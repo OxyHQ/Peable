@@ -97,13 +97,13 @@ import {
   quoteFaircoin,
   toFaircoinQuoteDTO,
 } from '../faircoin/quote';
+import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
 import {
-  FaircoinNetworkClosedError,
-  FaircoinWalletMissingError,
-  faircoinAvailability,
-  faircoinRecipientOf,
-} from '../faircoin/recipient';
-import { findAccountById } from '../../db/accounts/connectedAccountRepository';
+  FaircoinAmountTooSmallError,
+  orderFaircoinAvailability,
+  orderRecipients,
+  splitOrderPayment,
+} from '../faircoin/orderRecipients';
 import { applyEvent } from '../intentState';
 import type { TaxService } from '../tax/taxService';
 import { kickWebhookOutbox } from '../webhookOutbox';
@@ -329,16 +329,11 @@ export async function faircoinAvailabilityOf(
   merchant: MerchantRow,
 ): Promise<{ available: boolean; unavailable_reason: FaircoinUnavailableReason | null } | null> {
   if (session.mode === 'setup') return null;
-  // The seller's own wallet for an on-behalf order, the owner's otherwise.
-  const account =
-    session.connectedAccountId !== null
-      ? await findAccountById(getDb(), session.merchantId, session.connectedAccountId)
-      : null;
-  return faircoinAvailability({
-    network: session.network,
-    currency: session.currency,
-    recipientAccountId: faircoinRecipientOf(merchant, account),
-  });
+  // Every seller of the order (ADR 0021 D6), the session's one seller, or the
+  // merchant's owner: each must be payable.
+  const db = getDb();
+  const recipients = await orderRecipients(db, session, await listLineItems(db, session.id));
+  return orderFaircoinAvailability(merchant, session, recipients);
 }
 
 /** Refuse a discount the order cannot take, naming the field that carried it. */
@@ -493,6 +488,7 @@ export async function createCheckoutSession(
     collection,
     customFields,
     clientReferenceId: body.client_reference_id ?? null,
+    paymentIntentMetadata: body.payment_intent_data?.metadata ?? null,
     successUrl: body.success_url,
     cancelUrl: body.cancel_url,
     expiresAt,
@@ -1411,22 +1407,47 @@ async function createSessionPayment(
         }
       : {}),
     ...(current.paymentLinkId ? { paymentLinkId: current.paymentLinkId } : {}),
-    metadata: {},
+    // The merchant's own identifiers, on every payment of the session (ADR 0021 D8).
+    metadata: current.paymentIntentMetadata ?? {},
+  };
+  // Whom a FairCoin payment pays (ADR 0021 D6): every seller its share, in ONE
+  // transaction; one recipient is the one-output case.
+  const faircoinPayees = async (total: bigint) => {
+    if (current.network === null) throw new FaircoinWalletMissingError();
+    const recipients = await orderRecipients(getDb(), current, lines);
+    const split = splitOrderPayment(total, recipients, current.network);
+    return split.length > 1
+      ? { faircoinSplit: split }
+      : split[0]?.connectedAccount
+        ? { connectedAccount: split[0].connectedAccount }
+        : {};
   };
   try {
-    if (method === 'card' || current.currency === 'FAIR') {
+    if (current.currency === 'FAIR') {
       return (
         await createIntent({
           ...common,
           amount: current.amount,
           rail: current.rail,
           currency: current.currency,
-          ...(current.rail === 'faircoin' && current.network ? { network: current.network } : {}),
-          // A card payment of a fiat order is the merchant's own charge; the
-          // seller is paid by the FairCoin choice (ADR 0021 D5).
-          ...(current.rail === 'faircoin' && current.connectedAccountPublicId
-            ? { connectedAccount: current.connectedAccountPublicId }
-            : {}),
+          ...(current.network ? { network: current.network } : {}),
+          ...(await faircoinPayees(BigInt(current.amount))),
+          expiresInSeconds: remaining,
+          idempotencyKey: `checkout:${current.publicId}:${current.amount}`,
+        })
+      ).intent;
+    }
+    if (method === 'card') {
+      return (
+        await createIntent({
+          ...common,
+          amount: current.amount,
+          rail: current.rail,
+          currency: current.currency,
+          // A card payment of a fiat order is the merchant's OWN charge (a
+          // platform charge, ADR 0015 §2), whatever sellers its lines name: the
+          // merchant pays them with the transfers it makes from it. Only the
+          // FairCoin choice pays sellers directly (ADR 0021 D5, D6).
           expiresInSeconds: remaining,
           // The session and its amount name the payment: a retried confirm finds
           // the payment the first one created, and a re-priced order a new one.
@@ -1444,9 +1465,7 @@ async function createSessionPayment(
         rail: 'faircoin',
         currency: 'FAIR',
         network: current.network,
-        ...(current.connectedAccountPublicId
-          ? { connectedAccount: current.connectedAccountPublicId }
-          : {}),
+        ...(await faircoinPayees(BigInt(quote.faircoinAmount))),
         faircoinQuote: toFaircoinQuoteDTO(quote),
         expiresInSeconds: Math.max(60, Math.min(remaining, quoteSeconds)),
         idempotencyKey: `checkout:${current.publicId}:${current.amount}:faircoin:${randomUUID()}`,
@@ -1472,6 +1491,14 @@ async function createSessionPayment(
     }
     if (error instanceof FaircoinNetworkClosedError) {
       throw new CheckoutError(409, 'faircoin_network_closed', error.message, 'payment_method_type');
+    }
+    if (error instanceof FaircoinAmountTooSmallError) {
+      throw new CheckoutError(
+        409,
+        'faircoin_amount_too_small',
+        error.message,
+        'payment_method_type',
+      );
     }
     return translateRail(error, 'payment_method_type');
   }

@@ -1,7 +1,7 @@
 # ADR 0021 — FairCoin is always offered
 
 **Status:** accepted.
-**Date:** 2026-11-05; D5 amended 2026-11-06.
+**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added.
 **Amends:** ADR 0012 (D5 `connected_account` on a fiat order, D12 the platform
 fee), ADR 0015 §5 (the FairCoin ledger entry gains its fiat equivalent), ADR 0018
 ("as built" §3 *the rail follows the currency*, and the "not built" item
@@ -201,24 +201,66 @@ xpub mechanism is removed.
   Peable never touched. Their keys are dropped in a `post` migration; new
   payments for them go to their owners' identity wallets. No other row holds a key.
 
-### D6. The marketplace's fee on a FairCoin sale: none
+### D6. A FairCoin payment pays every seller of the order directly, in ONE transaction; the marketplace's fee on it: none
 
-ADR 0012 D12 option (a), a second output to the platform's address in the payer's
-transaction, cannot be expressed or verified today, measured in the code:
+**Amended 2026-11-06 (owner's rule: *anyone can always pay with FairCoin* —
+a marketplace cart of several sellers included).** The first D6 measured that a
+second output could not be expressed or verified (one `faircoin:` address, one
+`to` in `@peable.to/pay`, one address in the watcher). That is now built, for the
+outputs that pay SELLERS — never for a fee:
 
-- a `faircoin:` URI (BIP 21, `@fairco.in/core`) names ONE address and one amount,
-  so every external wallet could pay only the seller's half;
-- `@peable.to/pay` `sendPayment` takes ONE `to` (`recipients: [{ address: to,
-  value }]`);
-- the settlement watcher verifies one transaction against ONE address and ONE
-  amount (`verifyPayment(tx, address, amount)`); a fee output would be unverified
-  money.
+- **A FairCoin payment has an ordered list of outputs** (`payment_intent_outputs`,
+  one row per output, written in the intent's transaction; a payment to one
+  payee is the one-output case, the same rows and the same code). Each output
+  names the account it pays (`connected_account_id`, `null` for the merchant's
+  own owner), the Oxy account whose Peable wallet receives, the address — ONE
+  reservation per output on THAT account's cursor (ADR 0002, D5), so every
+  seller's address is in the seller's own tree — and the amount.
+  `payment_intents.address` / `faircoin_recipient_account_id` keep output 0
+  (the CHECKs and the address index stand); an intent written before the table
+  has no rows and reads as its one output from those columns.
+- **Who a line pays.** A Checkout Session line may name its seller
+  (`line_items[].connected_account`, exclusive with the session's
+  `connected_account`). A line without one is the merchant's own sale. Every
+  seller must be ready for FairCoin on the order's network, with a Peable wallet;
+  otherwise FairCoin is shown unavailable on the order (`faircoin_wallet_missing`)
+  and the card keeps working — the order is never refused for it.
+- **The split is pricing, exact and in `bigint`** (`services/faircoin/split.ts`):
+  the quoted FAIR total (D4) is divided by each recipient's subtotal (the sum of
+  its lines' `amount_subtotal`, before discount and tax). Each share is the
+  floor of `total × subtotal ÷ Σ subtotals`; the units left over (fewer than the
+  number of recipients) go one each to the recipients with the largest
+  remainders, ties to the earlier recipient (first line order) — the largest
+  remainder method. A recipient whose share is zero gets no output; a share
+  below the network's dust threshold refuses the FairCoin confirm (409
+  `faircoin_amount_too_small`; the card keeps working), because the network
+  would not relay it and no part of a seller's share may go to someone else.
+- **One transaction, signed by the payer.** `next_action.faircoin_payment.outputs`
+  (and `faircoin.outputs`) list every output; `address` and `uri` are the one
+  output's when there is one and `null` when there are several (a BIP 21
+  `faircoin:` URI names one address, so an external wallet cannot pay such an
+  order and is not offered it). The `peable://pay` request carries
+  `outputs=<address>:<amount>,…`; the Peable wallet signs one transaction with
+  one output per entry plus its change. `@peable.to/pay`'s `sendPayment` and
+  `quotePayment` take `recipients` (the fee is sized for every output).
+- **The watcher verifies EVERY output** (`verifyPayment(tx, outputs)`): the
+  payment is paid only when each output's address receives at least its amount
+  in the reported transaction. Any output short → the whole payment is
+  `canceled` `underpaid`, as before. The ledger's informational entry is posted
+  per output against the account it paid.
+- **No fee output, still.** The platform's address is never an output of a
+  seller's sale: a FairCoin on-behalf payment carries **no application fee**
+  (`application_fee_amount` stays a 400), each seller receives its whole share,
+  and the marketplace takes its commission on the card rail, as ADR 0012
+  recommended. Revisit only as its own decision.
 
-So a FairCoin on-behalf payment carries **no application fee**:
-`application_fee_amount` on it stays a 400, the seller receives the whole amount
-(the ledger already records `fee: '0'`), and the platform takes its commission on
-the card rail, as ADR 0012 recommended. Revisit when a multi-output payment
-request exists end to end (URI, wallet, `pay`, watcher).
+### D8. A session's payments carry the merchant's identifiers
+
+`payment_intent_data.metadata` on a Checkout Session is copied to EVERY payment
+the session creates (each method the payer confirms, each fresh quote), so a
+merchant matches a payment's events to its own records by its own id rather
+than by amount or timing. The session's `client_reference_id` stays on the
+session. Peable keys nothing on that metadata.
 
 ### D7. The ledger records the fiat equivalent
 
@@ -252,4 +294,6 @@ the sale was priced at. No fiat balance is created by it.
 
 - A multi-rail PaymentIntent (D1), and with it FairCoin on raw card Elements.
 - A FairCoin application fee (D6) and seller-assisted FairCoin refunds (ADR 0012 D10).
+- Multi-recipient FairCoin on a raw PaymentIntent or a payment link (D6 builds it
+  for Checkout Sessions, the marketplace cart).
 - Which fiat reference applies beyond the ECB's set (no Orbit currency needs one today).
