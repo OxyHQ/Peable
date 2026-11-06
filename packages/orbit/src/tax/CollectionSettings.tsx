@@ -3,6 +3,7 @@ import { View } from 'react-native';
 // The `/tax` subpath, not the root: the root barrel also exports the
 // node:crypto webhook signer, which a browser or native bundle cannot load.
 import {
+  TAX_BEHAVIORS,
   TAX_REGISTRATION_SCHEMES,
   type TaxCode,
   type TaxRegistration,
@@ -25,6 +26,7 @@ import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { Section } from '@/ui/OrbitScreen';
 import { PageSkeleton } from '../ui/states';
+import { buildTaxSettingsBody, type TaxSettingsForm, taxSettingsFormOf } from './settingsForm';
 
 const upper = (value: string) => value.trim().toUpperCase();
 const firstOfMonth = () => {
@@ -47,11 +49,9 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
   const [settings, setSettings] = useState<TaxSettings | null>(null);
   const [registrations, setRegistrations] = useState<TaxRegistration[]>([]);
   const [codes, setCodes] = useState<TaxCode[]>([]);
-  const [legalName, setLegalName] = useState('');
-  const [country, setCountry] = useState('');
-  const [state, setState] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [defaultTaxCode, setDefaultTaxCode] = useState('');
+  const [form, setForm] = useState<TaxSettingsForm | null>(null);
+  const edit = (field: keyof TaxSettingsForm) => (value: string) =>
+    setForm((current) => (current ? { ...current, [field]: value } : current));
   const [regCountry, setRegCountry] = useState('');
   const [regState, setRegState] = useState('');
   const [regScheme, setRegScheme] = useState<TaxRegistrationScheme>('standard');
@@ -83,11 +83,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
       setSettings(loaded);
       setRegistrations(regs.data);
       setCodes(list.data);
-      setLegalName(loaded.legal_name ?? '');
-      setCountry(loaded.head_office?.country ?? '');
-      setState(loaded.head_office?.state ?? '');
-      setPostalCode(loaded.head_office?.postal_code ?? '');
-      setDefaultTaxCode(loaded.default_tax_code);
+      setForm(taxSettingsFormOf(loaded));
     } catch (e) {
       if (current === generation.current) setError(describeError(e, t('tax.error')));
     } finally {
@@ -124,7 +120,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
           <AdmonitionText>{error}</AdmonitionText>
         </Admonition>
       ) : null}
-      {settings ? (
+      {settings && form ? (
         <>
           <Section>
             <View className="flex-row flex-wrap items-center gap-2">
@@ -153,27 +149,38 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
           <Section title={t('tax.seller')}>
             <FormField
               label={t('tax.legalName')}
-              value={legalName}
-              onChange={setLegalName}
+              value={form.legalName}
+              onChange={edit('legalName')}
               autoCapitalize="words"
+              disabled={locked}
+            />
+            <FormField
+              label={t('tax.headOfficeLine1')}
+              value={form.line1}
+              onChange={edit('line1')}
+              disabled={locked}
+            />
+            <FormField
+              label={t('tax.headOfficeLine2')}
+              value={form.line2}
+              onChange={edit('line2')}
               disabled={locked}
             />
             <View className="flex-row flex-wrap gap-4">
               <View className="flex-1 min-w-48">
                 <FormField
-                  label={t('tax.headOfficeCountry')}
-                  value={country}
-                  onChange={setCountry}
-                  placeholder="US"
-                  autoCapitalize="characters"
+                  label={t('tax.headOfficeCity')}
+                  value={form.city}
+                  onChange={edit('city')}
+                  autoCapitalize="words"
                   disabled={locked}
                 />
               </View>
               <View className="flex-1 min-w-48">
                 <FormField
                   label={t('tax.headOfficeState')}
-                  value={state}
-                  onChange={setState}
+                  value={form.state}
+                  onChange={edit('state')}
                   placeholder="DE"
                   autoCapitalize="characters"
                   disabled={locked}
@@ -182,8 +189,18 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
               <View className="flex-1 min-w-48">
                 <FormField
                   label={t('tax.postalCode')}
-                  value={postalCode}
-                  onChange={setPostalCode}
+                  value={form.postalCode}
+                  onChange={edit('postalCode')}
+                  autoCapitalize="characters"
+                  disabled={locked}
+                />
+              </View>
+              <View className="flex-1 min-w-48">
+                <FormField
+                  label={t('tax.headOfficeCountry')}
+                  value={form.country}
+                  onChange={edit('country')}
+                  placeholder="US"
                   autoCapitalize="characters"
                   disabled={locked}
                 />
@@ -191,9 +208,19 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
             </View>
             <Choice
               label={t('tax.defaultCode')}
-              value={defaultTaxCode || null}
+              value={form.defaultTaxCode || null}
               options={codeOptions}
-              onChange={setDefaultTaxCode}
+              onChange={edit('defaultTaxCode')}
+              disabled={locked}
+            />
+            <Choice
+              label={t('tax.defaultBehavior')}
+              value={form.defaultTaxBehavior}
+              options={TAX_BEHAVIORS.map((behavior) => ({
+                value: behavior,
+                label: t(`tax.behavior.${behavior}`),
+              }))}
+              onChange={edit('defaultTaxBehavior')}
               disabled={locked}
             />
             <View className="flex-row justify-end">
@@ -204,19 +231,12 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                 disabled={locked}
                 onPress={() =>
                   void run(async () => {
-                    setSettings(
-                      await dashboardApi.tax.updateSettings(scope, {
-                        legal_name: legalName.trim() || null,
-                        head_office: upper(country)
-                          ? {
-                              country: upper(country),
-                              state: upper(state) || null,
-                              postal_code: postalCode.trim() || null,
-                            }
-                          : null,
-                        default_tax_code: defaultTaxCode,
-                      }),
+                    const saved = await dashboardApi.tax.updateSettings(
+                      scope,
+                      buildTaxSettingsBody(form),
                     );
+                    setSettings(saved);
+                    setForm(taxSettingsFormOf(saved));
                   })
                 }
               >
