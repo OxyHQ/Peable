@@ -325,12 +325,15 @@ grows by is now bounded by REAL payments, whatever anyone does:
   the recipient's, and that address is retired, never recycled. **Amended
   2026-11-06 (N4):** an address that WAS paid in full, under another txid (a
   malleated or rebroadcast transaction, or a mistyped report), is not lost: the
-  watcher reads the address's transactions (at most 10), and one that pays every
-  output its amount, is no older than the payment (less 15 minutes for a
-  staker's clock) and is not another payment's `processing`/`succeeded` txid
-  becomes the payment's `txid` and settles it as any observation. One that is
-  another payment's leaves it `processing` with a warning for review — never
-  cancelled. Only dust, or nothing, at the address is lost. This narrows ADR 0012 D9
+  watcher lists the address's transactions, keeps those the list shows moving
+  at least the output's amount no earlier than the payment (less 15 minutes for
+  a staker's clock) — so dust costs no read and cannot push the payment out of
+  reach — and reads at most 10 of them. One that pays every output its amount
+  and is not another payment's `processing`/`succeeded` txid becomes the
+  payment's `txid` and settles it as any observation. One that is another
+  payment's, or more such candidates than are read, leaves it `processing`
+  with a warning for review — never cancelled. Only dust, or nothing, at the
+  address is lost. This narrows ADR 0012 D9
   ("once broadcast, never expires") to broadcasts that exist: a transaction
   nobody has seen in a day of two-minute, nearly empty blocks is not moving
   money.

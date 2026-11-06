@@ -85,10 +85,13 @@ const SETTLED_RECHECK_INTERVAL_MS = 60 * 1000;
 
 /**
  * Transactions read, at most, when a lost broadcast's address was paid under
- * another txid (ADR 0021 D9, amended): the address is single-use, so the
- * payment that filled it is among its few transactions.
+ * another txid (ADR 0021 D9, amended) — of those the address's list shows
+ * moving at least the output's amount, after the payment was created. Dust
+ * never reaches a read, so it cannot push the real payment out of reach.
  */
 const SUBSTITUTE_TX_READS = 10;
+/** Base units the list's float `amount` may round below the true value. */
+const LISTED_AMOUNT_TOLERANCE = 1_000n;
 /**
  * How far a block's own timestamp may sit before the payment's creation and
  * still be its payment: a staker's clock, not Peable's, stamps the block.
@@ -420,8 +423,11 @@ export class SettlementWatcher {
    * The transaction at `address` that pays every output of `intent` its
    * amount, seen no earlier than the payment was created (a recycled address
    * may hold a late payment of its previous holder's quote), and not settling
-   * another payment. `flagged` when one pays it but is another payment's —
-   * the payment stays `processing` and is reported, never cancelled;
+   * another payment. The address's list is filtered by its own `amount` and
+   * `time` first, so dust costs no read and cannot push a real payment out of
+   * the window. `flagged` when one pays it but is another payment's, or more
+   * candidates exist than are read — the payment stays `processing` and is
+   * reported, never cancelled;
    * `unknown` when the Explorer cannot answer; `none` when nothing pays it.
    */
   private async findSubstitute(
@@ -438,11 +444,19 @@ export class SettlementWatcher {
       address: output.address,
       amount: toBaseUnits(output.amount),
     }));
+    const owed = expected.find((output) => output.address === address)?.amount ?? 0n;
     const created = Math.floor(intent.createdAt.getTime() / 1000) - SUBSTITUTE_TIME_SLACK_SECONDS;
-    let flagged = false;
-    for (const candidate of listed.slice(0, SUBSTITUTE_TX_READS)) {
-      if (candidate === intent.txid) continue;
-      const tx = await this.deps.getTransaction(candidate, network);
+    const candidates = listed.filter(
+      (entry) =>
+        entry.txid !== intent.txid &&
+        (entry.amountSat === null || entry.amountSat + LISTED_AMOUNT_TOLERANCE >= owed) &&
+        (entry.time === null || entry.time >= created),
+    );
+    // More plausible payments than a confirm should ever need to read: never
+    // conclude "nothing paid it" from a part of them.
+    let flagged = candidates.length > SUBSTITUTE_TX_READS;
+    for (const candidate of candidates.slice(0, SUBSTITUTE_TX_READS)) {
+      const tx = await this.deps.getTransaction(candidate.txid, network);
       if (tx === null) return 'unknown';
       if (!verifyPayment(tx, expected).paid) continue;
       if (typeof tx.time === 'number' && tx.time < created) continue;
@@ -454,7 +468,7 @@ export class SettlementWatcher {
     }
     if (flagged) {
       process.emitWarning(
-        `Peable FairCoin payment ${intent.publicId}: its reported transaction was never seen, and the transaction that paid its address is another payment's; left processing for review`,
+        `Peable FairCoin payment ${intent.publicId}: its reported transaction was never seen, and its address was paid by transactions it cannot take (another payment's, or more than it reads); left processing for review`,
       );
       return 'flagged';
     }

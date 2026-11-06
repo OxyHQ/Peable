@@ -400,7 +400,7 @@ test('a made-up txid plus dust sent to the address does not hold it for ever: th
     // …and whether it was the reported transaction is what decides.
     addressHasTransaction: async () => listed,
     // What did arrive pays less than the payment: not a substitute.
-    listAddressTransactions: async () => ['tx_dust'],
+    listAddressTransactions: async () => [{ txid: 'tx_dust', amountSat: 1_000n, time: null }],
     now: () => clock,
     onChange: () => undefined,
   });
@@ -527,7 +527,15 @@ test('an address paid in full under another txid settles against that transactio
     getTip: async () => 100,
     getAddressUsage: async () => 'used',
     addressHasTransaction: async () => 'no',
-    listAddressTransactions: async () => ['tx_real'],
+    // Dust, newest first, then the payment: dust never costs a read.
+    listAddressTransactions: async () => [
+      ...Array.from({ length: 15 }, (_, i) => ({
+        txid: `tx_dust_${String(i)}`,
+        amountSat: 1_000n,
+        time: null,
+      })),
+      { txid: 'tx_real', amountSat: PAID_VALUE, time: Math.floor(Date.now() / 1000) },
+    ],
     now: () => clock,
     onChange: (row) => {
       changes.push(`${row.status}:${row.txid}`);
@@ -561,7 +569,7 @@ test("a paying transaction that is another payment's is flagged, not taken and n
     getTip: async () => 100,
     getAddressUsage: async () => 'used',
     addressHasTransaction: async () => 'no',
-    listAddressTransactions: async () => ['tx_taken'],
+    listAddressTransactions: async () => [{ txid: 'tx_taken', amountSat: null, time: null }],
     now: () => clock,
     onChange: () => undefined,
   });
@@ -572,4 +580,31 @@ test("a paying transaction that is another payment's is flagged, not taken and n
   expect(kept.status).toBe('processing');
   expect(kept.txid).toBe('tx_misreported_2');
   expect(must(await findIntentById(gatewayDb(), other.intent.id)).txid).toBe('tx_taken');
+});
+
+test('more plausible payments at the address than are read never conclude "lost"', async () => {
+  const { intent } = await lostBroadcast('tx_misreported_3');
+  let clock = Date.now() + BROADCAST_UNSEEN_MS + 1;
+  const watcher = new SettlementWatcher({
+    // Each listed transaction, read, pays someone else.
+    getTransaction: async (txid) =>
+      txid.startsWith('tx_big_')
+        ? { txid, confirmations: 5, outputs: [{ address: 'elsewhere', valueSat: PAID_VALUE }] }
+        : null,
+    getTip: async () => 100,
+    getAddressUsage: async () => 'used',
+    addressHasTransaction: async () => 'no',
+    listAddressTransactions: async () =>
+      Array.from({ length: 12 }, (_, i) => ({
+        txid: `tx_big_${String(i)}`,
+        amountSat: PAID_VALUE,
+        time: null,
+      })),
+    now: () => clock,
+    onChange: () => undefined,
+  });
+  await watcher.check();
+  clock += 61 * 60 * 1000;
+  await watcher.check();
+  expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('processing');
 });

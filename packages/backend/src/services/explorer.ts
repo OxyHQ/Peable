@@ -107,9 +107,24 @@ const addressResponseSchema = z.object({
 });
 
 const addressTransactionsSchema = z.object({
-  transactions: z.array(z.object({ txid: z.string() })),
+  transactions: z.array(
+    z.object({ txid: z.string(), amount: z.number().optional(), time: z.number().optional() }),
+  ),
   total: z.number(),
 });
+
+/** One entry of an address's transaction list (`GET /api/address/:a/txs`). */
+export interface AddressTransaction {
+  readonly txid: string;
+  /**
+   * What the transaction moved at this address, in base units, as the
+   * Explorer's float `amount` rounded — a pre-filter only, never a settlement
+   * figure (`verifyPayment` reads the transaction itself). `null` when absent.
+   */
+  readonly amountSat: bigint | null;
+  /** Unix seconds; `null` when absent. */
+  readonly time: number | null;
+}
 
 function addressUrl(address: string, network: NetworkType): string {
   return `${config.explorerBaseUrl}/api/address/${encodeURIComponent(address)}?network=${network}`;
@@ -245,20 +260,21 @@ export async function addressHasTransaction(
 ): Promise<'yes' | 'no' | 'unknown'> {
   const listed = await listAddressTransactions(address, network);
   if (listed === null) return 'unknown';
-  return listed.includes(txid) ? 'yes' : 'no';
+  return listed.some((entry) => entry.txid === txid) ? 'yes' : 'no';
 }
 
 /**
- * Every txid the Explorer lists for `address`, newest first as it answers —
- * up to {@link ADDRESS_TXS_MAX_PAGES} pages, past which the list is taken as
- * read (see {@link addressHasTransaction}). `null` when any page fails, does
- * not parse, or is short before the total.
+ * Every transaction the Explorer lists for `address` (measured 2026-11-06:
+ * `{txid, blockhash, blockHeight, confirmations, time, amount, type}`), newest
+ * first as it answers — up to {@link ADDRESS_TXS_MAX_PAGES} pages, past which
+ * the list is taken as read (see {@link addressHasTransaction}). `null` when
+ * any page fails, does not parse, or is short before the total.
  */
 export async function listAddressTransactions(
   address: string,
   network: NetworkType,
-): Promise<string[] | null> {
-  const txids: string[] = [];
+): Promise<AddressTransaction[] | null> {
+  const txids: AddressTransaction[] = [];
   for (let page = 1; page <= ADDRESS_TXS_MAX_PAGES; page += 1) {
     let body: unknown;
     try {
@@ -273,7 +289,16 @@ export async function listAddressTransactions(
     const parsed = addressTransactionsSchema.safeParse(body);
     if (!parsed.success) return null;
     const { transactions, total } = parsed.data;
-    for (const entry of transactions) txids.push(entry.txid);
+    for (const entry of transactions) {
+      txids.push({
+        txid: entry.txid,
+        amountSat:
+          entry.amount === undefined || !Number.isFinite(entry.amount)
+            ? null
+            : BigInt(Math.round(entry.amount * 1e8)),
+        time: entry.time ?? null,
+      });
+    }
     if (txids.length >= total) return txids;
     // A short page before the total: the list is not what it says.
     if (transactions.length === 0) return null;
