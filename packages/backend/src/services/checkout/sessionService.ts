@@ -1402,7 +1402,7 @@ export async function confirmSessionAsPayer(
     // The session moved under the confirm: the payment just created is nobody's.
     // A FairCoin one is cancelled HERE, in the transaction that saw it orphaned,
     // so its address is not left payable on an order that will never link it
-    // (and becomes recyclable, ADR 0021 D9); a card one is cancelled at the
+    // (ADR 0021 D9); a card one is cancelled at the
     // provider first, after this commits.
     const moved = async () => {
       if (locked?.paymentIntentId === intent.id) return { kind: 'moved' as const, orphan: null };
@@ -1591,8 +1591,8 @@ async function createSessionPayment(
     if (error instanceof FaircoinNetworkClosedError) {
       throw new CheckoutError(409, 'faircoin_network_closed', error.message, 'payment_method_type');
     }
-    // Every address the recipient can hold open is open (ADR 0021 D9): FairCoin
-    // waits for one to free up; the card does not.
+    // Too many of the recipient's addresses of the last day went unpaid (ADR
+    // 0021 D9): FairCoin waits; the card does not.
     if (error instanceof FaircoinCapacityError) {
       throw new CheckoutError(
         503,

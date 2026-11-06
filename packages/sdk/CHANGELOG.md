@@ -1,5 +1,42 @@
 # Changelog
 
+## 6.0.0 — a recipient's FairCoin addresses are never reused, and its wallet watches exactly them
+
+Requires `@peable.to/contracts` 6.0.0 and `@peable.to/shared-types` 6.0.0 (ADR 0021 D9, replaced 2026-11-06).
+
+Removed (breaking):
+
+- `@peable.to/contracts/vocabulary/receiveTree` and its constants
+  `SOCIAL_RECEIVE_MAX_WATCHED`, `SOCIAL_RECEIVE_GAP_LIMIT`,
+  `SOCIAL_RECEIVE_INDEX_LIMIT` and `SOCIAL_RECEIVE_NEARLY_FULL_REMAINING`
+  (also gone from the `@peable.to/contracts/vocabulary` barrel): a recipient's
+  tree has no ceiling.
+- Error code `faircoin_receive_tree_full`. `POST /v1/social/:username/next_address`
+  answers 503 `faircoin_capacity_reached` instead when the recipient was handed
+  too many fresh `@username` addresses in the last day.
+
+Changed:
+
+- A FairCoin address is never handed out twice: a cancelled payment's address
+  stays that payment's (no recycling). `faircoin_capacity_reached` (503) now
+  means the recipient has 500 unpaid payment addresses of the last 24 hours (or
+  500 fresh `@username` addresses), not "500 open" or "tree full"; the other
+  methods still work. Paid addresses never count.
+- The hosted checkout's FairCoin confirm and the hosted invoice's FairCoin pay
+  are limited to 20 per client address per hour (429 `rate_limit_error`);
+  `next_address` to 30 fresh addresses per Oxy account per hour.
+
+Added:
+
+- `GET /v1/social/me/receive_addresses?network=&after=&limit=` (user session,
+  not an SDK method): every FairCoin address handed out in the caller's Peable
+  wallet — payments and `@username`, under every key the account has had —
+  as `{ addresses: SocialReceiveAddress[], has_more, sync_cursor }`, ascending
+  `derivation_index`, `after` = the previous `sync_cursor`. Types
+  `SocialReceiveAddress`, `SocialReceiveAddresses(Params|Response)` and
+  `SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT` / `_MAX` (500 / 1 000) in contracts
+  and shared-types.
+
 ## 5.6.0 — a recipient's FairCoin tree stops where its wallet stops watching
 
 Requires `@peable.to/contracts` 5.6.0 and `@peable.to/shared-types` 5.6.0 (ADR 0021 D9, D10, amended 2026-11-06).

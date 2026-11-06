@@ -13,7 +13,6 @@ import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
 } from '@peable.to/shared-types';
-import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
 import { socialReceiveCursors, socialSendAttributions } from '../../db/schema';
 import { must } from '../../__tests__/helpers/must';
 import { useAddressUsageReader } from '../../services/faircoin/addressPool';
@@ -71,6 +70,8 @@ const getProfileByUsernameMock = mock(async (username: string) => {
   if (username === 'flaky') {
     throw new Error('network timeout');
   }
+  // `r1`, `r2`, …: as many distinct recipients as a test needs.
+  if (/^r\d+$/.test(username)) return { id: `user_${username}`, username } as unknown as User;
   const profile = PROFILES[username];
   if (!profile) {
     // Real `getProfileByUsername` 404s carry `.status` (set by
@@ -105,8 +106,12 @@ mock.module('../../oxy', () => ({
   }),
 }));
 
-const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX } = await import('../social');
-const { useDidTransport, useIdentityKeyResolver } = await import('../../services/socialReceive');
+const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX, NEXT_ADDRESS_SENDER_MAX } = await import(
+  '../social'
+);
+const { useDidTransport, useIdentityKeyResolver, useMaxFreshSocialAddresses } = await import(
+  '../../services/socialReceive'
+);
 
 // This suite serves the DID document itself (the gateway reads it fresh,
 // through its transport): not the preloaded test keys.
@@ -270,32 +275,77 @@ describe('POST /v1/social/:username/next_address', () => {
     expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test("503s with code faircoin_receive_tree_full once the recipient's wallet watches no further index (ADR 0021 D9)", async () => {
-    // Index 1 creates the cursor; then every index below the limit is taken.
+  test('hands out indices past the old 1 980 ceiling: nothing caps a recipient (ADR 0021 D9)', async () => {
     await postNextAddress('alice', { network: 'testnet' }, 'user_tree_sender_1');
     await gatewayDb()
       .update(socialReceiveCursors)
-      .set({ nextDerivationIndex: SOCIAL_RECEIVE_INDEX_LIMIT - 1 })
+      .set({ nextDerivationIndex: 1_985 })
       .where(eq(socialReceiveCursors.oxyUserId, 'user_alice'));
-    const last = await postNextAddress('alice', { network: 'testnet' }, 'user_tree_sender_2');
-    expect(last.status).toBe(200);
-    expect(last.body.index).toBe(SOCIAL_RECEIVE_INDEX_LIMIT - 1);
+    const next = await postNextAddress('alice', { network: 'testnet' }, 'user_tree_sender_2');
+    expect(next.status).toBe(200);
+    expect(next.body.index).toBe(1_985);
+  });
 
-    const { status, body } = await postNextAddress(
-      'alice',
-      { network: 'testnet' },
-      'user_tree_sender_3',
-    );
-    // Not 409: that status alone means a keyless recipient to the wallet.
-    expect(status).toBe(503);
-    expect(body.error?.type).toBe('api_error');
-    expect(body.error?.code).toBe('faircoin_receive_tree_full');
-    expect(body.address).toBeUndefined();
-    const attributions = await gatewayDb()
-      .select()
-      .from(socialSendAttributions)
-      .where(eq(socialSendAttributions.senderUserId, 'user_tree_sender_3'));
-    expect(attributions).toEqual([]);
+  test("503s faircoin_capacity_reached once the recipient's daily fresh @username bound is reached, reserving nothing", async () => {
+    const previous = useMaxFreshSocialAddresses(2);
+    // The chain shows every address unused, so a sender asking again is handed its own.
+    const previousReader = useAddressUsageReader(async () => 'unused');
+    try {
+      expect((await postNextAddress('alice', { network: 'testnet' }, 'user_day_1')).status).toBe(
+        200,
+      );
+      expect((await postNextAddress('alice', { network: 'testnet' }, 'user_day_2')).status).toBe(
+        200,
+      );
+      const { status, body } = await postNextAddress('alice', { network: 'testnet' }, 'user_day_3');
+      // Not 409: that status alone means a keyless recipient to the wallet.
+      expect(status).toBe(503);
+      expect(body.error?.type).toBe('api_error');
+      expect(body.error?.code).toBe('faircoin_capacity_reached');
+      expect(body.address).toBeUndefined();
+      const attributions = await gatewayDb()
+        .select()
+        .from(socialSendAttributions)
+        .where(eq(socialSendAttributions.senderUserId, 'user_day_3'));
+      expect(attributions).toEqual([]);
+      // Nothing was reserved: the next fresh address, another day, is index 3.
+      const [cursor] = await gatewayDb()
+        .select({ next: socialReceiveCursors.nextDerivationIndex })
+        .from(socialReceiveCursors)
+        .where(eq(socialReceiveCursors.oxyUserId, 'user_alice'));
+      expect(cursor?.next).toBe(3);
+      // A sender that already holds an address is still handed it.
+      const again = await postNextAddress('alice', { network: 'testnet' }, 'user_day_1');
+      expect(again.status).toBe(200);
+      expect(again.body.index).toBe(1);
+    } finally {
+      useMaxFreshSocialAddresses(previous);
+      useAddressUsageReader(previousReader);
+    }
+  });
+
+  test(`a sender is handed at most ${NEXT_ADDRESS_SENDER_MAX} fresh addresses an hour, across recipients`, async () => {
+    const sender = 'user_sender_hourly';
+    const previous = useAddressUsageReader(async () => 'unused');
+    try {
+      for (let i = 1; i <= NEXT_ADDRESS_SENDER_MAX; i += 1) {
+        const { status } = await postNextAddress(`r${i}`, { network: 'testnet' }, sender);
+        expect(status).toBe(200);
+      }
+      const { status, body } = await postNextAddress(
+        `r${NEXT_ADDRESS_SENDER_MAX + 1}`,
+        { network: 'testnet' },
+        sender,
+      );
+      expect(status).toBe(429);
+      expect(body.error?.type).toBe('rate_limit_error');
+      // Asking again for an address it holds is not a fresh one.
+      const held = await postNextAddress('r1', { network: 'testnet' }, sender);
+      expect(held.status).toBe(200);
+      expect(held.body.index).toBe(1);
+    } finally {
+      useAddressUsageReader(previous);
+    }
   });
 
   test('409s with code keyless_recipient for a keyless recipient', async () => {
@@ -718,5 +768,93 @@ describe('GET /v1/social/me/payments', () => {
     expect(payment?.address).toBe('Tsourced000000000000000000000000000');
     expect(payment?.direction).toBe('sent');
     expect(payment?.counterparty.username).toBe('keylessbob');
+  });
+});
+
+interface ReceiveAddressesResponse {
+  addresses?: {
+    address: string;
+    derivation_index: number;
+    identity_public_key: string | null;
+    network: string;
+    created: number;
+  }[];
+  has_more?: boolean;
+  sync_cursor?: number;
+  error?: { type: string; message: string };
+}
+
+async function getReceiveAddresses(
+  query: string,
+  userId: string,
+): Promise<{ status: number; body: ReceiveAddressesResponse }> {
+  const res = await fetch(`${baseUrl}/v1/social/me/receive_addresses?${query}`, {
+    headers: { 'X-Test-User-Id': userId },
+  });
+  return { status: res.status, body: (await res.json()) as ReceiveAddressesResponse };
+}
+
+describe('GET /v1/social/me/receive_addresses (ADR 0021 D9)', () => {
+  test('lists every address handed out for the caller, in index order, with its key', async () => {
+    const handed: string[] = [];
+    for (const sender of ['user_ra_1', 'user_ra_2', 'user_ra_3']) {
+      handed.push(
+        must((await postNextAddress('alice', { network: 'testnet' }, sender)).body.address),
+      );
+    }
+    const { status, body } = await getReceiveAddresses('network=testnet', 'user_alice');
+    expect(status).toBe(200);
+    expect(body.has_more).toBe(false);
+    expect(body.sync_cursor).toBe(3);
+    expect(body.addresses?.map((a) => a.address)).toEqual(handed);
+    expect(body.addresses?.map((a) => a.derivation_index)).toEqual([1, 2, 3]);
+    for (const row of must(body.addresses)) {
+      expect(row.identity_public_key).toMatch(/^[0-9a-f]{66,130}$/);
+      expect(row.network).toBe('testnet');
+      expect(row.created).toBeGreaterThan(0);
+    }
+    // The sender's own list holds none of them: they are alice's.
+    const sender = await getReceiveAddresses('network=testnet', 'user_ra_1');
+    expect(sender.body.addresses).toEqual([]);
+    expect(sender.body.sync_cursor).toBe(0);
+  });
+
+  test('pages by the sync cursor and misses nothing handed out after it', async () => {
+    for (const sender of ['user_rp_1', 'user_rp_2', 'user_rp_3']) {
+      await postNextAddress('alice', { network: 'testnet' }, sender);
+    }
+    const first = await getReceiveAddresses('network=testnet&limit=2', 'user_alice');
+    expect(first.body.addresses?.map((a) => a.derivation_index)).toEqual([1, 2]);
+    expect(first.body.has_more).toBe(true);
+    expect(first.body.sync_cursor).toBe(2);
+    const second = await getReceiveAddresses(
+      `network=testnet&limit=2&after=${String(first.body.sync_cursor)}`,
+      'user_alice',
+    );
+    expect(second.body.addresses?.map((a) => a.derivation_index)).toEqual([3]);
+    expect(second.body.has_more).toBe(false);
+    const done = await getReceiveAddresses(
+      `network=testnet&after=${String(second.body.sync_cursor)}`,
+      'user_alice',
+    );
+    expect(done.body.addresses).toEqual([]);
+    expect(done.body.sync_cursor).toBe(3);
+    await postNextAddress('alice', { network: 'testnet' }, 'user_rp_4');
+    const later = await getReceiveAddresses('network=testnet&after=3', 'user_alice');
+    expect(later.body.addresses?.map((a) => a.derivation_index)).toEqual([4]);
+  });
+
+  test('is scoped per network, and refuses a bad query', async () => {
+    await postNextAddress('alice', { network: 'testnet' }, 'user_rn_1');
+    const mainnet = await getReceiveAddresses('network=mainnet', 'user_alice');
+    expect(mainnet.status).toBe(200);
+    expect(mainnet.body.addresses).toEqual([]);
+    expect((await getReceiveAddresses('', 'user_alice')).status).toBe(400);
+    expect((await getReceiveAddresses('network=testnet&limit=0', 'user_alice')).status).toBe(400);
+    expect((await getReceiveAddresses('network=testnet&limit=1001', 'user_alice')).status).toBe(
+      400,
+    );
+    expect((await getReceiveAddresses('network=testnet&after=-1', 'user_alice')).status).toBe(400);
+    expect((await getReceiveAddresses('network=testnet&extra=1', 'user_alice')).status).toBe(400);
   });
 });

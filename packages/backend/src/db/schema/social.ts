@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { check, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, updatedAt } from '@oxy.so/db';
 import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
@@ -133,6 +133,18 @@ export const socialSendAttributions = pgTable(
   },
   (table) => [
     uniqueIndex('social_send_attributions_address_network_key').on(table.address, table.network),
+    /** The recipient's watch set, synced in index order (`GET /v1/social/me/receive_addresses`). */
+    index('social_send_attributions_recipient_index_idx').on(
+      table.recipientUserId,
+      table.network,
+      table.derivationIndex,
+    ),
+    /** The recipient's fresh `@username` addresses of the last day: the per-recipient bound (ADR 0021 D9). */
+    index('social_send_attributions_recipient_created_idx').on(
+      table.recipientUserId,
+      table.network,
+      table.createdAt,
+    ),
     check(
       'social_send_attributions_network_check',
       sql.raw(`network in (${inList(NETWORK_TYPES)})`),

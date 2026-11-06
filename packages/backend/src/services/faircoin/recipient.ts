@@ -23,7 +23,7 @@ import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { config } from '../../config';
 import { faircoinPriceAvailable } from './quote';
 import { resolveIdentityPublicKey } from '../socialReceive';
-import { findRecyclableAddress, type PlannedAddress, recipientHasAddressRoom } from './addressPool';
+import { type PlannedAddress, recipientHasAddressRoom } from './addressPool';
 
 /** The recipient has no Peable wallet yet (no identity key), or is not known yet. */
 export class FaircoinWalletMissingError extends Error {
@@ -88,11 +88,11 @@ async function hasIdentityKey(accountId: string): Promise<boolean> {
 
 /**
  * Decide, before the payment's transaction, how the next address in the
- * recipient's Peable wallet will be reserved: the gates (network, wallet), the
- * recipient's PUBLIC identity key, and an address of theirs the chain shows
- * unused that can be recycled (`addressPool.ts`, ADR 0021 D9). The reservation
- * itself — the claim, or one statement on the cursor under the open-address
- * cap — is `reservePlannedAddresses`, in the payment's transaction.
+ * recipient's Peable wallet will be reserved: the gates (network, wallet) and
+ * the recipient's PUBLIC identity key, read fresh (an HTTP call, so outside the
+ * transaction). The reservation itself — a fresh index on the cursor, under
+ * the per-recipient unpaid bound (ADR 0021 D9) — is `reservePlannedAddresses`,
+ * in the payment's transaction.
  *
  * @throws {FaircoinWalletMissingError} no recipient, or no identity key.
  * @throws {FaircoinNetworkClosedError} the deployment does not open `network`.
@@ -105,12 +105,7 @@ export async function planFaircoinAddress(
   if (recipientAccountId === null) throw new FaircoinWalletMissingError();
   const identityPublicKey = await resolveIdentityPublicKey(recipientAccountId);
   if (!identityPublicKey) throw new FaircoinWalletMissingError();
-  return {
-    recipientAccountId,
-    network,
-    identityPublicKey,
-    candidate: await findRecyclableAddress(recipientAccountId, network, identityPublicKey),
-  };
+  return { recipientAccountId, network, identityPublicKey };
 }
 
 /**
@@ -139,9 +134,9 @@ export async function faircoinAvailability(order: {
     return unavailable('temporarily_unavailable');
   }
   if (!hasKey) return unavailable('faircoin_wallet_missing');
-  // Every address the recipient can hold open is open (ADR 0021 D9): FairCoin
-  // waits for one to free up, and says so. Display only — the confirm decides
-  // under the pool's lock — so a pool that cannot be read does not hide it.
+  // Too many of the recipient's addresses of the last day went unpaid (ADR
+  // 0021 D9): FairCoin waits, and says so. Display only — the confirm decides
+  // under the pool's lock — so a count that cannot be read does not hide it.
   const room = await recipientHasAddressRoom(order.recipientAccountId, order.network).catch(
     () => true,
   );

@@ -23,8 +23,7 @@ import { useTheme } from '@oxy.so/bloom/theme';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { requestSocialReceiveResync, useWalletStore } from '../../wallet/wallet-store';
 import { Button, ListItem } from '../components';
-import { formatNumber, t } from '../../i18n';
-import { SOCIAL_RECEIVE_MAX_WATCHED } from '../../wallet/social-receive';
+import { t } from '../../i18n';
 import { FONT_PHUDU_BLACK } from '../../utils/fonts';
 
 const CONTENT_MAX_WIDTH = 500;
@@ -49,10 +48,9 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
   const getNewAddress = useWalletStore((s) => s.getNewAddress);
   const socialReceiveDefaultAddress = useWalletStore((s) => s.socialReceiveDefaultAddress);
   const socialReceiveKeyMismatch = useWalletStore((s) => s.socialReceiveKeyMismatch);
-  const socialReceiveWindowCapped = useWalletStore((s) => s.socialReceiveWindowCapped);
   const { user } = useOxy();
 
-  // The person is about to be paid: make sure the window covers every address
+  // The person is about to be paid: make sure the wallet watches every address
   // the gateway has handed out, and that this phone's key is still the one the
   // account publishes, before offering `@username`.
   useEffect(() => {
@@ -174,7 +172,7 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
             identity key than this device holds: payers would be sent to
             addresses derived from that other key, which this wallet can neither
             see nor spend, and the handle would be an invitation to lose money. */}
-        {user?.username && socialReceiveDefaultAddress && !socialReceiveWindowCapped ? (
+        {user?.username && socialReceiveDefaultAddress ? (
           <View className="items-center">
             <Text className="text-muted-foreground text-sm">{t('receive.payMeAt')}</Text>
             <Text className="text-foreground text-lg font-bold mt-0.5">@{user.username}</Text>
@@ -194,22 +192,6 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
               {user?.kind === 'organization'
                 ? t('receive.keyMismatch.organization')
                 : t('receive.keyMismatch.personal')}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* More addresses were handed out for this account than this wallet
-            watches: a payment by handle could land beyond them. Say so rather
-            than offer `@username`. */}
-        {socialReceiveWindowCapped && !socialReceiveKeyMismatch ? (
-          <View className="bg-surface rounded-2xl px-4 py-3">
-            <Text className="text-foreground text-sm font-semibold">
-              {t('receive.windowCapped.title')}
-            </Text>
-            <Text className="text-muted-foreground text-xs mt-1 leading-4">
-              {t('receive.windowCapped.description', {
-                max: formatNumber(SOCIAL_RECEIVE_MAX_WATCHED, 0),
-              })}
             </Text>
           </View>
         ) : null}

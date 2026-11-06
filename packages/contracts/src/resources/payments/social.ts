@@ -1,11 +1,17 @@
 import { z } from 'zod';
 import { defineComponent } from '../../common/objects';
+import { queryInteger } from '../../common/params';
+
+/** The highest BIP32 non-hardened child index, `int4`'s ceiling (`schema/valueSets.ts`). */
+const MAX_DERIVATION_INDEX = 2_147_483_647;
 import { network, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import {
   ENRICH_MAX_ADDRESSES,
   ENRICHMENT_KINDS,
   SOCIAL_PAYMENT_DIRECTIONS,
+  SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT,
+  SOCIAL_RECEIVE_ADDRESSES_PAGE_MAX,
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
 } from '../../vocabulary/payments';
@@ -116,10 +122,10 @@ export const socialReceiveCursorQuery = networkQuery;
 export type SocialReceiveCursorParams = z.input<typeof socialReceiveCursorQuery>;
 
 /**
- * Lets the caller's device resync its watch window: every `next_address`
- * advances a monotonic index whether or not it is ever paid, so a burst of
- * reservations can outrun a device that widens only on payment. Watch
- * `0..reserved_through + gap`.
+ * The caller's cursor and keys. The addresses to watch are
+ * `GET /v1/social/me/receive_addresses` (ADR 0021 D9, amended 2026-11-06);
+ * `reserved_through` only says how far the cursor went, and the device
+ * compares its key with `account_identity_public_key`.
  */
 export const socialReceiveCursorSchema = defineComponent(
   'SocialReceiveCursor',
@@ -148,6 +154,80 @@ export const socialReceiveCursorSchema = defineComponent(
     .strict(),
 );
 export type SocialReceiveCursorResponse = z.output<typeof socialReceiveCursorSchema>;
+
+/**
+ * The caller's receive addresses after a sync cursor (ADR 0021 D9, amended
+ * 2026-11-06). `after` is the `sync_cursor` of the previous answer, `0` (the
+ * default) from the start.
+ */
+export const socialReceiveAddressesQuery = z
+  .object({
+    network,
+    after: queryInteger({ min: 0, max: MAX_DERIVATION_INDEX })
+      .optional()
+      .describe(
+        'The `sync_cursor` of the previous page or sync; absent (or `0`) lists from the first address.',
+      ),
+    limit: queryInteger({ min: 1, max: SOCIAL_RECEIVE_ADDRESSES_PAGE_MAX })
+      .optional()
+      .describe(
+        `At most this many addresses (default ${SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT}); a page exceeds it only by addresses sharing its last index.`,
+      ),
+  })
+  .strict();
+export type SocialReceiveAddressesParams = z.input<typeof socialReceiveAddressesQuery>;
+
+/**
+ * One FairCoin address the gateway handed out in the caller's Peable wallet —
+ * for a payment (merchant, seller, invoice, raw intent, one output of a split
+ * payment) or an `@username` request — under ANY key the account has had.
+ * Addresses are never reused: each is a fresh index of the account's one
+ * cursor (ADR 0002, ADR 0021 D5, D9).
+ */
+export const socialReceiveAddressSchema = defineComponent(
+  'SocialReceiveAddress',
+  z
+    .object({
+      address: z.string().describe('The FairCoin address.'),
+      derivation_index: z
+        .number()
+        .int()
+        .positive()
+        .describe(
+          "Its index in the account's social-receive tree (`deriveSocialReceiveAddress(key, index)`); index 0, the stable default address, is never handed out.",
+        ),
+      identity_public_key: z
+        .string()
+        .nullable()
+        .describe(
+          "The identity public key the address was derived from, in the encoding of the cursor's `identity_public_key` (lowercase hex of the DID `#key-1` bytes). It may be a key the account has since replaced. `null` only for an address handed out before keys were recorded.",
+        ),
+      network,
+      created: unixSeconds.describe('When the address was handed out.'),
+    })
+    .strict(),
+);
+export type SocialReceiveAddress = z.output<typeof socialReceiveAddressSchema>;
+
+export const socialReceiveAddressesSchema = defineComponent(
+  'SocialReceiveAddresses',
+  z
+    .object({
+      addresses: z
+        .array(socialReceiveAddressSchema)
+        .describe('In ascending `derivation_index`, each address once.'),
+      has_more: z.boolean().describe('More addresses follow `sync_cursor`: ask again with it.'),
+      sync_cursor: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe(
+          'Pass as `after` to continue — the highest `derivation_index` in this page, or `after` when the page is empty. Monotonic: an address handed out later always has a higher index, so a wallet that stored it misses nothing by asking from it.',
+        ),
+    })
+    .strict(),
+);
+export type SocialReceiveAddressesResponse = z.output<typeof socialReceiveAddressesSchema>;
 
 export const socialPaymentsQuery = networkQuery;
 export type SocialPaymentsParams = z.input<typeof socialPaymentsQuery>;
@@ -211,7 +291,7 @@ export const socialRoutes = [
     tag: 'Social payments',
     summary: 'Reserve an address to pay a person',
     description:
-      "A fresh address of the recipient's, derived from their Oxy identity key. Limited per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one whose wallet watches no further address (every index below its watched bound is taken) 503 `faircoin_receive_tree_full`; paying yourself is refused.",
+      "A fresh address of the recipient's, derived from their Oxy identity key — or the one this sender already holds and has not paid. Limited per sender and per (sender, recipient) pair; a recipient without an identity answers 409 `keyless_recipient`, and one handed too many fresh `@username` addresses in the last day 503 `faircoin_capacity_reached`; paying yourself is refused.",
     auth: 'user',
     params: { username: 'The recipient’s Oxy username.' },
     body: socialNextAddressParams,
@@ -228,6 +308,18 @@ export const socialRoutes = [
     auth: 'user',
     query: socialReceiveCursorQuery,
     response: socialReceiveCursorSchema,
+  }),
+  defineRoute({
+    operationId: 'listSocialReceiveAddresses',
+    method: 'get',
+    path: '/v1/social/me/receive_addresses',
+    tag: 'Social payments',
+    summary: "List the caller's receive addresses",
+    description:
+      "Every FairCoin address handed out in the caller's Peable wallet on `network` — payments and `@username` alike, under every key the account has had — after `after`, in ascending index, for whoever the session acts as (an organization's, when acting as it). The wallet watches exactly this set (ADR 0021 D9). Read-only.",
+    auth: 'user',
+    query: socialReceiveAddressesQuery,
+    response: socialReceiveAddressesSchema,
   }),
   defineRoute({
     operationId: 'listSocialPayments',

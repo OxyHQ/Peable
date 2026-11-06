@@ -1,29 +1,33 @@
 /**
- * Keeping the social-receive watch window honest while the wallet RUNS.
+ * Keeping the social-receive watch set honest while the wallet RUNS (ADR 0021
+ * D9, amended 2026-11-06).
  *
- * The gateway advances this account's cursor on every `next_address` — every
- * `@username` lookup, every FairCoin checkout, abandoned or not — and none of
- * that reaches the phone. Reading the cursor only at unlock meant a running
- * wallet fell behind after the gap limit's worth of unpaid reservations, and
- * the payment after them was never seen: the gateway said succeeded, the
- * wallet never showed the coins.
+ * The gateway hands out a fresh address of this account on every FairCoin
+ * payment and every `@username` request, and none of that reaches the phone by
+ * itself. So the wallet pulls the set the gateway reports
+ * (`GET /v1/social/me/receive_addresses`) on request and on an interval.
  *
- * Two halves, both pure over injected effects so they are unit-tested without
- * SQLite, SPV or a network:
+ * Three pieces, each pure over injected effects so they are unit-tested
+ * without SQLite, SPV or a network:
  *
- * - {@link createResyncScheduler}: WHEN to re-read the cursor — on request
- *   (the app coming to the foreground, a push, a social payment landing, the
- *   Receive sheet opening) and on a bounded interval — never two at once.
- * - {@link checkSocialReceiveAddresses}: making sure every watched index has
- *   actually been LOOKED AT. An address that joins the Bloom filter is watched
- *   from then on; blocks the historical rescan already passed are never
- *   revisited. So each new index is read once through the Explorer, and any
- *   coin found there sends the SPV rescan back to the block it confirmed in.
+ * - {@link createResyncScheduler}: WHEN to resync — on request (the app coming
+ *   to the foreground, a push, a social payment landing, the Receive sheet
+ *   opening) and on a bounded interval — never two at once.
+ * - {@link pullSocialReceiveSet}: paging the set from the stored sync cursor,
+ *   and once a week from the start again.
+ * - {@link checkSocialReceiveDue}: reading through the Explorer the addresses
+ *   whose turn came (`social-receive-watch.ts` decides which). An address that
+ *   joins the Bloom filter is watched from then on, but blocks the historical
+ *   rescan already passed are never revisited, and a dormant address is not in
+ *   the filter at all; any coin a read finds sends the SPV rescan back to the
+ *   block it confirmed in.
  */
 
 import type { AddressActivity } from '../services/explorer-address';
+import type { WatchSetCheck, WatchSetRow } from './social-receive-watch';
+import { nextSocialReceiveCheckAt } from './social-receive-watch';
 
-/** How often a running wallet re-reads the cursor with nothing prompting it. */
+/** How often a running wallet resyncs with nothing prompting it. */
 export const SOCIAL_RECEIVE_RESYNC_INTERVAL_MS = 2 * 60_000;
 
 export interface ResyncScheduler {
@@ -98,75 +102,173 @@ export function createResyncScheduler(deps: {
 const CHECK_BATCH = 50;
 
 export interface SocialReceiveCheckDeps {
-  /** Every watched index with its address (any order). */
-  readonly watched: readonly { readonly index: number; readonly address: string }[];
-  /** Every index up to and including this one has been checked (-1: none). */
-  readonly checkedThrough: number;
-  /**
-   * False when no historical rescan has ever started: the first one scans from
-   * the wallet birthday with whatever the Bloom filter holds by then, which
-   * covers every address already watched — no Explorer read needed.
-   */
-  readonly scanHasBegun: boolean;
+  /** The rows to read, in the order to read them (`planSocialReceiveChecks`). */
+  readonly due: readonly WatchSetRow[];
+  /** The clock, Unix seconds. */
+  readonly now: () => number;
   /** {@link fetchAddressActivity}; throws on any failure but a 404. */
   readonly fetchActivity: (addresses: readonly string[]) => Promise<Map<string, AddressActivity>>;
   /** Send the SPV rescan back to `height` (persisted, applied by the driver). */
   readonly requestRescanFrom: (height: number) => Promise<void>;
-  /** Persist progress. Called only after the reads it covers answered. */
-  readonly markCheckedThrough: (index: number) => Promise<void>;
+  /** Persist one batch's checks. Called only after the reads it covers answered. */
+  readonly record: (checks: readonly WatchSetCheck[]) => Promise<void>;
   /** False once the wallet closed or switched: stop without writing. */
   readonly isCurrent: () => boolean;
   readonly batchSize?: number;
 }
 
 export interface SocialReceiveCheckResult {
-  readonly checkedThrough: number;
+  /** How many rows were read and recorded. */
+  readonly checked: number;
+  /** The addresses a read showed coins at (confirmed or in the mempool). */
+  readonly found: readonly string[];
   /** The lowest height a rescan was requested from, or `null`. */
   readonly rescanFrom: number | null;
 }
 
 /**
- * Look at every watched index above `checkedThrough`, in index order, a batch
- * at a time. Progress is recorded only for a batch whose reads all answered,
- * so an Explorer outage leaves the rest to the next resync instead of
- * recording them as empty. A coin still in the mempool needs nothing: the
- * block that confirms it is above the rescan's target and is scanned with the
- * filter as it is now.
+ * Read every due row through the Explorer, a batch at a time. A batch is
+ * recorded only once all its reads answered, so an Explorer outage leaves the
+ * rest due for the next resync instead of recording them as empty. A coin
+ * found sends the rescan back to its block and marks the row found, which
+ * puts it in the Bloom filter: a coin still in the mempool is then seen in the
+ * block that confirms it.
  */
-export async function checkSocialReceiveAddresses(
+export async function checkSocialReceiveDue(
   deps: SocialReceiveCheckDeps,
 ): Promise<SocialReceiveCheckResult> {
-  const pending = deps.watched
-    .filter(({ index }) => index > deps.checkedThrough)
-    .sort((a, b) => a.index - b.index);
-  const last = pending[pending.length - 1];
-  if (!last) return { checkedThrough: deps.checkedThrough, rescanFrom: null };
-
-  if (!deps.scanHasBegun) {
-    await deps.markCheckedThrough(last.index);
-    return { checkedThrough: last.index, rescanFrom: null };
-  }
-
   const batchSize = deps.batchSize ?? CHECK_BATCH;
-  let checkedThrough = deps.checkedThrough;
+  let checked = 0;
   let rescanFrom: number | null = null;
-  for (let offset = 0; offset < pending.length; offset += batchSize) {
-    const batch = pending.slice(offset, offset + batchSize);
+  const found: string[] = [];
+  for (let offset = 0; offset < deps.due.length; offset += batchSize) {
+    const batch = deps.due.slice(offset, offset + batchSize);
     const activity = await deps.fetchActivity(batch.map(({ address }) => address));
     if (!deps.isCurrent()) break;
+    const now = deps.now();
     let lowest: number | null = null;
-    for (const { address } of batch) {
-      const first = activity.get(address)?.confirmedHeights[0];
+    const checks: WatchSetCheck[] = [];
+    for (const row of batch) {
+      const seen = activity.get(row.address);
+      const first = seen?.confirmedHeights[0];
       if (first !== undefined && (lowest === null || first < lowest)) lowest = first;
+      const hasCoins = first !== undefined || seen?.hasUnconfirmed === true;
+      if (hasCoins) found.push(row.address);
+      checks.push({
+        address: row.address,
+        checkedAt: now,
+        nextCheckAt: nextSocialReceiveCheckAt(row.createdAt, now),
+        ...(hasCoins ? { foundAt: now } : {}),
+      });
     }
     if (lowest !== null) {
       await deps.requestRescanFrom(lowest);
       rescanFrom = rescanFrom === null ? lowest : Math.min(rescanFrom, lowest);
     }
-    const batchLast = batch[batch.length - 1];
-    if (!batchLast || !deps.isCurrent()) break;
-    await deps.markCheckedThrough(batchLast.index);
-    checkedThrough = batchLast.index;
+    if (!deps.isCurrent()) break;
+    await deps.record(checks);
+    checked += checks.length;
   }
-  return { checkedThrough, rescanFrom };
+  return { checked, found, rescanFrom };
+}
+
+/** Pages one resync reads at most; the rest is read on the next. */
+export const SOCIAL_RECEIVE_SYNC_PAGES_PER_RESYNC = 20;
+
+/** How often the whole set is read again from the start (defence in depth). */
+export const SOCIAL_RECEIVE_FULL_SYNC_SECONDS = 7 * 24 * 60 * 60;
+
+/** Where the pull stands, persisted between resyncs. */
+export interface SocialReceiveSyncState {
+  /** The incremental sync cursor: every address at or below it is stored. */
+  readonly cursor: number;
+  /** A full re-read in progress: where it stands; `null` when none is. */
+  readonly fullAfter: number | null;
+  /** When a read last reached the end from the start; `null`: never. */
+  readonly fullAt: number | null;
+}
+
+/** One page as the route answers it. */
+export interface SocialReceivePage<Item> {
+  readonly addresses: readonly Item[];
+  readonly has_more: boolean;
+  readonly sync_cursor: number;
+}
+
+export interface SocialReceivePullDeps<Item> {
+  readonly state: SocialReceiveSyncState;
+  /** Unix seconds. */
+  readonly now: () => number;
+  /** `GET /v1/social/me/receive_addresses` after `after`. */
+  readonly list: (after: number) => Promise<SocialReceivePage<Item>>;
+  /** Store a page's addresses (idempotent: a full re-read stores them again). */
+  readonly store: (items: readonly Item[]) => Promise<void>;
+  /** Persist the state after a page was stored. */
+  readonly saveState: (state: SocialReceiveSyncState) => Promise<void>;
+  readonly isCurrent: () => boolean;
+  readonly maxPages?: number;
+  readonly fullSyncSeconds?: number;
+}
+
+export interface SocialReceivePullResult<Item> {
+  readonly state: SocialReceiveSyncState;
+  /** Every address this pull stored, in the order it came. */
+  readonly items: readonly Item[];
+  /** Whether the set is read to its end (nothing left for the next resync). */
+  readonly complete: boolean;
+}
+
+/**
+ * Page the set from the stored sync cursor until the gateway says there is no
+ * more, at most `maxPages` pages; a page is stored before the cursor moves past
+ * it, so a crash re-reads a page rather than skipping one. The cursor is
+ * monotonic on the gateway (a later address has a higher index), so the
+ * incremental read misses nothing; once every {@link SOCIAL_RECEIVE_FULL_SYNC_SECONDS}
+ * the set is read again from the start anyway, resumable across resyncs,
+ * never moving the incremental cursor back. Errors propagate to the caller,
+ * with every stored page kept.
+ */
+export async function pullSocialReceiveSet<Item>(
+  deps: SocialReceivePullDeps<Item>,
+): Promise<SocialReceivePullResult<Item>> {
+  const maxPages = deps.maxPages ?? SOCIAL_RECEIVE_SYNC_PAGES_PER_RESYNC;
+  const fullSyncSeconds = deps.fullSyncSeconds ?? SOCIAL_RECEIVE_FULL_SYNC_SECONDS;
+  let state = deps.state;
+  if (
+    state.fullAfter === null &&
+    state.fullAt !== null &&
+    deps.now() - state.fullAt >= fullSyncSeconds
+  ) {
+    state = { ...state, fullAfter: 0 };
+  }
+  const items: Item[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const full = state.fullAfter !== null;
+    const after = state.fullAfter ?? state.cursor;
+    const answer = await deps.list(after);
+    if (!deps.isCurrent()) return { state, items, complete: false };
+    await deps.store(answer.addresses);
+    for (const item of answer.addresses) items.push(item);
+    const reached = Math.max(after, answer.sync_cursor);
+    const done = !answer.has_more;
+    if (full) {
+      state = {
+        cursor: Math.max(state.cursor, reached),
+        fullAfter: done ? null : reached,
+        fullAt: done ? deps.now() : state.fullAt,
+      };
+    } else {
+      state = {
+        cursor: reached,
+        fullAfter: null,
+        // The cursor starts at 0, so the first read to the end IS a full read.
+        fullAt: done && state.fullAt === null ? deps.now() : state.fullAt,
+      };
+    }
+    if (!deps.isCurrent()) return { state, items, complete: false };
+    await deps.saveState(state);
+    // A page that moved nothing while saying "more" would loop: stop and retry later.
+    if (done || reached === after) return { state, items, complete: done };
+  }
+  return { state, items, complete: false };
 }

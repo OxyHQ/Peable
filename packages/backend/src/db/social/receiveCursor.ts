@@ -3,20 +3,6 @@ import type { NetworkType } from '@fairco.in/core';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import { uuidv7 } from '@oxy.so/db';
-import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
-
-/**
- * The recipient's tree is full: every index the Peable wallet watches with its
- * gap above has been handed out (ADR 0021 D9, amended 2026-11-06). Nothing was
- * reserved. A FairCoin payment answers `faircoin_capacity_reached` (and may
- * still recycle), `@username` answers `faircoin_receive_tree_full`.
- */
-export class ReceiveTreeFullError extends Error {
-  constructor(oxyUserId: string, network: NetworkType) {
-    super(`the ${network} receive tree of ${oxyUserId} has no index left that its wallet watches`);
-    this.name = 'ReceiveTreeFullError';
-  }
-}
 
 /**
  * Claim the next unused social-receive index for a user on a network,
@@ -50,17 +36,15 @@ export class ReceiveTreeFullError extends Error {
  * Index 0 is never reachable through here. It is the recipient's stable
  * default address, computed on-device from their identity key.
  *
- * ## The ceiling is in the same statement
+ * ## No ceiling
  *
- * The wallet watches indices `0 .. SOCIAL_RECEIVE_MAX_WATCHED - 1` and reaches
- * `SOCIAL_RECEIVE_GAP_LIMIT` past the highest reserved; an index at or above
- * `SOCIAL_RECEIVE_INDEX_LIMIT` (`@peable.to/contracts/vocabulary`) would be
- * paid where it does not look. The conflict branch's `WHERE` refuses it: the
- * row lock the upsert takes is the same one the increment needs, so two
- * callers can never both pass the bound, and a refused call returns no row and
- * changes nothing. The insert branch hands out `FIRST_FRESH_INDEX`, far below.
- *
- * @throws {ReceiveTreeFullError} the next index is `>= SOCIAL_RECEIVE_INDEX_LIMIT`.
+ * The recipient's wallet watches exactly the addresses handed out
+ * (`GET /v1/social/me/receive_addresses`, ADR 0021 D9 amended 2026-11-06), not
+ * a contiguous range from 0, so no index is too high to be watched; what bounds
+ * how many are handed out is the per-recipient count under the pool's lock
+ * (`services/faircoin/addressPool.ts`), never this statement. The row lock it
+ * takes is held until the caller's transaction ends, which is what makes the
+ * index the wallet's sync cursor (`db/social/receiveAddresses.ts`).
  */
 export async function reserveNextSocialReceiveIndex(
   db: DatabaseOrTransaction,
@@ -86,14 +70,10 @@ export async function reserveNextSocialReceiveIndex(
         nextDerivationIndex: sql`${socialReceiveCursors.nextDerivationIndex} + 1`,
         identityPublicKey,
       },
-      // The ceiling (ADR 0021 D9, amended 2026-11-06): the index this branch
-      // hands out is the pre-increment value, so it must be below the limit.
-      setWhere: sql`${socialReceiveCursors.nextDerivationIndex} < ${SOCIAL_RECEIVE_INDEX_LIMIT}`,
     })
     .returning({ index: sql<number>`${socialReceiveCursors.nextDerivationIndex} - 1` });
 
-  // `DO UPDATE … WHERE` produces no row exactly when the WHERE refused it.
-  if (!row) throw new ReceiveTreeFullError(oxyUserId, network);
+  if (!row) throw new Error('the receive cursor upsert returned no row');
   return row.index;
 }
 

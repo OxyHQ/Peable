@@ -112,37 +112,41 @@ Two consequences, both wanted:
   path in `connectedAccountFaircoin.realdb.test.ts`); one reservation cannot
   tell a number from a string that prints the same.
 
-### A payment address has one HOLDER, not one row (ADR 0021 D9)
+### An address is handed out once, for ever (ADR 0021 D9, amended 2026-11-06)
 
-`payment_intent_outputs (network, address)` is unique only among rows with
-`recycled_at is null`: a recycled address keeps its old row (its payment's
-history) and gains a new holder. Readers that resolve "who is this address
-for" take the holder; the previous one is always a `canceled` payment, which is
-terminal, so no transaction can settle both. `derivation_index` (NULL only on
-rows written before it, CHECKed `>= 1`) is what lets a recycle prove the address
-still derives from the recipient's current key; `retired_at` marks an address
-the chain showed used (or that no longer derives from the key), never offered
-again. The pool's reads use `payment_intent_outputs_recipient_pool_idx`,
-partial on neither column being set.
+`payment_intent_outputs (network, address)` is unique, full — not partial: an
+address belongs to ONE output for ever (migration 0114 dropped the recycling
+columns `recycled_at`, `retired_at`, `recycle_checked_at`, `recycle_lease_until`
+and made the index full again; until 2026-11-06 a cancelled payment's unused
+address could be handed to a later payment, and a late payer of the old quote
+then paid the new order). `social_send_attributions (address, network)` is
+unique as before. There is no cross-table unique index; instead every
+reservation derives the next index's address and skips it when either table
+already holds it (`reserveFreshAddress`, `services/faircoin/addressPool.ts`) —
+possible only where history left a cursor behind an address it derived
+(migration 0009). `derivation_index` (NULL only on outputs written before 0105,
+CHECKed `>= 1`) is what the wallet derives and signs with.
 
-`recycle_lease_until` and `recycle_checked_at` (amended 2026-11-06) are hints,
-never the decision: the lease only spreads concurrent confirms over different
-candidates (one `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED)`), and
-the check stamp only spares a reservation under the pool's lock an HTTP call.
-The claim itself is still `claimRecycleCandidate`'s compare-and-swap on
-`recycled_at is null`. No CHECK ties them to anything: a lapsed lease is free,
-and a stale stamp is read again.
+The two tables ARE the recipient's watch set: `GET
+/v1/social/me/receive_addresses` reads their union by
+`(recipient, network, derivation_index)` (`*_recipient_index_idx`), and the
+per-recipient daily bounds count by `(recipient, network, created_at)`
+(`*_recipient_created_idx`). No third table copies them.
 
-### The cursor has a ceiling, in the reservation's own statement (ADR 0021 D9)
+### The cursor's index is the wallet's sync cursor (ADR 0021 D9)
 
-`social_receive_cursors.next_derivation_index` never hands out an index at or
-above `SOCIAL_RECEIVE_INDEX_LIMIT` (`@peable.to/contracts/vocabulary/receiveTree`,
-`SOCIAL_RECEIVE_MAX_WATCHED − SOCIAL_RECEIVE_GAP_LIMIT`): the wallet watches a
-bounded window and an address past it is paid where nobody looks. The bound is
-the `WHERE` of the upsert's `DO UPDATE` — same row lock, no read-then-write —
-and deliberately NOT a CHECK: a cursor already past it
-must stay readable, and a CHECK would make the refused reservation an error
-instead of "no row".
+`social_receive_cursors.next_derivation_index` has no ceiling any more (the
+`WHERE` of the upsert's `DO UPDATE` that refused `≥ 1 980` is gone with the
+contiguous watch window). What it does carry is ORDER: the upsert's row lock is
+held until the reserving transaction ends, and the address's own row (the
+output, or the attribution) is written in that transaction, so for one account
+and network an index commits only after every lower one has committed or rolled
+back. That is why a wallet that has synced through index `n` misses nothing by
+asking for `> n`, and why both writers MUST record the address in the
+reservation's transaction — an attribution written after the reservation
+committed (as it was until 2026-11-06) could appear below a cursor a wallet
+already passed. Migration 0113 moved every cursor above the indices already
+recorded for its account, so this holds for older rows too.
 
 ## Composite foreign keys carry the invariants a CHECK cannot
 

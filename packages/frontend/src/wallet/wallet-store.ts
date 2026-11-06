@@ -79,7 +79,7 @@ import {
   isFreshlyCreatedWallet,
 } from '../storage/secure-store';
 import type { WalletInfo } from '../storage/secure-store';
-import { Database } from '../storage/database';
+import { Database, type SocialReceiveSetRow } from '../storage/database';
 import {
   PERSONAL_SUBJECT,
   SEED_SECRET_PREFIX,
@@ -91,20 +91,33 @@ import {
 } from './identity-wallet';
 import { hasIdentityKeystore } from './keystore';
 import {
-  SOCIAL_RECEIVE_GAP_LIMIT,
   accountKeyFromDidDocument,
   compressedPublicKeyHex,
   getIdentityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
-  highestIndex,
   judgeSocialReceiveKey,
-  planSocialReceiveWindow,
   signSocialReceiveInput,
   type SocialReceiveKeyVerdict,
 } from './social-receive';
-import { checkSocialReceiveAddresses, createResyncScheduler } from './social-receive-sync';
+import {
+  checkSocialReceiveDue,
+  createResyncScheduler,
+  pullSocialReceiveSet,
+} from './social-receive-sync';
+import {
+  planActiveSet,
+  planSocialReceiveChecks,
+  watchableRows,
+  type WatchSetCheck,
+  type WatchSetRow,
+} from './social-receive-watch';
 import { partitionStrandedCoins, signableCoins, sumCoinValues } from './spendable';
-import { getSocialReceiveCursor, type SocialReceiveCursor } from '../services/gateway-client';
+import {
+  getSocialReceiveCursor,
+  listSocialReceiveAddresses,
+  type SocialReceiveCursor,
+} from '../services/gateway-client';
+import type { SocialReceiveAddress } from '@peable.to/shared-types';
 import { fetchAddressActivity } from '../services/explorer-address';
 import { oxyServices } from '../services/oxy-services';
 import {
@@ -185,7 +198,7 @@ export interface WalletState {
   /**
    * The recipient's stable social-receive default address (spec §4.3
    * `addr(0)`) — shown on the Receive screen alongside `@username`. `null`
-   * until the social-receive window has been derived (web, keyless account,
+   * until social receive has been set up (web, keyless account,
    * or before `initializeFromIdentity` completes).
    */
   socialReceiveDefaultAddress: string | null;
@@ -197,13 +210,6 @@ export interface WalletState {
    * received under this phone's key stay watched and spendable here.
    */
   socialReceiveKeyMismatch: boolean;
-  /**
-   * True when the gateway has handed out more social-receive addresses for
-   * this account than this wallet watches (`SOCIAL_RECEIVE_MAX_WATCHED`): a
-   * payment to one beyond the bound would not appear here, so `@username` is
-   * not offered. Everything already watched still is.
-   */
-  socialReceiveWindowCapped: boolean;
   /**
    * Coins stored by this wallet, on this network, at addresses it no longer
    * derives — received under a previous identity key (a rotation, a replaced
@@ -420,14 +426,14 @@ let database: Database | null = null;
 let networkConfig: NetworkConfig | null = null;
 let spvClient: SPVClient | null = null;
 /**
- * The identity PUBLIC key (compressed hex) the social-receive window derives
+ * The identity PUBLIC key (compressed hex) the social-receive watch set is judged
  * from (spec §4.3). Peable never holds the private key: spending a social
  * coin asks the key's holder to sign. `null` until `initializeFromIdentity`
  * sets up social receive.
  */
 let socialReceiveIdentityPublicKey: string | null = null;
 /**
- * Whose key the active social-receive window derives from and who signs for
+ * Whose key the social-receive watch set belongs to and who signs for
  * it: the person, or the organization they act as. Set with the window in
  * `setUpSocialReceive`; reset with it.
  */
@@ -447,8 +453,16 @@ const organizationPublishedKeys = new Map<string, string>();
  * and could reopen the previous account's wallet under the new account.
  */
 let activeWalletForgotten = false;
-/** address -> derivation index, for every currently-watched social-receive address (used + unused window). */
+/**
+ * address -> derivation index, for every social-receive address of this
+ * device's key in the set (active and dormant): what the wallet owns and signs
+ * for (ADR 0021 D9, amended 2026-11-06).
+ */
 let socialReceiveAddressIndex: Map<string, number> = new Map();
+/** The rows behind {@link socialReceiveAddressIndex}, with their check state. */
+let socialReceiveWatched: Map<string, WatchSetRow> = new Map();
+/** The active tier: the social-receive addresses in the Bloom filter (`planActiveSet`). */
+let socialReceiveActive: Set<string> = new Set();
 /**
  * Bumped by `resetWalletInternals`. A social-receive resync captures it before
  * its first await and writes nothing once it moved: the wallet it was reading
@@ -613,21 +627,87 @@ export function getActiveWalletAddresses(): string[] {
 
 /**
  * Every address hash the wallet should watch: the private spending tree PLUS
- * the social-receive branch (spec §4.3). `setBloomFilter` replaces the
- * filter wholesale, so every call site that rebuilds it must include BOTH
- * sets or the other silently drops out of coverage until the next refresh.
+ * the ACTIVE tier of the social-receive set (spec §4.3; ADR 0021 D9, amended
+ * 2026-11-06). `setBloomFilter` replaces the filter wholesale, so every call
+ * site that rebuilds it must include BOTH sets or the other silently drops out
+ * of coverage until the next refresh. The dormant tier is never in the filter:
+ * it is read through the Explorer instead (`checkWatchedSocialAddresses`).
  */
 function buildCombinedBloomFilterHashes(km: KeyManager): Uint8Array[] {
-  return [...km.getAllAddresses(), ...socialReceiveAddressIndex.keys()].map(
-    (addr) => decodeAddress(addr).hash,
-  );
+  return [...km.getAllAddresses(), ...socialReceiveActive].map((addr) => decodeAddress(addr).hash);
+}
+
+/** Now, in the Unix seconds the watch set keeps. */
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function toWatchSetRow(row: SocialReceiveSetRow): WatchSetRow {
+  return {
+    address: row.address,
+    index: row.index_num,
+    identityPublicKey: row.identity_public_key,
+    createdAt: row.created_at,
+    used: row.used === 1,
+    checkedAt: row.checked_at,
+    nextCheckAt: row.next_check_at,
+    foundAt: row.found_at,
+    origin: row.origin,
+  };
+}
+
+/** Watch `rows` (already judged this device's): ownership, signing, tiers. */
+function addWatchedSocialRows(rows: readonly WatchSetRow[]): void {
+  for (const row of rows) {
+    socialReceiveWatched.set(row.address, row);
+    socialReceiveAddressIndex.set(row.address, row.index);
+  }
+}
+
+/** Fold persisted checks into the in-memory rows. */
+function applySocialReceiveChecks(checks: readonly WatchSetCheck[]): void {
+  for (const check of checks) {
+    const row = socialReceiveWatched.get(check.address);
+    if (!row) continue;
+    socialReceiveWatched.set(check.address, {
+      ...row,
+      checkedAt: check.checkedAt,
+      nextCheckAt: check.nextCheckAt,
+      foundAt: check.foundAt ?? row.foundAt,
+      used: row.used || check.foundAt !== undefined,
+    });
+  }
+}
+
+/**
+ * Recompute the active tier (`planActiveSet`) from what the rows and the UTXO
+ * set say now. Returns whether it changed — the caller rebuilds the filter.
+ */
+async function refreshSocialReceiveActive(db: Database): Promise<boolean> {
+  const holdingCoins = new Set(await db.getSocialReceiveAddressesHoldingCoins());
+  const next = planActiveSet({
+    watchable: Array.from(socialReceiveWatched.values()),
+    holdingCoins,
+    now: nowSeconds(),
+  });
+  let changed = next.size !== socialReceiveActive.size;
+  if (!changed) {
+    for (const address of next) {
+      if (!socialReceiveActive.has(address)) {
+        changed = true;
+        break;
+      }
+    }
+  }
+  socialReceiveActive = next;
+  return changed;
 }
 
 /**
  * Bring up the social-receive branch (spec §4.3) for the identity wallet:
- * derive (or load the persisted) watch window, populate the in-memory index
- * map, publish the stable default address (`addr(0)`) to the store, and
- * resync the window against the backend's reservation cursor.
+ * make sure index 0 (the stable default address) is in the set, load the
+ * set's rows this device's key owns, choose the active tier, publish the
+ * default address to the store, and resync the set with the gateway.
  *
  * Called from INSIDE `initialize()` itself (gated on `activeId ===
  * an identity wallet` — the person's or an organization's — AND the active
@@ -637,7 +717,7 @@ function buildCombinedBloomFilterHashes(km: KeyManager): Uint8Array[] {
  * `initialize()` after `resetWalletInternals()` cleared this module's state
  * (a PIN unlock, a Pocket switch, a wallet switch) reliably re-establishes
  * social-receive watching. It runs BEFORE `initialize()` builds its Bloom
- * filter (which folds in `socialReceiveAddressIndex` via
+ * filter (which folds in the active tier via
  * {@link buildCombinedBloomFilterHashes}), so the very first filter a peer
  * ever sees already covers the social branch — no separate post-hoc
  * `setBloomFilter` call needed here.
@@ -660,37 +740,28 @@ async function setUpSocialReceive(
   socialReceiveIdentityPublicKey = identityPublicKey;
   socialReceiveSubject = subject;
 
-  // Which key this window belongs to. Every address in it is a function of the
-  // identity key, so a window derived from a different one watches addresses
-  // nobody will ever pay — indistinguishable, from the inside, from not being
-  // paid. Re-derive instead of extending it.
-  const windowKey = await db.getSocialReceiveIdentityKey();
-  if (windowKey !== null && windowKey !== identityPublicKey) {
-    console.warn(
-      '[social-receive] the persisted window was derived from a different identity key; re-deriving',
-    );
-    await db.clearSocialReceiveAddresses();
-  }
-
-  let persisted = await db.getSocialReceiveAddresses();
-  if (persisted.length === 0) {
-    const initial = deriveSocialReceiveWatchWindow(
+  // Index 0 of THIS key: never handed out by the gateway, always watched. A
+  // previous key's rows stay in the set, with their key, and are simply not
+  // this device's to watch (ADR 0002): nothing is deleted on a key change.
+  const [defaultAddress] = deriveSocialReceiveWatchWindow(identityPublicKey, 0, 1, network);
+  if (!defaultAddress) return;
+  await db.insertSocialReceiveSet([
+    {
+      address: defaultAddress.address,
+      index: 0,
       identityPublicKey,
-      0,
-      SOCIAL_RECEIVE_GAP_LIMIT,
-      network,
-    );
-    await db.insertSocialReceiveAddresses(initial);
-    persisted = await db.getSocialReceiveAddresses();
-  }
-  await db.setSocialReceiveIdentityKey(identityPublicKey);
-
-  socialReceiveAddressIndex = new Map(persisted.map((row) => [row.address, row.index_num]));
-  const defaultRow = persisted.find((row) => row.index_num === 0);
+      createdAt: nowSeconds(),
+      origin: 'default',
+    },
+  ]);
+  const persisted = await db.getSocialReceiveSet();
+  socialReceiveWatched = new Map();
+  socialReceiveAddressIndex = new Map();
+  addWatchedSocialRows(watchableRows(persisted.map(toWatchSetRow), identityPublicKey, network));
+  await refreshSocialReceiveActive(db);
   set({
-    socialReceiveDefaultAddress: defaultRow?.address ?? null,
+    socialReceiveDefaultAddress: defaultAddress.address,
     socialReceiveKeyMismatch: false,
-    socialReceiveWindowCapped: false,
   });
 
   // An organization publishes its key as its DID `#key-1` (oxy ADR 0061), and
@@ -709,12 +780,12 @@ async function setUpSocialReceive(
     return;
   }
 
-  // Cursor-sync (finding: HIGH). The gateway advances this account's cursor
-  // on EVERY `next_address` — a payer picking a recipient, a FairCoin checkout
-  // abandoned before paying — and this device only learns of it by asking.
-  // Ask now, before `@username` is offered, and again while the wallet runs
+  // The gateway hands out a fresh address on every FairCoin payment and every
+  // `@username` request, and this device only learns of it by asking. Ask
+  // now, before `@username` is offered, and again while the wallet runs
   // (`socialResync`): foreground, a bounded interval, a push, a payment.
-  await syncSocialReceiveCursor(db, network, networkType, set, socialReceiveGeneration);
+  await syncSocialReceiveSet(db, network, networkType, set, socialReceiveGeneration);
+  await refreshSocialReceiveActive(db);
 }
 
 /**
@@ -739,7 +810,7 @@ async function readPublishedAccountKey(
   }
 }
 
-/** addr(0), the stable default address, if the window holds it. */
+/** addr(0) of this device's key, the stable default address. */
 function socialReceiveDefaultFromIndex(): string | null {
   for (const [address, index] of socialReceiveAddressIndex) {
     if (index === 0) return address;
@@ -749,13 +820,13 @@ function socialReceiveDefaultFromIndex(): string | null {
 
 /**
  * Re-read the cursor and the account's published key; stop offering
- * `@username` when the key is not this device's (ADR 0002); grow the window to
- * `SOCIAL_RECEIVE_GAP_LIMIT` past every index reserved or paid, up to
- * `SOCIAL_RECEIVE_MAX_WATCHED`, and say so when that bound is what stopped it.
- * Returns whether new addresses were derived. An offline gateway leaves the
- * local window as it is; the next resync tries again.
+ * `@username` when the key is not this device's (ADR 0002); then pull the
+ * addresses the gateway handed out since the stored sync cursor
+ * (`pullSocialReceiveSet`) and watch those of this device's key. Returns
+ * whether new addresses joined. An offline gateway leaves the set as it is;
+ * the next resync tries again.
  */
-async function syncSocialReceiveCursor(
+async function syncSocialReceiveSet(
   db: Database,
   network: NetworkConfig,
   networkType: NetworkType,
@@ -766,33 +837,29 @@ async function syncSocialReceiveCursor(
   const subject = socialReceiveSubject;
   if (!deviceKey) return false;
   const current = (): boolean => generation === socialReceiveGeneration && database === db;
+  // `/v1/social/me/*` answers for whoever the session acts as. For an
+  // organization's wallet that must BE the organization: a session that has
+  // since switched account would hand back someone else's cursor and set.
+  const actsAsSubject = (): boolean =>
+    subject.kind !== 'organization' || oxyServices.session.userId === subject.accountId;
 
-  let reservedThrough = 0;
   let verdict: SocialReceiveKeyVerdict | null = null;
   try {
-    // `/v1/social/me/cursor` answers for whoever the session acts as. For an
-    // organization's wallet that must BE the organization: a session that has
-    // since switched account would hand back someone else's cursor and key.
-    if (subject.kind === 'organization' && oxyServices.session.userId !== subject.accountId) {
-      throw new Error('the Oxy session no longer acts as this organization');
-    }
+    if (!actsAsSubject()) throw new Error('the Oxy session no longer acts as this organization');
     const cursor = await getSocialReceiveCursor(networkType);
-    if (subject.kind === 'organization' && oxyServices.session.userId !== subject.accountId) {
+    if (!actsAsSubject())
       throw new Error('the Oxy session switched account during the cursor read');
-    }
     const accountKey = await readPublishedAccountKey(cursor, subject);
     // The gateway derives every NEW address from the key the account
-    // publishes. If that is not the key this device holds, each index it
-    // hands out belongs to a tree this wallet cannot see or spend from, and
-    // widening the window only watches more of the wrong tree.
+    // publishes. If that is not the key this device holds, each address it
+    // hands out belongs to a tree this wallet cannot see or spend from.
     verdict = judgeSocialReceiveKey({
       deviceKey,
       accountKey,
       lastReservedKey: cursor.identity_public_key,
     });
-    reservedThrough = cursor.reserved_through;
   } catch (error) {
-    console.warn('[social-receive] cursor resync failed, using local-only watch window:', error);
+    console.warn('[social-receive] cursor resync failed, using the stored watch set:', error);
   }
   if (!current()) return false;
 
@@ -801,9 +868,7 @@ async function syncSocialReceiveCursor(
       '[social-receive] this account publishes a different identity key than this device holds; social receive is off',
     );
     set({ socialReceiveDefaultAddress: null, socialReceiveKeyMismatch: true });
-    return false;
-  }
-  if (verdict === 'match' && useWalletStore.getState().socialReceiveKeyMismatch) {
+  } else if (verdict === 'match' && useWalletStore.getState().socialReceiveKeyMismatch) {
     // The account publishes this device's key again (Commons caught up with a
     // rotation, or an owner added the organization's current key here).
     set({
@@ -811,139 +876,111 @@ async function syncSocialReceiveCursor(
       socialReceiveKeyMismatch: false,
     });
   }
+  // Pulled whatever the verdict, once the cursor answered for the right
+  // account: a mismatch still leaves this key's earlier addresses to watch,
+  // and every row is stored with its key (another key's is kept, not watched).
+  if (verdict === null) return false;
 
-  // `0` is the endpoint's "nothing reserved" sentinel: index 0 is the stable
-  // default address and is never handed out by `next_address`.
-  const highestUsed = await db.getHighestUsedSocialReceiveIndex();
-  if (!current()) return false;
-  const plan = planSocialReceiveWindow({
-    highestWatched: highestIndex(socialReceiveAddressIndex.values()),
-    highestUsed,
-    highestReserved: reservedThrough > 0 ? reservedThrough : -1,
-  });
-  if (plan.capped && !useWalletStore.getState().socialReceiveWindowCapped) {
+  const fresh: WatchSetRow[] = [];
+  try {
+    const state = await db.getSocialReceiveSyncState();
+    await pullSocialReceiveSet<SocialReceiveAddress>({
+      state,
+      now: nowSeconds,
+      list: async (after) => {
+        if (!actsAsSubject())
+          throw new Error('the Oxy session no longer acts as this organization');
+        const page = await listSocialReceiveAddresses(networkType, after);
+        if (!actsAsSubject()) throw new Error('the Oxy session switched account during the read');
+        return page;
+      },
+      store: async (items) => {
+        const rows: WatchSetRow[] = [];
+        for (const item of items) {
+          if (item.network !== networkType) continue;
+          rows.push({
+            address: item.address,
+            index: item.derivation_index,
+            identityPublicKey: item.identity_public_key,
+            createdAt: item.created,
+            used: false,
+            checkedAt: null,
+            nextCheckAt: null,
+            foundAt: null,
+            origin: 'gateway',
+          });
+        }
+        await db.insertSocialReceiveSet(rows);
+        for (const row of rows) if (!socialReceiveWatched.has(row.address)) fresh.push(row);
+        // Yield between pages: a large set is many derivation-free inserts,
+        // but the JS thread still has a UI to draw.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      },
+      saveState: (next) => db.setSocialReceiveSyncState(next),
+      isCurrent: current,
+    });
+  } catch (error) {
     console.warn(
-      '[social-receive] more addresses were reserved than this wallet watches; @username is paused',
+      '[social-receive] reading the watch set failed; the rest is read next time:',
+      error,
     );
   }
-  set({ socialReceiveWindowCapped: plan.capped });
-  if (!plan.extension) return false;
-  return growSocialReceiveWindow(db, network, deviceKey, plan.extension, current);
-}
-
-/** Derive this many addresses before yielding the JS thread. */
-const SOCIAL_DERIVE_CHUNK = 100;
-
-/**
- * Derive, persist and watch `extension`, a chunk at a time so a large one
- * (bounded by `SOCIAL_RECEIVE_MAX_WATCHED`) does not freeze the UI. Coins that
- * were stranded at an address now watched again rejoin the balance. Returns
- * whether anything was added; the caller refreshes the Bloom filter.
- */
-async function growSocialReceiveWindow(
-  db: Database,
-  network: NetworkConfig,
-  identityPublicKey: string,
-  extension: { start: number; count: number },
-  current: () => boolean,
-): Promise<boolean> {
-  let added = false;
-  const end = extension.start + extension.count;
-  for (let start = extension.start; start < end; start += SOCIAL_DERIVE_CHUNK) {
-    if (start > extension.start) await new Promise((resolve) => setTimeout(resolve, 0));
-    if (!current()) return added;
-    const fresh = deriveSocialReceiveWatchWindow(
-      identityPublicKey,
-      start,
-      Math.min(SOCIAL_DERIVE_CHUNK, end - start),
-      network,
-    );
-    await db.insertSocialReceiveAddresses(fresh);
-    if (!current()) return added;
-    for (const { index, address } of fresh) {
-      socialReceiveAddressIndex.set(address, index);
-    }
-    added = true;
-  }
-  if (added) reclaimStrandedCoins();
-  return added;
+  if (!current() || fresh.length === 0) return false;
+  const mine = watchableRows(fresh, deviceKey, network);
+  addWatchedSocialRows(mine);
+  return mine.length > 0;
 }
 
 /**
- * Extend the persisted + in-memory social-receive watch window if the
- * highest USED index has moved close enough to its edge (spec §4.3 — mirrors
- * the private tree's `markAddressUsed`-driven lookahead extension). Returns
- * true if new addresses were derived (caller should refresh the Bloom
- * filter), false otherwise. The new addresses are looked at by the next
- * resync, which this payment also requests.
- */
-async function extendSocialReceiveWindowIfNeeded(
-  db: Database,
-  network: NetworkConfig,
-): Promise<boolean> {
-  const identityPublicKey = socialReceiveIdentityPublicKey;
-  if (!identityPublicKey) {
-    return false;
-  }
-  const generation = socialReceiveGeneration;
-  const highestUsed = await db.getHighestUsedSocialReceiveIndex();
-  const plan = planSocialReceiveWindow({
-    highestWatched: highestIndex(socialReceiveAddressIndex.values()),
-    highestUsed,
-    highestReserved: -1,
-  });
-  if (plan.capped) useWalletStore.setState({ socialReceiveWindowCapped: true });
-  if (!plan.extension) {
-    return false;
-  }
-  return growSocialReceiveWindow(
-    db,
-    network,
-    identityPublicKey,
-    plan.extension,
-    () => generation === socialReceiveGeneration && database === db,
-  );
-}
-
-/**
- * Make sure every watched social-receive index has been LOOKED AT for coins
- * paid before it joined the Bloom filter — the filter only shows what is paid
- * from then on, and the historical rescan never goes back over blocks it
- * already scanned. Each new index is read once through the Explorer; a coin
- * found there sends the SPV rescan back to its block, so the payment is
- * credited through the same merkle-checked path as every other.
+ * Look, through the Explorer, at every social-receive address whose turn came
+ * (`planSocialReceiveChecks`): a new one the Bloom filter has only watched
+ * from now on, and a dormant one, which the filter does not hold at all. A
+ * coin found there sends the SPV rescan back to its block and puts the
+ * address in the filter, so the payment is credited through the same
+ * merkle-checked path as every other. Returns whether anything was found.
  */
 async function checkWatchedSocialAddresses(
   db: Database,
   networkType: NetworkType,
   generation: number,
-): Promise<void> {
+): Promise<boolean> {
   const current = (): boolean => generation === socialReceiveGeneration && database === db;
-  const watched = Array.from(socialReceiveAddressIndex, ([address, index]) => ({ index, address }));
-  const checkedThrough = await db.getSocialReceiveCheckedThrough();
   const scanHasBegun = (await db.getRescanState()) !== null;
-  if (!current()) return;
-  const result = await checkSocialReceiveAddresses({
-    watched,
-    checkedThrough,
+  if (!current()) return false;
+  const plan = planSocialReceiveChecks({
+    watchable: Array.from(socialReceiveWatched.values()),
+    active: socialReceiveActive,
+    now: nowSeconds(),
     scanHasBegun,
+  });
+  await db.recordSocialReceiveChecks(plan.seen);
+  if (!current()) return false;
+  applySocialReceiveChecks(plan.seen);
+  const result = await checkSocialReceiveDue({
+    due: plan.due,
+    now: nowSeconds,
     fetchActivity: (addresses) => fetchAddressActivity(addresses, networkType),
     requestRescanFrom: (height) => db.requestRescanFrom(height),
-    markCheckedThrough: (index) => db.setSocialReceiveCheckedThrough(index),
+    record: async (checks) => {
+      await db.recordSocialReceiveChecks(checks);
+      applySocialReceiveChecks(checks);
+    },
     isCurrent: current,
   });
   if (result.rescanFrom !== null) {
     console.warn(
-      `[social-receive] coins found at addresses watched late; rescanning from block ${String(result.rescanFrom)}`,
+      `[social-receive] coins found at addresses not watched by SPV; rescanning from block ${String(result.rescanFrom)}`,
     );
   }
+  return result.found.length > 0;
 }
 
 /**
  * One full social-receive resync for the open wallet: the cursor, the key,
- * the window, the Bloom filter, and the check of every newly watched index.
- * A no-op for a wallet without social receive (not an identity wallet, not
- * its main Pocket, no key on this device).
+ * the set, the active tier and the Bloom filter, the check of every address
+ * whose turn came, then the historical rescan. A no-op for a wallet without
+ * social receive (not an identity wallet, not its main Pocket, no key on this
+ * device).
  */
 async function resyncSocialReceive(): Promise<void> {
   const db = database;
@@ -953,17 +990,27 @@ async function resyncSocialReceive(): Promise<void> {
   const set = useWalletStore.setState;
   const get = useWalletStore.getState;
   const networkType = get().network;
-  const grew = await syncSocialReceiveCursor(db, network, networkType, set, generation);
+  const grew = await syncSocialReceiveSet(db, network, networkType, set, generation);
   if (generation !== socialReceiveGeneration) return;
-  if (grew) {
-    if (spvClient && keyManager) {
+  const refilter = async (): Promise<void> => {
+    const changed = await refreshSocialReceiveActive(db);
+    if (generation !== socialReceiveGeneration) return;
+    if (changed && spvClient && keyManager) {
       spvClient.setBloomFilter(buildCombinedBloomFilterHashes(keyManager));
     }
+  };
+  await refilter();
+  if (generation !== socialReceiveGeneration) return;
+  if (grew) {
+    // Coins stranded at an address now watched again rejoin the balance.
+    reclaimStrandedCoins();
     publishBalance(set);
   }
   // Errors (an Explorer outage) propagate to the scheduler's log; progress
   // already recorded stays, and the rest is read on the next resync.
-  await checkWatchedSocialAddresses(db, networkType, generation);
+  const found = await checkWatchedSocialAddresses(db, networkType, generation);
+  if (generation !== socialReceiveGeneration) return;
+  if (found) await refilter();
   if (generation !== socialReceiveGeneration) return;
   // A rescan requested above is folded in by the driver; start it now rather
   // than on the next peer tick.
@@ -973,7 +1020,7 @@ async function resyncSocialReceive(): Promise<void> {
 }
 
 /**
- * When the open wallet re-reads its social-receive cursor: on request and on
+ * When the open wallet resyncs its social-receive set: on request and on
  * the peer tick's bounded interval, never two at once, and once more when an
  * event arrives mid-run. Reset with the wallet.
  */
@@ -986,7 +1033,7 @@ const socialResync = createResyncScheduler({
 });
 
 /**
- * Ask the open wallet to re-read its social-receive cursor now: the app came
+ * Ask the open wallet to resync its social-receive set now: the app came
  * to the foreground, a push arrived, the Receive sheet opened — anything after
  * which a payer may have been handed a new address. Cheap and safe to call
  * any time; a no-op without an open identity wallet.
@@ -1227,13 +1274,12 @@ async function processIncomingTransaction(
     if (keyManager.markAddressUsed(address)) {
       bloomNeedsRefresh = true;
     }
-    if (socialReceiveAddressIndex.has(address)) {
+    const watched = socialReceiveWatched.get(address);
+    if (watched) {
       await database.markSocialReceiveAddressUsed(address);
-      if (await extendSocialReceiveWindowIfNeeded(database, networkConfig)) {
-        bloomNeedsRefresh = true;
-      }
+      socialReceiveWatched.set(address, { ...watched, used: true });
       // Someone was handed this address, so others may have been handed later
-      // ones: re-read the cursor rather than wait for the interval.
+      // ones: resync the set rather than wait for the interval.
       socialReceivePaid = true;
     }
   }
@@ -1593,6 +1639,8 @@ function resetWalletInternals(): void {
   socialReceiveIdentityPublicKey = null;
   socialReceiveSubject = PERSONAL_SUBJECT;
   socialReceiveAddressIndex = new Map();
+  socialReceiveWatched = new Map();
+  socialReceiveActive = new Set();
   socialReceiveGeneration += 1;
   socialResync.reset();
   strandedUtxos = [];
@@ -1632,7 +1680,6 @@ const DEFAULT_WALLET_STATE = {
   hasBackedUp: false,
   socialReceiveDefaultAddress: null as string | null,
   socialReceiveKeyMismatch: false,
-  socialReceiveWindowCapped: false,
   strandedBalance: 0n,
   activeAccount: 0,
   pockets: [] as PocketInfo[],
@@ -1710,7 +1757,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   hasBackedUp: false,
   socialReceiveDefaultAddress: null,
   socialReceiveKeyMismatch: false,
-  socialReceiveWindowCapped: false,
   strandedBalance: 0n,
   activeAccount: 0,
   pockets: [],
@@ -3222,15 +3268,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       set({ loading: true, error: null });
 
       try {
-        // Network-scope the social-receive window (finding: MEDIUM).
+        // Network-scope the social-receive watch set (finding: MEDIUM).
         // `databaseFileName` has no network component, so this DB file is
         // shared across mainnet/testnet for the active wallet+Pocket — a
-        // window derived for the OLD network is a stale, wrong-network
+        // set synced for the OLD network is a stale, wrong-network
         // address set for the new one (FairCoin mainnet/testnet addresses
         // encode different version bytes for the same underlying key). Clear
         // it here, BEFORE `resetWalletInternals()` nulls the module-level
-        // `database` reference, so `setUpSocialReceive` re-derives a fresh
-        // window for `newNetwork` from inside the `initialize()` call further
+        // `database` reference, so `setUpSocialReceive` pulls a fresh
+        // set for `newNetwork` from inside the `initialize()` call further
         // down. Also moves the DB close to precede `resetWalletInternals()`
         // (matching switchWallet/switchPocket) — closing it AFTER, as this
         // used to, checked `database` once `resetWalletInternals()` had

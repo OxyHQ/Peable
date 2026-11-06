@@ -2,11 +2,22 @@ import { bytesToHex, getNetwork, hexToBytes, deriveSocialReceiveAddress } from '
 import type { NetworkType } from '@fairco.in/core';
 import type { DidDocument } from '@oxy.so/contracts';
 import type { ServiceHttpClient } from '@oxy.so/core/server';
+import type { SocialPaymentSource } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
-import { readReservedThrough, reserveNextSocialReceiveIndex } from '../db/social/receiveCursor';
-import { findLatestAttributionForPair } from '../db/social/sendAttribution';
-import { addressUsage } from './faircoin/addressPool';
+import { lockRecipientPool } from '../db/payments/faircoinAddressPool';
+import { readReservedThrough } from '../db/social/receiveCursor';
+import {
+  countAttributionsSince,
+  findLatestAttributionForPair,
+  insertSendAttribution,
+} from '../db/social/sendAttribution';
+import {
+  addressUsage,
+  FaircoinCapacityError,
+  reserveFreshAddress,
+  UNPAID_WINDOW_SECONDS,
+} from './faircoin/addressPool';
 
 /**
  * First index this reservation flow ever hands out. Index 0 is the
@@ -155,57 +166,98 @@ export async function resolveIdentityPublicKeyHex(oxyUserId: string): Promise<st
 }
 
 /**
- * Atomically claim the next unused social-receive index for `oxyUserId` and
- * derive its FairCoin address — the user-identity equivalent of
- * `reserveNextAddress` (merchant flow), reusing the SAME public-only
- * derivation primitive (`deriveSocialReceiveAddress`, published from
- * `@fairco.in/core`). The backend only ever handles the recipient's PUBLIC
- * identity key; it never sees or stores a private key.
- *
- * Returns `null` when the recipient is keyless (no identity key to derive
- * from) — callers surface the "invite them to set up Peable" flow (spec
- * §4.5) instead of a send.
- *
- * Lazily creates the per-user cursor on first use (no merchant-style
- * pre-registration exists for an ordinary user). The create and the claim are
- * ONE statement — `INSERT … ON CONFLICT DO UPDATE`, in
- * `db/social/receiveCursor.ts` — so two concurrent first payments converge on
- * the unique index rather than racing between a create and a separate
- * increment. There is no "the cursor vanished" branch to get wrong any more,
- * because there is no window in which it could vanish.
- *
- * @throws {ReceiveTreeFullError} every index the recipient's wallet watches is
- *   taken (`SOCIAL_RECEIVE_INDEX_LIMIT`, ADR 0021 D9 amended); nothing reserved.
+ * Fresh `@username` addresses per recipient per network per day (ADR 0021 D9,
+ * amended 2026-11-06). A sender asking again before paying is handed the
+ * address it already holds ({@link reuseUnpaidSocialAddress}) and adds
+ * nothing, so this bounds what DISTINCT senders can add to a recipient's watch
+ * set — far above how many new people pay one person in a day.
  */
-export async function reserveNextSocialAddress(
-  oxyUserId: string,
-  network: NetworkType,
-): Promise<{ index: number; address: string; identityPublicKey: string } | null> {
-  // Fresh, never cached: the key a reservation derives from and records is the
-  // one the recipient's DID publishes NOW (ADR 0002, amended 2026-11-06).
-  const identityPublicKey = await resolveIdentityPublicKey(oxyUserId);
-  if (!identityPublicKey) {
-    return null;
-  }
+export const MAX_FRESH_SOCIAL_ADDRESSES = 500;
 
-  // The key the address was derived from is recorded with the cursor, so the
-  // recipient's device can ask "is this still the key I derive from?" instead
-  // of widening a watch window in the wrong tree.
-  const keyHex = bytesToHex(identityPublicKey);
-  const index = await reserveNextSocialReceiveIndex(getDb(), oxyUserId, network, keyHex);
-  const address = deriveSocialReceiveAddress(identityPublicKey, index, getNetwork(network));
-  return { index, address, identityPublicKey: keyHex };
+let maxFreshSocial = MAX_FRESH_SOCIAL_ADDRESSES;
+
+/** Replace the bound (tests); `null` restores {@link MAX_FRESH_SOCIAL_ADDRESSES}. Answers the previous one. */
+export function useMaxFreshSocialAddresses(next: number | null): number {
+  const previous = maxFreshSocial;
+  maxFreshSocial = next ?? MAX_FRESH_SOCIAL_ADDRESSES;
+  return previous;
 }
 
 /**
- * Read-only counterpart to {@link reserveNextSocialAddress}: the highest
+ * Hand `senderUserId` a FRESH address of `recipientUserId`'s Peable wallet and
+ * record it — ONE transaction: the recipient's lock, its daily bound, the
+ * cursor's one statement (`reserveFreshAddress`) and the attribution row. The
+ * attribution is the address's record — what the recipient's wallet syncs
+ * (`GET /v1/social/me/receive_addresses`) — so an address is never handed out
+ * without it, and because it commits with the cursor's row lock the sync's
+ * index order is exact. Derived from the recipient's PUBLIC identity key, read
+ * fresh before the transaction (ADR 0002); the gateway never sees a private
+ * key.
+ *
+ * Returns `null` when the recipient is keyless (no identity key to derive
+ * from) — callers surface the "invite them to set up Peable" flow (spec §4.5).
+ *
+ * @throws {FaircoinCapacityError} {@link MAX_FRESH_SOCIAL_ADDRESSES} fresh
+ *   `@username` addresses of the recipient's were handed out in the last day;
+ *   nothing reserved.
+ */
+export async function reserveSocialSendAddress(input: {
+  readonly senderUserId: string;
+  readonly recipientUserId: string;
+  readonly network: NetworkType;
+  readonly source?: SocialPaymentSource;
+}): Promise<{ index: number; address: string; identityPublicKey: string } | null> {
+  // Fresh, never cached: the key a reservation derives from and records is the
+  // one the recipient's DID publishes NOW (ADR 0002, amended 2026-11-06).
+  const identityPublicKey = await resolveIdentityPublicKey(input.recipientUserId);
+  if (!identityPublicKey) return null;
+
+  return getDb().transaction(async (tx) => {
+    await lockRecipientPool(tx, input.recipientUserId, input.network);
+    const fresh = await countAttributionsSince(
+      tx,
+      input.recipientUserId,
+      input.network,
+      UNPAID_WINDOW_SECONDS,
+    );
+    if (fresh >= maxFreshSocial) throw new FaircoinCapacityError();
+    const reserved = await reserveFreshAddress(
+      tx,
+      input.recipientUserId,
+      input.network,
+      identityPublicKey,
+    );
+    const row = await insertSendAttribution(tx, {
+      address: reserved.address,
+      network: input.network,
+      senderUserId: input.senderUserId,
+      recipientUserId: input.recipientUserId,
+      derivationIndex: reserved.derivationIndex,
+      identityPublicKey: reserved.identityPublicKey,
+      // Recorded AFTER the reservation and an input to nothing before it: a
+      // request carrying a source and one carrying none reserve the same
+      // index — the context is something the recipient reads later.
+      ...(input.source ? { source: input.source } : {}),
+    });
+    // `reserveFreshAddress` skipped every recorded address, so a conflict here
+    // is a bug; never hand out an address its record does not hold.
+    if (!row) throw new Error(`the @username address ${reserved.address} was already attributed`);
+    return {
+      index: reserved.derivationIndex,
+      address: reserved.address,
+      identityPublicKey: reserved.identityPublicKey,
+    };
+  });
+}
+
+/**
+ * Read-only counterpart to {@link reserveSocialSendAddress}: the highest
  * social-receive index EVER reserved for `oxyUserId` on `network`, without
  * reserving another one. Backs `GET /v1/social/me/cursor` (cursor-sync fix
  * for the silent-desync finding — see `SocialReceiveCursorResponse`).
  *
  * `social_receive_cursors.next_derivation_index` always holds the NEXT index
- * this user's cursor will hand out (post-increment value, per
- * `reserveNextSocialAddress`'s claim above), so the highest index already
+ * this user's cursor will hand out (post-increment value), so the highest index already
  * reserved is one less than that. `0` when no cursor exists yet (the user has
  * never had an address reserved on this network).
  *

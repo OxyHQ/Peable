@@ -8,27 +8,28 @@ import {
   type SocialNextAddressResponse,
   type SocialPayment,
   type SocialPaymentsResponse,
+  type SocialReceiveAddressesResponse,
   type SocialReceiveCursorResponse,
   socialNextAddressParams,
   socialPaymentsQuery,
+  socialReceiveAddressesQuery,
   socialReceiveCursorQuery,
 } from '@peable.to/contracts';
+import { SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT } from '@peable.to/contracts/vocabulary';
 import { config } from '../config';
 import {
   getReservedThrough,
   IdentityDocumentUnavailableError,
-  reserveNextSocialAddress,
+  reserveSocialSendAddress,
   resolveIdentityPublicKeyHex,
   reuseUnpaidSocialAddress,
 } from '../services/socialReceive';
+import { FaircoinCapacityError } from '../services/faircoin/addressPool';
 import { getDb } from '../db/postgres';
-import { ReceiveTreeFullError } from '../db/social/receiveCursor';
-import {
-  insertSendAttribution,
-  listAttributionsForViewer,
-  updateAttributionSource,
-} from '../db/social/sendAttribution';
+import { listReceiveAddresses } from '../db/social/receiveAddresses';
+import { listAttributionsForViewer, updateAttributionSource } from '../db/social/sendAttribution';
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
+import { passesLimit } from '../lib/faircoinPayerLimit';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { toSocialPaymentSource } from '../lib/serialize';
 import { toUnix } from '../lib/time';
@@ -52,9 +53,20 @@ import { toUnix } from '../lib/time';
 export const NEXT_ADDRESS_PAIR_WINDOW_MS = 10 * 60 * 1000;
 export const NEXT_ADDRESS_PAIR_MAX = 6;
 
+/**
+ * Fresh `@username` addresses one SENDER may be handed, across every recipient,
+ * per hour (ADR 0021 D9, amended 2026-11-06) — the per-payer bound beside the
+ * pair limiter and the recipient's daily one. Only a fresh address counts: an
+ * address handed again to the sender that holds it adds nothing to anyone's
+ * watch set. Per task, like every in-memory limiter here.
+ */
+export const NEXT_ADDRESS_SENDER_WINDOW_MS = 60 * 60 * 1000;
+export const NEXT_ADDRESS_SENDER_MAX = 30;
+
 /** Carries the resolved (sender, recipient) rate-limit key from the handler to `nextAddressPairLimiter`'s `keyGenerator`, set just before invoking it (recipient isn't known until after the username lookup). */
 interface PairRateLimitedRequest extends Request {
   socialNextAddressPairKey?: string;
+  socialNextAddressSenderKey?: string;
 }
 
 /**
@@ -87,6 +99,22 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         429,
         'rate_limit_error',
         'too many address reservations for this recipient — try again shortly',
+      );
+    },
+  });
+
+  const nextAddressSenderLimiter = rateLimit({
+    windowMs: NEXT_ADDRESS_SENDER_WINDOW_MS,
+    limit: NEXT_ADDRESS_SENDER_MAX,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req as PairRateLimitedRequest).socialNextAddressSenderKey ?? 'unknown',
+    handler: (_req, res) => {
+      sendError(
+        res,
+        429,
+        'rate_limit_error',
+        'too many new payment addresses requested from this account — try again later',
       );
     },
   });
@@ -149,17 +177,11 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         return;
       }
 
-      // Anti-grief: bound how many fresh indices THIS sender can force onto
-      // THIS recipient before reserving one (see `nextAddressPairLimiter`
-      // above). `withinPairLimit` is only ever set inside the `next()`
-      // callback, so it stays false (and the limiter has already written the
-      // 429 response) when the pair is over budget.
+      // Anti-grief: bound how often THIS sender can ask about THIS recipient
+      // (see `nextAddressPairLimiter` above); over budget, the limiter has
+      // already written the 429.
       (req as PairRateLimitedRequest).socialNextAddressPairKey = `${senderUserId}:${recipient.id}`;
-      let withinPairLimit = false;
-      await nextAddressPairLimiter(req, res, () => {
-        withinPairLimit = true;
-      });
-      if (!withinPairLimit) return;
+      if (!(await passesLimit(nextAddressPairLimiter, req, res))) return;
 
       // The same sender asking again before paying is handed the address it
       // already holds (ADR 0021 D9): one unpaid address per (sender,
@@ -173,25 +195,29 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         return;
       }
 
-      // Reservation (Task 5) + attribution write (Task 6) happen together in
-      // this handler so an enrichment lookup can never observe a reserved
-      // address with no attribution row.
-      let reservation: Awaited<ReturnType<typeof reserveNextSocialAddress>>;
+      // A FRESH address: the sender's own hourly bound, then the recipient's
+      // daily one, the reservation and its record in one transaction
+      // (`reserveSocialSendAddress`, ADR 0021 D9).
+      (req as PairRateLimitedRequest).socialNextAddressSenderKey = senderUserId;
+      if (!(await passesLimit(nextAddressSenderLimiter, req, res))) return;
+      let reservation: Awaited<ReturnType<typeof reserveSocialSendAddress>>;
       try {
-        reservation = await reserveNextSocialAddress(recipient.id, network);
+        reservation = await reserveSocialSendAddress({
+          senderUserId,
+          recipientUserId: recipient.id,
+          network,
+          ...(source ? { source } : {}),
+        });
       } catch (err) {
-        // Every index the recipient's wallet watches is taken (ADR 0021 D9,
-        // amended 2026-11-06): an address past them would be paid where the
-        // wallet never looks, so none is handed out.
-        if (!(err instanceof ReceiveTreeFullError)) throw err;
+        if (!(err instanceof FaircoinCapacityError)) throw err;
         // 503, not 409: a 409 on this route is the keyless recipient, and the
         // wallet and `@peable.to/pay` read it so from the status alone.
         sendError(
           res,
           503,
           'api_error',
-          "the recipient's Peable wallet has no FairCoin address left to hand out",
-          'faircoin_receive_tree_full',
+          'this person was asked to be paid by too many new senders today; try again later',
+          'faircoin_capacity_reached',
         );
         return;
       }
@@ -205,21 +231,6 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         );
         return;
       }
-
-      await insertSendAttribution(getDb(), {
-        address: reservation.address,
-        network,
-        senderUserId,
-        recipientUserId: recipient.id,
-        derivationIndex: reservation.index,
-        identityPublicKey: reservation.identityPublicKey,
-        // Recorded AFTER the reservation and an input to nothing before it. The
-        // address comes from the recipient's identity key and their cursor, so
-        // a request carrying a source and one carrying none reserve the same
-        // index — the context is something the recipient reads later, never
-        // something that decides where money goes.
-        source,
-      });
 
       const body: SocialNextAddressResponse = {
         address: reservation.address,
@@ -263,6 +274,48 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         identity_public_key: identityPublicKey,
         account_identity_public_key: accountIdentityPublicKey,
       };
+      res.status(200).json(body);
+    }),
+  );
+
+  /**
+   * Every FairCoin address handed out in the caller's Peable wallet (ADR 0021
+   * D9, amended 2026-11-06): the set the wallet watches, paged by the
+   * derivation index — a monotonic sync cursor (`db/social/receiveAddresses.ts`).
+   * For whoever the session acts as, like the cursor: an organization's
+   * addresses when acting as it. Every key the account has had, each address
+   * with its own. Read-only.
+   */
+  router.get(
+    '/v1/social/me/receive_addresses',
+    requireOxyUser,
+    wrap(async (req, res) => {
+      const accountId = getRequiredOxyUserId(req);
+      const parsed = socialReceiveAddressesQuery.safeParse(req.query);
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const { network } = parsed.data;
+      const page = await listReceiveAddresses(
+        getDb(),
+        accountId,
+        network,
+        parsed.data.after ?? 0,
+        parsed.data.limit ?? SOCIAL_RECEIVE_ADDRESSES_PAGE_DEFAULT,
+      );
+      const body: SocialReceiveAddressesResponse = {
+        addresses: page.addresses.map((row) => ({
+          address: row.address,
+          derivation_index: row.derivationIndex,
+          identity_public_key: row.identityPublicKey,
+          network: row.network,
+          created: toUnix(row.createdAt),
+        })),
+        has_more: page.hasMore,
+        sync_cursor: page.syncCursor,
+      };
+      res.setHeader('Cache-Control', 'no-store');
       res.status(200).json(body);
     }),
   );

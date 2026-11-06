@@ -1,0 +1,22 @@
+---
+title: "SocialReceiveAddress"
+description: "The SocialReceiveAddress shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# SocialReceiveAddress
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `address` | string | The FairCoin address. |
+| `derivation_index` | integer | Its index in the account's social-receive tree (`deriveSocialReceiveAddress(key, index)`); index 0, the stable default address, is never handed out. |
+| `identity_public_key` | string \| null | The identity public key the address was derived from, in the encoding of the cursor's `identity_public_key` (lowercase hex of the DID `#key-1` bytes). It may be a key the account has since replaced. `null` only for an address handed out before keys were recorded. |
+| `network` | string | One of `mainnet`, `testnet`. |
+| `created` | integer | When the address was handed out. |
+
+## Used in
+
+[SocialReceiveAddresses](/reference/objects/social-receive-addresses)

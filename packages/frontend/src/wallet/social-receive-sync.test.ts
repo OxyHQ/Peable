@@ -1,11 +1,16 @@
 import { describe, test, expect } from 'bun:test';
 import type { AddressActivity } from '../services/explorer-address';
 import {
+  SOCIAL_RECEIVE_FULL_SYNC_SECONDS,
   SOCIAL_RECEIVE_RESYNC_INTERVAL_MS,
-  checkSocialReceiveAddresses,
+  checkSocialReceiveDue,
   createResyncScheduler,
+  pullSocialReceiveSet,
   type SocialReceiveCheckDeps,
+  type SocialReceivePage,
+  type SocialReceiveSyncState,
 } from './social-receive-sync';
+import type { WatchSetCheck, WatchSetRow } from './social-receive-watch';
 
 /** A promise and the function that settles it. */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -132,20 +137,36 @@ describe('createResyncScheduler', () => {
 });
 
 const EMPTY: AddressActivity = { confirmedHeights: [], hasUnconfirmed: false };
+const DAY = 24 * 60 * 60;
+const NOW = 1_800_000_000;
 
-function window(count: number): { index: number; address: string }[] {
-  return Array.from({ length: count }, (_, index) => ({ index, address: `F${String(index)}` }));
+function row(index: number, overrides: Partial<WatchSetRow> = {}): WatchSetRow {
+  return {
+    address: `F${String(index)}`,
+    index,
+    identityPublicKey: null,
+    createdAt: NOW - 30 * DAY,
+    used: false,
+    checkedAt: null,
+    nextCheckAt: null,
+    foundAt: null,
+    origin: 'gateway',
+    ...overrides,
+  };
+}
+
+function rows(count: number): WatchSetRow[] {
+  return Array.from({ length: count }, (_, index) => row(index + 1));
 }
 
 function harness(overrides: Partial<SocialReceiveCheckDeps> & { paid?: Record<string, number[]> }) {
   const fetched: string[][] = [];
-  const marks: number[] = [];
+  const recorded: WatchSetCheck[][] = [];
   const rescans: number[] = [];
   const paid = overrides.paid ?? {};
   const deps: SocialReceiveCheckDeps = {
-    watched: window(42),
-    checkedThrough: -1,
-    scanHasBegun: true,
+    due: rows(42),
+    now: () => NOW,
     fetchActivity: async (addresses) => {
       fetched.push([...addresses]);
       return new Map(
@@ -158,83 +179,60 @@ function harness(overrides: Partial<SocialReceiveCheckDeps> & { paid?: Record<st
     requestRescanFrom: async (height) => {
       rescans.push(height);
     },
-    markCheckedThrough: async (index) => {
-      marks.push(index);
+    record: async (checks) => {
+      recorded.push([...checks]);
     },
     isCurrent: () => true,
     batchSize: 10,
     ...overrides,
   };
-  return { deps, fetched, marks, rescans };
+  return { deps, fetched, recorded, rescans };
 }
 
-describe('checkSocialReceiveAddresses', () => {
-  // F3: the window grew from 20 to 42 because 21 checkouts were abandoned and
-  // a payer was then handed index 22 — which they paid at block 1234, before
-  // this phone watched it. Only the new indices are read, and the rescan goes
-  // back to the block that pays it.
-  test('reads every index above the checked mark and rescans from the paid block', async () => {
-    const { deps, fetched, marks, rescans } = harness({
-      checkedThrough: 19,
-      paid: { F22: [1234, 1300] },
-    });
-    const result = await checkSocialReceiveAddresses(deps);
-    expect(fetched.flat()).toEqual(
-      window(42)
-        .slice(20)
-        .map(({ address }) => address),
-    );
+describe('checkSocialReceiveDue', () => {
+  // A payer paid an address handed out a month ago, after its quote lapsed,
+  // at block 1234: the address is dormant (not in the Bloom filter), so only
+  // this read can find it, and the rescan goes back to the block that pays it.
+  test('reads every due row, records each, and rescans from the paid block', async () => {
+    const { deps, fetched, recorded, rescans } = harness({ paid: { F22: [1234, 1300] } });
+    const result = await checkSocialReceiveDue(deps);
+    expect(fetched.flat()).toEqual(rows(42).map(({ address }) => address));
     expect(rescans).toEqual([1234]);
-    expect(marks).toEqual([29, 39, 41]);
-    expect(result).toEqual({ checkedThrough: 41, rescanFrom: 1234 });
+    expect(recorded.map((batch) => batch.length)).toEqual([10, 10, 10, 10, 2]);
+    expect(result).toEqual({ checked: 42, found: ['F22'], rescanFrom: 1234 });
+    const paidCheck = recorded.flat().find((check) => check.address === 'F22');
+    expect(paidCheck?.foundAt).toBe(NOW);
+    // A month old: read again in a month (the doubling schedule).
+    expect(paidCheck?.nextCheckAt).toBe(NOW + 30 * DAY);
+    expect(recorded.flat().find((check) => check.address === 'F1')?.foundAt).toBeUndefined();
   });
 
-  test('every reserved index ends up checked, however far from the last payment', async () => {
-    const { deps, marks } = harness({ watched: window(2_000), batchSize: 50 });
-    const result = await checkSocialReceiveAddresses(deps);
-    expect(result.checkedThrough).toBe(1_999);
-    expect(marks[marks.length - 1]).toBe(1_999);
-  });
-
-  test('nothing above the mark: no read', async () => {
-    const { deps, fetched } = harness({ checkedThrough: 41 });
-    expect(await checkSocialReceiveAddresses(deps)).toEqual({
-      checkedThrough: 41,
-      rescanFrom: null,
-    });
+  test('nothing due: no read', async () => {
+    const { deps, fetched } = harness({ due: [] });
+    expect(await checkSocialReceiveDue(deps)).toEqual({ checked: 0, found: [], rescanFrom: null });
     expect(fetched).toHaveLength(0);
-  });
-
-  test('before any scan has begun, the first scan covers what is watched', async () => {
-    const { deps, fetched, marks } = harness({ scanHasBegun: false });
-    expect(await checkSocialReceiveAddresses(deps)).toEqual({
-      checkedThrough: 41,
-      rescanFrom: null,
-    });
-    expect(fetched).toHaveLength(0);
-    expect(marks).toEqual([41]);
   });
 
   // An Explorer outage is not "never paid": the batch that failed, and every
-  // one after it, stays unchecked for the next resync.
-  test('a failed read records no progress past the last batch that answered', async () => {
-    const marks: number[] = [];
+  // one after it, stays due for the next resync.
+  test('a failed read records nothing past the last batch that answered', async () => {
     let calls = 0;
-    const { deps } = harness({
+    const { deps, recorded } = harness({
       fetchActivity: async (addresses) => {
         calls += 1;
         if (calls === 2) throw new Error('Explorer 502');
         return new Map(addresses.map((address) => [address, EMPTY]));
       },
-      markCheckedThrough: async (index) => {
-        marks.push(index);
-      },
     });
-    await expect(checkSocialReceiveAddresses(deps)).rejects.toThrow('Explorer 502');
-    expect(marks).toEqual([9]);
+    await expect(checkSocialReceiveDue(deps)).rejects.toThrow('Explorer 502');
+    expect(recorded.flat().map((check) => check.address)).toEqual(
+      rows(10).map(({ address }) => address),
+    );
   });
 
-  test('a mempool-only coin needs no rescan: its block is still ahead', async () => {
+  // A mempool-only coin needs no rescan, but the row is FOUND, which puts it
+  // in the Bloom filter so the block that confirms it is seen.
+  test('a mempool-only coin is found without a rescan', async () => {
     const { deps, rescans } = harness({
       fetchActivity: async (addresses) =>
         new Map(
@@ -244,20 +242,147 @@ describe('checkSocialReceiveAddresses', () => {
           ]),
         ),
     });
-    await checkSocialReceiveAddresses(deps);
+    const result = await checkSocialReceiveDue(deps);
     expect(rescans).toEqual([]);
+    expect(result.found).toEqual(['F3']);
   });
 
   test('a wallet closed mid-check writes nothing more', async () => {
     let live = true;
-    const { deps, marks } = harness({
+    const { deps, recorded } = harness({
       fetchActivity: async (addresses) => {
         live = false;
         return new Map(addresses.map((address) => [address, EMPTY]));
       },
       isCurrent: () => live,
     });
-    await checkSocialReceiveAddresses(deps);
-    expect(marks).toEqual([]);
+    await checkSocialReceiveDue(deps);
+    expect(recorded).toEqual([]);
+  });
+});
+
+/** A gateway holding `count` addresses at indices 1..count, paged like the route. */
+function gateway(count: number, pageSize: number) {
+  const calls: number[] = [];
+  const list = async (after: number): Promise<SocialReceivePage<number>> => {
+    calls.push(after);
+    const addresses: number[] = [];
+    for (let index = after + 1; index <= count && addresses.length < pageSize; index += 1) {
+      addresses.push(index);
+    }
+    const last = addresses[addresses.length - 1];
+    return {
+      addresses,
+      has_more: last !== undefined && last < count,
+      sync_cursor: last ?? after,
+    };
+  };
+  return { list, calls };
+}
+
+function puller(
+  state: SocialReceiveSyncState,
+  source: ReturnType<typeof gateway>,
+  options: { now?: number; maxPages?: number; isCurrent?: () => boolean } = {},
+) {
+  const stored: number[] = [];
+  const saved: SocialReceiveSyncState[] = [];
+  return {
+    stored,
+    saved,
+    run: () =>
+      pullSocialReceiveSet<number>({
+        state,
+        now: () => options.now ?? NOW,
+        list: source.list,
+        store: async (items) => {
+          for (const item of items) stored.push(item);
+        },
+        saveState: async (next) => {
+          saved.push(next);
+        },
+        isCurrent: options.isCurrent ?? (() => true),
+        maxPages: options.maxPages,
+      }),
+  };
+}
+
+describe('pullSocialReceiveSet', () => {
+  test('pages a fresh set from the start to the end, and that read is the first full one', async () => {
+    const source = gateway(2_500, 1_000);
+    const pull = puller({ cursor: 0, fullAfter: null, fullAt: null }, source);
+    const result = await pull.run();
+    expect(source.calls).toEqual([0, 1_000, 2_000]);
+    expect(pull.stored).toHaveLength(2_500);
+    expect(result).toMatchObject({
+      complete: true,
+      state: { cursor: 2_500, fullAfter: null, fullAt: NOW },
+    });
+    expect(pull.saved.map((state) => state.cursor)).toEqual([1_000, 2_000, 2_500]);
+  });
+
+  test('continues from the stored cursor: only what was handed out since', async () => {
+    const source = gateway(2_510, 1_000);
+    const pull = puller({ cursor: 2_500, fullAfter: null, fullAt: NOW - DAY }, source);
+    const result = await pull.run();
+    expect(source.calls).toEqual([2_500]);
+    expect(pull.stored).toEqual(Array.from({ length: 10 }, (_, i) => 2_501 + i));
+    expect(result.state).toEqual({ cursor: 2_510, fullAfter: null, fullAt: NOW - DAY });
+  });
+
+  test('stops after the page budget and resumes on the next resync', async () => {
+    const source = gateway(50, 10);
+    const first = await puller({ cursor: 0, fullAfter: null, fullAt: null }, source, {
+      maxPages: 2,
+    }).run();
+    expect(first).toMatchObject({ complete: false, state: { cursor: 20, fullAt: null } });
+    const second = await puller(first.state, source, { maxPages: 20 }).run();
+    expect(second).toMatchObject({ complete: true, state: { cursor: 50, fullAt: NOW } });
+  });
+
+  test('once a week the set is read again from the start, without moving the cursor back', async () => {
+    const source = gateway(30, 10);
+    const state = { cursor: 30, fullAfter: null, fullAt: NOW - SOCIAL_RECEIVE_FULL_SYNC_SECONDS };
+    const partial = await puller(state, source, { maxPages: 1 }).run();
+    expect(source.calls).toEqual([0]);
+    expect(partial.state).toEqual({ cursor: 30, fullAfter: 10, fullAt: state.fullAt });
+    const rest = await puller(partial.state, source).run();
+    expect(source.calls).toEqual([0, 10, 20]);
+    expect(rest).toMatchObject({
+      complete: true,
+      state: { cursor: 30, fullAfter: null, fullAt: NOW },
+    });
+  });
+
+  test('not yet a week: no full read', async () => {
+    const source = gateway(30, 10);
+    await puller({ cursor: 30, fullAfter: null, fullAt: NOW - DAY }, source).run();
+    expect(source.calls).toEqual([30]);
+  });
+
+  test('a wallet closed mid-pull stores nothing more and saves no state', async () => {
+    const source = gateway(30, 10);
+    const pull = puller({ cursor: 0, fullAfter: null, fullAt: null }, source, {
+      isCurrent: () => false,
+    });
+    await pull.run();
+    expect(pull.stored).toEqual([]);
+    expect(pull.saved).toEqual([]);
+  });
+
+  test('a failed page keeps every page stored before it', async () => {
+    let calls = 0;
+    const source = gateway(30, 10);
+    const failing = {
+      calls: source.calls,
+      list: async (after: number) => {
+        calls += 1;
+        if (calls === 2) throw new Error('gateway 503');
+        return source.list(after);
+      },
+    };
+    const pull = puller({ cursor: 0, fullAfter: null, fullAt: null }, failing);
+    await expect(pull.run()).rejects.toThrow('gateway 503');
+    expect(pull.saved).toEqual([{ cursor: 10, fullAfter: null, fullAt: null }]);
   });
 });

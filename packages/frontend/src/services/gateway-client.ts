@@ -7,7 +7,9 @@ import type {
   SocialReceiveCursorResponse,
   EnrichmentResult,
   SocialPaymentsResponse,
+  SocialReceiveAddressesResponse,
 } from '@peable.to/shared-types';
+import { SOCIAL_RECEIVE_ADDRESSES_PAGE_MAX } from '@peable.to/contracts/vocabulary/payments';
 import { oxyServices } from '@/services/oxy-services';
 import { GATEWAY_API_URL } from '@/config';
 
@@ -131,8 +133,9 @@ export type SocialReceiveCursor = Omit<
  * reserved address is ever paid, but a receiving device only widens its
  * local watch window when a payment lands on an index it already watches —
  * so a burst of reservations with no payment in between can silently outrun
- * the device. This endpoint is read-only (reserves nothing), so a device
- * can poll it freely to widen its window to `0..reservedThrough+gap`.
+ * the device. This endpoint is read-only (reserves nothing). The addresses
+ * themselves come from {@link listSocialReceiveAddresses}; the cursor carries
+ * the keys the device judges its own against (ADR 0002).
  *
  * The Gateway returns `{ reservedThrough }` directly (no `{ data }` envelope
  * — verified against `packages/backend/src/routes/social.ts`'s
@@ -143,6 +146,26 @@ export type SocialReceiveCursor = Omit<
 export async function getSocialReceiveCursor(network: NetworkType): Promise<SocialReceiveCursor> {
   return gateway.client.get<SocialReceiveCursor>('/v1/social/me/cursor', {
     params: { network },
+  });
+}
+
+/**
+ * One page of the caller's watch set: every FairCoin address the gateway handed
+ * out in this account's Peable wallet on `network` (payments and `@username`,
+ * under every key the account has had), after the sync cursor `after`, in
+ * ascending index (ADR 0021 D9, amended 2026-11-06). Pass the answer's
+ * `sync_cursor` back as `after`; it is monotonic, so a stored cursor misses
+ * nothing. Answers for whoever the session acts as, like the cursor.
+ *
+ * Same envelope as `getSocialReceiveCursor`: the body is the object itself.
+ */
+export async function listSocialReceiveAddresses(
+  network: NetworkType,
+  after: number,
+  limit: number = SOCIAL_RECEIVE_ADDRESSES_PAGE_MAX,
+): Promise<SocialReceiveAddressesResponse> {
+  return gateway.client.get<SocialReceiveAddressesResponse>('/v1/social/me/receive_addresses', {
+    params: { network, after, limit },
   });
 }
 

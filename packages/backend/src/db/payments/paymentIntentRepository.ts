@@ -831,10 +831,10 @@ export async function findIntentsByAddresses(
     .select(INTENT_COLUMNS)
     .from(paymentIntents)
     .where(
-      // An intent with outputs is found by an output it still HOLDS (ADR 0021
-      // D9: a recycled address's previous holder is not "this address's
-      // payment" any more); one written before outputs, by its own address.
-      sql`((${inArray(paymentIntents.address, [...addresses])} and not exists (select 1 from ${paymentIntentOutputs} where ${paymentIntentOutputs.paymentIntentId} = ${paymentIntents.id})) or ${paymentIntents.id} in (select ${paymentIntentOutputs.paymentIntentId} from ${paymentIntentOutputs} where ${inArray(paymentIntentOutputs.address, [...addresses])} and ${paymentIntentOutputs.recycledAt} is null))`,
+      // An intent with outputs is found by any of its outputs (one address,
+      // one output, for ever: ADR 0021 D9); one written before outputs, by its
+      // own address.
+      sql`((${inArray(paymentIntents.address, [...addresses])} and not exists (select 1 from ${paymentIntentOutputs} where ${paymentIntentOutputs.paymentIntentId} = ${paymentIntents.id})) or ${paymentIntents.id} in (select ${paymentIntentOutputs.paymentIntentId} from ${paymentIntentOutputs} where ${inArray(paymentIntentOutputs.address, [...addresses])}))`,
     );
   return rows.map(toIntentRow);
 }

@@ -8,9 +8,7 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import { uuidv7 } from '@oxy.so/db';
 import type { OxyAuthRequest, SafeFetchResult } from '@oxy.so/core/server';
-import { SOCIAL_RECEIVE_INDEX_LIMIT } from '@peable.to/contracts/vocabulary';
-import { merchants, socialReceiveCursors } from '../../db/schema';
-import { reserveNextSocialReceiveIndex } from '../../db/social/receiveCursor';
+import { merchants } from '../../db/schema';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 import { requireOxyUser } from '../../lib/http';
@@ -246,38 +244,6 @@ describe('GET /v1/dashboard/applications/:applicationId/merchant', () => {
       `/v1/dashboard/applications/${APP_ID}/merchant?environment=regtest`,
     );
     expect(res.status).toBe(400);
-  });
-});
-
-describe('GET /v1/dashboard/applications/:applicationId/faircoin/receive_tree (ADR 0021 D9)', () => {
-  test("answers how much of the owning account's tree is taken, and warns once it is nearly full", async () => {
-    const path = `/v1/dashboard/applications/${APP_ID}/faircoin/receive_tree?environment=development`;
-    const empty = await authedFetch(path);
-    expect(empty.status).toBe(200);
-    expect(await empty.json()).toEqual({
-      object: 'faircoin_receive_tree',
-      network: 'testnet',
-      recipient: true,
-      reserved_through: 0,
-      index_limit: SOCIAL_RECEIVE_INDEX_LIMIT,
-      remaining: SOCIAL_RECEIVE_INDEX_LIMIT - 1,
-      nearly_full: false,
-    });
-
-    const merchant = must(await findMerchantByAppEnvironment(gatewayDb(), APP_ID, 'development'));
-    const owner = must(merchant.ownerAccountId);
-    await reserveNextSocialReceiveIndex(gatewayDb(), owner, 'testnet', `02${'aa'.repeat(32)}`);
-    await gatewayDb()
-      .update(socialReceiveCursors)
-      .set({ nextDerivationIndex: SOCIAL_RECEIVE_INDEX_LIMIT - 10 })
-      .where(eq(socialReceiveCursors.oxyUserId, owner));
-    const nearly = (await (await authedFetch(path)).json()) as Record<string, unknown>;
-    expect(nearly).toMatchObject({
-      reserved_through: SOCIAL_RECEIVE_INDEX_LIMIT - 11,
-      remaining: 10,
-      nearly_full: true,
-    });
-    await gatewayDb().delete(socialReceiveCursors).where(eq(socialReceiveCursors.oxyUserId, owner));
   });
 });
 

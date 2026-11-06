@@ -1,7 +1,7 @@
 /**
  * Peable's on-device half of the social-receive scheme (design spec §4.3).
  *
- * Peable never holds the identity private key. The watch window derives from
+ * Peable never holds the identity private key. Every watched address derives from
  * the identity PUBLIC key (`KeyManager.getSharedPublicKey()`), exactly as a
  * payer or the backend derives the same addresses, and spending a
  * social-receive coin asks the key's holder to sign the input's sighash
@@ -11,9 +11,11 @@
  *
  * The address derivation is `@fairco.in/core`'s published primitive
  * (`deriveSocialReceiveAddress`) — generic secp256k1 crypto with no Oxy
- * dependency. Also owns the window math and the key comparison as pure
- * functions, kept here (not in `wallet-store.ts`) so they stay directly
- * unit-testable without any SQLite or SPV setup.
+ * dependency. Also owns the key comparison as a pure function, kept here (not
+ * in `wallet-store.ts`) so it stays directly unit-testable without any SQLite
+ * or SPV setup. WHICH addresses are watched is `social-receive-watch.ts`: the
+ * set the gateway reports it handed out (ADR 0021 D9, amended 2026-11-06), not
+ * a contiguous window.
  */
 import {
   SIGHASH_ALL,
@@ -27,33 +29,7 @@ import {
 import type { NetworkConfig, Transaction } from '@fairco.in/core';
 import { Point } from '@noble/secp256k1';
 import { KeyManager as IdentityKeyManager, getOrganizationPublicKey } from '@oxy.so/core/crypto';
-// One module, not the vocabulary barrel: Metro ships every module it reaches.
-import {
-  SOCIAL_RECEIVE_GAP_LIMIT,
-  SOCIAL_RECEIVE_INDEX_LIMIT,
-  SOCIAL_RECEIVE_MAX_WATCHED,
-} from '@peable.to/contracts/vocabulary/receiveTree';
 import { PERSONAL_SUBJECT, identityKeyOptions, type IdentitySubject } from './identity-wallet';
-
-/**
- * How many unused social-receive addresses stay watched beyond the highest
- * USED or RESERVED index — the FairCoin BIP44 external-chain gap limit
- * (`EXTERNAL_GAP_LIMIT` in `key-manager.ts`). The gateway's ceiling is derived
- * from it, so it is the contract's constant, not this wallet's.
- *
- * {@link SOCIAL_RECEIVE_MAX_WATCHED}: the most indices this device watches,
- * `0 .. MAX - 1`. Every index the gateway hands out is watched forever (a paid
- * address can be paid again), so the window only grows. It has to stop
- * somewhere: each index is an elliptic-curve derivation, a row, a Bloom-filter
- * entry (the filter caps at 36,000 bytes, ~15,000 entries at its
- * false-positive rate, and saturates beyond) and, the first time, an Explorer
- * read. The gateway never hands out an index at or above
- * {@link SOCIAL_RECEIVE_INDEX_LIMIT} (`MAX - GAP`), so with the plan below
- * every address it reserves is inside this window; past the bound the wallet
- * says so ({@link SocialReceiveWindowPlan.capped}) rather than pretend it still
- * watches what payers are sent to.
- */
-export { SOCIAL_RECEIVE_GAP_LIMIT, SOCIAL_RECEIVE_INDEX_LIMIT, SOCIAL_RECEIVE_MAX_WATCHED };
 
 /**
  * The compressed, lowercase hex form of a secp256k1 public key, whatever
@@ -72,8 +48,8 @@ export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
  * Android when Commons is absent: only the key's holder can sign for these
  * addresses, so without it there is nothing to watch.
  *
- * Both sides of social receive derive from it: this device computes its watch
- * window from it, and the backend derives what payers are sent to from the key
+ * Both sides of social receive derive from it: this device derives the addresses it
+ * watches from it, and the backend derives what payers are sent to from the key
  * the account publishes. Comparing the two is the only way to notice they have
  * stopped being the same key.
  */
@@ -178,53 +154,6 @@ export function highestIndex(values: Iterable<number>): number {
     if (value > highest) highest = value;
   }
   return highest;
-}
-
-export interface SocialReceiveWindowPlan {
-  /** The indices to derive and watch next, or `null` when none. */
-  readonly extension: { start: number; count: number } | null;
-  /**
-   * True when the gateway has RESERVED an index whose gap reaches past
-   * {@link SOCIAL_RECEIVE_MAX_WATCHED}: a payment to one of them would not
-   * reach this wallet, so `@username` must not be offered.
-   *
-   * Only the reservation decides it, never a USED index. The gateway never
-   * hands out an index at or above {@link SOCIAL_RECEIVE_INDEX_LIMIT}, but the
-   * addresses above it derive from the public key, so anyone can send dust to
-   * index 1,999 — and letting that flip `capped` would let one dust payment
-   * hide a recipient's `@username`. A used index still extends the window (up
-   * to the bound), so whatever was received there is still watched.
-   */
-  readonly capped: boolean;
-}
-
-/**
- * How far the watch window should reach — `SOCIAL_RECEIVE_GAP_LIMIT` past the
- * highest index either PAID (seen on chain) or RESERVED (the gateway's cursor)
- * — bounded by `maxWatched`; whether it is capped is the RESERVED index's
- * alone (see {@link SocialReceiveWindowPlan.capped}). Pure.
- *
- * @param highestReserved The cursor's `reserved_through`, or -1 when nothing
- *   was reserved (the endpoint's `0` sentinel: index 0 is the stable default
- *   address and is never handed out by `next_address`).
- */
-export function planSocialReceiveWindow(input: {
-  readonly highestWatched: number;
-  readonly highestUsed: number;
-  readonly highestReserved: number;
-  readonly gapLimit?: number;
-  readonly maxWatched?: number;
-}): SocialReceiveWindowPlan {
-  const gapLimit = input.gapLimit ?? SOCIAL_RECEIVE_GAP_LIMIT;
-  const maxWatched = input.maxWatched ?? SOCIAL_RECEIVE_MAX_WATCHED;
-  const ceiling = maxWatched - 1;
-  const wanted = Math.max(input.highestUsed, input.highestReserved) + gapLimit;
-  const target = Math.min(wanted, ceiling);
-  const extension =
-    target > input.highestWatched
-      ? { start: input.highestWatched + 1, count: target - input.highestWatched }
-      : null;
-  return { extension, capped: input.highestReserved + gapLimit > ceiling };
 }
 
 /**

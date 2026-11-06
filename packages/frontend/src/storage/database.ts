@@ -78,10 +78,42 @@ export interface AddressRow {
   used: number;
 }
 
-export interface SocialReceiveAddressRow {
-  index_num: number;
+/** A row of `social_receive_set` (ADR 0021 D9, amended 2026-11-06). Times are Unix seconds. */
+export interface SocialReceiveSetRow {
   address: string;
+  index_num: number;
+  identity_public_key: string | null;
+  created_at: number;
   used: number;
+  checked_at: number | null;
+  next_check_at: number | null;
+  found_at: number | null;
+  origin: 'gateway' | 'default' | 'legacy';
+}
+
+/** One address to add to the set. */
+export interface SocialReceiveSetInsert {
+  readonly address: string;
+  readonly index: number;
+  readonly identityPublicKey: string | null;
+  readonly createdAt: number;
+  readonly origin: SocialReceiveSetRow['origin'];
+  readonly checkedAt?: number | null;
+}
+
+/** A check to persist on one row (`social-receive-watch.ts`'s `WatchSetCheck`). */
+export interface SocialReceiveSetCheck {
+  readonly address: string;
+  readonly checkedAt: number;
+  readonly nextCheckAt: number;
+  readonly foundAt?: number;
+}
+
+/** Where the pull of the set stands (`social-receive-sync.ts`'s `SocialReceiveSyncState`). */
+export interface SocialReceiveSyncStateRow {
+  readonly cursor: number;
+  readonly fullAfter: number | null;
+  readonly fullAt: number | null;
 }
 
 export interface WatchAddressRow {
@@ -210,10 +242,28 @@ const SCHEMA_SQL = `
     used INTEGER DEFAULT 0
   );
 
+  -- The contiguous window before ADR 0021 D9's amendment (2026-11-06). Kept
+  -- only so an upgraded wallet's rows are imported into social_receive_set
+  -- (migrateSocialReceiveWindow); always empty afterwards.
   CREATE TABLE IF NOT EXISTS social_receive_addresses (
     index_num INTEGER PRIMARY KEY,
     address TEXT UNIQUE NOT NULL,
     used INTEGER DEFAULT 0
+  );
+
+  -- Every social-receive address this wallet knows of: what the gateway
+  -- reports it handed out (any key the account has had), index 0, and an
+  -- upgraded wallet's old window. Keyed by ADDRESS: two keys share indices.
+  CREATE TABLE IF NOT EXISTS social_receive_set (
+    address TEXT PRIMARY KEY,
+    index_num INTEGER NOT NULL,
+    identity_public_key TEXT,
+    created_at INTEGER NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    checked_at INTEGER,
+    next_check_at INTEGER,
+    found_at INTEGER,
+    origin TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS watch_addresses (
@@ -296,6 +346,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp);
   CREATE INDEX IF NOT EXISTS idx_addresses_change_used ON addresses(is_change, used);
   CREATE INDEX IF NOT EXISTS idx_social_receive_used ON social_receive_addresses(used);
+  CREATE INDEX IF NOT EXISTS idx_social_receive_set_next_check ON social_receive_set(next_check_at);
   CREATE INDEX IF NOT EXISTS idx_contacts_address ON contacts(address);
   CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
   CREATE INDEX IF NOT EXISTS idx_buy_orders_created ON buy_orders(created_at);
@@ -353,7 +404,57 @@ export class Database {
     await this.migrateHeaderHashesToBlob();
     await this.db.execAsync(SCHEMA_SQL);
     await this.migrateUtxoColumns();
+    await this.migrateSocialReceiveWindow();
     await this.repairHeaderStore();
+  }
+
+  /**
+   * Import the contiguous social-receive window of a wallet created before the
+   * watch set (ADR 0021 D9, amended 2026-11-06), once, then empty it. Its
+   * addresses derive from the key the window recorded, and some may have been
+   * handed out before the gateway recorded every index — so they stay watched
+   * (origin `legacy`) rather than being dropped. Rows the window had already
+   * looked at for earlier coins keep that, as checked now.
+   */
+  private async migrateSocialReceiveWindow(): Promise<void> {
+    const old = await this.db.getAllAsync<{ index_num: number; address: string; used: number }>(
+      'SELECT index_num, address, used FROM social_receive_addresses',
+    );
+    if (old.length === 0) return;
+    const keyRow = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'social_receive_identity_key'",
+    );
+    const checkedRow = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'social_receive_checked_through'",
+    );
+    const checkedThrough = checkedRow ? Number(checkedRow.value) : -1;
+    const now = Math.floor(Date.now() / 1000);
+    await this.db.withTransactionAsync(async () => {
+      const stmt = await this.db.prepareAsync(
+        `INSERT OR IGNORE INTO social_receive_set
+           (address, index_num, identity_public_key, created_at, used, checked_at, origin)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      try {
+        for (const row of old) {
+          await stmt.executeAsync(
+            row.address,
+            row.index_num,
+            keyRow?.value ?? null,
+            now,
+            row.used ? 1 : 0,
+            Number.isSafeInteger(checkedThrough) && row.index_num <= checkedThrough ? now : null,
+            row.index_num === 0 ? 'default' : 'legacy',
+          );
+        }
+      } finally {
+        await stmt.finalizeAsync();
+      }
+      await this.db.runAsync('DELETE FROM social_receive_addresses');
+      await this.db.runAsync(
+        "DELETE FROM schema_meta WHERE key IN ('social_receive_checked_through', 'social_receive_identity_key')",
+      );
+    });
   }
 
   /**
@@ -955,20 +1056,27 @@ export class Database {
   // -----------------------------------------------------------------------
 
   /**
-   * Persist a batch of derived social-receive addresses. `INSERT OR IGNORE`
-   * makes this idempotent: re-deriving and re-inserting an already-persisted
-   * index is a safe no-op, so callers never need to check existence first.
+   * Add addresses to the set. `INSERT OR IGNORE`: an address already stored
+   * keeps its check state, so a full re-read of the gateway's set is a no-op.
    */
-  async insertSocialReceiveAddresses(rows: { index: number; address: string }[]): Promise<void> {
+  async insertSocialReceiveSet(rows: readonly SocialReceiveSetInsert[]): Promise<void> {
     if (rows.length === 0) return;
     await this.db.withTransactionAsync(async () => {
       const stmt = await this.db.prepareAsync(
-        `INSERT OR IGNORE INTO social_receive_addresses (index_num, address, used)
-         VALUES (?, ?, 0)`,
+        `INSERT OR IGNORE INTO social_receive_set
+           (address, index_num, identity_public_key, created_at, used, checked_at, origin)
+         VALUES (?, ?, ?, ?, 0, ?, ?)`,
       );
       try {
         for (const row of rows) {
-          await stmt.executeAsync(row.index, row.address);
+          await stmt.executeAsync(
+            row.address,
+            row.index,
+            row.identityPublicKey,
+            row.createdAt,
+            row.checkedAt ?? null,
+            row.origin,
+          );
         }
       } finally {
         await stmt.finalizeAsync();
@@ -976,86 +1084,117 @@ export class Database {
     });
   }
 
-  async getSocialReceiveAddresses(): Promise<SocialReceiveAddressRow[]> {
-    return this.db.getAllAsync<SocialReceiveAddressRow>(
-      'SELECT * FROM social_receive_addresses ORDER BY index_num ASC',
+  /** Every row of the set, of every key, in index order. */
+  async getSocialReceiveSet(): Promise<SocialReceiveSetRow[]> {
+    return this.db.getAllAsync<SocialReceiveSetRow>(
+      'SELECT * FROM social_receive_set ORDER BY index_num ASC, address ASC',
     );
+  }
+
+  /** The rows with these addresses (a page just stored, say). */
+  async getSocialReceiveSetRows(addresses: readonly string[]): Promise<SocialReceiveSetRow[]> {
+    const rows: SocialReceiveSetRow[] = [];
+    for (let start = 0; start < addresses.length; start += 500) {
+      const chunk = addresses.slice(start, start + 500);
+      const found = await this.db.getAllAsync<SocialReceiveSetRow>(
+        `SELECT * FROM social_receive_set WHERE address IN (${chunk.map(() => '?').join(',')})`,
+        ...chunk,
+      );
+      for (const row of found) rows.push(row);
+    }
+    return rows;
   }
 
   async markSocialReceiveAddressUsed(address: string): Promise<void> {
-    await this.db.runAsync(
-      'UPDATE social_receive_addresses SET used = 1 WHERE address = ?',
-      address,
+    await this.db.runAsync('UPDATE social_receive_set SET used = 1 WHERE address = ?', address);
+  }
+
+  /** Persist checks, one transaction. A found coin also marks the row used. */
+  async recordSocialReceiveChecks(checks: readonly SocialReceiveSetCheck[]): Promise<void> {
+    if (checks.length === 0) return;
+    await this.db.withTransactionAsync(async () => {
+      const stmt = await this.db.prepareAsync(
+        `UPDATE social_receive_set
+            SET checked_at = ?, next_check_at = ?,
+                found_at = COALESCE(?, found_at),
+                used = CASE WHEN ? IS NULL THEN used ELSE 1 END
+          WHERE address = ?`,
+      );
+      try {
+        for (const check of checks) {
+          const foundAt = check.foundAt ?? null;
+          await stmt.executeAsync(
+            check.checkedAt,
+            check.nextCheckAt,
+            foundAt,
+            foundAt,
+            check.address,
+          );
+        }
+      } finally {
+        await stmt.finalizeAsync();
+      }
+    });
+  }
+
+  /** The set's addresses that hold an unspent output in this wallet's UTXO set. */
+  async getSocialReceiveAddressesHoldingCoins(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ address: string }>(
+      `SELECT DISTINCT s.address FROM social_receive_set s
+         JOIN utxos u ON u.address = s.address
+        WHERE u.spent = 0`,
     );
+    return rows.map((row) => row.address);
+  }
+
+  /** Where the pull of the gateway's set stands. */
+  async getSocialReceiveSyncState(): Promise<SocialReceiveSyncStateRow> {
+    const rows = await this.db.getAllAsync<{ key: string; value: string }>(
+      "SELECT key, value FROM schema_meta WHERE key IN ('social_receive_sync_cursor', 'social_receive_full_sync_after', 'social_receive_full_sync_at')",
+    );
+    const read = (key: string): number | null => {
+      const value = Number(rows.find((row) => row.key === key)?.value ?? Number.NaN);
+      return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    };
+    return {
+      cursor: read('social_receive_sync_cursor') ?? 0,
+      fullAfter: read('social_receive_full_sync_after'),
+      fullAt: read('social_receive_full_sync_at'),
+    };
+  }
+
+  async setSocialReceiveSyncState(state: SocialReceiveSyncStateRow): Promise<void> {
+    await this.db.withTransactionAsync(async () => {
+      const put = async (key: string, value: number | null) => {
+        if (value === null) {
+          await this.db.runAsync('DELETE FROM schema_meta WHERE key = ?', key);
+        } else {
+          await this.db.runAsync(
+            'INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)',
+            key,
+            String(value),
+          );
+        }
+      };
+      await put('social_receive_sync_cursor', state.cursor);
+      await put('social_receive_full_sync_after', state.fullAfter);
+      await put('social_receive_full_sync_at', state.fullAt);
+    });
   }
 
   /**
-   * The highest social-receive index marked used, or -1 if none are used yet.
-   * Mirrors `getNextUnusedIndex`'s role for the private spending tree: the
-   * caller extends the watched window to stay `SOCIAL_RECEIVE_GAP_LIMIT`
-   * ahead of this value.
-   */
-  async getHighestUsedSocialReceiveIndex(): Promise<number> {
-    const row = await this.db.getFirstAsync<{ max_used: number | null }>(
-      'SELECT MAX(index_num) as max_used FROM social_receive_addresses WHERE used = 1',
-    );
-    return row?.max_used ?? -1;
-  }
-
-  /**
-   * The identity public key the persisted social-receive window was derived
-   * from, or `null` for a window that predates this record.
-   *
-   * Every address in that window is a function of the identity key. Store which
-   * key produced them and a device can notice that it now derives from a
-   * different one — the alternative is watching a tree nobody is paying into,
-   * which looks exactly like not being paid.
-   */
-  async getSocialReceiveIdentityKey(): Promise<string | null> {
-    const row = await this.db.getFirstAsync<{ value: string }>(
-      "SELECT value FROM schema_meta WHERE key = 'social_receive_identity_key'",
-    );
-    return row?.value ?? null;
-  }
-
-  async setSocialReceiveIdentityKey(publicKeyHex: string): Promise<void> {
-    await this.db.runAsync(
-      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('social_receive_identity_key', ?)",
-      publicKeyHex,
-    );
-  }
-
-  /**
-   * Drop every persisted social-receive address. `databaseFileName` has no
-   * network component, so this DB file is shared across mainnet/testnet for
-   * a given wallet+Pocket — a window derived on one network is a stale,
-   * wrong-network address set on the other. Called on `switchNetwork` so the
-   * next `setUpSocialReceive` re-derives a fresh window for the new network
-   * (finding: network-scope the social-receive window, MEDIUM).
+   * Drop the whole social-receive set and where its pull stood. `databaseFileName`
+   * has no network component, so this DB file is shared across mainnet/testnet
+   * for a given wallet+Pocket — a set synced on one network is the wrong
+   * network's addresses on the other. Called on `switchNetwork` only, so the
+   * next `setUpSocialReceive` pulls the new network's set; a key change never
+   * drops rows (the addresses of a previous key keep their coins).
    */
   async clearSocialReceiveAddresses(): Promise<void> {
+    await this.db.runAsync('DELETE FROM social_receive_set');
     await this.db.runAsync('DELETE FROM social_receive_addresses');
-    // A fresh window has not been looked at yet, whatever the old one was.
-    await this.db.runAsync("DELETE FROM schema_meta WHERE key = 'social_receive_checked_through'");
-  }
-
-  /**
-   * Every social-receive index up to and including this one has been checked
-   * for coins paid BEFORE it joined the Bloom filter (an Explorer read, or a
-   * historical rescan that had not begun yet). -1 when none has.
-   */
-  async getSocialReceiveCheckedThrough(): Promise<number> {
-    const row = await this.db.getFirstAsync<{ value: string }>(
-      "SELECT value FROM schema_meta WHERE key = 'social_receive_checked_through'",
-    );
-    const value = row ? Number(row.value) : -1;
-    return Number.isSafeInteger(value) ? value : -1;
-  }
-
-  async setSocialReceiveCheckedThrough(index: number): Promise<void> {
     await this.db.runAsync(
-      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('social_receive_checked_through', ?)",
-      String(index),
+      "DELETE FROM schema_meta WHERE key IN ('social_receive_sync_cursor', 'social_receive_full_sync_after', 'social_receive_full_sync_at', 'social_receive_checked_through', 'social_receive_identity_key')",
     );
   }
 

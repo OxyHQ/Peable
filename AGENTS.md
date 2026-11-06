@@ -270,28 +270,36 @@ recipient's current `#key-1`: a payment nobody reported a txid for under a
 replaced key (or on a network the deployment closed) is retired — only once the
 Explorer shows its addresses unused, because "no txid" is not "not paid".
 
-**Before the cursor, the pool (ADR 0021 D9).** A payment's address is reserved
-in the payment's OWN transaction by `services/faircoin/addressPool.ts`: an
-address of the recipient's whose payment was cancelled over an hour ago, that
-still derives from its key and that the Explorer shows unused, is recycled;
-otherwise the cursor mints — only while fewer than 500 of the recipient's
-addresses are open, counted under a per-recipient advisory lock
-(`pg_advisory_xact_lock`, `db/payments/faircoinAddressPool.ts`). A recycled
-address is always below the tree's ceiling, like a minted one. Never mint for
-a payment outside that function, and never read `unknown` from the Explorer as
-unused: that bound is what keeps a recipient's wallet scannable.
+**Every address is fresh, and the bound is a rate (ADR 0021 D9, amended
+2026-11-06).** A payment's address is reserved in the payment's OWN
+transaction by `services/faircoin/addressPool.ts`'s `reservePlannedAddresses`,
+an `@username` one with its attribution in ONE transaction by
+`reserveSocialSendAddress` (`services/socialReceive.ts`); both go through
+`reserveFreshAddress` — the one-statement cursor, skipping an index whose
+address history already holds. Addresses are never recycled. A recipient gets
+a new payment address only while fewer than 500 of its payment addresses of the
+last 24 h are unpaid, and a new `@username` address only while fewer than 500
+were handed out fresh in the last 24 h — each counted under a per-recipient
+advisory lock (`pg_advisory_xact_lock`, `db/payments/faircoinAddressPool.ts`);
+past it, 503 `faircoin_capacity_reached`. Per-payer limits sit in front
+(`lib/faircoinPayerLimit.ts` on anonymous FairCoin confirms and invoice pays,
+the sender and pair limiters on `@username`). Never hand out an address
+outside those functions, and never record it outside the reservation's
+transaction: the cursor's row lock is what makes the index the wallet's sync
+cursor.
 
 The counters are `integer` on purpose (see `CONVENTIONS.md` §Counters) — a
 `bigint` column comes back from postgres.js as a STRING, and `"0" + 1` is `"01"`.
 Any change there must keep the two-consecutive-reservation test, because a single
 reservation cannot tell a number from a string that prints the same.
 
-The cursor's `DO UPDATE` also carries the tree's ceiling in its `WHERE`
-(`SOCIAL_RECEIVE_INDEX_LIMIT`, `@peable.to/contracts/vocabulary/receiveTree`,
-ADR 0021 D9): the wallet watches a bounded window, and the wallet and the
-gateway read that ONE constant. Never mint past it in a second statement, and
-never let the wallet's `capped` follow a USED index above it — anyone can dust
-an address there, and the gateway never handed it out.
+There is no ceiling on the tree. The wallet watches EXACTLY the addresses
+handed out, synced from `GET /v1/social/me/receive_addresses` (the union of
+`payment_intent_outputs` and `social_send_attributions`, every key the account
+ever had, paged by `derivation_index`) — the recent and funded ones in its
+Bloom filter, the rest read on the Explorer on a doubling schedule
+(`packages/frontend/src/wallet/social-receive-watch.ts`). Never reintroduce a
+contiguous window or an index limit.
 
 ## Chain access: Explorer HTTP, not RPC
 
@@ -340,7 +348,7 @@ seller's own account (`connected_accounts.faircoin_oxy_user_id`).
 on which network (the merchant's environment's) and how the address is
 reserved (`planFaircoinAddress`, then `addressPool.ts`'s
 `reservePlannedAddresses` in the payment's transaction: the account's DID
-`#key-1` PUBLIC key, `deriveSocialReceiveAddress`, a recycled address or the
+`#key-1` PUBLIC key, `deriveSocialReceiveAddress`, a fresh index of the
 one-statement cursor).
 The payment stores the account it pays (`faircoin_recipient_account_id`).
 No column holds a private or extended key — only the PUBLIC identity key

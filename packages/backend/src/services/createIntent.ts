@@ -831,9 +831,9 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       ? await resolveCardMethodsOrRefuse(merchant, currency, input, paymentMethod !== null)
       : null;
 
-  // A FairCoin payment holds an address of the recipient's for as long as it is
-  // payable, and only a cancelled one can ever be recycled (ADR 0021 D9): the
-  // contract caps `expires_in_seconds`, and so does every internal caller.
+  // A FairCoin payment is payable — and its unpaid address counts against the
+  // recipient's daily bound (ADR 0021 D9) — for at most a day: the contract
+  // caps `expires_in_seconds`, and so does every internal caller.
   if (
     rail === 'faircoin' &&
     expiresInSeconds !== undefined &&
@@ -913,10 +913,10 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // A split payment (ADR 0021 D6) reserves ONE address per output, each on its
   // own recipient's cursor — every seller's address is in the seller's own tree.
   //
-  // Each output's address is PLANNED here — the gates, the recipient's key, an
-  // address of theirs to recycle (ADR 0021 D9) — and RESERVED inside the
-  // intent's transaction below, so a payment that is never written holds no
-  // address and the recipient's open-address cap is one decision with the row.
+  // Each output's address is PLANNED here — the gates, the recipient's key —
+  // and RESERVED inside the intent's transaction below (a fresh index, never a
+  // reused address, ADR 0021 D9), so a payment that is never written holds no
+  // address and the recipient's unpaid bound is one decision with the row.
   const planned: { plan: PlannedAddress; connectedAccountId: string | null; amount: string }[] = [];
   if (rail === 'faircoin' && network !== null) {
     if (split.length > 1) {

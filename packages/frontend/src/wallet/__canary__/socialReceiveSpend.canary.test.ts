@@ -5,9 +5,11 @@
  * The gateway half (`packages/backend/src/__tests__/canary/`) paid a person's
  * `@username` and two merchants (one owned by that person, one by an
  * organization) on a FairCoin testnet chain, and recorded each recipient's
- * cursor. Here each recipient's wallet does what `wallet-store.ts` does with
- * that answer — compare the key, derive the watch window through the cursor —
- * using this package's own `social-receive.ts`, finds every coin on the chain,
+ * cursor and its watch set (`GET /v1/social/me/receive_addresses`, ADR 0021 D9
+ * amended 2026-11-06). Here each recipient's wallet does what `wallet-store.ts`
+ * does with those answers — compare the key, keep the set's rows of its own key,
+ * choose the active tier and read through the Explorer what is due — using this
+ * package's own `social-receive*.ts`, finds every coin on the chain,
  * and spends them all with the identity key's holder (`signSocialReceiveInput`
  * over `@oxy.so/core`'s `signSocialReceiveDigest`, the function the iOS SDK
  * runs and Commons' identity host reproduces natively).
@@ -51,8 +53,11 @@ interface WalletEvidence {
 const keys: { person: string; org: string } = ENABLED
   ? JSON.parse(readFileSync(String(KEYS), 'utf8'))
   : { person: '11'.repeat(32), org: '22'.repeat(32) };
-const gateway: { wallets: { person: WalletEvidence; organization: WalletEvidence } } | null =
-  ENABLED ? JSON.parse(readFileSync(String(GATEWAY), 'utf8')) : null;
+type ReceiveAddresses = import('@peable.to/contracts').SocialReceiveAddressesResponse;
+const gateway: {
+  wallets: { person: WalletEvidence; organization: WalletEvidence };
+  receiveAddresses?: { person?: ReceiveAddresses; organization?: ReceiveAddresses };
+} | null = ENABLED ? JSON.parse(readFileSync(String(GATEWAY), 'utf8')) : null;
 const ORG_ACCOUNT = gateway?.wallets.organization.account ?? 'org';
 
 // The key's holder, as on a phone: the person's key for personal requests, the
@@ -76,15 +81,16 @@ mock.module('@oxy.so/core/crypto', () => ({
 }));
 
 const {
-  SOCIAL_RECEIVE_GAP_LIMIT,
   deriveSocialReceiveWatchWindow,
   getIdentityPublicKeyHex,
-  highestIndex,
   judgeSocialReceiveKey,
-  planSocialReceiveWindow,
   signSocialReceiveInput,
 } = await import('../social-receive');
-const { checkSocialReceiveAddresses } = await import('../social-receive-sync');
+const { checkSocialReceiveDue } = await import('../social-receive-sync');
+const { planActiveSet, planSocialReceiveChecks, watchableRows } = await import(
+  '../social-receive-watch'
+);
+type WatchSetRow = import('../social-receive-watch').WatchSetRow;
 const { PERSONAL_SUBJECT } = await import('../identity-wallet');
 type IdentitySubject = import('../identity-wallet').IdentitySubject;
 type AddressActivity = import('../../services/explorer-address').AddressActivity;
@@ -119,7 +125,11 @@ async function mineOne(): Promise<number> {
 const network = getNetwork('testnet');
 const evidence: Record<string, unknown> = { started_at: new Date().toISOString() };
 
-async function sweep(label: string, wallet: WalletEvidence, subject: IdentitySubject) {
+async function sweep(
+  label: 'person' | 'organization',
+  wallet: WalletEvidence,
+  subject: IdentitySubject,
+) {
   // 1. The key this phone holds is the key the account publishes (the cursor
   // carries the DID's current `#key-1`) — `setUpSocialReceive`'s verdict.
   const deviceKey = await getIdentityPublicKeyHex(subject);
@@ -131,42 +141,63 @@ async function sweep(label: string, wallet: WalletEvidence, subject: IdentitySub
   });
   expect(verdict).toBe('match');
 
-  // 2. The watch window, exactly as `setUpSocialReceive` plans it: the initial
-  // gap, then through everything the cursor says was ever reserved.
-  const window = deriveSocialReceiveWatchWindow(
-    String(deviceKey),
-    0,
-    SOCIAL_RECEIVE_GAP_LIMIT,
-    network,
-  );
-  const plan = planSocialReceiveWindow({
-    highestWatched: highestIndex(window.map((entry) => entry.index)),
-    highestUsed: -1,
-    highestReserved: wallet.cursor.reserved_through > 0 ? wallet.cursor.reserved_through : -1,
-  });
-  expect(plan.capped).toBe(false);
-  if (plan.extension) {
-    window.push(
-      ...deriveSocialReceiveWatchWindow(
-        String(deviceKey),
-        plan.extension.start,
-        plan.extension.count,
-        network,
-      ),
+  // 2. The watch set, exactly as `setUpSocialReceive` builds it: index 0 of
+  // this key, plus the rows of the gateway's set this key owns.
+  const set = gateway?.receiveAddresses?.[label];
+  if (!set) {
+    throw new Error(
+      `the gateway evidence has no receiveAddresses.${label}: rerun the gateway canary (it records GET /v1/social/me/receive_addresses per recipient)`,
     );
   }
-  const indexOf = new Map(window.map((entry) => [entry.address, entry.index]));
+  expect(set.has_more).toBe(false);
+  const now = Math.floor(Date.now() / 1000);
+  const [zero] = deriveSocialReceiveWatchWindow(String(deviceKey), 0, 1, network);
+  if (!zero) throw new Error('no index 0');
+  const rows: WatchSetRow[] = [
+    {
+      address: zero.address,
+      index: 0,
+      identityPublicKey: String(deviceKey),
+      createdAt: now,
+      used: false,
+      checkedAt: null,
+      nextCheckAt: null,
+      foundAt: null,
+      origin: 'default',
+    },
+  ];
+  for (const item of set.addresses) {
+    expect(item.network).toBe('testnet');
+    rows.push({
+      address: item.address,
+      index: item.derivation_index,
+      identityPublicKey: item.identity_public_key,
+      createdAt: item.created,
+      used: false,
+      checkedAt: null,
+      nextCheckAt: null,
+      foundAt: null,
+      origin: 'gateway',
+    });
+  }
+  const watched = watchableRows(rows, String(deviceKey), network);
+  // Every address the gateway handed out is this key's (no rotation in the run).
+  expect(watched).toHaveLength(rows.length);
+  const indexOf = new Map(watched.map((entry) => [entry.address, entry.index]));
   for (const coin of wallet.received) expect(indexOf.has(coin.address)).toBe(true);
+  const active = planActiveSet({ watchable: watched, holdingCoins: new Set(), now });
+  for (const coin of wallet.received) expect(active.has(coin.address)).toBe(true);
 
-  // 2b. The running wallet's check of every watched index (the fix for payments
-  // that land beyond what SPV already scanned): the chain answers, and the
+  // 2b. The running wallet's look at every address not yet looked at (the
+  // filter only shows what is paid from now on): the chain answers, and the
   // rescan is sent back to the block of the first payment.
+  const plan = planSocialReceiveChecks({ watchable: watched, active, now, scanHasBegun: true });
+  expect(plan.due).toHaveLength(watched.length);
   const rescans: number[] = [];
-  const check = await checkSocialReceiveAddresses({
-    watched: window,
-    checkedThrough: -1,
-    scanHasBegun: true,
-    fetchActivity: async (addresses) => {
+  const check = await checkSocialReceiveDue({
+    due: plan.due,
+    now: () => Math.floor(Date.now() / 1000),
+    fetchActivity: async (addresses: readonly string[]) => {
       const activity = new Map<string, AddressActivity>();
       for (const address of addresses) {
         const utxos = await rpc<{ height: number }[]>('getaddressutxos', [
@@ -179,14 +210,15 @@ async function sweep(label: string, wallet: WalletEvidence, subject: IdentitySub
       }
       return activity;
     },
-    requestRescanFrom: async (height) => {
+    requestRescanFrom: async (height: number) => {
       rescans.push(height);
     },
-    markCheckedThrough: async () => {},
+    record: async () => {},
     isCurrent: () => true,
   });
-  expect(check.checkedThrough).toBe(highestIndex(window.map((entry) => entry.index)));
+  expect(check.checked).toBe(watched.length);
   expect(check.rescanFrom).not.toBeNull();
+  for (const coin of wallet.received) expect(check.found).toContain(coin.address);
 
   // 3. The coins, as the chain has them.
   const utxos = await rpc<
@@ -244,9 +276,11 @@ async function sweep(label: string, wallet: WalletEvidence, subject: IdentitySub
     at: new Date().toISOString(),
     account: wallet.account,
     reserved_through: wallet.cursor.reserved_through,
-    watched_indices: [window[0]?.index, window.at(-1)?.index],
+    watched_indices: watched.map((entry) => entry.index),
+    active: active.size,
     key_verdict: verdict,
-    checked_through: check.checkedThrough,
+    checked: check.checked,
+    found: check.found,
     rescan_from_height: check.rescanFrom,
     spent: utxos.map((utxo) => ({
       address: utxo.address,
