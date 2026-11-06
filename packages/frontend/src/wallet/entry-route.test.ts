@@ -140,4 +140,15 @@ describe('decideEntryRoute', () => {
       }).kind,
     ).toBe('signin');
   });
+
+  test('an init superseded by an account switch waits for the next one', () => {
+    expect(
+      decideEntryRoute({
+        isAuthResolved: true,
+        isAuthenticated: true,
+        identityInit: 'superseded',
+        hasPinConfigured: true,
+      }).kind,
+    ).toBe('loading');
+  });
 });

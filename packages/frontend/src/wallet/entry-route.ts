@@ -56,7 +56,7 @@ export function decideEntryRoute(input: {
   if (block) return { kind: 'blocked', block };
 
   // Signed in: the identity/wallet probe runs asynchronously; wait for it.
-  if (identityInit === null) return { kind: 'loading' };
+  if (identityInit === null || identityInit === 'superseded') return { kind: 'loading' };
   if (identityInit === 'no-keystore') return { kind: 'read-only' };
   if (identityInit === 'no-identity') return { kind: 'create-identity' };
 

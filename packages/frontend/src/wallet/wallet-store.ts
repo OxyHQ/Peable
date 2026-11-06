@@ -122,7 +122,12 @@ import {
 
 export type FeeLevel = 'low' | 'medium' | 'high';
 
-export type IdentityInitResult = 'initialized' | 'no-identity' | 'no-keystore';
+/**
+ * `superseded`: the wallet was closed or locked (an account switch, say) while
+ * this init was deriving, so it opened nothing; whoever closed it opens the
+ * next one.
+ */
+export type IdentityInitResult = 'initialized' | 'no-identity' | 'no-keystore' | 'superseded';
 
 /**
  * Discrete P2P network states. Stored on the wallet store as a key (rather
@@ -242,6 +247,13 @@ export interface WalletState {
     walletId?: string,
     onReady?: () => void,
     account?: number,
+    /**
+     * The lock epoch the CALLER started under. A caller that awaited
+     * something before calling (a seed derivation over IPC) passes the epoch
+     * it captured first, so a lock or account switch in between makes this a
+     * no-op instead of opening the previous account's wallet.
+     */
+    epoch?: number,
   ) => Promise<void>;
   /**
    * Bring up the Oxy-identity-derived wallet of `subject` — the person's own
@@ -1390,6 +1402,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     walletId?: string,
     onReady?: () => void,
     account?: number,
+    epoch?: number,
   ): Promise<void> => {
     // N-1: serialise wallet initialisation. If two callers race (deep-link +
     // boot, double-tap wallet switch, restore + network switch, …) we must
@@ -1403,9 +1416,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Lock-race guard (see `lockEpoch`): captured before the first await
       // below, so every checkpoint compares against the epoch that was
       // current when THIS task started.
-      const myEpoch = lockEpoch;
+      // A caller that started earlier (and awaited before queueing) passes the
+      // epoch it started under: a close or lock since then abandons this init.
+      const myEpoch = epoch ?? lockEpoch;
+      if (myEpoch !== lockEpoch) return;
       const state = get();
       if (state.initialized) {
+        // Another wallet is up: never treat it as this one. The account
+        // switch that asked for this wallet closes that one first.
+        if (walletId !== undefined && state.activeWalletId !== walletId) return;
         // Already up (e.g. a concurrent caller won the race). Signal the
         // UI-ready checkpoint immediately so a boot/unlock caller renders /
         // lifts the lock instead of waiting on a no-op.
@@ -1793,6 +1812,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     if (!hasIdentityKeystore()) {
       return 'no-keystore';
     }
+    // Captured BEFORE the derivation, which can wait on Commons over IPC: a
+    // close (account switch) or lock meanwhile must not open this wallet.
+    const epoch = lockEpoch;
     if (subject.kind === 'organization' && publishedPublicKey) {
       organizationPublishedKeys.set(subject.accountId, compressedPublicKeyHex(publishedPublicKey));
     }
@@ -1809,10 +1831,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // The bytes are needed only to build the secret; do not keep them.
       seed.fill(0);
     }
+    if (epoch !== lockEpoch) return 'superseded';
+    const walletId = identityWalletIdOf(subject);
     // `initialize()` itself brings up social receive (gated on the wallet id
     // naming an identity wallet, which it always does here) — no separate
     // step needed.
-    await get().initialize(secret, identityWalletIdOf(subject), onReady);
+    await get().initialize(secret, walletId, onReady, undefined, epoch);
+    const after = get();
+    if (epoch !== lockEpoch || (after.initialized && after.activeWalletId !== walletId)) {
+      return 'superseded';
+    }
     return 'initialized';
   },
 
@@ -1823,6 +1851,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   reloadActiveWallet: async (onReady?: () => void): Promise<void> => {
+    // As in `initializeFromIdentity`: the seed derivation below can wait, and
+    // a close (account switch) meanwhile must not bring this wallet back.
+    const epoch = lockEpoch;
     try {
       const activeId =
         get().activeWalletId ?? (activeWalletForgotten ? null : await getActiveWalletId());
@@ -1839,7 +1870,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         if (!marker) {
           throw new Error('Wallet xpub not found');
         }
-        await get().initialize(marker, activeId, onReady);
+        await get().initialize(marker, activeId, onReady, undefined, epoch);
         return;
       }
       // Identity-wallet-aware, mirroring switchPocket/switchNetwork: the
@@ -1848,7 +1879,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // wallet's, so route through `resolveWalletSeed` instead of assuming a
       // stored mnemonic exists.
       const seed = await resolveWalletSeed(activeId, walletSeedDeps);
-      await get().initialize(buildSeedSecret(seed), activeId, onReady);
+      await get().initialize(buildSeedSecret(seed), activeId, onReady, undefined, epoch);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to reload wallet';
       set({ loading: false, error: message });

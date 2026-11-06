@@ -81,8 +81,6 @@ export default function IndexScreen() {
   const { isAuthResolved, isAuthenticated, user } = useAuth();
   const initializeFromIdentity = useWalletStore((s) => s.initializeFromIdentity);
   const closeWallet = useWalletStore((s) => s.closeWallet);
-  const initialized = useWalletStore((s) => s.initialized);
-  const activeWalletId = useWalletStore((s) => s.activeWalletId);
   const accountId = user?.id ?? null;
   const accountKind = user?.kind ?? null;
   const markNoPinUnlocked = useLockStore((s) => s.markNoPinUnlocked);
@@ -124,12 +122,17 @@ export default function IndexScreen() {
         // An initialized wallet counts only if it is THIS account's: the
         // person may have switched between their own account and an
         // organization since it was opened.
-        const current = initialized && activeWalletId === walletId;
-        if (initialized && !current) closeWallet();
+        // Read the store NOW, not this render's snapshot: the awaits above
+        // leave room for an account switch to have closed or replaced it.
+        const live = useWalletStore.getState();
+        const current = live.initialized && live.activeWalletId === walletId;
+        if (live.initialized && !current) closeWallet();
         const result: IdentityInitResult = current
           ? 'initialized'
           : await initializeFromIdentity(() => {}, target.subject, target.publishedPublicKey);
-        if (isCancelled()) return;
+        // Superseded: closed (another account switch) while deriving; the
+        // boot that closed it decides what opens next.
+        if (isCancelled() || result === 'superseded') return;
         if (result === 'no-identity' && target.subject.kind === 'organization') {
           // The key vanished between the check and the derivation (Commons
           // removed it, or an older Commons cannot answer for an
@@ -162,8 +165,6 @@ export default function IndexScreen() {
       isAuthenticated,
       accountId,
       accountKind,
-      initialized,
-      activeWalletId,
       initializeFromIdentity,
       closeWallet,
       markNoPinUnlocked,
