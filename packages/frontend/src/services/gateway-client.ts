@@ -117,7 +117,10 @@ export async function enrichAddresses(
  * field omits it, so it is optional here and its absence means "not known",
  * never "no key".
  */
-export type SocialReceiveCursor = SocialReceiveCursorResponse & {
+export type SocialReceiveCursor = Omit<
+  SocialReceiveCursorResponse,
+  'account_identity_public_key'
+> & {
   readonly account_identity_public_key?: string | null;
 };
 
