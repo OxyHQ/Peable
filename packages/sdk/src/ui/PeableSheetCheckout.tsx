@@ -67,7 +67,11 @@ export interface PeableSheetCheckoutProps {
   locale?: string;
   /** Product copy overrides, by `checkoutMessage` key. */
   messages?: Readonly<Record<string, string>>;
-  /** What the payer reviewed. An order that is not it is refused with `onUnavailable('mismatch')`. */
+  /**
+   * What the payer reviewed — a session's subtotal (before tax and discount), a
+   * single payment's amount. An order that is not it is refused with
+   * `onUnavailable('mismatch')`.
+   */
   expected?: SheetExpectation;
   /** A session's presentation the gateway does not carry (a subscription's cadence). */
   presentation?: SheetPresentation;
@@ -222,7 +226,9 @@ export function PeableSheetCheckout({
     const priced =
       next.type === 'checkout_session'
         ? {
-            amount: next.session.amount_total,
+            // The reviewed price: before tax (priced once the payer says where
+            // they pay from) and before a promotion code.
+            amount: next.session.amount_subtotal,
             currency: next.session.currency,
             livemode: next.session.livemode,
           }

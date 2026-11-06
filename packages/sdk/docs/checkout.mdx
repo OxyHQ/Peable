@@ -151,7 +151,7 @@ const source = sessionSource(clientSecret); // cs_…_secret_…, null if it is 
 <PeableSheetCheckout
   source={source}
   locale={language}
-  expected={{ amount: '999', currency: 'EUR' }} // what the payer reviewed
+  expected={{ amount: '999', currency: 'EUR' }} // the reviewed price, before tax and discount
   presentation={{ recurring: { interval: 'month' } }}
   onSettled={() => refetchFromYourServer()} // the gateway closed the order
   outcome={yourServerSays} // 'succeeded' | 'failed' | null

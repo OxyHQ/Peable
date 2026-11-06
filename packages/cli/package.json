@@ -46,7 +46,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@peable.to/sdk": "workspace:4.2.0",
+    "@peable.to/sdk": "workspace:4.2.1",
     "@peable.to/shared-types": "workspace:4.1.0"
   },
   "devDependencies": {
