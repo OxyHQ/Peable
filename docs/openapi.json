@@ -6991,6 +6991,27 @@
                       "faircoin"
                     ],
                     "description": "How the payer pays: one of the session's `payment_method_types`. Default: the rail of the order's currency (`card` on a fiat order). `faircoin` on a fiat order quotes its total in FAIR for 10 minutes; confirming again with the other method replaces a payment that has not started moving money."
+                  },
+                  "locale": {
+                    "type": "string",
+                    "enum": [
+                      "ar",
+                      "bn",
+                      "ca",
+                      "de",
+                      "en",
+                      "es",
+                      "fr",
+                      "hi",
+                      "id",
+                      "it",
+                      "ja",
+                      "pt",
+                      "ru",
+                      "tr",
+                      "zh"
+                    ],
+                    "description": "The language the payer is completing checkout in. Recorded on the session (never on its `locale`) and given to a customer checkout creates as its `preferred_locales`; the session's emails are written in it when the customer has no preferred language."
                   }
                 },
                 "additionalProperties": false
@@ -9738,6 +9759,31 @@
                     ],
                     "additionalProperties": false
                   },
+                  "preferred_locales": {
+                    "maxItems": 15,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "ar",
+                        "bn",
+                        "ca",
+                        "de",
+                        "en",
+                        "es",
+                        "fr",
+                        "hi",
+                        "id",
+                        "it",
+                        "ja",
+                        "pt",
+                        "ru",
+                        "tr",
+                        "zh"
+                      ]
+                    },
+                    "description": "Most preferred first, each once, from the payer locale set (`ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`)."
+                  },
                   "invoice_settings": {
                     "type": "object",
                     "properties": {
@@ -10351,6 +10397,40 @@
                         "const": ""
                       }
                     ]
+                  },
+                  "preferred_locales": {
+                    "anyOf": [
+                      {
+                        "maxItems": 15,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "ar",
+                            "bn",
+                            "ca",
+                            "de",
+                            "en",
+                            "es",
+                            "fr",
+                            "hi",
+                            "id",
+                            "it",
+                            "ja",
+                            "pt",
+                            "ru",
+                            "tr",
+                            "zh"
+                          ]
+                        },
+                        "description": "Most preferred first, each once, from the payer locale set (`ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`)."
+                      },
+                      {
+                        "type": "string",
+                        "const": ""
+                      }
+                    ],
+                    "description": "Replaces the list; `[]` or `\"\"` clears it."
                   },
                   "invoice_settings": {
                     "type": "object",
@@ -55873,6 +55953,30 @@
               }
             ]
           },
+          "preferred_locales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ar",
+                "bn",
+                "ca",
+                "de",
+                "en",
+                "es",
+                "fr",
+                "hi",
+                "id",
+                "it",
+                "ja",
+                "pt",
+                "ru",
+                "tr",
+                "zh"
+              ]
+            },
+            "description": "The customer's preferred languages, most preferred first (Stripe's `preferred_locales`), from the payer locale set. Receipts, invoices and dunning emails are written in the first; empty when none is known. A customer Checkout creates gets the language the payer completed it in."
+          },
           "invoice_settings": {
             "type": "object",
             "properties": {
@@ -55967,6 +56071,7 @@
           "description",
           "address",
           "shipping",
+          "preferred_locales",
           "invoice_settings",
           "metadata",
           "balance",
@@ -55986,6 +56091,10 @@
             "description": null,
             "address": null,
             "shipping": null,
+            "preferred_locales": [
+              "fr",
+              "en"
+            ],
             "invoice_settings": {
               "default_payment_method": null
             },

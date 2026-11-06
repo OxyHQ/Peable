@@ -2,7 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { CHECKOUT_LOCALES } from '@peable.to/shared-types';
 import { mailerFromEnv, MemoryMailer, MailerRefusedError } from '../mailer';
 import { formatReceiptNumber } from '../outbox';
-import { EMAIL_STRINGS, emailLocale, escapeHtml, formatAmount, stringsFor } from '../render';
+import {
+  EMAIL_STRINGS,
+  emailLocale,
+  escapeHtml,
+  formatAmount,
+  pickEmailLocale,
+  stringsFor,
+} from '../render';
 
 describe('customer email rendering', () => {
   test('amounts are exact in every currency', () => {
@@ -33,6 +40,17 @@ describe('customer email rendering', () => {
     expect(emailLocale('zh')).toBe('zh');
     expect(emailLocale(null)).toBe('en');
     expect(emailLocale('nl')).toBe('en');
+  });
+
+  test("an email speaks the customer's first supported language, else the order's, else English", () => {
+    expect(pickEmailLocale(['ja', 'fr'], 'de', 'es')).toBe('ja');
+    // An unsupported preference is passed over, a regional tag is its language.
+    expect(pickEmailLocale(['nl', 'pt-BR'], 'de')).toBe('pt');
+    expect(pickEmailLocale(['nl'], 'de', 'es')).toBe('de');
+    expect(pickEmailLocale([], null, 'es')).toBe('es');
+    expect(pickEmailLocale([], undefined, null)).toBe('en');
+    expect(pickEmailLocale(['nl'])).toBe('en');
+    expect(emailLocale('zh-Hans')).toBe('zh');
   });
 
   test('every locale has every string, translated, and every subject names its arguments', () => {

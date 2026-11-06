@@ -7,6 +7,7 @@ import { getDb } from '../../db/postgres';
 import { answerList, parseQuery, surfaceQuery } from '../../lib/list';
 import { toCustomerDTO, toDeletedCustomerDTO } from '../../lib/serialize';
 import { missing } from '../../services/billingEngine/errors';
+import { updateCustomerCore } from '../customers';
 import type { CatalogRoute } from '../catalogRoutes';
 import { answerObject, idParam } from './helpers';
 
@@ -15,10 +16,11 @@ const listQuery = surfaceQuery(listCustomersQuery);
 const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 /**
- * `GET /customers` and `GET /customers/:id` for Orbit's dashboard (ADR 0016's
- * `cus_…`). The merchant API has its own `/v1/customers` router
- * (`routes/customers.ts`); these two reads are the dashboard's mirror of it,
- * mounted there only.
+ * `GET /customers`, `GET /customers/:id` and `POST /customers/:id` for Orbit's
+ * dashboard (ADR 0016's `cus_…`). The merchant API has its own `/v1/customers`
+ * router (`routes/customers.ts`); these are the dashboard's mirror of it,
+ * mounted there only. The update is that router's own core
+ * (`updateCustomerCore`): one validation, one write, one event.
  */
 export const DASHBOARD_CUSTOMER_ROUTES: readonly CatalogRoute[] = [
   {
@@ -57,5 +59,10 @@ export const DASHBOARD_CUSTOMER_ROUTES: readonly CatalogRoute[] = [
         query.expand,
       );
     },
+  },
+  {
+    method: 'post',
+    path: '/customers/:id',
+    core: (req, res, merchant) => updateCustomerCore(req, res, merchant),
   },
 ];

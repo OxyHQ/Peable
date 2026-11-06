@@ -954,6 +954,34 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the catalog', () => {
       expect(ids(await ok('GET', '/v1/products'))).toEqual([product.id]);
     });
 
+    test("a member sets a customer's language through the API's own update core", async () => {
+      const customer = (await call('POST', '/v1/customers', { email: 'lang@example.com' })).json;
+      const path = `/customers/${String(customer.id)}`;
+      const set = await dashboard(path, {
+        method: 'POST',
+        body: JSON.stringify({ preferred_locales: ['hi'] }),
+      });
+      expect(set.status).toBe(200);
+      expect(((await set.json()) as Json).preferred_locales).toEqual(['hi']);
+      expect((await ok('GET', `/v1/customers/${String(customer.id)}`)).preferred_locales).toEqual([
+        'hi',
+      ]);
+      const wrong = await dashboard(path, {
+        method: 'POST',
+        body: JSON.stringify({ preferred_locales: ['xx'] }),
+      });
+      expect(wrong.status).toBe(400);
+      const outsider = await dashboard(path, {
+        method: 'POST',
+        body: JSON.stringify({ preferred_locales: [] }),
+        user: 'user_outsider',
+      });
+      expect(outsider.status).toBe(403);
+      const event = must((await storedEvents({ type: 'customer.updated' })).at(-1)).event;
+      expect((event.data.object as Json).preferred_locales).toEqual(['hi']);
+      expect(event.request.id).toMatch(/^req_/);
+    });
+
     test('a validation error names its param on the dashboard too', async () => {
       const answer = await dashboard('/prices', {
         method: 'POST',

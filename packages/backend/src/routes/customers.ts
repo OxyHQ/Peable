@@ -9,7 +9,8 @@
  */
 import { findLiveTestClockForMerchant } from '../db/billingEngine/testClockRepository';
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
   METADATA_LIMIT_MESSAGE,
   createCustomerParams,
@@ -47,6 +48,77 @@ import { resolveMerchant } from './paymentIntents';
 function clear<T>(value: T | '' | undefined): T | null | undefined {
   if (value === undefined) return undefined;
   return value === '' ? null : value;
+}
+
+/**
+ * `POST /v1/customers/:id` — and the dashboard's `POST /customers/:id`
+ * (`routes/billingEngine/dashboardCustomers.ts`), so the two surfaces validate,
+ * write and answer the same way.
+ */
+export async function updateCustomerCore(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const { id } = req.params;
+  if (!id) {
+    sendError(res, 400, 'invalid_request_error', 'id is required');
+    return;
+  }
+  const parsed = updateCustomerParams.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const body = parsed.data;
+  const expand = parseExpand(res, 'customer', body.expand, { list: false });
+  if (!expand) return;
+  const customer = await findCustomerForMerchant(getDb(), id, merchant.id);
+  if (!customer || customer.deletedAt !== null) {
+    sendError(res, 404, 'invalid_request_error', 'customer not found');
+    return;
+  }
+  const address = clear(body.address);
+  const shipping = clear(body.shipping);
+  try {
+    const result = await updateCustomerFields(merchant, customer, {
+      email: clear(body.email),
+      name: clear(body.name),
+      phone: clear(body.phone),
+      description: clear(body.description),
+      address: address === undefined || address === null ? address : toAddress(address),
+      shipping: shipping === undefined || shipping === null ? shipping : toShipping(shipping),
+      ...(body.preferred_locales !== undefined
+        ? { preferredLocales: body.preferred_locales === '' ? [] : body.preferred_locales }
+        : {}),
+      metadata: body.metadata,
+      defaultPaymentMethod: clear(body.invoice_settings?.default_payment_method),
+    });
+    if (result === 'missing') {
+      sendError(res, 404, 'invalid_request_error', 'customer not found');
+      return;
+    }
+    if (result === 'limit_exceeded') {
+      sendError(
+        res,
+        400,
+        'invalid_request_error',
+        METADATA_LIMIT_MESSAGE,
+        'parameter_invalid',
+        'metadata',
+      );
+      return;
+    }
+    const dto = toCustomerDTO(result);
+    await expandObjects([dto], 'customer', expand, merchant.id);
+    res.status(200).json(dto);
+  } catch (error) {
+    if (error instanceof CustomerParameterError) {
+      sendError(res, 400, 'invalid_request_error', error.message, error.code, error.param);
+      return;
+    }
+    throw error;
+  }
 }
 
 export function createCustomersRouter(deps: { requireMerchant: RequestHandler }): Router {
@@ -90,6 +162,9 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.address !== undefined ? { address: toAddress(body.address) } : {}),
         ...(body.shipping !== undefined ? { shipping: toShipping(body.shipping) } : {}),
+        ...(body.preferred_locales !== undefined
+          ? { preferredLocales: body.preferred_locales }
+          : {}),
       };
       let testClockId: string | null = null;
       if (body.test_clock !== undefined) {
@@ -190,62 +265,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-      const parsed = updateCustomerParams.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const body = parsed.data;
-      const expand = parseExpand(res, 'customer', body.expand, { list: false });
-      if (!expand) return;
-      const customer = await findCustomerForMerchant(getDb(), id, merchant.id);
-      if (!customer || customer.deletedAt !== null) {
-        sendError(res, 404, 'invalid_request_error', 'customer not found');
-        return;
-      }
-      const address = clear(body.address);
-      const shipping = clear(body.shipping);
-      try {
-        const result = await updateCustomerFields(merchant, customer, {
-          email: clear(body.email),
-          name: clear(body.name),
-          phone: clear(body.phone),
-          description: clear(body.description),
-          address: address === undefined || address === null ? address : toAddress(address),
-          shipping: shipping === undefined || shipping === null ? shipping : toShipping(shipping),
-          metadata: body.metadata,
-          defaultPaymentMethod: clear(body.invoice_settings?.default_payment_method),
-        });
-        if (result === 'missing') {
-          sendError(res, 404, 'invalid_request_error', 'customer not found');
-          return;
-        }
-        if (result === 'limit_exceeded') {
-          sendError(
-            res,
-            400,
-            'invalid_request_error',
-            METADATA_LIMIT_MESSAGE,
-            'parameter_invalid',
-            'metadata',
-          );
-          return;
-        }
-        const dto = toCustomerDTO(result);
-        await expandObjects([dto], 'customer', expand, merchant.id);
-        res.status(200).json(dto);
-      } catch (error) {
-        if (error instanceof CustomerParameterError) {
-          sendError(res, 400, 'invalid_request_error', error.message, error.code, error.param);
-          return;
-        }
-        throw error;
-      }
+      await updateCustomerCore(req, res, merchant);
     }),
   );
 

@@ -146,6 +146,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the address pool's `0105`–`0106` merged.
   '0104_checkout_locales_validate':
     'released with #259; its post phase applied by the 1f7cbf7f deploy (run 42167982710)',
+  // The address pool's post half shipped with #255, whose deploy of 89942340
+  // (Deploy to AWS run 42172438009, 2026-11-06) ran its post phase
+  // successfully before the customer locale migrations `0107`–`0109` merged.
+  '0106_mainnet_required_confirmations':
+    'released with #255; its post phase applied by the 89942340 deploy (run 42172438009)',
 };
 
 interface Migration {

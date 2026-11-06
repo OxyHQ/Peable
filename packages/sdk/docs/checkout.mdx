@@ -34,7 +34,7 @@ const session = await peable.checkout.sessions.create({
   consent_collection: { terms_of_service: 'required' }, // needs branding.terms_of_service_url
   automatic_tax: { enabled: true },          // Peable Tax; fails closed
   customer_email: 'buyer@example.com',       // or customer: 'cus_…'
-  locale: 'es',                              // en es fr de it pt, or 'auto'
+  locale: 'es',                              // one of the 15 CHECKOUT_LOCALES, or 'auto'
   success_url: 'https://shop.example/done?cs={CHECKOUT_SESSION_ID}',
   cancel_url: 'https://shop.example/cart',   // "Back to merchant", before payment
   expires_at: Math.floor(Date.now() / 1000) + 3600, // 30 min – 24 h; default 24 h
@@ -104,8 +104,12 @@ the quote holds. FairCoin pays through a deep link or a QR code. The payer can
 switch with **Pay with FairCoin instead** or **Pay by card instead** until
 money starts moving. FairCoin is always listed; when it cannot be paid right
 now, it appears disabled with the reason.
-It speaks `en`, `es`, `fr`, `de`, `it` and `pt` (`locale`, else the browser's
-language).
+It speaks the fifteen payer languages (`CHECKOUT_LOCALES`: `ar`, `bn`, `ca`,
+`de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`) — the
+session's `locale`, else the browser's language. The language the payer
+confirms in is recorded: a customer the session creates gets it as its
+`preferred_locales`, and the order's receipt and confirmation are written in it
+(the customer's own `preferred_locales` win when it has them).
 
 The page redirects to `success_url` only after the gateway says the session is
 `complete`; until then it shows what is true ("confirming"), and an expired

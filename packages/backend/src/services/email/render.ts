@@ -1,6 +1,8 @@
 /**
  * Rendering a customer email (Orbit Phase 3) — at SEND time, from the rows it
- * names, in the merchant's branding and the order's language.
+ * names, in the merchant's branding and the customer's language
+ * ({@link pickEmailLocale}: the customer's `preferred_locales`, else the
+ * order's, else English).
  *
  * What a receipt carries is what a receipt needs and nothing more: the
  * merchant's name and branding, the amount, the lines, the receipt number,
@@ -17,6 +19,7 @@ import {
   decimalsFor,
 } from '@peable.to/shared-types';
 import { findBranding, findEmailSettings } from '../../db/merchants/brandingRepository';
+import { findCustomerById } from '../../db/customers/customerRepository';
 import { findMerchantById } from '../../db/merchants/merchantRepository';
 import {
   findSessionById,
@@ -547,11 +550,42 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
   },
 };
 
-/** The payer locale an email is written in: the order's, else English. */
+/** A tag the emails speak, as its locale (`pt-BR` → `pt`), or `null`. */
+function supportedLocale(tag: string | null | undefined): CheckoutLocale | null {
+  if (!tag) return null;
+  const locales = CHECKOUT_LOCALES as readonly string[];
+  if (locales.includes(tag)) return tag as CheckoutLocale;
+  const language = tag.toLowerCase().split(/[-_]/)[0] ?? '';
+  return locales.includes(language) ? (language as CheckoutLocale) : null;
+}
+
+/** One tag as the locale an email is written in, else English. */
 export function emailLocale(locale: string | null | undefined): CheckoutLocale {
-  return (CHECKOUT_LOCALES as readonly string[]).includes(locale ?? '')
-    ? (locale as CheckoutLocale)
-    : 'en';
+  return supportedLocale(locale) ?? 'en';
+}
+
+/**
+ * The language an email is written in: the customer's first supported
+ * preferred locale (Stripe's `preferred_locales`), else the first language
+ * the order recorded (the one the payer confirmed checkout in, then the
+ * session's own), else English.
+ */
+export function pickEmailLocale(
+  preferred: readonly string[],
+  ...recorded: readonly (string | null | undefined)[]
+): CheckoutLocale {
+  for (const tag of [...preferred, ...recorded]) {
+    const locale = supportedLocale(tag);
+    if (locale) return locale;
+  }
+  return 'en';
+}
+
+/** The hosted invoice page, opened in the email's language (`?locale=`). */
+function localizedInvoiceUrl(token: string, locale: CheckoutLocale): string {
+  const url = new URL(hostedInvoiceUrl(token));
+  url.searchParams.set('locale', locale);
+  return url.toString();
 }
 
 export function stringsFor(locale: string | null | undefined): Strings {
@@ -700,7 +734,14 @@ export async function renderOwedEmail(
     : intent
       ? await findSessionByIntentId(db, intent.id)
       : null;
-  const locale = emailLocale(session?.locale);
+  const invoice = row.invoiceId ? await findInvoiceById(db, row.invoiceId) : null;
+  const customerId = invoice?.customerId ?? intent?.customerId ?? session?.customerId ?? null;
+  const customer = customerId ? await findCustomerById(db, customerId) : null;
+  const locale = pickEmailLocale(
+    customer?.preferredLocales ?? [],
+    session?.payerLocale,
+    session?.locale,
+  );
   const t = stringsFor(locale);
   const lines = session ? await listLineItems(db, session.id) : [];
   const brand = {
@@ -770,8 +811,6 @@ export async function renderOwedEmail(
     }
     case 'invoice':
     case 'invoice_payment_failed': {
-      if (!row.invoiceId) return null;
-      const invoice = await findInvoiceById(db, row.invoiceId);
       if (!invoice?.number || !invoice.hostedToken) return null;
       const money = (amount: string) => formatAmount(amount, invoice.currency, locale);
       const due =
@@ -798,7 +837,7 @@ export async function renderOwedEmail(
               : []),
           ],
           note: failed ? t.paymentFailedNote : null,
-          action: { label: t.payInvoice, url: hostedInvoiceUrl(invoice.hostedToken) },
+          action: { label: t.payInvoice, url: localizedInvoiceUrl(invoice.hostedToken, locale) },
         },
         brand,
       );

@@ -328,6 +328,63 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('customers, payment methods and setup i
     ]);
   });
 
+  test("preferred_locales: Stripe's ordered list from the payer locale set, replaced and cleared", async () => {
+    const plain = await call('POST', '/v1/customers', { email: 'nolang@example.test' });
+    expect(plain.status).toBe(201);
+    expect(plain.body.preferred_locales).toEqual([]);
+
+    const created = await call('POST', '/v1/customers', {
+      email: 'lang@example.test',
+      preferred_locales: ['ja', 'en'],
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.preferred_locales).toEqual(['ja', 'en']);
+
+    const replaced = await call('POST', `/v1/customers/${created.body.id}`, {
+      preferred_locales: ['ar'],
+    });
+    expect(replaced.status).toBe(200);
+    expect(replaced.body.preferred_locales).toEqual(['ar']);
+    // A field not sent is kept.
+    const untouched = await call('POST', `/v1/customers/${created.body.id}`, { name: 'Lang' });
+    expect(untouched.body.preferred_locales).toEqual(['ar']);
+
+    const cleared = await call('POST', `/v1/customers/${created.body.id}`, {
+      preferred_locales: [],
+    });
+    expect(cleared.body.preferred_locales).toEqual([]);
+    await call('POST', `/v1/customers/${created.body.id}`, { preferred_locales: ['de'] });
+    const emptied = await call('POST', `/v1/customers/${created.body.id}`, {
+      preferred_locales: '',
+    });
+    expect(emptied.body.preferred_locales).toEqual([]);
+
+    // Only the fifteen payer locales, each once.
+    for (const refused of [['nl'], ['fr', 'fr'], ['fr-CA']]) {
+      const answer = await call('POST', '/v1/customers', { preferred_locales: refused });
+      expect([refused, answer.status]).toEqual([refused, 400]);
+      expect(answer.body.error.param).toMatch(/^preferred_locales/);
+    }
+    const retrieved = await call('GET', `/v1/customers/${created.body.id}`);
+    expect(retrieved.body.preferred_locales).toEqual([]);
+  });
+
+  test('the database refuses a preferred locale outside the set, whatever the writer', async () => {
+    const created = await call('POST', '/v1/customers', { email: 'db@example.test' });
+    const { getDb } = await import('../../db/postgres');
+    const { sql } = await import('drizzle-orm');
+    const write = (locales: string) => async () => {
+      await getDb().execute(
+        sql`update customers set preferred_locales = ${locales}::text[] where public_id = ${created.body.id}`,
+      );
+    };
+    await expect(write('{nl}')()).rejects.toThrow();
+    await expect(write('{fr,NULL}')()).rejects.toThrow();
+    await write('{fr,en}')();
+    const retrieved = await call('GET', `/v1/customers/${created.body.id}`);
+    expect(retrieved.body.preferred_locales).toEqual(['fr', 'en']);
+  });
+
   test('a new customer cannot name a default payment method, and an unknown field is a 400', async () => {
     const refused = await call('POST', '/v1/customers', {
       invoice_settings: { default_payment_method: 'pm_x' },

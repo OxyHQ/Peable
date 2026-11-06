@@ -688,6 +688,13 @@ export const checkoutSessions = pgTable(
     uiMode: text().notNull().default('hosted'),
     /** `null` follows the payer's browser. */
     locale: text(),
+    /**
+     * The language the payer confirmed in (`…/public/confirm`'s `locale`) —
+     * internal, never on the wire, and never written over `locale`, which is
+     * the merchant's. A customer checkout creates takes it as its
+     * `preferred_locales`, and the session's emails fall back to it.
+     */
+    payerLocale: text(),
     submitType: text().notNull().default('auto'),
     /** `cs_…_secret_…`. NULL only on a row that predates the order model, until its backfill. */
     clientSecret: text(),
@@ -894,6 +901,10 @@ export const checkoutSessions = pgTable(
     check(
       'checkout_sessions_locale_check',
       sql.raw(`locale is null or locale in (${inList(CHECKOUT_LOCALES)})`),
+    ),
+    check(
+      'checkout_sessions_payer_locale_check',
+      sql.raw(`payer_locale is null or payer_locale in (${inList(CHECKOUT_LOCALES)})`),
     ),
     check(
       'checkout_sessions_submit_type_check',

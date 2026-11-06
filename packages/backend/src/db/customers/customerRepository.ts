@@ -1,5 +1,5 @@
 import { and, count, eq, inArray, isNull, type SQL } from 'drizzle-orm';
-import type { Address, CurrencyCode, Shipping } from '@peable.to/shared-types';
+import type { Address, CheckoutLocale, CurrencyCode, Shipping } from '@peable.to/shared-types';
 import { customerProviderBindings, customers, paymentMethods } from '../schema';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -23,6 +23,8 @@ export interface CustomerRow {
   readonly description: string | null;
   readonly address: Address | null;
   readonly shipping: Shipping | null;
+  /** Stripe's `preferred_locales`, most preferred first; empty when none is known. */
+  readonly preferredLocales: readonly CheckoutLocale[];
   readonly defaultPaymentMethodId: string | null;
   /** The default method's public `pm_…`, read in the same statement. */
   readonly defaultPaymentMethodPublicId: string | null;
@@ -48,6 +50,7 @@ export const CUSTOMER_COLUMNS = {
   description: customers.description,
   address: customers.address,
   shipping: customers.shipping,
+  preferredLocales: customers.preferredLocales,
   defaultPaymentMethodId: customers.defaultPaymentMethodId,
   defaultPaymentMethodPublicId: sql<
     string | null
@@ -183,6 +186,8 @@ export interface CustomerFields {
   readonly description?: string | null;
   readonly address?: Address | null;
   readonly shipping?: Shipping | null;
+  /** Replaces the list; `[]` clears it. */
+  readonly preferredLocales?: readonly CheckoutLocale[];
 }
 
 function fieldValues(fields: CustomerFields) {
@@ -193,6 +198,9 @@ function fieldValues(fields: CustomerFields) {
     ...(fields.description !== undefined ? { description: fields.description } : {}),
     ...(fields.address !== undefined ? { address: fields.address } : {}),
     ...(fields.shipping !== undefined ? { shipping: fields.shipping } : {}),
+    ...(fields.preferredLocales !== undefined
+      ? { preferredLocales: [...fields.preferredLocales] }
+      : {}),
   };
 }
 

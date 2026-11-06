@@ -6,6 +6,7 @@ import { lineItemFixture, refusal, sessionFixture } from '../../__tests__/sessio
 
 installCheckoutMocks();
 const { CheckoutPage } = await import('../CheckoutPage');
+const { I18nProvider } = await import('../../i18n');
 const { QUANTITY_DEBOUNCE_MS } = await import('../OrderSummary');
 
 const SECRET = 'cs_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff';
@@ -223,6 +224,35 @@ test('a locked email is shown read-only and never sent', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Pay €20.00' }));
   await screen.findByRole('heading', { name: 'Payment' });
   expect(mocks.updateCheckoutSession).not.toHaveBeenCalled();
+});
+
+test('the confirm carries the language the payer reads the page in', async () => {
+  mocks.confirmCheckoutSession.mockImplementation(async () =>
+    sessionFixture({
+      payment_intent: intentFixture({ rail: 'card', client_secret: 'pi_live123_secret_x' }),
+    }),
+  );
+  render(
+    <I18nProvider locale="fr">
+      <CheckoutPage
+        initialSession={sessionFixture({
+          customer_email_locked: true,
+          customer_details: {
+            email: 'payeur@example.com',
+            name: null,
+            phone: null,
+            address: null,
+            tax_ids: [],
+          },
+        })}
+        clientSecret={SECRET}
+      />
+    </I18nProvider>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: /^Payer/ }));
+  await waitFor(() => {
+    expect(mocks.confirmCheckoutSession.mock.calls[0]?.[2]).toMatchObject({ locale: 'fr' });
+  });
 });
 
 test('a FairCoin order, once confirmed, is locked and shows the wallet payment', async () => {
@@ -505,8 +535,10 @@ test('FairCoin is always offered beside the card, and the payer’s choice is wh
   fireEvent.click(screen.getByLabelText('FairCoin'));
   fireEvent.click(screen.getByRole('button', { name: 'Pay €20.00' }));
   await screen.findByRole('heading', { name: 'Payment' });
+  // The page's language travels with the confirm (English: no provider above it).
   expect(mocks.confirmCheckoutSession.mock.calls[0]?.[2]).toEqual({
     payment_method_type: 'faircoin',
+    locale: 'en',
   });
   expect(screen.getByText('50 FAIR')).toBeTruthy();
   expect(screen.getByText(/Priced at €20.00 · 1 FAIR = 0.4 EUR/)).toBeTruthy();
@@ -518,6 +550,7 @@ test('FairCoin is always offered beside the card, and the payer’s choice is wh
   await waitFor(() => {
     expect(mocks.confirmCheckoutSession.mock.calls[1]?.[2]).toEqual({
       payment_method_type: 'card',
+      locale: 'en',
     });
   });
 });

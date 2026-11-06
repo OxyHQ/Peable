@@ -52,6 +52,7 @@ import {
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createCheckoutSessionsRouter } from '../checkoutSessions';
 import { createBrandingRouter } from '../branding';
+import { createCustomersRouter } from '../customers';
 
 // biome-ignore lint/suspicious/noExplicitAny: response bodies are read structurally by the assertions
 type Json = Record<string, any>;
@@ -211,6 +212,7 @@ beforeAll(async () => {
     }),
   );
   app.use(createBrandingRouter({ requireMerchant: stubRequireMerchant }));
+  app.use(createCustomersRouter({ requireMerchant: stubRequireMerchant }));
   server = app.listen(0);
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -714,6 +716,83 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('confirm and completion', () => {
     expect(done.body.status).toBe('complete');
     expect(done.body.payment_status).toBe('no_payment_required');
     expect(done.body.payment_intent).toBeNull();
+  });
+});
+
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('the payer locale', () => {
+  /** A FAIR order a 100% coupon takes to zero: it completes on confirm, with no payment. */
+  async function freeOrder(extra: Json) {
+    const price = await seedPrice(merchant, { currency: 'FAIR', unitAmount: '500' });
+    const coupon = await seedCoupon({ percentOffBps: 10000 });
+    const { body: session } = await createSession({
+      line_items: [{ price: price.publicId, quantity: 1 }],
+      discounts: [{ coupon: coupon.publicId }],
+      ...extra,
+    });
+    return session;
+  }
+
+  async function confirmationTo(email: string) {
+    const mailer = new MemoryMailer();
+    await dispatchCustomerEmails(mailer);
+    return must(
+      mailer.sent.find(
+        (sent) =>
+          sent.to === email && sent.headers['X-Peable-Email-Kind'] === 'checkout_confirmation',
+      ),
+    );
+  }
+
+  test('the customer checkout creates keeps the language the payer confirmed in, and its emails speak it', async () => {
+    await upsertEmailSettings(gatewayDb(), merchant.id, { checkoutConfirmations: true });
+    const session = await freeOrder({ customer_creation: 'always' });
+    await payer(session, 'POST', '', { customer_details: { email: 'ja@example.com' } });
+    const refused = await payer(session, 'POST', '/confirm', { locale: 'nl' });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.param).toBe('locale');
+
+    const done = await payer(session, 'POST', '/confirm', { locale: 'ja' });
+    expect(done.status).toBe(200);
+    expect(done.body.status).toBe('complete');
+    // The merchant's `locale` is untouched: the payer's is recorded beside it.
+    const merchantView = await call('GET', `/v1/checkout_sessions/${session.id}`);
+    expect(merchantView.body.locale).toBeNull();
+    expect(must(await findSessionByPublicId(gatewayDb(), session.id)).payerLocale).toBe('ja');
+
+    const customer = await call('GET', `/v1/customers/${merchantView.body.customer}`);
+    expect(customer.body.preferred_locales).toEqual(['ja']);
+    const email = await confirmationTo('ja@example.com');
+    expect(email.html).toContain('<html lang="ja" dir="ltr">');
+    expect(email.subject).not.toContain('confirmed');
+  });
+
+  test("a customer's own preferred language wins over the payer's, and checkout never rewrites it", async () => {
+    await upsertEmailSettings(gatewayDb(), merchant.id, { checkoutConfirmations: true });
+    const created = await call('POST', '/v1/customers', {
+      email: 'de@example.com',
+      preferred_locales: ['de', 'en'],
+    });
+    const session = await freeOrder({ customer: created.body.id, locale: 'fr' });
+    await payer(session, 'POST', '', { customer_details: { email: 'de@example.com' } });
+    const done = await payer(session, 'POST', '/confirm', { locale: 'ar' });
+    expect(done.body.status).toBe('complete');
+    const customer = await call('GET', `/v1/customers/${created.body.id}`);
+    expect(customer.body.preferred_locales).toEqual(['de', 'en']);
+    const email = await confirmationTo('de@example.com');
+    expect(email.html).toContain('<html lang="de" dir="ltr">');
+  });
+
+  test('with no customer language, the email speaks the one the payer confirmed in, else the session’s', async () => {
+    await upsertEmailSettings(gatewayDb(), merchant.id, { checkoutConfirmations: true });
+    const confirmedIn = await freeOrder({ locale: 'fr' });
+    await payer(confirmedIn, 'POST', '', { customer_details: { email: 'ar@example.com' } });
+    await payer(confirmedIn, 'POST', '/confirm', { locale: 'ar' });
+    expect((await confirmationTo('ar@example.com')).html).toContain('<html lang="ar" dir="rtl">');
+
+    const sessionOnly = await freeOrder({ locale: 'fr' });
+    await payer(sessionOnly, 'POST', '', { customer_details: { email: 'fr@example.com' } });
+    await payer(sessionOnly, 'POST', '/confirm', {});
+    expect((await confirmationTo('fr@example.com')).html).toContain('<html lang="fr" dir="ltr">');
   });
 });
 

@@ -6,6 +6,7 @@ import { Text } from '@oxy.so/bloom/typography';
 import type { DashboardScope } from '@/api/dashboard';
 import { describeBalance, formatSignedAmount } from '@/billing/amount';
 import { InvoicesTable, RowList, SubscriptionsTable } from '@/billing/BillingParts';
+import { CustomerLanguage } from '@/billing/CustomerLanguage';
 import { useCustomer, useInvoicePages, useSubscriptionPages } from '@/billing/useBilling';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
@@ -90,6 +91,7 @@ function CustomerDetail({ scope, id }: { scope: DashboardScope; id: string }) {
               <Field label={t('customer.field.testClock')} value={customer.test_clock} mono />
             ) : null}
             <Field label={t('customer.field.created')} value={formatInstant(customer.created)} />
+            <CustomerLanguage scope={scope} customer={customer} />
           </Section>
         }
       >
