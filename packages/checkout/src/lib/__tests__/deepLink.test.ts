@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { validateAddress, getNetwork } from '@fairco.in/core';
+import { getNetwork, publicKeyToAddress, validateAddress } from '@fairco.in/core';
 import { buildPayDeepLink } from '../deepLink';
 // Cross-package import of the WALLET's REAL parser — proves this app's deep
 // link is actually consumable by the wallet, not just "looks right" by
@@ -54,4 +54,54 @@ test('round-trips a client secret containing URL-reserved characters', () => {
 
   expect(parsed).not.toBeNull();
   expect(parsed?.clientSecret).toBe(secretWithReservedChars);
+});
+
+test('a multi-seller payment carries every output and no address (ADR 0021 D6)', () => {
+  const link = buildPayDeepLink({
+    intentId: ID,
+    clientSecret: SECRET,
+    outputs: [
+      { address: ADDR, amount: '800' },
+      { address: 'FSecondSellerAddress', amount: '200' },
+    ],
+    amount: '1000',
+    network: NET,
+  });
+  const query = new Map(
+    link
+      .slice(link.indexOf('?') + 1)
+      .split('&')
+      .map((pair) => pair.split('=').map(decodeURIComponent) as [string, string]),
+  );
+  expect(query.get('outputs')).toBe(`${ADDR}:800,FSecondSellerAddress:200`);
+  expect(query.get('amount')).toBe('1000');
+  // A wallet that predates multi-output payments finds no address and refuses.
+  expect(query.has('address')).toBe(false);
+});
+
+test('a multi-seller link round-trips through the wallet real parser (ADR 0021 D6)', () => {
+  // Any compressed secp256k1 point gives a valid address: the generator G.
+  const g = Uint8Array.from(
+    '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798'
+      .match(/../g)
+      ?.map((byte) => Number.parseInt(byte, 16)) ?? [],
+  );
+  const second = publicKeyToAddress(g, getNetwork(NET));
+  const link = buildPayDeepLink({
+    intentId: ID,
+    clientSecret: SECRET,
+    outputs: [
+      { address: ADDR, amount: '800' },
+      { address: second, amount: '200' },
+    ],
+    amount: '1000',
+    network: NET,
+  });
+  const parsed = parsePaymentRequest(link);
+  expect(parsed?.address).toBeNull();
+  expect(parsed?.amount).toBe(1000n);
+  expect(parsed?.outputs).toEqual([
+    { address: ADDR, amount: 800n },
+    { address: second, amount: 200n },
+  ]);
 });

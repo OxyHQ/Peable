@@ -69,6 +69,7 @@ const EVENT: WebhookEvent = {
       faircoin: {
         network: 'testnet',
         address: 'addr1',
+        outputs: [{ address: 'addr1', amount: '100000', connected_account: null }],
         txid: 'tx1',
         confirmations: 6,
         required_confirmations: 6,

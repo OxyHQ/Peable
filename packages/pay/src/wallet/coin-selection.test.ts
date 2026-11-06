@@ -22,7 +22,12 @@ const MAINNET = getNetwork('mainnet');
 const ADDR = 'FQVANvQqVsLwkwBnAJ5oPDYrqcfXLak7Bf';
 
 /** The actual fee buildTransaction charges for the given inputs + amount. */
-function builtFee(selected: UTXO[], amount: bigint, feePerByte: number): bigint {
+function builtFee(
+  selected: UTXO[],
+  amount: bigint,
+  feePerByte: number,
+  recipientCount = 1,
+): bigint {
   const inputs: TxUTXO[] = selected.map((u) => ({
     txid: u.txid,
     vout: u.vout,
@@ -31,7 +36,11 @@ function builtFee(selected: UTXO[], amount: bigint, feePerByte: number): bigint 
   }));
   const tx = buildTransaction({
     utxos: inputs,
-    recipients: [{ address: ADDR, value: amount }],
+    // Split `amount` across `recipientCount` outputs (the remainder on the first).
+    recipients: Array.from({ length: recipientCount }, (_, i) => ({
+      address: ADDR,
+      value: amount / BigInt(recipientCount) + (i === 0 ? amount % BigInt(recipientCount) : 0n),
+    })),
     changeAddress: ADDR,
     feePerByte: BigInt(feePerByte),
     network: MAINNET,
@@ -319,5 +328,48 @@ describe('H2: fee parity with buildTransaction (dustThreshold)', () => {
     });
     expect(est.fee).toBe(coinValue - amount);
     expect(est.total).toBe(amount + (coinValue - amount));
+  });
+});
+
+describe('several recipients (ADR 0021 D6)', () => {
+  const coins = [utxo('aa'.repeat(32), 5n * ONE_FAIR), utxo('bb'.repeat(32), 3n * ONE_FAIR)];
+
+  for (const recipientCount of [1, 2, 3, 7]) {
+    test(`${recipientCount} recipient(s): selection's fee is the built fee`, () => {
+      const amount = 6n * ONE_FAIR;
+      const selection = selectInputsForSend({
+        candidates: coins,
+        targetValue: amount,
+        feePerByte: FEE_PER_BYTE,
+        dustThreshold: MAINNET.minRelayFee,
+        recipientCount,
+      });
+      expect(selection.fee).toBe(
+        builtFee(selection.selected, amount, FEE_PER_BYTE, recipientCount),
+      );
+      const estimate = estimateSend({
+        candidates: coins,
+        targetValue: amount,
+        feePerByte: FEE_PER_BYTE,
+        dustThreshold: MAINNET.minRelayFee,
+        recipientCount,
+      });
+      expect(estimate.fee).toBe(selection.fee);
+    });
+  }
+
+  test('each extra output costs its 34 bytes', () => {
+    expect(estimateFeeForInputs(2, 10, 4) - estimateFeeForInputs(2, 10)).toBe(2n * 34n * 10n);
+  });
+
+  test('a recipient count below one is refused', () => {
+    expect(() =>
+      selectInputsForSend({
+        candidates: coins,
+        targetValue: ONE_FAIR,
+        feePerByte: FEE_PER_BYTE,
+        recipientCount: 0,
+      }),
+    ).toThrow('recipientCount');
   });
 });

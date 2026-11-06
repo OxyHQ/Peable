@@ -249,3 +249,12 @@ sellers ([FairCoin sellers](/connect-faircoin#4-take-a-payment-for-a-seller)).
 A FairCoin payment of that order pays the seller directly. On a
 fiat order, a card payment is your own charge, and you pay the seller with a
 [transfer](/connect).
+
+A cart of several sellers names each line's seller instead
+(`line_items[].connected_account`): a FairCoin payment then pays every seller
+its share in one transaction, and a card payment stays your own charge
+([a cart with several sellers](/connect-faircoin#a-cart-with-several-sellers)).
+
+`payment_intent_data.metadata` is copied to every payment the session
+creates — each method the payer confirms and each fresh FairCoin quote — so
+`payment_intent.*` webhooks carry your own order id.

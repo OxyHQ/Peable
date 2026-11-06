@@ -80,18 +80,54 @@ export interface WalletRef {
  * to invent a placeholder address and quote against a payment nobody is making.
  */
 export interface QuoteRequest extends WalletRef {
+  /** The total to pay: for a multi-recipient payment, the sum of its outputs. */
   readonly amountSat: bigint;
   /**
    * Fee rate in base units per byte. Omitted, the Explorer is asked. There is
    * no default constant — see {@link resolveFeePerByte}.
    */
   readonly feePerByte?: number;
+  /**
+   * How many outputs the payment pays (default 1). A payment of several
+   * recipients (one output per payee, ADR 0021 D6) costs more bytes, so the
+   * quote must be sized for all of them to be the fee {@link sendPayment} pays.
+   */
+  readonly recipientCount?: number;
 }
 
-export interface PaymentRequest extends QuoteRequest {
+/** One output of a payment: who receives, and how much. */
+export interface PaymentRecipient {
   /** Destination address. Validated by the builder against `network`. */
   readonly to: string;
+  readonly amountSat: bigint;
 }
+
+/** The most outputs one payment carries; a longer list is a caller bug, not an order. */
+export const MAX_PAYMENT_RECIPIENTS = 50;
+
+interface PaymentRequestBase extends WalletRef {
+  /** See {@link QuoteRequest.feePerByte}; pass the quote's back. */
+  readonly feePerByte?: number;
+}
+
+/**
+ * What to pay: ONE transaction with one output per recipient (plus change).
+ * `to` + `amountSat` is the one-recipient shorthand; `recipients` the general
+ * form (a multi-seller order, ADR 0021 D6). Exactly one of the two.
+ */
+export type PaymentRequest = PaymentRequestBase &
+  (
+    | {
+        readonly to: string;
+        readonly amountSat: bigint;
+        readonly recipients?: undefined;
+      }
+    | {
+        readonly recipients: readonly PaymentRecipient[];
+        readonly to?: undefined;
+        readonly amountSat?: undefined;
+      }
+  );
 
 export interface PaymentResult {
   /** The txid the DAEMON returned: what was accepted, not what was sent. */
@@ -125,7 +161,8 @@ export interface WalletBalance {
 }
 
 /**
- * Pay `amountSat` to `to`, and return the txid the network accepted.
+ * Pay every recipient in ONE transaction (or `amountSat` to `to`), and return
+ * the txid the network accepted.
  *
  * Discovers the wallet's coins, selects inputs, builds, signs and broadcasts.
  * Every failure happens as early as it can: an amount the wallet cannot cover
@@ -136,7 +173,10 @@ export async function sendPayment(
   request: PaymentRequest,
   chain: ChainAccess = {},
 ): Promise<PaymentResult> {
-  const { seed, network, to, amountSat } = request;
+  const { seed, network } = request;
+  // ONE path: the shorthand is the one-recipient list.
+  const recipients = resolveRecipients(request);
+  const amountSat = recipients.reduce((sum, recipient) => sum + recipient.amountSat, 0n);
   const networkConfig = getNetwork(network);
   const feePerByte = await resolveFeePerByte(request.feePerByte, network, chain);
 
@@ -152,6 +192,7 @@ export async function sendPayment(
       targetValue: amountSat,
       feePerByte,
       dustThreshold: networkConfig.minRelayFee,
+      recipientCount: recipients.length,
     });
 
     // Change must land somewhere this wallet can spend from again. The address
@@ -170,7 +211,10 @@ export async function sendPayment(
         value: utxo.value,
         scriptPubKey: utxo.scriptPubKey,
       })),
-      recipients: [{ address: to, value: amountSat }],
+      recipients: recipients.map((recipient) => ({
+        address: recipient.to,
+        value: recipient.amountSat,
+      })),
       changeAddress,
       feePerByte: BigInt(feePerByte),
       network: networkConfig,
@@ -218,6 +262,7 @@ export async function quotePayment(
       targetValue: amountSat,
       feePerByte,
       dustThreshold: networkConfig.minRelayFee,
+      recipientCount: resolveRecipientCount(request.recipientCount),
     });
 
     return {
@@ -295,6 +340,46 @@ async function resolveFeePerByte(
     throw new Error(`feePerByte must be a positive number, got ${rate}`);
   }
   return Math.ceil(rate);
+}
+
+/**
+ * The outputs a payment request pays, as one list — the shorthand is a list of
+ * one. Refused rather than repaired: both forms or neither, no recipient, more
+ * than {@link MAX_PAYMENT_RECIPIENTS}, a non-positive amount, or one address
+ * twice (two outputs to one address is one payee paid in a shape no payment
+ * request describes).
+ */
+function resolveRecipients(request: PaymentRequest): readonly PaymentRecipient[] {
+  const shorthand = request.to !== undefined || request.amountSat !== undefined;
+  if (shorthand === (request.recipients !== undefined)) {
+    throw new Error('A payment names either `to` and `amountSat`, or `recipients` — exactly one');
+  }
+  const recipients: readonly PaymentRecipient[] = request.recipients ?? [
+    { to: request.to ?? '', amountSat: request.amountSat ?? 0n },
+  ];
+  if (recipients.length === 0) throw new Error('A payment needs at least one recipient');
+  if (recipients.length > MAX_PAYMENT_RECIPIENTS) {
+    throw new Error(`A payment carries at most ${MAX_PAYMENT_RECIPIENTS} recipients`);
+  }
+  const seen = new Set<string>();
+  for (const recipient of recipients) {
+    if (recipient.amountSat <= 0n) throw new Error('Every recipient amount must be positive');
+    if (seen.has(recipient.to)) {
+      throw new Error(`Refusing to send: ${recipient.to} is named twice`);
+    }
+    seen.add(recipient.to);
+  }
+  return recipients;
+}
+
+function resolveRecipientCount(requested: number | undefined): number {
+  if (requested === undefined) return 1;
+  if (!Number.isInteger(requested) || requested < 1 || requested > MAX_PAYMENT_RECIPIENTS) {
+    throw new Error(
+      `recipientCount must be an integer from 1 to ${MAX_PAYMENT_RECIPIENTS}, got ${requested}`,
+    );
+  }
+  return requested;
 }
 
 /**

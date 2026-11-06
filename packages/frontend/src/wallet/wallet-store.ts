@@ -299,6 +299,12 @@ export interface WalletState {
   refreshBalance: () => void;
   getNewAddress: () => string;
   sendTransaction: (toAddress: string, amount: bigint, feeRate: number) => Promise<string>;
+  /**
+   * Pay several outputs in ONE transaction (plus change) — a Peable payment
+   * request that pays every seller of an order (Peable ADR 0021 D6).
+   * `sendTransaction` is its one-recipient case.
+   */
+  sendToRecipients: (recipients: readonly SendRecipient[], feeRate: number) => Promise<string>;
   refreshMasternodeUTXOs: () => void;
   estimateFee: (feeLevel: FeeLevel) => bigint;
   estimateSend: (amount: bigint, feeRate: number) => SendEstimate;
@@ -428,6 +434,30 @@ let peerUpdateInterval: ReturnType<typeof setInterval> | null = null;
 // Guards the historical-rescan driver so the periodic trigger never starts a
 // second concurrent scan.
 let rescanDriverRunning = false;
+/** One output of a send: an address and the base units it receives. */
+export interface SendRecipient {
+  readonly address: string;
+  readonly amount: bigint;
+}
+
+/** The most outputs one send carries (Peable's `MAX_PAYMENT_RECIPIENTS`). */
+const MAX_SEND_RECIPIENTS = 50;
+
+/** Why a recipient list is not one payment, or `null` when it is. */
+function invalidRecipients(recipients: readonly SendRecipient[]): string | null {
+  if (recipients.length === 0) return 'A payment needs at least one recipient';
+  if (recipients.length > MAX_SEND_RECIPIENTS) {
+    return `A payment carries at most ${MAX_SEND_RECIPIENTS} recipients`;
+  }
+  const seen = new Set<string>();
+  for (const recipient of recipients) {
+    if (recipient.amount <= 0n) return 'Every recipient amount must be positive';
+    if (seen.has(recipient.address)) return `${recipient.address} is named twice`;
+    seen.add(recipient.address);
+  }
+  return null;
+}
+
 // True while `sendTransaction` is executing. Used by `lockWallet` /
 // `resetWalletInternals` callers (N-2) to defer the teardown until the send
 // finishes, so we never wipe the KeyManager mid-signing (would produce a
@@ -1984,7 +2014,21 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     return derived.address;
   },
 
-  sendTransaction: async (toAddress: string, amount: bigint, feeRate: number): Promise<string> => {
+  sendTransaction: (toAddress: string, amount: bigint, feeRate: number): Promise<string> =>
+    get().sendToRecipients([{ address: toAddress, amount }], feeRate),
+
+  sendToRecipients: async (
+    recipients: readonly SendRecipient[],
+    feeRate: number,
+  ): Promise<string> => {
+    // Refused before anything is selected, reserved or signed.
+    const invalid = invalidRecipients(recipients);
+    if (invalid !== null) {
+      set({ error: invalid });
+      throw new Error(invalid);
+    }
+    const amount = recipients.reduce((sum, recipient) => sum + recipient.amount, 0n);
+    const toAddress = recipients[0]?.address ?? '';
     set({ loading: true, error: null });
 
     // N-2: capture local references to every module-level dependency the
@@ -2054,6 +2098,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         feePerByte: feeRate,
         coinControl,
         dustThreshold: localNetworkConfig.minRelayFee,
+        recipientCount: recipients.length,
       });
 
       // Reserve the selected outpoints synchronously, before the first `await`
@@ -2083,7 +2128,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const changeAddress = localKeyManager.getNextChangeAddress().address;
       const tx = buildTransaction({
         utxos: inputs,
-        recipients: [{ address: toAddress, value: amount }],
+        recipients: recipients.map((recipient) => ({
+          address: recipient.address,
+          value: recipient.amount,
+        })),
         changeAddress,
         feePerByte: BigInt(feeRate),
         network: localNetworkConfig,
@@ -2150,7 +2198,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         confirmed: 0,
       });
 
-      // Update UI state
+      // Update UI state. A multi-recipient send is ONE history row for its
+      // total, shown against its first recipient; the SPV history replaces it
+      // with the chain's own view once the transaction is seen.
       const newTx: WalletTransaction = {
         txid,
         amount: -amount,

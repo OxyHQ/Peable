@@ -923,8 +923,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
                 txid,
                 confirmations: 99,
                 outputs: [
-                  { address: outputs[0].address, valueSat: 8_000_000_000n },
-                  { address: outputs[1].address, valueSat: 2_000_000_000n },
+                  { address: sellerAddress(80, 1), valueSat: 8_000_000_000n },
+                  { address: sellerAddress(81, 1), valueSat: 2_000_000_000n },
                   { address: 'TChangeChangeChange', valueSat: 1n },
                 ],
               }

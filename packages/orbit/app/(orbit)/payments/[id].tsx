@@ -199,7 +199,16 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
             {payment.faircoin ? (
               <>
                 <Field label={t('payment.field.network')} value={payment.faircoin.network} />
-                <Field label={t('payment.field.address')} value={payment.faircoin.address} mono />
+                {/* Every output of the payment's one transaction: one address, or each
+                    seller's share of a multi-seller order (ADR 0021 D6). */}
+                {payment.faircoin.outputs.map((output) => (
+                  <Field
+                    key={output.address}
+                    label={t('payment.field.address')}
+                    value={output.address}
+                    mono
+                  />
+                ))}
                 {payment.faircoin.txid ? (
                   <Field label={t('payment.field.txid')} value={payment.faircoin.txid} mono />
                 ) : null}

@@ -59,6 +59,7 @@ const ON_BEHALF: PaymentIntent = paymentIntentFixture({
   faircoin: {
     network: 'testnet',
     address: 'tFairSellerAddress',
+    outputs: [{ address: 'tFairSellerAddress', amount: '250000000', connected_account: null }],
     txid: null,
     confirmations: 0,
     required_confirmations: 1,

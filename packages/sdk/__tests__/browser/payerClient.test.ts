@@ -90,6 +90,7 @@ const INTENT: PaymentIntent = paymentIntentFixture({
   faircoin: {
     network: 'testnet',
     address: 'TAddr1',
+    outputs: [{ address: 'TAddr1', amount: '100', connected_account: null }],
     txid: null,
     confirmations: 0,
     required_confirmations: 1,
@@ -186,6 +187,7 @@ describe('submitTx', () => {
       faircoin: {
         network: 'testnet',
         address: 'TAddr1',
+        outputs: [{ address: 'TAddr1', amount: '100', connected_account: null }],
         txid: 'tx_abc',
         confirmations: 0,
         required_confirmations: 1,

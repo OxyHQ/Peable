@@ -29,7 +29,9 @@ export {
 // intents have a wallet deep link", not two.
 export {
   payDeepLinkFor,
+  payableByExternalWallet,
   buildPayDeepLink,
+  type PayDeepLinkOutput,
   type PayDeepLinkParams,
   PeableRailUnsupportedError,
 } from './browser/payDeepLink';
