@@ -190,7 +190,7 @@ export default {
   'faircoin.confirming': "El teu pagament en FairCoin ja s'està confirmant i no es pot substituir.",
   'faircoin.noPeable': "No s'ha pogut obrir Peable aquí. Escaneja el codi amb Peable al telèfon.",
   'faircoin.otherMethod': 'Tria una altra forma de pagament',
-  'billing.state': 'Estat / província',
+  'billing.state': 'Codi de l’estat / província (2 lletres)',
   'billing.title': 'País de facturació',
   'billing.hint': "Els impostos es calculen segons el país des d'on pagues.",
   'card.hosted.title': 'Paga amb targeta',

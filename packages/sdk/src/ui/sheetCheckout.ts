@@ -1,3 +1,4 @@
+import { validBillingRegion } from './countries';
 import type {
   CheckoutSessionPublic,
   FaircoinUnavailableReason,
@@ -283,7 +284,8 @@ export function needsBillingLocation(session: CheckoutSessionPublic): boolean {
     !address?.country ||
     (session.automatic_tax.enabled &&
       (address.country === 'US' || address.country === 'CA') &&
-      (!address.state?.trim() || !address.postal_code?.trim()))
+      (!validBillingRegion(address.country, address.state ?? undefined) ||
+        !address.postal_code?.trim()))
   );
 }
 
@@ -416,7 +418,7 @@ export function billingAddressParams(location: BillingLocation): {
   postal_code?: string;
   state?: string;
 } {
-  const state = location.state?.trim();
+  const state = location.state?.trim().toUpperCase();
   const postcode = location.postcode.trim();
   return {
     country: location.country.trim().toUpperCase(),

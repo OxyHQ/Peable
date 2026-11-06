@@ -182,7 +182,7 @@ export default {
   'faircoin.confirming': '你的 FairCoin 付款已在确认中，无法替换。',
   'faircoin.noPeable': '无法在此打开 Peable。请用手机上的 Peable 扫描此码。',
   'faircoin.otherMethod': '选择其他付款方式',
-  'billing.state': '州 / 省',
+  'billing.state': '州 / 省代码（2个字母）',
   'billing.title': '账单国家或地区',
   'billing.hint': '税费根据你付款所在的国家或地区计算。',
   'card.hosted.title': '用银行卡付款',

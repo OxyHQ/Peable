@@ -395,7 +395,10 @@ test('US and Canadian tax billing retains the explicitly supplied region and req
     expect(
       needsBillingLocation({
         ...taxed,
-        customer_details: { ...taxed.customer_details, address: { ...address, state: 'DE' } },
+        customer_details: {
+          ...taxed.customer_details,
+          address: { ...address, state: country === 'US' ? 'DE' : 'ON' },
+        },
       }),
     ).toBe(false);
     expect(
@@ -403,12 +406,12 @@ test('US and Canadian tax billing retains the explicitly supplied region and req
         ...taxed,
         customer_details: {
           ...taxed.customer_details,
-          address: { ...address, state: 'DE', postal_code: '' },
+          address: { ...address, state: country === 'US' ? 'DE' : 'ON', postal_code: '' },
         },
       }),
     ).toBe(true);
   }
-  expect(billingAddressParams({ country: ' us ', postcode: ' 19802 ', state: ' DE ' })).toEqual({
+  expect(billingAddressParams({ country: ' us ', postcode: ' 19802 ', state: ' de ' })).toEqual({
     country: 'US',
     postal_code: '19802',
     state: 'DE',

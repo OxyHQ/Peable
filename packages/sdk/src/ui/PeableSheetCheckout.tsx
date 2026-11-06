@@ -33,7 +33,7 @@ import {
   resolveCheckoutLocale,
 } from './messages';
 import { formatCheckoutAmount, formatFairAmount } from './amount';
-import { billingCountries } from './countries';
+import { billingCountries, validBillingRegion } from './countries';
 import {
   baseUnits,
   billingAddressParams,
@@ -245,7 +245,7 @@ function SheetCheckout({
       setBilling({
         country: preparationState.details.shipping.country,
         postcode: preparationState.details.shipping.postalCode,
-        state: preparationState.details.shipping.state,
+        state: preparationState.details.shipping.state.trim().toUpperCase(),
       });
     }
   }, [preparationState.prepared, preparationState.details, preparation?.request.requiresShipping]);
@@ -602,7 +602,7 @@ function SheetCheckout({
       ? {
           country: address.country,
           postcode: address.postal_code ?? '',
-          state: address.state ?? '',
+          state: address.state?.toUpperCase() ?? '',
         }
       : null;
   }
@@ -957,9 +957,12 @@ function SheetCheckout({
             <TextFieldInput
               label={t('billing.state')}
               value={billing.state ?? ''}
-              onChangeText={(state) => setBilling((value) => ({ ...value, state }))}
+              onChangeText={(state) =>
+                setBilling((value) => ({ ...value, state: state.toUpperCase() }))
+              }
               disabled={busy}
               autoCapitalize="characters"
+              maxLength={2}
             />
           )}
           <CardFormPostcode
@@ -975,7 +978,7 @@ function SheetCheckout({
               busy ||
               !billing.country ||
               ((billingNext === 'card' || billingRegionRequired) && !billing.postcode.trim()) ||
-              (billingRegionRequired && !billing.state?.trim())
+              (billingRegionRequired && !validBillingRegion(billing.country, billing.state))
             }
             onPress={() => {
               void (billingNext === 'card' ? continueToCard() : quoteWithBilling());

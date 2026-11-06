@@ -589,6 +589,12 @@ for (const country of ['US', 'CA']) {
   assert.ok(regionField);
   assert.equal(regionField.value, '');
   assert.equal(billingContinue?.disabled, true);
+  for (const invalid of ['ZZ', 'California']) {
+    await act(async () => {
+      regionField?.onChangeText(invalid);
+    });
+    assert.equal(billingContinue?.disabled, true);
+  }
   await act(async () => {
     regionField?.onChangeText(country === 'US' ? 'DE' : 'ON');
   });

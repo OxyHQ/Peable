@@ -192,7 +192,7 @@ export default {
   'faircoin.noPeable':
     'ここでは Peable を開けませんでした。スマートフォンの Peable でコードをスキャンしてください。',
   'faircoin.otherMethod': '別の支払い方法を選ぶ',
-  'billing.state': '州・省',
+  'billing.state': '州・省コード（2文字）',
   'billing.title': '請求先の国',
   'billing.hint': '税金はお支払いになる国に基づいて計算されます。',
   'card.hosted.title': 'カードで支払う',

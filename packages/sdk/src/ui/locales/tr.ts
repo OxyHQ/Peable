@@ -187,7 +187,7 @@ export default {
   'faircoin.confirming': 'FairCoin ödemen zaten onaylanıyor ve değiştirilemez.',
   'faircoin.noPeable': 'Peable burada açılamadı. Kodu telefonundaki Peable ile tara.',
   'faircoin.otherMethod': 'Başka bir yöntem seç',
-  'billing.state': 'Eyalet / il',
+  'billing.state': 'Eyalet / il kodu (2 harf)',
   'billing.title': 'Fatura ülkesi',
   'billing.hint': 'Vergi, ödeme yaptığın ülkeye göre hesaplanır.',
   'card.hosted.title': 'Kartla öde',
