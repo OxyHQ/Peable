@@ -206,6 +206,14 @@ export async function reserveSocialSendAddress(input: {
   readonly recipientUserId: string;
   readonly network: NetworkType;
   readonly source?: SocialPaymentSource;
+  /**
+   * The id of the sender's latest attribution for this recipient as the
+   * caller read it before deciding a fresh address was needed (`null`: none).
+   * Under the lock, a different latest one means a concurrent request of the
+   * same sender just reserved: it is handed back instead of a second fresh
+   * address, so concurrency cannot give one sender two unpaid addresses.
+   */
+  readonly seenLatestAttributionId?: string | null;
 }): Promise<{ index: number; address: string; identityPublicKey: string } | null> {
   // Fresh, never cached: the key a reservation derives from and records is the
   // one the recipient's DID publishes NOW (ADR 0002, amended 2026-11-06).
@@ -214,6 +222,21 @@ export async function reserveSocialSendAddress(input: {
 
   return getDb().transaction(async (tx) => {
     await lockRecipientPool(tx, input.recipientUserId, input.network);
+    if (input.seenLatestAttributionId !== undefined) {
+      const latest = await findLatestAttributionForPair(
+        tx,
+        input.senderUserId,
+        input.recipientUserId,
+        input.network,
+      );
+      if (latest && latest.id !== input.seenLatestAttributionId) {
+        return {
+          index: latest.derivationIndex,
+          address: latest.address,
+          identityPublicKey: bytesToHex(identityPublicKey),
+        };
+      }
+    }
     const fresh = await countAttributionsSince(
       tx,
       input.recipientUserId,
@@ -281,28 +304,40 @@ export async function getReservedThrough(
  * Handed back only when it still derives from the recipient's CURRENT key (a
  * rotated key's tree is one nobody scans, ADR 0002) and the chain shows it
  * received nothing. An Explorer that cannot tell (`unknown`, testnet's node)
- * hands nothing back: the caller reserves a fresh address, as before.
+ * hands nothing back: the caller reserves a fresh address, as before. A
+ * refusal names the latest attribution it saw, which the caller hands to
+ * {@link reserveSocialSendAddress} so a concurrent request of the same sender
+ * is answered with the address that one just got.
  */
 export async function reuseUnpaidSocialAddress(
   senderUserId: string,
   recipientUserId: string,
   network: NetworkType,
-): Promise<{ attributionId: string; index: number; address: string } | null> {
+): Promise<
+  | { reusable: true; attributionId: string; index: number; address: string }
+  | { reusable: false; latestAttributionId: string | null }
+> {
   const latest = await findLatestAttributionForPair(
     getDb(),
     senderUserId,
     recipientUserId,
     network,
   );
-  if (!latest) return null;
+  if (!latest) return { reusable: false, latestAttributionId: null };
+  const no = { reusable: false, latestAttributionId: latest.id } as const;
   const identityPublicKey = await resolveIdentityPublicKey(recipientUserId);
-  if (!identityPublicKey) return null;
+  if (!identityPublicKey) return no;
   const derived = deriveSocialReceiveAddress(
     identityPublicKey,
     latest.derivationIndex,
     getNetwork(network),
   );
-  if (derived !== latest.address) return null;
-  if ((await addressUsage(latest.address, network)) !== 'unused') return null;
-  return { attributionId: latest.id, index: latest.derivationIndex, address: latest.address };
+  if (derived !== latest.address) return no;
+  if ((await addressUsage(latest.address, network)) !== 'unused') return no;
+  return {
+    reusable: true,
+    attributionId: latest.id,
+    index: latest.derivationIndex,
+    address: latest.address,
+  };
 }

@@ -47,6 +47,7 @@ import {
   confirmSessionAsPayer,
   faircoinAvailabilityOf,
   createCheckoutSession,
+  payerMethodOf,
   expireSessionForMerchant,
   publishableKeyFor,
   sessionForPayer,
@@ -414,7 +415,7 @@ export function createCheckoutSessionsRouter(deps: {
       // A FairCoin confirm may hand out a fresh address in the recipient's
       // wallet: one payer's share of that is bounded (ADR 0021 D9).
       if (
-        parsed.data.payment_method_type === 'faircoin' &&
+        payerMethodOf(found.session, parsed.data.payment_method_type) === 'faircoin' &&
         !(await passesLimit(faircoinPayerLimit, req, res))
       ) {
         return;

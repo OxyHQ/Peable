@@ -163,7 +163,7 @@ export function createPublicBillingRouter(deps: {
       // A FairCoin pay may hand out a fresh address in the recipient's wallet:
       // one payer's share of that is bounded (ADR 0021 D9).
       if (
-        parsed.payment_method_type === 'faircoin' &&
+        (parsed.payment_method_type ?? railOf(invoice.currency)) === 'faircoin' &&
         !(await passesLimit(faircoinPayerLimit, req, res))
       ) {
         return;

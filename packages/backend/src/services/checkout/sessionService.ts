@@ -1166,13 +1166,26 @@ async function recordPayerLocale(
   return recorded;
 }
 
-function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
-  // A FairCoin-only fiat order defaults to FairCoin; otherwise the currency's rail.
-  const method =
-    choice.paymentMethodType ??
+/**
+ * The method a payer's confirm pays with: the one named, else the order's
+ * default — FairCoin on a FairCoin-only fiat order, otherwise the currency's
+ * rail. Unvalidated (the confirm refuses what the order does not offer); the
+ * payer route reads it to bound FairCoin confirms (ADR 0021 D9).
+ */
+export function payerMethodOf(
+  session: CheckoutSessionRow,
+  paymentMethodType: 'card' | 'faircoin' | undefined,
+): 'card' | 'faircoin' {
+  return (
+    paymentMethodType ??
     (session.rail === 'card' && !session.cardOffered && session.mode !== 'setup'
       ? 'faircoin'
-      : session.rail);
+      : session.rail)
+  );
+}
+
+function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
+  const method = payerMethodOf(session, choice.paymentMethodType);
   if (method === 'card' && session.mode !== 'setup' && !session.cardOffered) {
     throw invalid(
       'parameter_invalid',

@@ -188,7 +188,7 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
       // recipient), however often it asks — the bound the limiter above
       // cannot give, being per task and per window.
       const unpaid = await reuseUnpaidSocialAddress(senderUserId, recipient.id, network);
-      if (unpaid) {
+      if (unpaid.reusable) {
         await updateAttributionSource(getDb(), unpaid.attributionId, source);
         const body: SocialNextAddressResponse = { address: unpaid.address, index: unpaid.index };
         res.status(200).json(body);
@@ -206,6 +206,7 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
           senderUserId,
           recipientUserId: recipient.id,
           network,
+          seenLatestAttributionId: unpaid.latestAttributionId,
           ...(source ? { source } : {}),
         });
       } catch (err) {

@@ -324,6 +324,21 @@ describe('POST /v1/social/:username/next_address', () => {
     }
   });
 
+  test('concurrent asks of one sender hand it ONE fresh address, re-read under the recipient lock', async () => {
+    const asks = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        postNextAddress('alice', { network: 'testnet' }, 'user_concurrent_sender'),
+      ),
+    );
+    for (const ask of asks) expect(ask.status).toBe(200);
+    expect(new Set(asks.map((ask) => ask.body.address)).size).toBe(1);
+    const rows = await gatewayDb()
+      .select()
+      .from(socialSendAttributions)
+      .where(eq(socialSendAttributions.senderUserId, 'user_concurrent_sender'));
+    expect(rows).toHaveLength(1);
+  });
+
   test(`a sender is handed at most ${NEXT_ADDRESS_SENDER_MAX} fresh addresses an hour, across recipients`, async () => {
     const sender = 'user_sender_hourly';
     const previous = useAddressUsageReader(async () => 'unused');
