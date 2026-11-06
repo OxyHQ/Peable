@@ -52,8 +52,8 @@
  * revert to defaults.
  *
  * Writes name "own" explicitly and then remove any copy from the sources
- * (best effort; deleting is not reading). A delete reaches every group, as it
- * always did. Every other platform, and an iOS build whose native module
+ * (best effort; deleting is not reading). A delete names "own", the earlier
+ * group and the shared group, then makes the unscoped call it always made. Every other platform, and an iOS build whose native module
  * predates the keychain probe (`ungrouped`), makes exactly the calls it always
  * made.
  *
@@ -270,7 +270,14 @@ export function createGroupedKeychainAdapter(
     },
     deleteItem: async (key) => {
       const s = await ready();
-      if (s.groups) touched.add(key);
+      if (!s.groups) return store.deleteItemAsync(key);
+      touched.add(key);
+      // Every location by name — the app group is not the default group, so
+      // the delete must not rest on what an unscoped query reaches — then the
+      // unscoped delete it always made. A thrown delete propagates.
+      for (const group of [s.groups.own, s.groups.earlier, s.groups.shared]) {
+        if (group) await store.deleteItemAsync(key, { accessGroup: group });
+      }
       await store.deleteItemAsync(key);
     },
   };

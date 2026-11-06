@@ -313,6 +313,18 @@ describe("a native build with the app's own group (core 7.31+, ADR 0062 D6)", ()
     expect(k.items.has(`${SHARED}|fairwallet_pin`)).toBe(false);
   });
 
+  test('a delete names the app group: wiping a wallet never rests on the default group', async () => {
+    const k = walletGroupBuild({ [KEYCHAIN_MOVE_MARKER]: '1' });
+    const kv = createGroupedKeychainAdapter(k.store, withApp);
+    await kv.setItem('fairwallet_seed_w1', 'seed');
+    k.items.set(`${WALLET}|fairwallet_seed_w1`, 'stale');
+    k.calls.length = 0;
+    await kv.deleteItem('fairwallet_seed_w1');
+    const deletes = k.calls.filter((c) => c.op === 'delete').map((c) => c.options?.accessGroup);
+    expect(deletes).toEqual([APP, WALLET, SHARED, undefined]);
+    expect(await kv.getItem('fairwallet_seed_w1')).toBeNull();
+  });
+
   test('the dev build uses its own groups: to.peable.app.dev, then so.oxy.wallet.dev', async () => {
     const DEV_WALLET = 'ABCDE12345.so.oxy.wallet.dev';
     const DEV_APP = 'ABCDE12345.to.peable.app.dev';
