@@ -166,3 +166,75 @@ async function readAddressActivity(
   confirmedHeights.sort((a, b) => a - b);
   return { confirmedHeights, hasUnconfirmed };
 }
+
+/**
+ * Whether an address was EVER used, as far as the Explorer can say, and where
+ * it holds coins now. `unknown` when the Explorer cannot tell — testnet's node
+ * has no address index and answers `txCount: 0` beside `isValid: false` or a
+ * `note` for every address (measured 2026-11-06; the gateway's
+ * `getAddressUsage` reads that shape the same way). A spent-out address is
+ * `used`: gap-limit discovery must not stop at an address whose coins moved.
+ */
+export interface AddressUsage extends AddressActivity {
+  readonly usage: 'used' | 'unused' | 'unknown';
+}
+
+/**
+ * {@link AddressUsage} for each of `addresses`, for gap-limit discovery of a
+ * previous key's HD tree (Peable ADR 0002, amended 2026-11-06). Same failure
+ * rule as {@link fetchAddressActivity}: only a 404 means "nothing here"; any
+ * other failure THROWS, so an outage is never read as an empty tree.
+ */
+export async function fetchAddressUsage(
+  addresses: readonly string[],
+  network: NetworkType,
+): Promise<Map<string, AddressUsage>> {
+  const result = new Map<string, AddressUsage>();
+  const queue = [...new Set(addresses)];
+  const worker = async (): Promise<void> => {
+    for (let address = queue.shift(); address !== undefined; address = queue.shift()) {
+      result.set(address, await readAddressUsage(address, network));
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(ACTIVITY_CONCURRENCY, queue.length) }, () => worker()),
+  );
+  return result;
+}
+
+async function readAddressUsage(address: string, network: NetworkType): Promise<AddressUsage> {
+  const url = `${EXPLORER_BASE_URL}/api/address/${encodeURIComponent(address)}?network=${network}`;
+  const response = await fetch(url);
+  if (response.status === UNKNOWN_ADDRESS) {
+    return { usage: 'unused', confirmedHeights: [], hasUnconfirmed: false };
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Explorer address request for ${address} failed: ${String(response.status)} ${response.statusText}`,
+    );
+  }
+  const body: unknown = await response.json();
+  const info = (body as { addressInfo?: Record<string, unknown> } | null)?.addressInfo;
+  const utxos = info?.utxos;
+  if (!info || !Array.isArray(utxos)) {
+    throw new Error(`Explorer address response for ${address} carried no utxo list`);
+  }
+  const confirmedHeights: number[] = [];
+  let hasUnconfirmed = false;
+  for (const entry of utxos) {
+    const height = (entry as { height?: unknown } | null)?.height;
+    if (typeof height === 'number' && Number.isSafeInteger(height) && height > 0) {
+      confirmedHeights.push(height);
+    } else {
+      hasUnconfirmed = true;
+    }
+  }
+  confirmedHeights.sort((a, b) => a - b);
+  const txCount = typeof info.txCount === 'number' ? info.txCount : 0;
+  const received = typeof info.totalReceivedSat === 'number' ? info.totalReceivedSat : 0;
+  let usage: AddressUsage['usage'];
+  if (txCount !== 0 || received !== 0 || utxos.length !== 0) usage = 'used';
+  else if (info.isValid === false || info.note !== undefined) usage = 'unknown';
+  else usage = 'unused';
+  return { usage, confirmedHeights, hasUnconfirmed };
+}

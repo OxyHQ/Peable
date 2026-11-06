@@ -27,14 +27,14 @@ the same phone, a departed organization admin and a network attacker.
 
 | ID | Severity | Finding | Fix |
 |---|---|---|---|
-| F1 | critical | A personal key rotation strands every Peable coin (the HD seed and the social tree both derive from the identity key); Commons said the old phrase "stops working"; open intents kept pre-rotation addresses and settled `succeeded` | oxy#2183 (Commons copy, required "move your Peable funds first" acknowledgement on both rotation paths); #254 (open payments under a replaced key are retired). No path spends from a previous phrase (residual) |
+| F1 | critical | A personal key rotation strands every Peable coin (the HD seed and the social tree both derive from the identity key); Commons said the old phrase "stops working"; open intents kept pre-rotation addresses and settled `succeeded` | oxy#2183 (Commons copy, required "move your Peable funds first" acknowledgement on both rotation paths); #254 (open payments under a replaced key are retired). No path spends from a previous phrase (residual). **Update (2026-11-06): the residual is fixed in code** — Commons keeps a replaced key (oxy ADR 0061 D7 as amended); Peable spends from it and offers a one-tap move to the current key (ADR 0002 "previous keys stay spendable"). Pending re-review and device verification |
 | F2 | high | After an organization replaces its key, payments keep flowing to the replaced key | #254: every address records its key; stale-key payments are retired on every payer surface and by a 60 s sweep; a broadcast one settles stamped `recipient_key_replaced_at` |
 | F3 | high | Payments beyond the watch window missed; cursor synced only at unlock; extensions never rescanned | #253: resync on foreground, every 2 min, on push and on Receive; every newly watched index checked on the Explorer and the SPV rescan rewound to it |
 | F4 | high | Anyone can push a recipient's cursor without limit; the wallet freezes (`Math.max(...)` spread, Bloom saturation) | #253 (loop maximum, 2,000-index window, HD coins stay spendable); #255 (recycle unpaid addresses, 500 open per recipient, leaks closed) |
 | F5 | high | On iOS every Oxy app can read the personal and organization private keys (shared keychain group) | Not fixed. oxy#2183 adds `docs/identity/ios-keychain-access-groups.md`, which finds it wider: `keychainAccessGroup` is never applied (expo-secure-store reads `accessGroup`), so the recovery phrases share the group too |
 | F6 | medium | The DID (and so the key) was cached 60 s by the SDK and `max-age=300` by the route | #254 (Peable reads the DID `no-store`); oxy#2183 (`resolveDid({ fresh: true })`, user DIDs `public, no-cache` + ETag) |
 | F7 | medium | The personal wallet compared its key with the cursor's last-recorded key, not the published `#key-1` | #254 (`account_identity_public_key` on the cursor); #253 (compared first) |
-| F8 | medium | Coins the wallet can no longer sign for broke every send | #253: excluded from selection, shown as held under a previous key |
+| F8 | medium | Coins the wallet can no longer sign for broke every send | #253: excluded from selection, shown as held under a previous key. **Update (2026-11-06, F1 work):** the exclusion stays for keys this device cannot reach, and the line now says how to reach them (add the previous phrase in Commons); reachable previous keys are signable and in the balance (ADR 0002 "previous keys stay spendable"). Fixed in code, pending device verification |
 | F9 | medium | Nothing re-checked a payment after it succeeded; confirmations defaulted to 1 | #255: mainnet defaults to 6, succeeded payments re-read to 100 confirmations and rewound on a reorg. One Explorer is still trusted (residual) |
 | F10 | medium | `expires_in_seconds` unbounded | #255: 86,400 s cap in the contract |
 | F11 | low | An empty `PEABLE_SOCIAL_PAY_NETWORK` opened mainnet | #255: empty means testnet |
@@ -178,6 +178,19 @@ their variables, so CI never runs them.
    fixes. The canary records the synced set (`receiveAddresses` in the gateway
    evidence) and the wallet half watches exactly it; it has not been re-run on
    this change.
+
+   **Update (2026-11-06, later still): item 2 (F1) is fixed in code, not
+   accepted.** The owner chose to fix it: Commons keeps the replaced key (and
+   accepts a previous phrase), and the Peable wallet finds every previous key
+   from the keys recorded on the account's addresses, spends from the ones
+   this device reaches (HD tree and social-receive addresses, each input
+   signed by its own key), counts them in the balance on their own line, and
+   offers a prominent one-tap "move to my current key"; keys it cannot reach
+   stay excluded (F8) with the path to add them in Commons (ADR 0002
+   "previous keys stay spendable"; oxy ADR 0061 D7 as amended). It has not
+   been re-reviewed, run on the canary or verified on a device, so it does
+   not change the gate: items 1 and 3 still need the owner's acceptance, and
+   the gate stays closed.
 2. **Before opening**, a read-only production check that no mainnet
    `social_receive_cursors` row exists at or above the ceiling (mainnet minting
    was never open, so none should).

@@ -18,7 +18,6 @@ import {
   decodeAddress,
   validateAddress,
   buildTransaction,
-  signInput,
   serializeTransaction,
   hashTransaction,
   type NetworkType,
@@ -79,12 +78,14 @@ import {
   isFreshlyCreatedWallet,
 } from '../storage/secure-store';
 import type { WalletInfo } from '../storage/secure-store';
-import { Database, type SocialReceiveSetRow } from '../storage/database';
+import { Database, type PreviousKeyTreeRow, type SocialReceiveSetRow } from '../storage/database';
 import {
   PERSONAL_SUBJECT,
   SEED_SECRET_PREFIX,
   buildSeedSecret,
   deriveIdentitySeed,
+  derivePreviousKeySeed,
+  listPreviousKeyHints,
   identitySubjectOfWalletId,
   identityWalletIdOf,
   type IdentitySubject,
@@ -111,14 +112,30 @@ import {
   type WatchSetCheck,
   type WatchSetRow,
 } from './social-receive-watch';
-import { partitionStrandedCoins, signableCoins, sumCoinValues } from './spendable';
+import {
+  partitionStrandedCoins,
+  previousKeyCoins,
+  signableCoins,
+  sumCoinValues,
+} from './spendable';
+import {
+  advanceTreeOverKnownAddresses,
+  canonicalKey,
+  discoverPreviousTree,
+  groupPreviousKeys,
+  planPreviousKeyMove,
+  probePreviousKeys,
+  signWalletInput,
+  type InputSigner,
+  type PreviousKeyMovePlan,
+} from './previous-keys';
 import {
   getSocialReceiveCursor,
   listSocialReceiveAddresses,
   type SocialReceiveCursor,
 } from '../services/gateway-client';
 import type { SocialReceiveAddress } from '@peable.to/shared-types';
-import { fetchAddressActivity } from '../services/explorer-address';
+import { fetchAddressActivity, fetchAddressUsage } from '../services/explorer-address';
 import { oxyServices } from '../services/oxy-services';
 import {
   getPockets,
@@ -211,14 +228,25 @@ export interface WalletState {
    */
   socialReceiveKeyMismatch: boolean;
   /**
-   * Coins stored by this wallet, on this network, at addresses it no longer
-   * derives — received under a previous identity key (a rotation, a replaced
-   * organization key). Not in `balance` and never selected for a send: only
-   * the previous key's recovery phrase can spend them. Shown apart rather than
-   * dropped, because they are still the person's. (Coins of the OTHER network,
-   * which shares this database file, belong to that network's view.)
+   * Coins stored by this wallet, on this network, at addresses no key this
+   * device reaches owns — received under a previous identity key (a rotation,
+   * a replaced organization key) that Commons does not hold here. Not in
+   * `balance` and never selected for a send (F8). Shown apart, with the path
+   * to spend them HERE: add the previous phrase in Commons, after which the
+   * wallet reaches the key and they join `previousKeyBalance` (ADR 0002,
+   * amended 2026-11-06). (Coins of the OTHER network, which shares this
+   * database file, belong to that network's view.)
    */
   strandedBalance: bigint;
+  /**
+   * The part of `balance` held under a PREVIOUS identity key this device still
+   * reaches (ADR 0002, amended 2026-11-06 "previous keys stay spendable"):
+   * Commons kept the key after a rotation or replacement, so these coins are
+   * signable and selectable like any other — and the wallet offers to move
+   * them to the current key ({@link WalletState.movePreviousKeyFunds}),
+   * because whoever else holds the previous key can spend them too.
+   */
+  previousKeyBalance: bigint;
   /** Active Pocket (BIP44 account index) within the current wallet. */
   activeAccount: number;
   /** Pockets (BIP44 sub-accounts) of the current wallet. */
@@ -338,6 +366,15 @@ export interface WalletState {
   refreshMasternodeUTXOs: () => void;
   estimateFee: (feeLevel: FeeLevel) => bigint;
   estimateSend: (amount: bigint, feeRate: number) => SendEstimate;
+  /**
+   * What "move to your current key" would do at `feeRate`: every confirmed
+   * previous-key coin, one output to a fresh address of the current key.
+   * `blocked` when this device's key is not the account's current one (the
+   * move would land on a replaced key).
+   */
+  planPreviousKeyMove: (feeRate: number) => PreviousKeyMovePlan | { readonly kind: 'blocked' };
+  /** Broadcast {@link WalletState.planPreviousKeyMove}'s move; resolves its txid. */
+  movePreviousKeyFunds: (feeRate: number) => Promise<string>;
   hasWallet: () => Promise<boolean>;
   wipeWallet: () => Promise<void>;
   lockWallet: () => void;
@@ -475,6 +512,22 @@ let socialReceiveGeneration = 0;
  * balance nor coin selection sees them.
  */
 let strandedUtxos: UTXO[] = [];
+/**
+ * The HD tree of every PREVIOUS identity key this device reaches (ADR 0002,
+ * amended 2026-11-06 "previous keys stay spendable"), keyed by the key
+ * (compressed hex), built from a seed Commons derived and zeroed at once —
+ * held in memory only while the wallet is open, wiped with the current one.
+ */
+let previousTrees: Map<string, KeyManager> = new Map();
+/**
+ * address -> previous key (compressed hex), for the social-receive rows of a
+ * reachable previous key watched beside this device's own (in
+ * `socialReceiveWatched` / `socialReceiveAddressIndex`). An address absent
+ * here is this device's current key's.
+ */
+let socialReceiveAddressKey: Map<string, string> = new Map();
+/** Whose keys `previousTrees` belong to: the open identity wallet's subject, or `null`. */
+let previousKeySubject: IdentitySubject | null = null;
 // Handle of the recurring poll that mirrors peer / sync state from the SPV
 // client into the store (peer count, height, status text, periodic rescan).
 // Held at module scope so we can clear it from `resetWalletInternals` — without
@@ -634,7 +687,13 @@ export function getActiveWalletAddresses(): string[] {
  * it is read through the Explorer instead (`checkWatchedSocialAddresses`).
  */
 function buildCombinedBloomFilterHashes(km: KeyManager): Uint8Array[] {
-  return [...km.getAllAddresses(), ...socialReceiveActive].map((addr) => decodeAddress(addr).hash);
+  // A reachable previous key's HD tree is watched like the current one (its
+  // gap window, extended as payments land): late payers still use it.
+  const previous: string[] = [];
+  for (const tree of previousTrees.values()) previous.push(...tree.getAllAddresses());
+  return [...km.getAllAddresses(), ...previous, ...socialReceiveActive].map(
+    (addr) => decodeAddress(addr).hash,
+  );
 }
 
 /** Now, in the Unix seconds the watch set keeps. */
@@ -813,7 +872,8 @@ async function readPublishedAccountKey(
 /** addr(0) of this device's key, the stable default address. */
 function socialReceiveDefaultFromIndex(): string | null {
   for (const [address, index] of socialReceiveAddressIndex) {
-    if (index === 0) return address;
+    // A previous key's index 0 is watched too, but is never the default.
+    if (index === 0 && !socialReceiveAddressKey.has(address)) return address;
   }
   return null;
 }
@@ -850,6 +910,7 @@ async function syncSocialReceiveSet(
     if (!actsAsSubject())
       throw new Error('the Oxy session switched account during the cursor read');
     const accountKey = await readPublishedAccountKey(cursor, subject);
+    if (accountKey) publishedAccountKey = canonicalKey(accountKey);
     // The gateway derives every NEW address from the key the account
     // publishes. If that is not the key this device holds, each address it
     // hands out belongs to a tree this wallet cannot see or spend from.
@@ -1039,9 +1100,245 @@ const socialResync = createResyncScheduler({
  * any time; a no-op without an open identity wallet.
  */
 export function requestSocialReceiveResync(): void {
+  // The same moments (the app back from Commons, say) are when a previous key
+  // may have become reachable.
+  if (previousKeySubject) void previousKeyRefresh.request();
   if (!socialReceiveIdentityPublicKey) return;
   void socialResync.request();
 }
+
+// ---------------------------------------------------------------------------
+// Previous identity keys (ADR 0002, amended 2026-11-06 "previous keys stay
+// spendable"; mainnet gate F1). Pure rules in `previous-keys.ts`.
+// ---------------------------------------------------------------------------
+
+/**
+ * The account's published `#key-1` (compressed hex) as the last cursor read
+ * answered it, `null` when unknown. A previous key is any recorded key that is
+ * neither this device's nor this one.
+ */
+let publishedAccountKey: string | null = null;
+
+/** The keys that are never "previous": this device's, and the account's published one. */
+function currentKeysOf(subject: IdentitySubject, deviceKey: string | null): Set<string> {
+  const published =
+    subject.kind === 'organization'
+      ? (organizationPublishedKeys.get(subject.accountId) ?? null)
+      : publishedAccountKey;
+  const keys = new Set<string>();
+  for (const key of [deviceKey, published]) {
+    const canonical = canonicalKey(key);
+    if (canonical) keys.add(canonical);
+  }
+  return keys;
+}
+
+/** A previous key's HD tree, for the open Pocket, from a seed the caller zeroes. */
+function buildPreviousTree(network: NetworkConfig, account: number) {
+  return (_key: string, seed: Uint8Array): KeyManager =>
+    KeyManager.fromSeed(seed, network, account);
+}
+
+/**
+ * Watch the social-receive rows of `keys` (reachable previous keys) beside
+ * this device's own, in D9's tiers: index 0 and funded rows in the filter,
+ * the rest read through the Explorer on its schedule. Main Pocket only, like
+ * the rest of social receive.
+ */
+async function watchPreviousSocialRows(
+  db: Database,
+  network: NetworkConfig,
+  subject: IdentitySubject,
+  keys: readonly string[],
+): Promise<void> {
+  const deviceKey = socialReceiveIdentityPublicKey;
+  if (!deviceKey || keys.length === 0) return;
+  const wanted = new Set(keys);
+  const stored = (await db.getSocialReceiveSetKeys()).filter((key) => {
+    const canonical = canonicalKey(key);
+    return canonical !== null && wanted.has(canonical);
+  });
+  const rows = (await db.getSocialReceiveSetRowsForKeys(stored, true)).map(toWatchSetRow);
+  const groups = groupPreviousKeys({
+    rows,
+    currentKeys: [...currentKeysOf(subject, deviceKey)],
+    extraKeys: keys,
+    network,
+  });
+  for (const group of groups) {
+    if (!wanted.has(group.key)) continue;
+    addWatchedSocialRows(group.rows);
+    for (const row of group.rows) socialReceiveAddressKey.set(row.address, group.key);
+  }
+  await refreshSocialReceiveActive(db);
+}
+
+/**
+ * Bring up the previous keys this wallet already tracks, inside `initialize`
+ * (before the UTXO set loads, so their coins are held rather than stranded):
+ * every recorded tree whose discovery ran is re-derived through Commons and
+ * restored to its cursors. Cheap — no Explorer read; a new key is found by
+ * {@link refreshPreviousKeys} in the background.
+ */
+async function loadPreviousKeys(
+  db: Database,
+  network: NetworkConfig,
+  networkType: NetworkType,
+  subject: IdentitySubject,
+  account: number,
+): Promise<void> {
+  previousKeySubject = subject;
+  const deviceKey = socialReceiveIdentityPublicKey ?? (await getIdentityPublicKeyHex(subject));
+  const excluded = currentKeysOf(subject, deviceKey);
+  const rows = (await db.getPreviousKeyTrees(networkType)).filter(
+    (row) => row.discovered_at !== null && !excluded.has(row.public_key),
+  );
+  // A key this device cannot reach leaves its coins stranded;
+  // `refreshPreviousKeys` asks again on its interval.
+  const { reachable } = await probePreviousKeys(
+    rows.map((row) => row.public_key),
+    (key) => derivePreviousKeySeed(subject, key),
+    buildPreviousTree(network, account),
+  );
+  for (const row of rows)
+    reachable.get(row.public_key)?.restoreCursors(row.external_next, row.change_next);
+  previousTrees = reachable;
+  if (account === MAIN_POCKET_ACCOUNT) {
+    await watchPreviousSocialRows(db, network, subject, [...reachable.keys()]);
+  }
+}
+
+/**
+ * Find previous keys and the ones that became reachable: the keys the
+ * gateway recorded on the account's addresses (D9's `identity_public_key`),
+ * Commons' list as a hint, and the trees already recorded, less those already
+ * open. A newly reachable key's tree is advanced over what this device
+ * already stored, then discovered through the Explorer (gap limit, as a
+ * restored HD wallet) — or, when the Explorer cannot tell (testnet), rescanned
+ * from the wallet's birthday over its window — and recorded; its coins leave
+ * the stranded line for the balance, and the move prompt appears.
+ */
+async function refreshPreviousKeys(): Promise<void> {
+  const db = database;
+  const network = networkConfig;
+  const km = keyManager;
+  const subject = previousKeySubject;
+  const generation = socialReceiveGeneration;
+  if (!db || !network || !km || !subject || km.isWatchOnly()) return;
+  const current = (): boolean => generation === socialReceiveGeneration && database === db;
+  const set = useWalletStore.setState;
+  const get = useWalletStore.getState;
+  const { network: networkType, activeAccount: account, activeWalletId } = get();
+
+  const deviceKey = socialReceiveIdentityPublicKey ?? (await getIdentityPublicKeyHex(subject));
+  const excluded = currentKeysOf(subject, deviceKey);
+  const recorded =
+    account === MAIN_POCKET_ACCOUNT && socialReceiveIdentityPublicKey
+      ? await db.getSocialReceiveSetKeys()
+      : [];
+  const hints = await listPreviousKeyHints(subject);
+  const trees = await db.getPreviousKeyTrees(networkType);
+  if (!current()) return;
+  const candidates = new Set<string>();
+  for (const key of [...recorded, ...hints, ...trees.map((row) => row.public_key)]) {
+    const canonical = canonicalKey(key);
+    if (canonical && !excluded.has(canonical) && !previousTrees.has(canonical)) {
+      candidates.add(canonical);
+    }
+  }
+  if (candidates.size === 0) return;
+  // Every key not open yet is asked again each time: one the person has just
+  // added in Commons is reached on the next refresh.
+  const { reachable } = await probePreviousKeys(
+    [...candidates],
+    (key) => derivePreviousKeySeed(subject, key),
+    buildPreviousTree(network, account),
+  );
+  const discard = (): void => {
+    for (const tree of reachable.values()) tree.wipe();
+  };
+  if (!current()) return discard();
+  if (reachable.size === 0) return;
+
+  const known = new Set<string>();
+  for (const row of await db.getAllUTXOs()) known.add(row.address);
+  for (const row of await db.getAddresses()) known.add(row.address);
+  let birthday = 0;
+  if (activeWalletId) {
+    try {
+      birthday = await getWalletBirthdayHeight(activeWalletId);
+    } catch {
+      // No recorded birthday: from genesis, never risk missing a coin.
+    }
+  }
+  let rescanFrom: number | null = null;
+  const opened: string[] = [];
+  for (const [key, tree] of reachable) {
+    const row: PreviousKeyTreeRow | undefined = trees.find(
+      (candidate) => canonicalKey(candidate.public_key) === key,
+    );
+    if (row) tree.restoreCursors(row.external_next, row.change_next);
+    advanceTreeOverKnownAddresses(tree, known);
+    // Discovered every time a key is reached here, not only the first: while
+    // it was unreachable its tree was in no Bloom filter, so a payment that
+    // landed meanwhile is found only by reading the chain again.
+    try {
+      const found = await discoverPreviousTree(tree, (addresses) =>
+        fetchAddressUsage(addresses, networkType),
+      );
+      const from = found.conclusive ? found.rescanFrom : birthday;
+      if (from !== null) rescanFrom = rescanFrom === null ? from : Math.min(rescanFrom, from);
+    } catch (error) {
+      // The Explorer failed: nothing recorded, so the next refresh asks again.
+      console.warn('[previous-keys] discovery failed; retrying on the next refresh:', error);
+      tree.wipe();
+      continue;
+    }
+    if (!current()) return discard();
+    await db.savePreviousKeyTree({
+      public_key: key,
+      network: networkType,
+      external_next: tree.getNextExternalIndex(),
+      change_next: tree.getNextChangeIndex(),
+      discovered_at: nowSeconds(),
+    });
+    opened.push(key);
+  }
+  if (!current()) return discard();
+  for (const key of opened) {
+    const tree = reachable.get(key);
+    if (tree) previousTrees.set(key, tree);
+  }
+  if (opened.length === 0) return;
+  if (account === MAIN_POCKET_ACCOUNT) {
+    await watchPreviousSocialRows(db, network, subject, opened);
+  }
+  if (!current()) return;
+  // Coins stored while the key was stranded are held again.
+  reclaimStrandedCoins();
+  publishBalance(set);
+  if (spvClient) spvClient.setBloomFilter(buildCombinedBloomFilterHashes(km));
+  if (rescanFrom !== null) await db.requestRescanFrom(rescanFrom);
+  // The previous key's social rows are read through the Explorer on D9's
+  // schedule (never-read rows first), and any coin found rewinds the scan.
+  if (socialReceiveIdentityPublicKey) void socialResync.request();
+  void runHistoricalRescan(set, get).catch(() => {
+    // Best-effort; the peer tick retries.
+  });
+}
+
+/**
+ * When the open identity wallet looks for previous keys: on open, on the same
+ * moments as the social resync, and on the peer tick's interval (a key the
+ * person adds in Commons is found within it). Reset with the wallet.
+ */
+const previousKeyRefresh = createResyncScheduler({
+  run: refreshPreviousKeys,
+  now: () => Date.now(),
+  onError: (error) => {
+    console.warn('[previous-keys] refresh failed; retrying on the next one:', error);
+  },
+});
 
 /**
  * Whether a coin at `address` belongs to what this wallet watches now: its HD
@@ -1049,7 +1346,29 @@ export function requestSocialReceiveResync(): void {
  * window. A coin elsewhere is stranded (`WalletState.strandedBalance`).
  */
 function isWatchedAddress(address: string): boolean {
-  return (keyManager?.ownsAddress(address) ?? false) || socialReceiveAddressIndex.has(address);
+  return (
+    (keyManager?.ownsAddress(address) ?? false) ||
+    socialReceiveAddressIndex.has(address) ||
+    previousTreeOwning(address) !== null
+  );
+}
+
+/** The reachable previous key whose HD tree owns `address`, or `null`. */
+function previousTreeOwning(address: string): string | null {
+  for (const [key, tree] of previousTrees) {
+    if (tree.ownsAddress(address)) return key;
+  }
+  return null;
+}
+
+/**
+ * The PREVIOUS key a held coin at `address` is under (its HD tree or its
+ * social-receive address), or `null` for the current key's (ADR 0002,
+ * amended 2026-11-06).
+ */
+function previousKeyOf(address: string): string | null {
+  if (keyManager?.ownsAddress(address)) return null;
+  return socialReceiveAddressKey.get(address) ?? previousTreeOwning(address);
 }
 
 /**
@@ -1063,7 +1382,8 @@ function signerFor(km: KeyManager): (address: string) => boolean {
   const watchOnly = km.isWatchOnly();
   return (address) =>
     socialReceiveAddressIndex.has(address) ||
-    (!watchOnly && km.ownsAddress(address) && !multisig.has(address));
+    (!watchOnly && km.ownsAddress(address) && !multisig.has(address)) ||
+    (!watchOnly && previousTreeOwning(address) !== null);
 }
 
 /**
@@ -1090,22 +1410,43 @@ async function signInputForAddress(
   utxo: { address: string; scriptPubKey: Uint8Array },
   network: NetworkConfig,
 ): Promise<Uint8Array> {
-  if (km.ownsAddress(utxo.address)) {
-    return signInput(tx, inputIndex, utxo.scriptPubKey, km.getPrivateKeyForAddress(utxo.address));
-  }
-  const socialIndex = socialReceiveAddressIndex.get(utxo.address);
-  if (socialIndex !== undefined) {
-    return signSocialReceiveInput(
-      tx,
-      inputIndex,
-      utxo.scriptPubKey,
-      socialIndex,
-      utxo.address,
-      network,
-      socialReceiveSubject,
-    );
-  }
-  throw new Error(`Address not found in key manager: ${utxo.address}`);
+  // Captured now: a send may mix the current key's coins with a previous
+  // key's, and each input is signed by the key that owns it (ADR 0002,
+  // amended 2026-11-06) — `signWalletInput` is the one dispatch, tested with
+  // a transaction mixing current-HD, previous-HD and previous-social inputs.
+  const subject = socialReceiveSubject;
+  const trees = previousTrees;
+  const socialKeys = socialReceiveAddressKey;
+  const socialIndices = socialReceiveAddressIndex;
+  const signer = (address: string): InputSigner | null => {
+    if (km.ownsAddress(address)) {
+      return { kind: 'hd', privateKey: km.getPrivateKeyForAddress(address) };
+    }
+    const socialIndex = socialIndices.get(address);
+    if (socialIndex !== undefined) {
+      return { kind: 'social', index: socialIndex, publicKey: socialKeys.get(address) ?? null };
+    }
+    for (const tree of trees.values()) {
+      if (tree.ownsAddress(address)) {
+        return { kind: 'hd', privateKey: tree.getPrivateKeyForAddress(address) };
+      }
+    }
+    return null;
+  };
+  return signWalletInput(tx, inputIndex, utxo, {
+    signerFor: signer,
+    signSocial: (unsigned, index, scriptPubKey, childIndex, address, publicKey) =>
+      signSocialReceiveInput(
+        unsigned,
+        index,
+        scriptPubKey,
+        childIndex,
+        address,
+        network,
+        subject,
+        publicKey === null ? {} : { publicKey },
+      ),
+  });
 }
 
 /**
@@ -1122,6 +1463,50 @@ async function readPocketUnspentTotal(walletId: string, account: number): Promis
   } finally {
     await db.close();
   }
+}
+
+/**
+ * Broadcast a fully signed `tx` and record the spend: REQUIRES at least one
+ * peer to have received it (H-1) — otherwise nothing is marked spent — then
+ * marks its inputs spent (height -1 until it confirms, so a reorg can undo
+ * it) and persists the row with the REAL fee. Shared by every send, the move
+ * to the current key included, so they cannot drift. Returns the txid.
+ */
+async function broadcastAndRecord(
+  tx: Transaction,
+  fee: bigint,
+  client: SPVClient | null,
+  db: Database,
+  coins: UTXOSet | null,
+): Promise<{ txid: string; timestamp: number }> {
+  // `hashTransaction` is the single source of truth for the txid across the
+  // wallet (history, UI, reorg) — what the user sees is what hit the network (H-2).
+  const rawTx = serializeTransaction(tx);
+  const txid = hashTransaction(tx);
+  if (!client) {
+    throw new Error('Wallet is offline. Connect to peers before sending a transaction.');
+  }
+  const broadcast = client.broadcastTransaction(rawTx);
+  if (broadcast.peerCount === 0) {
+    throw new Error(
+      'No peers available to relay the transaction. Try again once the wallet is connected.',
+    );
+  }
+  for (const input of tx.inputs) {
+    await db.markUTXOSpent(input.txid, input.vout, txid, -1);
+    coins?.spend(input.txid, input.vout);
+  }
+  const timestamp = Math.floor(Date.now() / 1000);
+  await db.insertTransaction({
+    txid,
+    raw_hex: bytesToHex(rawTx),
+    block_height: -1,
+    block_hash: '',
+    timestamp,
+    fee: Number(fee),
+    confirmed: 0,
+  });
+  return { txid, timestamp };
 }
 
 // ---------------------------------------------------------------------------
@@ -1145,7 +1530,14 @@ function publishBalance(set: WalletSet): void {
     confirmedBalance: utxoSet.getConfirmedBalance(),
     unconfirmedBalance: utxoSet.getUnconfirmedBalance(),
     strandedBalance: sumCoinValues(strandedUtxos),
+    previousKeyBalance: currentPreviousKeyBalance(),
   });
+}
+
+/** The part of the in-memory balance under a reachable previous key. */
+function currentPreviousKeyBalance(): bigint {
+  if (!utxoSet || (previousTrees.size === 0 && socialReceiveAddressKey.size === 0)) return 0n;
+  return sumCoinValues(previousKeyCoins(utxoSet.getAllUTXOs(), previousKeyOf));
 }
 
 /**
@@ -1222,8 +1614,9 @@ async function processIncomingTransaction(
     utxoSet,
     tx,
     txid,
-    (address) =>
-      (keyManager?.ownsAddress(address) ?? false) || socialReceiveAddressIndex.has(address),
+    // A previous key's tree and social rows count too (ADR 0002, amended
+    // 2026-11-06): late payers still pay them, and they are spendable here.
+    isWatchedAddress,
     networkConfig,
     confirmation,
   );
@@ -1273,6 +1666,20 @@ async function processIncomingTransaction(
     await database.markAddressUsed(address);
     if (keyManager.markAddressUsed(address)) {
       bloomNeedsRefresh = true;
+    }
+    const previousKey = previousTreeOwning(address);
+    const previousTree = previousKey !== null ? previousTrees.get(previousKey) : undefined;
+    if (previousKey !== null && previousTree) {
+      // The previous tree's cursor moved: watch the gap past it, and
+      // remember where it stands so the next open restores it.
+      if (previousTree.markAddressUsed(address)) bloomNeedsRefresh = true;
+      await database.savePreviousKeyTree({
+        public_key: previousKey,
+        network: get().network,
+        external_next: previousTree.getNextExternalIndex(),
+        change_next: previousTree.getNextChangeIndex(),
+        discovered_at: null,
+      });
     }
     const watched = socialReceiveWatched.get(address);
     if (watched) {
@@ -1643,6 +2050,12 @@ function resetWalletInternals(): void {
   socialReceiveActive = new Set();
   socialReceiveGeneration += 1;
   socialResync.reset();
+  // A previous key's HD keys are wiped exactly like the current key's.
+  for (const tree of previousTrees.values()) tree.wipe();
+  previousTrees = new Map();
+  socialReceiveAddressKey = new Map();
+  previousKeySubject = null;
+  previousKeyRefresh.reset();
   strandedUtxos = [];
   utxoSet = null;
   database = null;
@@ -1681,6 +2094,7 @@ const DEFAULT_WALLET_STATE = {
   socialReceiveDefaultAddress: null as string | null,
   socialReceiveKeyMismatch: false,
   strandedBalance: 0n,
+  previousKeyBalance: 0n,
   activeAccount: 0,
   pockets: [] as PocketInfo[],
   pocketBalances: {} as Record<number, bigint>,
@@ -1758,6 +2172,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   socialReceiveDefaultAddress: null,
   socialReceiveKeyMismatch: false,
   strandedBalance: 0n,
+  previousKeyBalance: 0n,
   activeAccount: 0,
   pockets: [],
   pocketBalances: {},
@@ -1957,6 +2372,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           }
         }
 
+        // Previous identity keys this wallet already tracks (ADR 0002, amended
+        // 2026-11-06): re-derived through Commons before the UTXO set loads,
+        // so their coins are held — in the balance, signable — rather than
+        // stranded. New ones are found in the background (`previousKeyRefresh`).
+        if (identitySubject !== null && !watchOnly) {
+          try {
+            await loadPreviousKeys(
+              database,
+              networkConfig,
+              state.network,
+              identitySubject,
+              resolvedAccount,
+            );
+          } catch (previousError: unknown) {
+            // Never a reason for the wallet not to open: those coins read as
+            // stranded until the next refresh reaches their key.
+            console.warn('[previous-keys] could not be loaded:', previousError);
+          }
+        }
+
         // Load persisted UTXOs from database — AFTER the HD cursors, the
         // multisig watch addresses and the social window are in place, because
         // a coin at an address none of them watches is stranded (kept apart,
@@ -2017,6 +2452,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           confirmedBalance: utxoSet.getConfirmedBalance(),
           unconfirmedBalance: utxoSet.getUnconfirmedBalance(),
           strandedBalance: sumCoinValues(strandedUtxos),
+          previousKeyBalance: currentPreviousKeyBalance(),
           transactions: restoredTransactions,
           activeWalletId: activeId,
           activeWalletName: activeWallet?.name ?? '',
@@ -2191,6 +2627,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             if (socialReceiveIdentityPublicKey) {
               socialResync.tick();
             }
+            if (previousKeySubject) {
+              previousKeyRefresh.tick();
+            }
           }, 5000);
         } catch (spvError: unknown) {
           const spvMsg = spvError instanceof Error ? spvError.message : 'Unknown P2P error';
@@ -2363,14 +2802,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   refreshBalance: (): void => {
-    if (!utxoSet) {
-      return;
-    }
-    set({
-      balance: utxoSet.getBalance(),
-      confirmedBalance: utxoSet.getConfirmedBalance(),
-      unconfirmedBalance: utxoSet.getUnconfirmedBalance(),
-    });
+    // The previous-key and stranded lines move with the balance.
+    publishBalance(set);
   },
 
   getNewAddress: (): string => {
@@ -2460,9 +2893,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // never spends funds that could still be reorged away. Coins already
       // reserved by another in-flight send are excluded too, so automatic
       // selection cannot pick a UTXO a concurrent send is about to spend (M4).
-      // And only coins this wallet can SIGN for: a coin received under a
-      // previous identity key (stranded) or at a multisig watch address would
-      // be selected largest-first and fail the whole send at signing.
+      // And only coins this wallet can SIGN for: a coin under a previous
+      // identity key this device cannot reach (stranded) or at a multisig
+      // watch address would be selected largest-first and fail the whole send
+      // at signing. A previous key it DOES reach signs its own inputs.
       const utxoRows = await localDatabase.getUnspentUTXOs();
       const candidates: UTXO[] = signableCoins(
         utxoRows
@@ -2542,52 +2976,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         };
       }
 
-      // Serialize and compute txid. `hashTransaction` is the single source of
-      // truth used across the wallet (history, UI, reorg) — pass the same
-      // txid into broadcast so what the user sees matches what hit the network
-      // (H-2). The SPV client computes the txid from the raw bytes too but we
-      // ignore that value to avoid divergence between two code paths.
-      const rawTx = serializeTransaction(tx);
-      const txid = hashTransaction(tx);
-
-      // Broadcast via SPV client (P2P). REQUIRES at least one peer received the
-      // `tx` message; otherwise the transaction never reached the network and
-      // we MUST NOT mark inputs as spent or pretend the send succeeded (H-1).
-      // Without this gate the wallet would silently desync from the network:
-      // UTXOs locally spent but still spendable by anyone else on chain.
-      if (!localSpvClient) {
-        throw new Error('Wallet is offline. Connect to peers before sending a transaction.');
-      }
-      const broadcast = localSpvClient.broadcastTransaction(rawTx);
-      if (broadcast.peerCount === 0) {
-        throw new Error(
-          'No peers available to relay the transaction. Try again once the wallet is connected.',
-        );
-      }
-
-      // Mark UTXOs as spent locally. The spend is unconfirmed (height -1) until
-      // it lands in a block; recording the spending txid lets a reorg undo it.
-      for (const input of tx.inputs) {
-        await localDatabase.markUTXOSpent(input.txid, input.vout, txid, -1);
-        if (localUtxoSet) {
-          localUtxoSet.spend(input.txid, input.vout);
-        }
-      }
-
-      // Persist the transaction record. Persist the REAL fee derived from
-      // inputs - outputs (selection.fee), not a re-estimate against the
-      // serialized size — selection already computed exactly what the
-      // transaction pays, so the history row matches the on-chain fee (M-1).
-      const now = Math.floor(Date.now() / 1000);
-      await localDatabase.insertTransaction({
-        txid,
-        raw_hex: bytesToHex(rawTx),
-        block_height: -1,
-        block_hash: '',
-        timestamp: now,
-        fee: Number(selection.fee),
-        confirmed: 0,
-      });
+      // Broadcast (P2P, at least one peer — H-1), mark the inputs spent and
+      // persist the row with the REAL fee selection computed (M-1).
+      const { txid, timestamp: now } = await broadcastAndRecord(
+        tx,
+        selection.fee,
+        localSpvClient,
+        localDatabase,
+        localUtxoSet,
+      );
 
       // Update UI state. A multi-recipient send is ONE history row for its
       // total, shown against its first recipient; the SPV history replaces it
@@ -2679,6 +3076,139 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       coinControl: get().selectedUTXOs,
       dustThreshold: networkConfig?.minRelayFee,
     });
+  },
+
+  planPreviousKeyMove: (feeRate: number) => {
+    // A device whose key is not the account's current one would move the
+    // coins onto a replaced key: add the current key in Commons first.
+    if (get().socialReceiveKeyMismatch) return { kind: 'blocked' } as const;
+    const candidates =
+      utxoSet && keyManager && !keyManager.isWatchOnly()
+        ? previousKeyCoins(
+            utxoSet.getAllUTXOs().filter((u) => !utxoReservation.has(u.txid, u.vout)),
+            previousKeyOf,
+          )
+        : [];
+    return planPreviousKeyMove({
+      coins: candidates,
+      feePerByte: feeRate,
+      dustThreshold: networkConfig?.minRelayFee ?? 0n,
+    });
+  },
+
+  movePreviousKeyFunds: async (feeRate: number): Promise<string> => {
+    // An explicit, prominent prompt, never automatic (ADR 0002, amended
+    // 2026-11-06): a move spends a fee and the person should see it happen;
+    // after a rotation forced by a compromise it must happen AT ONCE, because
+    // whoever else holds the previous key can spend these coins too — the
+    // move races them, and the prompt says so.
+    const plan = get().planPreviousKeyMove(feeRate);
+    if (plan.kind !== 'ready') {
+      const message =
+        plan.kind === 'blocked'
+          ? 'Add your current key in Commons before moving these funds'
+          : plan.kind === 'dust'
+            ? 'These funds would not cover the network fee'
+            : 'Nothing to move yet: funds under a previous key move once confirmed';
+      set({ error: message });
+      throw new Error(message);
+    }
+    set({ loading: true, error: null });
+    // Local snapshots, as `sendToRecipients`: a lock mid-send defers its
+    // teardown until `finally`, so keys are never wiped mid-signing (N-2).
+    const localKeyManager = keyManager;
+    const localDatabase = database;
+    const localNetworkConfig = networkConfig;
+    const localSpvClient = spvClient;
+    const localUtxoSet = utxoSet;
+    const localReservation = utxoReservation;
+    let reservedHere: { txid: string; vout: number }[] = [];
+    let sendStarted = false;
+    try {
+      if (!localKeyManager || !localDatabase || !localNetworkConfig) {
+        throw new Error('Wallet not initialized');
+      }
+      sendInFlight = true;
+      sendStarted = true;
+      const outpoints = plan.inputs.map((utxo) => ({ txid: utxo.txid, vout: utxo.vout }));
+      if (localReservation.reserve(outpoints) !== null) {
+        throw new Error('Selected coins are being spent by another transaction in progress');
+      }
+      reservedHere = outpoints;
+
+      // A FRESH address of the current key's wallet, persisted like any
+      // receive address so the next open still watches it.
+      const destination = localKeyManager.getNextAddress();
+      await localDatabase.insertAddress(
+        destination.address,
+        destination.path,
+        destination.index,
+        false,
+      );
+      if (localSpvClient) {
+        localSpvClient.setBloomFilter(buildCombinedBloomFilterHashes(localKeyManager));
+      }
+      // One output, no change: the builder's no-change fee is the plan's.
+      const tx = buildTransaction({
+        utxos: plan.inputs.map((utxo) => ({
+          txid: utxo.txid,
+          vout: utxo.vout,
+          value: utxo.value,
+          scriptPubKey: utxo.scriptPubKey,
+        })),
+        recipients: [{ address: destination.address, value: plan.amount }],
+        changeAddress: destination.address,
+        feePerByte: BigInt(feeRate),
+        network: localNetworkConfig,
+      });
+      for (let i = 0; i < tx.inputs.length; i++) {
+        const input = tx.inputs[i];
+        const utxo = plan.inputs.find((u) => u.txid === input?.txid && u.vout === input?.vout);
+        if (!input || !utxo) throw new Error(`UTXO not found for input ${String(i)}`);
+        tx.inputs[i] = {
+          ...input,
+          scriptSig: await signInputForAddress(localKeyManager, tx, i, utxo, localNetworkConfig),
+        };
+      }
+      const { txid, timestamp } = await broadcastAndRecord(
+        tx,
+        plan.fee,
+        localSpvClient,
+        localDatabase,
+        localUtxoSet,
+      );
+      set((state) => ({
+        transactions: [
+          {
+            txid,
+            amount: -plan.fee,
+            address: destination.address,
+            timestamp,
+            confirmations: 0,
+            type: 'send' as const,
+          },
+          ...state.transactions,
+        ],
+        loading: false,
+        addresses: [...state.addresses, destination.address],
+      }));
+      publishBalance(set);
+      return txid;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Transaction failed';
+      set({ loading: false, error: msg });
+      throw new Error(msg);
+    } finally {
+      localReservation.release(reservedHere);
+      if (sendStarted) {
+        sendInFlight = false;
+        if (pendingLockTeardown) {
+          const teardown = pendingLockTeardown;
+          pendingLockTeardown = null;
+          teardown();
+        }
+      }
+    }
   },
 
   hasWallet: async (): Promise<boolean> => {

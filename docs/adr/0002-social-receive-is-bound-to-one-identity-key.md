@@ -12,6 +12,9 @@
   and the registered-xpub path is removed, so every rule below binds them too.
   **Amended 2026-11-06 (below):** every address records its key, a payment
   under a replaced key is never offered again, and keys are resolved fresh.
+  **Amended 2026-11-06 ("previous keys stay spendable", below):** coins
+  received under a previous key stay spendable from Peable, and the wallet
+  offers to move them to the current key.
 
 ## Context
 
@@ -41,7 +44,11 @@ nobody having paid:
 
 **One key, everywhere, and every side states which one.** No second address
 tree, no sweeping funds out of a previous key, no "which key was this?"
-heuristics.
+heuristics. *(The first two are superseded for SPENDING by the amendment
+"previous keys stay spendable" below: payers are still only ever handed
+addresses of the one current key, but the wallet signs for, and offers to
+move, what a previous key received. No heuristic was added — every address
+names its key.)*
 
 - **Oxy** (`@oxy.so/core`): a rotation writes the shared slot too, before the
   primary, so a crash between the two writes leaves the money path on the
@@ -74,13 +81,16 @@ heuristics.
   cursor is a counter, not money — reservations live in
   `social_send_attributions` — and Peable has no users, so what it clears is
   test counters whose key is not recoverable from anything stored.
-- **Rotating an identity key still leaves behind whatever was received under the
+- ~~**Rotating an identity key still leaves behind whatever was received under the
   previous one.** Social-receive addresses are a function of the key, so funds
   paid before a rotation are spendable only from the previous recovery phrase.
   Nothing here changes that, and no code pretends otherwise; with no users and
   no funds it is recorded rather than engineered around. When there is money at
   stake the honest fix is to say so before the rotation ("move your funds first,
-  keep the previous phrase"), not to silently maintain two trees.
+  keep the previous phrase"), not to silently maintain two trees.~~
+  *Superseded 2026-11-06 by "previous keys stay spendable" (below): Commons
+  keeps the replaced key and Peable spends from it, then moves it to the
+  current key.*
 
 ## Amendment (2026-11-06): every address is bound to its key
 
@@ -128,13 +138,15 @@ its key with the cursor's last-recorded one.
   *Why settle rather than hold or cancel:* the payer paid exactly the address
   Peable handed out, the transaction is final, and Peable holds nothing it
   could return. The coins are at an address of the recipient's PREVIOUS key —
-  spendable with that key's phrase, by whoever still has it. Withholding
+  spendable with that key, by whoever still has it (since "previous keys stay
+  spendable" below, from the recipient's own Peable wallet whenever Commons
+  kept the key or the previous phrase is added there). Withholding
   `succeeded` would leave a completed payment in a state nothing resolves and
   move no coin; canceling it would tell the payer they did not pay. What must
   not happen is saying so silently: the stamp is what lets the merchant decide
-  about fulfilment and the recipient recover the funds with the previous phrase
+  about fulfilment and the recipient recover the funds under the previous key
   (or, for an organization, treat the former key holder as having received
-  them).
+  them — they hold that key too).
 - **The wallet compares against the published key.** `GET /v1/social/me/cursor`
   also answers `account_identity_public_key`: the caller's current `#key-1`, read
   fresh, in the same encoding as `identity_public_key` (which stays the key of
@@ -237,6 +249,99 @@ another order, and a lifetime budget of 1 979 used addresses per recipient:
 
 The design, the wallet's tiers and the abuse bound are ADR 0021 D9.
 
+## Amendment (2026-11-06): previous keys stay spendable
+
+The owner's decision (2026-11-06, "Fix F5, F1 and D9", and explicitly for F1:
+after a personal key rotation or an organization key replacement, coins
+received under the previous key must remain spendable from Peable). It closes
+mainnet gate finding F1's residual — "no path in Peable to spend from a
+previous phrase; funds not moved before rotating are recoverable only outside
+Peable" — and replaces F8's stranded line with a path.
+
+**Where the key comes from (the oxy half).** Commons keeps a replaced private
+key on the device in a per-account ring — the person's, and one per
+organization — on a rotation (`oxy.identity.rotateKey`), on an organization
+key replacement, and when the person adds a previous recovery phrase
+(personal: Backup & recovery → Previous keys; organization: "Add the key you
+were given", which accepts a previous phrase too, and only when Oxy's key
+history names it as one of the account's retired keys). A retired key never
+signs in, publishes, receives a new reservation or rotates. Peable reaches
+it exactly as it reaches the current key — by derivation, never by export —
+through the `publicKey` selector of `KeyManager.deriveScopedSeed` and
+`KeyManager.signSocialReceive`, which answer for the account's key whose
+public key that is (current or retired) and `null`, never another key, when
+this device cannot reach it. On Android the answer comes from Commons'
+identity host (wallet only), on iOS from the keychain group. That half is oxy
+ADR 0061 D7 as amended 2026-11-06 and `@oxy.so/core` `crypto/retiredKeys.ts`.
+
+**Which keys.** Every address the gateway handed out records the key it
+derives from (`identity_public_key` on `GET /v1/social/me/receive_addresses`,
+ADR 0021 D9), and the wallet stores every row with its key. A previous key is
+any recorded key, canonicalised (compressed and uncompressed are one key),
+that is neither the key this device's wallet derives from nor the account's
+published `#key-1`. Commons' own list (`listRetiredIdentityKeys`) is added as
+a hint only — it is how a key that only ever received to its HD tree is found
+— and never the authority (`packages/frontend/src/wallet/previous-keys.ts`,
+`groupPreviousKeys`).
+
+**Reachable keys are spendable, through the one dispatch.** For each previous
+key the wallet asks `deriveScopedSeed(PEABLE_SEED_INFO, { accountId?,
+publicKey })`. A seed means the key is reachable: it builds that key's HD tree
+(the Pocket's account, like the current one) and zeroes the seed at once;
+nothing is persisted but the key's public half and its tree's cursors
+(`previous_key_trees`). The tree joins the Bloom filter with its gap window;
+its social-receive rows join D9's tiers (active, or read through the Explorer
+on the doubling schedule). A newly reached tree is first advanced over what
+the device already stored, then discovered through the Explorer by gap limit
+(a spent-out address counts as used), and the rescan is sent back to its
+lowest unspent coin — or, when the Explorer cannot tell (testnet's
+index-less node), to the wallet's birthday, which is how a restored HD
+wallet discovers. Every send signs input by input with the key that owns it
+(`signWalletInput`): the current or a previous tree locally, a social-receive
+address by the holder with `{ publicKey }` for a previous key. A transaction
+mixing current-HD, previous-HD and previous-social inputs is tested input by
+input against the right public key.
+
+**In the balance, named apart.** Reachable previous-key coins are in
+`balance` — a send can sign for them, so leaving them out would make Send's
+Max exceed the balance shown — and selectable like any other. F8's rule is
+unchanged and still enforced: the balance never includes a coin the wallet
+cannot sign for. `previousKeyBalance` names the part under a previous key, and
+the home screen shows it on its own card with the move.
+
+**Move to the current key: an explicit, prominent prompt, not automatic.**
+Whenever previous-key coins exist the home screen says how much, that anyone
+else who holds the previous key can spend them too, and — for a rotation done
+because the key or phrase may have been exposed — to move them now. One tap,
+then a confirmation with the amount and the network fee, moves every
+confirmed previous-key coin to a fresh address of the current key in one
+transaction with no change (`planPreviousKeyMove`; fee as for any send; what
+would not exceed the dust threshold after the fee is refused as not worth
+moving). It is not automatic because a move spends a fee the person did not
+choose and would surprise them; it is prominent and repeated because after a
+compromise it must happen at once. It is refused while this device's key is
+not the account's current one (the move would land on a replaced key).
+
+**Unreachable keys keep F8's exclusion, with a path.** Coins under a previous
+key this device cannot reach stay out of the balance and are never selected,
+and the line now says how to spend them here: add your previous recovery
+phrase in Commons (personal) / add the organization's previous phrase in
+Commons (organization). The wallet asks again on its refresh interval, on
+foreground and on a push, so a key added in Commons is reached within minutes.
+No copy says the coins are recoverable only outside Peable.
+
+**What this cannot fix, recorded honestly.** A retained key that was
+compromised is also the attacker's. Keeping it makes the coins under it
+spendable from Peable again; it cannot make them safe. The move to the current
+key races whoever else holds the previous key — for an organization, a
+departed admin who kept the phrase — and that race is inherent to a key that
+leaked, not something code can win in advance. Also recorded: a previous
+key's social-receive row first synced while the wallet is open is watched from
+the next open; a previous key's other Pockets are discovered when that Pocket
+is opened; the web build has no keys and so nothing to move; and none of this
+has been verified on a physical device (item (3) of the gate, waived by the
+owner, still undone).
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second
@@ -291,7 +396,12 @@ waiver does not touch the other two items: the gate opens only on a
   are in the audit record.
   **The last two were closed the same day** by the sparse watch set (amendment
   above, ADR 0021 D9): no address is recycled and no recipient has a lifetime
-  budget, so they need no acceptance; the other three still do.
+  budget, so they need no acceptance. **F1 was fixed in code the same day**
+  ("previous keys stay spendable", above): Peable spends from a previous key
+  Commons kept or the person added, and offers to move it to the current key.
+  That fix has not been re-reviewed or verified on a device, so whether the
+  review still asks for an F1 acceptance is the review's call. F5 and F9 still
+  need the owner's acceptance.
 - **Gate: closed** until those acceptances are written down here. Production
   leaves `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet), and the wallet's
   `SOCIAL_PAY_NETWORK` stays `testnet`.
