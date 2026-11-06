@@ -204,3 +204,29 @@ export function planRescan(
 
   return { startHeight: start, resumeFrom: start, targetHeight: chainTip };
 }
+
+/**
+ * Send a scan back to `fromHeight`, because an address joined the Bloom filter
+ * after the scan had already passed a block that pays it (the social-receive
+ * window grew to an index a payer was given earlier). Pure.
+ *
+ * Returns `persisted` unchanged when the scan has not reached `fromHeight` yet
+ * (it gets there with the current filter), and `null` when no scan has ever
+ * run (the first one starts from the birthday and covers it).
+ */
+export function rewindRescanProgress(
+  persisted: RescanProgress | null,
+  fromHeight: number,
+  chainTip: number,
+): RescanProgress | null {
+  if (!persisted) return null;
+  const from = Math.max(0, fromHeight);
+  const resumeAt = persisted.completed ? persisted.targetHeight + 1 : persisted.nextHeight;
+  if (from >= resumeAt) return persisted;
+  return {
+    startHeight: Math.min(persisted.startHeight, from),
+    nextHeight: from,
+    targetHeight: Math.max(persisted.targetHeight, chainTip),
+    completed: false,
+  };
+}

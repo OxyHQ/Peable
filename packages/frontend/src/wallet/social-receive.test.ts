@@ -61,7 +61,11 @@ const {
   getIdentityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
   signSocialReceiveInput,
-  computeWindowExtension,
+  SOCIAL_RECEIVE_MAX_WATCHED,
+  highestIndex,
+  planSocialReceiveWindow,
+  judgeSocialReceiveKey,
+  accountKeyFromDidDocument,
 } = await import('./social-receive');
 
 const TESTNET = getNetwork('testnet');
@@ -220,27 +224,170 @@ describe('signSocialReceiveInput', () => {
   });
 });
 
-describe('computeWindowExtension', () => {
-  test('no extension needed when the watched window already covers the gap limit', () => {
-    // Nothing used yet (highestUsedIndex -1), window already covers 0..19.
-    expect(computeWindowExtension(19, -1, 20)).toBeNull();
+describe('planSocialReceiveWindow', () => {
+  const plan = (highestWatched: number, highestUsed: number, highestReserved = -1) =>
+    planSocialReceiveWindow({ highestWatched, highestUsed, highestReserved });
+
+  test('first boot watches the gap limit from 0', () => {
+    expect(plan(-1, -1)).toEqual({ extension: { start: 0, count: 20 }, capped: false });
   });
 
-  test('extends when the highest used index approaches the edge of the watched window', () => {
-    // Used up to index 5, watched only up to 19 -> target = 5 + 20 = 25, extend 20..25.
-    const extension = computeWindowExtension(19, 5, 20);
-    expect(extension).toEqual({ start: 20, count: 6 });
+  test('nothing to do while the window already covers the gap past every use', () => {
+    expect(plan(19, -1)).toEqual({ extension: null, capped: false });
   });
 
-  test('extends from an empty window (first boot)', () => {
-    const extension = computeWindowExtension(-1, -1, 20);
-    expect(extension).toEqual({ start: 0, count: 20 });
+  test('a payment near the edge restores the full gap', () => {
+    expect(plan(19, 5)).toEqual({ extension: { start: 20, count: 6 }, capped: false });
+    expect(plan(19, 0)).toEqual({ extension: { start: 20, count: 1 }, capped: false });
   });
 
-  test('extends by exactly the amount needed to restore the full gap limit', () => {
-    // Used index 0 immediately after a 20-wide initial window (0..19):
-    // target = 0 + 20 = 20, watched already covers up to 19 -> extend by 1 (index 20).
-    const extension = computeWindowExtension(19, 0, 20);
-    expect(extension).toEqual({ start: 20, count: 1 });
+  // The F3 scenario: 21 abandoned FairCoin checkouts reserved 1..21 and none
+  // was paid. The window must reach 21 + gap so the 22nd — a real payment —
+  // lands on a watched address.
+  test('reaches the gap past the highest RESERVED index, paid or not', () => {
+    expect(plan(19, -1, 21)).toEqual({ extension: { start: 20, count: 22 }, capped: false });
+  });
+
+  // F4: a cursor of a million must not derive a million addresses, nor crash.
+  test('a huge cursor is bounded, and says so', () => {
+    const result = plan(19, -1, 1_000_000);
+    expect(result.capped).toBe(true);
+    expect(result.extension).toEqual({ start: 20, count: SOCIAL_RECEIVE_MAX_WATCHED - 20 });
+    expect(plan(SOCIAL_RECEIVE_MAX_WATCHED - 1, -1, 1_000_000)).toEqual({
+      extension: null,
+      capped: true,
+    });
+  });
+
+  test('capped once the gap would reach past the bound, before an index is lost', () => {
+    const lastWatched = SOCIAL_RECEIVE_MAX_WATCHED - 1;
+    expect(plan(lastWatched, -1, lastWatched - 20).capped).toBe(false);
+    expect(plan(lastWatched, -1, lastWatched - 19).capped).toBe(true);
+  });
+});
+
+describe('highestIndex', () => {
+  test('is -1 for nothing', () => {
+    expect(highestIndex([])).toBe(-1);
+    expect(highestIndex(new Map<string, number>().values())).toBe(-1);
+  });
+
+  // `Math.max(-1, ...values)` threw RangeError here: the spread passes every
+  // entry as an argument, and the stack runs out (V8 100k-200k, Hermes lower).
+  test('handles a window of millions without overflowing the stack', () => {
+    const big = new Map<string, number>();
+    for (let i = 0; i < 1_000_000; i++) big.set(`a${String(i)}`, i);
+    expect(highestIndex(big.values())).toBe(999_999);
+  });
+});
+
+describe('judgeSocialReceiveKey', () => {
+  const OTHER_PUB = bytesToHex(getPublicKey(hexToBytes('dd'.repeat(32)), false));
+
+  test("matches the account's published key, whatever its encoding", () => {
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: IDENTITY_PUB_A,
+        lastReservedKey: null,
+      }),
+    ).toBe('match');
+  });
+
+  // F7: a rotation done on another device. The cursor's LAST reservation used
+  // key A, the account now publishes B, and this phone still holds A: the next
+  // reservation derives from B, so this phone must stop offering @username.
+  test('the PUBLISHED key decides, not the key the last reservation used', () => {
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: OTHER_PUB,
+        lastReservedKey: IDENTITY_PUB_A,
+      }),
+    ).toBe('mismatch');
+    // And the reverse: this phone holds the NEW key; the last reservation was
+    // under the old one. New reservations derive from this phone's key.
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: IDENTITY_PUB_A,
+        lastReservedKey: OTHER_PUB,
+      }),
+    ).toBe('match');
+  });
+
+  test('an account that publishes no key is not this device', () => {
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: null,
+        lastReservedKey: null,
+      }),
+    ).toBe('mismatch');
+  });
+
+  test('a published key that does not parse is not this device', () => {
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: 'not-a-key',
+        lastReservedKey: null,
+      }),
+    ).toBe('mismatch');
+  });
+
+  test('without the published key, falls back to the last reservation (older gateway)', () => {
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: undefined,
+        lastReservedKey: OTHER_PUB,
+      }),
+    ).toBe('mismatch');
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: undefined,
+        lastReservedKey: IDENTITY_PUB_A,
+      }),
+    ).toBe('unverified');
+    expect(
+      judgeSocialReceiveKey({
+        deviceKey: IDENTITY_PUB_A_COMPRESSED,
+        accountKey: undefined,
+        lastReservedKey: null,
+      }),
+    ).toBe('unverified');
+  });
+});
+
+describe('accountKeyFromDidDocument', () => {
+  const method = (
+    id: string,
+    publicKeyHex: string,
+    type = 'EcdsaSecp256k1VerificationKey2019',
+  ) => ({
+    id,
+    type,
+    controller: 'did:oxy:x',
+    publicKeyHex,
+  });
+
+  test('takes #key-1 by NAME, not the first secp256k1 method listed', () => {
+    expect(
+      accountKeyFromDidDocument({
+        verificationMethod: [method('did:oxy:x#key-2', 'bb'), method('did:oxy:x#key-1', 'aa')],
+      }),
+    ).toBe('aa');
+  });
+
+  test('is null for a keyless account', () => {
+    expect(accountKeyFromDidDocument({ verificationMethod: [] })).toBeNull();
+    expect(accountKeyFromDidDocument({})).toBeNull();
+    expect(
+      accountKeyFromDidDocument({
+        verificationMethod: [method('did:oxy:x#key-1', 'aa', 'Ed25519VerificationKey2020')],
+      }),
+    ).toBeNull();
   });
 });

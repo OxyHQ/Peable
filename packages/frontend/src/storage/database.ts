@@ -1035,6 +1035,56 @@ export class Database {
    */
   async clearSocialReceiveAddresses(): Promise<void> {
     await this.db.runAsync('DELETE FROM social_receive_addresses');
+    // A fresh window has not been looked at yet, whatever the old one was.
+    await this.db.runAsync("DELETE FROM schema_meta WHERE key = 'social_receive_checked_through'");
+  }
+
+  /**
+   * Every social-receive index up to and including this one has been checked
+   * for coins paid BEFORE it joined the Bloom filter (an Explorer read, or a
+   * historical rescan that had not begun yet). -1 when none has.
+   */
+  async getSocialReceiveCheckedThrough(): Promise<number> {
+    const row = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'social_receive_checked_through'",
+    );
+    const value = row ? Number(row.value) : -1;
+    return Number.isSafeInteger(value) ? value : -1;
+  }
+
+  async setSocialReceiveCheckedThrough(index: number): Promise<void> {
+    await this.db.runAsync(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('social_receive_checked_through', ?)",
+      String(index),
+    );
+  }
+
+  /**
+   * The lowest block height the historical rescan still has to go back to,
+   * or `null`. Kept apart from `rescan_state`, which a running scan rewrites
+   * after every window: the driver folds this in when no scan is running.
+   */
+  async getPendingRescanFrom(): Promise<number | null> {
+    const row = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'pending_rescan_from'",
+    );
+    if (!row) return null;
+    const value = Number(row.value);
+    return Number.isSafeInteger(value) ? value : null;
+  }
+
+  /** Record `height`, keeping the lower of it and any height already pending. */
+  async requestRescanFrom(height: number): Promise<void> {
+    const pending = await this.getPendingRescanFrom();
+    const lowest = pending === null ? height : Math.min(pending, height);
+    await this.db.runAsync(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('pending_rescan_from', ?)",
+      String(lowest),
+    );
+  }
+
+  async clearPendingRescanFrom(): Promise<void> {
+    await this.db.runAsync("DELETE FROM schema_meta WHERE key = 'pending_rescan_from'");
   }
 
   // -----------------------------------------------------------------------

@@ -174,8 +174,12 @@ function delay(ms: number): Promise<void> {
 export async function handleIncomingPush(data: { txid: string; event: string }): Promise<void> {
   const settings = require('./notification-settings') as typeof import('./notification-settings');
   const notifications = require('./notifications') as typeof import('./notifications');
-  const { useWalletStore, getActiveWalletAddresses } =
+  const { useWalletStore, getActiveWalletAddresses, requestSocialReceiveResync } =
     require('../wallet/wallet-store') as typeof import('../wallet/wallet-store');
+  // A payment notice means someone paid, or is paying, this person — and
+  // whoever paid by @username was handed a new address first. Re-read the
+  // cursor so the window covers it, whatever this push turns out to be.
+  requestSocialReceiveResync();
   const { normalizeServerUrl } =
     require('./notification-server') as typeof import('./notification-server');
 

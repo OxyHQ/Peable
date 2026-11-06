@@ -11,9 +11,9 @@
  *
  * The address derivation is `@fairco.in/core`'s published primitive
  * (`deriveSocialReceiveAddress`) — generic secp256k1 crypto with no Oxy
- * dependency. Also owns the gap-limit-extension math as a pure function, kept
- * here (not in `wallet-store.ts`) so it stays directly unit-testable without
- * any SQLite or SPV setup.
+ * dependency. Also owns the window math and the key comparison as pure
+ * functions, kept here (not in `wallet-store.ts`) so they stay directly
+ * unit-testable without any SQLite or SPV setup.
  */
 import {
   SIGHASH_ALL,
@@ -147,26 +147,142 @@ export async function signSocialReceiveInput(
 }
 
 /**
- * Decide whether the persisted, watched social-receive window needs to grow,
- * and if so, which NEW indices to derive — pure, no I/O. Called after
- * persisting a newly-used address; the caller derives + persists whatever
- * this returns and refreshes the Bloom filter if it returns non-null.
+ * The most social-receive indices this device watches: `0 .. MAX - 1`.
  *
- * @param highestWatchedIndex The highest index currently derived+persisted,
- *   or -1 if none yet.
- * @param highestUsedIndex The highest index a real payment has landed on, or
- *   -1 if none yet.
- * @param gapLimit {@link SOCIAL_RECEIVE_GAP_LIMIT} in production; injectable
- *   for tests.
+ * Every index the gateway hands out is watched forever (a paid address can be
+ * paid again), so the window only grows. It has to stop somewhere: each index
+ * is an elliptic-curve derivation, a row, a Bloom-filter entry (the filter
+ * caps at 36,000 bytes, ~15,000 entries at its false-positive rate, and
+ * saturates beyond) and, the first time, an Explorer read. Past the bound the
+ * wallet says so ({@link SocialReceiveWindowPlan.capped}) rather than pretend
+ * it still watches what payers are sent to.
  */
-export function computeWindowExtension(
-  highestWatchedIndex: number,
-  highestUsedIndex: number,
-  gapLimit: number,
-): { start: number; count: number } | null {
-  const target = highestUsedIndex + gapLimit;
-  if (target <= highestWatchedIndex) {
-    return null;
+export const SOCIAL_RECEIVE_MAX_WATCHED = 2_000;
+
+/**
+ * The highest of `values`, or -1 when there is none. A loop, never
+ * `Math.max(...values)`: spreading a large collection into arguments throws
+ * `RangeError: Maximum call stack size exceeded` (V8 between 100k and 200k
+ * entries, JSC near 1M, Hermes lower), and a large cursor must never be what
+ * stops a wallet from opening.
+ */
+export function highestIndex(values: Iterable<number>): number {
+  let highest = -1;
+  for (const value of values) {
+    if (value > highest) highest = value;
   }
-  return { start: highestWatchedIndex + 1, count: target - highestWatchedIndex };
+  return highest;
+}
+
+export interface SocialReceiveWindowPlan {
+  /** The indices to derive and watch next, or `null` when none. */
+  readonly extension: { start: number; count: number } | null;
+  /**
+   * True when the gateway has handed out (or is within the gap of handing
+   * out) indices beyond {@link SOCIAL_RECEIVE_MAX_WATCHED}: a payment to one
+   * of them would not reach this wallet, so `@username` must not be offered.
+   */
+  readonly capped: boolean;
+}
+
+/**
+ * How far the watch window should reach — `SOCIAL_RECEIVE_GAP_LIMIT` past the
+ * highest index either PAID (seen on chain) or RESERVED (the gateway's cursor)
+ * — bounded by `maxWatched`. Pure.
+ *
+ * @param highestReserved The cursor's `reserved_through`, or -1 when nothing
+ *   was reserved (the endpoint's `0` sentinel: index 0 is the stable default
+ *   address and is never handed out by `next_address`).
+ */
+export function planSocialReceiveWindow(input: {
+  readonly highestWatched: number;
+  readonly highestUsed: number;
+  readonly highestReserved: number;
+  readonly gapLimit?: number;
+  readonly maxWatched?: number;
+}): SocialReceiveWindowPlan {
+  const gapLimit = input.gapLimit ?? SOCIAL_RECEIVE_GAP_LIMIT;
+  const maxWatched = input.maxWatched ?? SOCIAL_RECEIVE_MAX_WATCHED;
+  const ceiling = maxWatched - 1;
+  const wanted = Math.max(input.highestUsed, input.highestReserved) + gapLimit;
+  const target = Math.min(wanted, ceiling);
+  const extension =
+    target > input.highestWatched
+      ? { start: input.highestWatched + 1, count: target - input.highestWatched }
+      : null;
+  return { extension, capped: wanted > ceiling };
+}
+
+/**
+ * Whether this device's key is the one payers are sent to:
+ *
+ *   match       the account publishes this device's key as its `#key-1`
+ *   mismatch    it publishes another key, or none: every address the gateway
+ *               hands out belongs to a tree this wallet cannot see (ADR 0002)
+ *   unverified  the published key could not be read; the cursor's last
+ *               recorded key did not contradict this device
+ */
+export type SocialReceiveKeyVerdict = 'match' | 'mismatch' | 'unverified';
+
+/**
+ * Judge the device's key against the account's PUBLISHED key — the one the
+ * gateway derives the NEXT reservation from — and only when that cannot be
+ * read, against the key the cursor's LAST reservation used. The last-recorded
+ * key is history: after a rotation done on another device it still names the
+ * old key, and a phone holding that old key would keep offering `@username`
+ * while every new payment derives from the new one.
+ *
+ * @param accountKey The account's `#key-1` (any encoding), `null` when it
+ *   publishes none, `undefined` when it could not be read.
+ * @param lastReservedKey The cursor's `identity_public_key`.
+ */
+export function judgeSocialReceiveKey(input: {
+  readonly deviceKey: string;
+  readonly accountKey: string | null | undefined;
+  readonly lastReservedKey: string | null;
+}): SocialReceiveKeyVerdict {
+  const device = compressedPublicKeyHex(input.deviceKey);
+  if (input.accountKey !== undefined) {
+    if (input.accountKey === null) return 'mismatch';
+    return sameKey(input.accountKey, device) ? 'match' : 'mismatch';
+  }
+  if (input.lastReservedKey !== null && !sameKey(input.lastReservedKey, device)) {
+    return 'mismatch';
+  }
+  return 'unverified';
+}
+
+/** A key that does not parse is not this device's key. */
+function sameKey(candidate: string, deviceCompressed: string): boolean {
+  try {
+    return compressedPublicKeyHex(candidate) === deviceCompressed;
+  } catch {
+    return false;
+  }
+}
+
+const SECP256K1_VERIFICATION_METHOD_TYPE = 'EcdsaSecp256k1VerificationKey2019';
+const ACCOUNT_KEY_FRAGMENT = '#key-1';
+
+/**
+ * The account's own key from its DID document: the secp256k1 method named
+ * `#key-1`, exactly as the gateway's `resolveIdentityPublicKey` takes it (by
+ * NAME, never the first one listed). `null` when the document lists none.
+ */
+export function accountKeyFromDidDocument(document: {
+  readonly verificationMethod?: readonly unknown[];
+}): string | null {
+  for (const entry of document.verificationMethod ?? []) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const method = entry as { id?: unknown; type?: unknown; publicKeyHex?: unknown };
+    if (
+      method.type === SECP256K1_VERIFICATION_METHOD_TYPE &&
+      typeof method.id === 'string' &&
+      method.id.endsWith(ACCOUNT_KEY_FRAGMENT) &&
+      typeof method.publicKeyHex === 'string'
+    ) {
+      return method.publicKeyHex;
+    }
+  }
+  return null;
 }
