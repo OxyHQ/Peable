@@ -1,5 +1,28 @@
 # Changelog
 
+## 5.4.0 — a recipient's FairCoin addresses are bounded
+
+Requires `@peable.to/contracts` 5.4.0 and `@peable.to/shared-types` 5.4.0 (ADR 0021 D9, D10).
+
+Changed:
+
+- `paymentIntents.create`: `expires_in_seconds` is at most `86400` (24 hours); a
+  larger value is a 400 naming the parameter. A FairCoin payment holds an
+  address in the recipient's wallet for as long as it is payable.
+- `merchants.register`: a live (mainnet) merchant that names no
+  `required_confirmations` gets 6 (was 1); testnet keeps 1.
+- `temporarily_unavailable` (an order's or a configuration's FairCoin
+  `unavailable_reason`) also means every address the recipient can hold open is
+  open; FairCoin frees up as unpaid payments expire.
+
+Added:
+
+- Error code `faircoin_capacity_reached` (503): too many FairCoin payments to
+  this recipient are waiting to be paid; the other methods still work.
+  `PeableSheetCheckout` shows it as FairCoin temporarily unavailable.
+- `POST /v1/social/:username/next_address`: a sender that has not paid the
+  address it holds for a recipient is handed that address again.
+
 ## 5.3.0 — every payer surface speaks the sheet's fifteen languages
 
 Requires `@peable.to/contracts` 5.3.0 and `@peable.to/shared-types` 5.3.0.

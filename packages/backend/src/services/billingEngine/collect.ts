@@ -60,6 +60,7 @@ import { confirmCardIntent } from '../confirmIntent';
 import { createIntent } from '../createIntent';
 import { retireIfRecipientKeyReplaced } from '../faircoin/keyBinding';
 import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
+import { FaircoinCapacityError } from '../faircoin/addressPool';
 import { announceIntentChange, transitionIntent, transitionIntentIn } from '../intentTransition';
 import {
   type FaircoinQuote,
@@ -292,6 +293,15 @@ async function createInvoiceIntent(
         error.message,
         'payment_method_type',
         409,
+      );
+    }
+    // Every address the recipient can hold open is open (ADR 0021 D9).
+    if (error instanceof FaircoinCapacityError) {
+      throw new BillingEngineError(
+        'faircoin_capacity_reached',
+        error.message,
+        'payment_method_type',
+        503,
       );
     }
     throw error;

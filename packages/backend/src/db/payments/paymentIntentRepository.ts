@@ -316,6 +316,8 @@ export interface InsertFaircoinOutputParams {
   readonly address: string;
   /** The recipient's identity key the address was derived from, read fresh at the reservation. */
   readonly identityPublicKey: string;
+  /** The index on the recipient's cursor `address` derives at (ADR 0021 D9). */
+  readonly derivationIndex: number;
   readonly amount: string;
 }
 
@@ -341,6 +343,7 @@ export async function insertFaircoinOutputs(
       network,
       recipientAccountId: output.recipientAccountId,
       address: output.address,
+      derivationIndex: output.derivationIndex,
       amount: output.amount,
       identityPublicKey: output.identityPublicKey,
     })),
@@ -828,7 +831,10 @@ export async function findIntentsByAddresses(
     .select(INTENT_COLUMNS)
     .from(paymentIntents)
     .where(
-      sql`(${inArray(paymentIntents.address, [...addresses])} or ${paymentIntents.id} in (select ${paymentIntentOutputs.paymentIntentId} from ${paymentIntentOutputs} where ${inArray(paymentIntentOutputs.address, [...addresses])}))`,
+      // An intent with outputs is found by an output it still HOLDS (ADR 0021
+      // D9: a recycled address's previous holder is not "this address's
+      // payment" any more); one written before outputs, by its own address.
+      sql`((${inArray(paymentIntents.address, [...addresses])} and not exists (select 1 from ${paymentIntentOutputs} where ${paymentIntentOutputs.paymentIntentId} = ${paymentIntents.id})) or ${paymentIntents.id} in (select ${paymentIntentOutputs.paymentIntentId} from ${paymentIntentOutputs} where ${inArray(paymentIntentOutputs.address, [...addresses])} and ${paymentIntentOutputs.recycledAt} is null))`,
     );
   return rows.map(toIntentRow);
 }
@@ -886,6 +892,35 @@ export async function findKeyBoundFaircoinIntents(
       ),
     )
     .orderBy(paymentIntents.id)
+    .limit(limit);
+  return rows.map(toIntentRow);
+}
+
+/**
+ * SUCCEEDED FairCoin payments still shallow enough for a reorg to undo (ADR
+ * 0021 D10): fewer than `depth` confirmations recorded, settled within
+ * `maxAgeSeconds` (so a row whose count stopped moving is not polled forever),
+ * oldest first, at most `limit` per poll.
+ */
+export async function findSettlingIntents(
+  db: DatabaseOrTransaction,
+  depth: number,
+  maxAgeSeconds: number,
+  limit: number,
+): Promise<PaymentIntentRow[]> {
+  const rows = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.rail, 'faircoin'),
+        eq(paymentIntents.status, 'succeeded'),
+        isNotNull(paymentIntents.txid),
+        lt(paymentIntents.confirmations, depth),
+        sql`${paymentIntents.updatedAt} > now() - (${maxAgeSeconds}::integer * interval '1 second')`,
+      ),
+    )
+    .orderBy(paymentIntents.updatedAt)
     .limit(limit);
   return rows.map(toIntentRow);
 }

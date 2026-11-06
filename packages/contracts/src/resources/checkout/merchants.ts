@@ -97,7 +97,14 @@ const merchantDescription = z.string().min(1).max(512);
  */
 export const registerMerchantParams = z
   .object({
-    required_confirmations: z.number().int().positive().optional(),
+    required_confirmations: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Confirmations a FairCoin payment needs to succeed. Defaults to 6 for a live (mainnet) merchant, 1 on testnet.',
+      ),
     display_name: displayName.optional(),
     avatar_file_id: avatarFileId.optional(),
     description: merchantDescription.optional(),

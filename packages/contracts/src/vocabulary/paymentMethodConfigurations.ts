@@ -45,7 +45,8 @@ export type PaymentMethodConfigurationType = (typeof PAYMENT_METHOD_CONFIGURATIO
  *    received (ADR 0021 D5); the owner sets it up in Peable;
  *  - `faircoin_network_closed` — the deployment does not open the merchant's
  *    FairCoin network yet (ADR 0002's gate);
- *  - `temporarily_unavailable` — the wallet could not be checked just now.
+ *  - `temporarily_unavailable` — the wallet could not be checked just now, or every
+ *    address the recipient can hold open is open (ADR 0021 D9) — try again shortly.
  */
 export const PAYMENT_METHOD_UNAVAILABLE_REASONS = [
   'provider_unsupported',

@@ -21,12 +21,21 @@ import { upsertBranding, upsertEmailSettings } from '../../db/merchants/branding
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 import { findSessionByPublicId } from '../../db/payments/checkoutSessionRepository';
-import { checkoutSessions, coupons, customerEmails, promotionCodes } from '../../db/schema';
+import {
+  checkoutSessions,
+  coupons,
+  customerEmails,
+  paymentIntents,
+  promotionCodes,
+} from '../../db/schema';
 import { newId } from '../../lib/ids';
 import { requestIdMiddleware } from '../../lib/requestId';
 import { reportFaircoinBroadcast } from '../../services/faircoinBroadcast';
 import { simulateFaircoinPayment } from '../../services/testHelpers';
 import { runSessionExpirySweep } from '../../services/checkout/sessionSweeper';
+import { expireSessionNow } from '../../services/checkout/sessionService';
+import { useIdentityKeyResolver } from '../../services/socialReceive';
+import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import { MemoryMailer } from '../../services/email/mailer';
 import { dispatchCustomerEmails } from '../../services/email/dispatcher';
 import { registerSubscriptionCheckoutFulfiller } from '../../services/checkout/subscriptionFulfiller';
@@ -522,6 +531,41 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the payer', () => {
 });
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('confirm and completion', () => {
+  test('a confirm whose session moved meanwhile cancels the FairCoin payment it created (ADR 0021 D9)', async () => {
+    const price = await seedPrice(merchant, { currency: 'FAIR', unitAmount: '120000000' });
+    const { body: session } = await createSession({
+      line_items: [{ price: price.publicId, quantity: 1 }],
+    });
+    await payer(session, 'POST', '', { customer_details: { email: 'buyer@example.com' } });
+    // The session expires while the confirm is creating its payment: the
+    // recipient's key is read between the order write and the link.
+    const row = must(await findSessionByPublicId(gatewayDb(), session.id));
+    let expiredOnce = false;
+    const previous = useIdentityKeyResolver(async (accountId) => {
+      if (!expiredOnce) {
+        expiredOnce = true;
+        await expireSessionNow(must(await findSessionByPublicId(gatewayDb(), row.publicId)));
+      }
+      return testIdentityPublicKey(accountId);
+    });
+    try {
+      const refused = await payer(session, 'POST', '/confirm', {});
+      expect(refused.status).toBe(409);
+      expect(refused.body.error.code).toBe('checkout_session_changed');
+    } finally {
+      useIdentityKeyResolver(previous);
+    }
+    const [orphan] = await gatewayDb()
+      .select({
+        status: paymentIntents.status,
+        cancellationReason: paymentIntents.cancellationReason,
+      })
+      .from(paymentIntents)
+      .where(eq(paymentIntents.idempotencyKey, `checkout:${session.id}:120000000`));
+    // Cancelled in the transaction that found it orphaned, not left payable.
+    expect(orphan).toEqual({ status: 'canceled', cancellationReason: 'abandoned' });
+  });
+
   test('creates the FairCoin payment, locks the order, and completes only with the payment', async () => {
     const price = await seedPrice(merchant, { currency: 'FAIR', unitAmount: '250000000' });
     await upsertEmailSettings(gatewayDb(), merchant.id, { checkoutConfirmations: true });

@@ -62,7 +62,7 @@ import {
 } from '../../db/payments/checkoutSessionRepository';
 import { findIntentById, type PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
 import { listLinkLineItems, type PaymentLinkRow } from '../../db/payments/paymentLinkRepository';
-import { getDb } from '../../db/postgres';
+import { getDb, type Transaction } from '../../db/postgres';
 import type { StoredCustomField } from '../../db/schema/payments';
 import { findSetupIntentById } from '../../db/customers/setupIntentRepository';
 import { newId } from '../../lib/ids';
@@ -99,6 +99,7 @@ import {
 } from '../faircoin/quote';
 import { retireIfRecipientKeyReplaced } from '../faircoin/keyBinding';
 import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
+import { FaircoinCapacityError } from '../faircoin/addressPool';
 import {
   FaircoinAmountTooSmallError,
   orderFaircoinAvailability,
@@ -1368,15 +1369,25 @@ export async function confirmSessionAsPayer(
 
   const outcome = await db.transaction(async (tx) => {
     const locked = await lockSession(tx, current.id);
-    if (locked?.status !== 'open') return { kind: 'moved' as const };
+    // The session moved under the confirm: the payment just created is nobody's.
+    // A FairCoin one is cancelled HERE, in the transaction that saw it orphaned,
+    // so its address is not left payable on an order that will never link it
+    // (and becomes recyclable, ADR 0021 D9); a card one is cancelled at the
+    // provider first, after this commits.
+    const moved = async () => {
+      if (locked?.paymentIntentId === intent.id) return { kind: 'moved' as const, orphan: null };
+      if (intent.rail !== 'faircoin') return { kind: 'moved' as const, orphan: intent };
+      return { kind: 'moved' as const, orphan: null, canceled: await cancelOrphanIn(tx, intent) };
+    };
+    if (locked?.status !== 'open') return moved();
     if (locked.paymentIntentId === intent.id) return { kind: 'linked' as const, row: locked };
     if (locked.paymentIntentId !== null || locked.amount !== orderAmountOf(intent)) {
-      return { kind: 'moved' as const };
+      return moved();
     }
     const refusal = await reserveDiscount(tx, locked);
     if (refusal) return { kind: 'refused' as const, refusal };
     const linked = await linkSessionObject(tx, locked.id, { paymentIntentId: intent.id });
-    return linked ? { kind: 'linked' as const, row: linked } : { kind: 'moved' as const };
+    return linked ? { kind: 'linked' as const, row: linked } : moved();
   });
   if (outcome.kind === 'refused') {
     // The payment was created and will never be linked: cancel it, so no payer
@@ -1388,6 +1399,11 @@ export async function confirmSessionAsPayer(
     );
   }
   if (outcome.kind === 'moved') {
+    if (outcome.orphan) await cancelOrphanIntent(outcome.orphan);
+    if ('canceled' in outcome && outcome.canceled) {
+      announceIntentChange(outcome.canceled);
+      kickWebhookOutbox();
+    }
     throw new CheckoutError(
       409,
       'checkout_session_changed',
@@ -1395,6 +1411,24 @@ export async function confirmSessionAsPayer(
     );
   }
   return outcome.row;
+}
+
+/**
+ * Cancel, on the caller's transaction, a FairCoin payment a confirm created and
+ * could not link — only while nothing has been sent to it (no broadcast
+ * reported); a payment already moving money is left to the chain.
+ */
+async function cancelOrphanIn(
+  tx: Transaction,
+  intent: PaymentIntentRow,
+): Promise<PaymentIntentRow | null> {
+  if (!REPLACEABLE.has(intent.status) || intent.txid !== null) return null;
+  const canceled = await transitionIntentIn(tx, intent.id, {
+    from: intent.status,
+    status: applyEvent(intent.status, 'cancel', intent.rail),
+    cancellationReason: 'abandoned',
+  });
+  return canceled.kind === 'updated' ? canceled.row : null;
 }
 
 /**
@@ -1526,6 +1560,16 @@ async function createSessionPayment(
     }
     if (error instanceof FaircoinNetworkClosedError) {
       throw new CheckoutError(409, 'faircoin_network_closed', error.message, 'payment_method_type');
+    }
+    // Every address the recipient can hold open is open (ADR 0021 D9): FairCoin
+    // waits for one to free up; the card does not.
+    if (error instanceof FaircoinCapacityError) {
+      throw new CheckoutError(
+        503,
+        'faircoin_capacity_reached',
+        error.message,
+        'payment_method_type',
+      );
     }
     if (error instanceof FaircoinAmountTooSmallError) {
       throw new CheckoutError(

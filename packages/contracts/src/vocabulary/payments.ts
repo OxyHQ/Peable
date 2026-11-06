@@ -11,6 +11,14 @@ export const PAYMENT_INTENT_RAILS = ['faircoin', 'card'] as const;
 export type PaymentIntentRail = (typeof PAYMENT_INTENT_RAILS)[number];
 
 /**
+ * The longest a PaymentIntent created through the API may stay payable before
+ * it expires (`expires_in_seconds`): 24 hours. A FairCoin payment holds a
+ * reserved address in the recipient's wallet for as long as it is payable, so
+ * an unbounded expiry is an address nobody can ever recycle (ADR 0021 D9).
+ */
+export const PAYMENT_INTENT_MAX_EXPIRES_IN_SECONDS = 24 * 60 * 60;
+
+/**
  * Stripe's seven statuses, and no others (ADR 0019). The FairCoin rail walks
  * four of them (`requires_action` → `processing` → `succeeded` | `canceled`); a
  * card walks all seven. The order is the lifecycle table's

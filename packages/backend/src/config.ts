@@ -434,6 +434,20 @@ function readNetwork(raw: string | undefined): NetworkType {
   throw new Error(`PEABLE_NETWORK must be "mainnet" or "testnet", received "${raw}"`);
 }
 
+/**
+ * ADR 0002's deployment gate: which network may mint identity addresses. Unset
+ * OR EMPTY is the CLOSED default, `testnet` — never `readNetwork`'s `mainnet`,
+ * which an empty value (`PEABLE_SOCIAL_PAY_NETWORK=""`, a blank SSM parameter)
+ * used to reach past a `?? 'testnet'` that only catches `undefined`. Opening
+ * mainnet takes the word `mainnet`, spelled out.
+ */
+export function readSocialPayNetwork(raw: string | undefined): NetworkType {
+  if (raw === undefined || raw.trim() === '') return 'testnet';
+  const value = raw.trim();
+  if (value === 'mainnet' || value === 'testnet') return value;
+  throw new Error(`PEABLE_SOCIAL_PAY_NETWORK must be "mainnet" or "testnet", received "${raw}"`);
+}
+
 function readPort(raw: string | undefined): number {
   if (raw === undefined || raw.trim() === '') return DEFAULT_PORT;
   const value = Number(raw);
@@ -481,7 +495,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   return {
     explorerBaseUrl: readNonEmpty(env.EXPLORER_BASE_URL, DEFAULT_EXPLORER_BASE_URL),
     network: readNetwork(env.PEABLE_NETWORK),
-    socialPayNetwork: readNetwork(env.PEABLE_SOCIAL_PAY_NETWORK ?? 'testnet'),
+    socialPayNetwork: readSocialPayNetwork(env.PEABLE_SOCIAL_PAY_NETWORK),
     databaseUrl: readRequired(env.DATABASE_URL, 'DATABASE_URL'),
     port: readPort(env.PORT),
     allowedOrigins: readOrigins(env.PEABLE_ALLOWED_ORIGINS),

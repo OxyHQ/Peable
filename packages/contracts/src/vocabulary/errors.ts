@@ -163,6 +163,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
     "The Peable wallet that receives this payment (the merchant owner's, or the seller's) isn't set up yet, so it cannot be paid in FairCoin. The other payment methods still work.",
   faircoin_network_closed:
     'FairCoin payments on this network are not open on this deployment yet. The other payment methods still work.',
+  faircoin_capacity_reached:
+    'Too many FairCoin payments to this recipient are waiting to be paid right now, so no new FairCoin address can be handed out. The other payment methods still work; try FairCoin again shortly.',
   faircoin_amount_too_small:
     "One seller's share of this order is below the smallest amount the FairCoin network relays, so it cannot be paid in FairCoin. The other payment methods still work.",
   credit_note_exceeds_invoice:

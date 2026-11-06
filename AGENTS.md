@@ -257,6 +257,15 @@ same address, and two payments land where the gateway can tell only one of them
 apart. One account has ONE cursor per network, so merchant, seller and social
 payments to it can never collide.
 
+**Before the cursor, the pool (ADR 0021 D9).** A payment's address is reserved
+in the payment's OWN transaction by `services/faircoin/addressPool.ts`: an
+address of the recipient's whose payment was cancelled over an hour ago, that
+still derives from its key and that the Explorer shows unused, is recycled;
+otherwise the cursor mints — only while fewer than 500 of the recipient's
+addresses are open, counted under a per-recipient advisory lock. Never mint for
+a payment outside that function, and never read `unknown` from the Explorer as
+unused: that bound is what keeps a recipient's wallet scannable.
+
 The counters are `integer` on purpose (see `CONVENTIONS.md` §Counters) — a
 `bigint` column comes back from postgres.js as a STRING, and `"0" + 1` is `"01"`.
 Any change there must keep the two-consecutive-reservation test, because a single

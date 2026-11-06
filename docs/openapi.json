@@ -17003,7 +17003,8 @@
                   "required_confirmations": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 9007199254740991,
+                    "description": "Confirmations a FairCoin payment needs to succeed. Defaults to 6 for a live (mainnet) merchant, 1 on testnet."
                   },
                   "display_name": {
                     "type": "string",
@@ -18639,7 +18640,8 @@
                   "expires_in_seconds": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
+                    "maximum": 86400,
+                    "description": "How long the payment stays payable, in seconds: at most 86400 (24 hours). Defaults to 900 (15 minutes)."
                   },
                   "payment_method_types": {
                     "minItems": 1,
@@ -56988,7 +56990,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 110 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 111 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -63296,7 +63298,7 @@
         "properties": {
           "address": {
             "type": "string",
-            "description": "A fresh single-use address of the recipient's."
+            "description": "A single-use address of the recipient's: the one this sender already holds and has not paid, or a fresh one."
           },
           "index": {
             "type": "integer",

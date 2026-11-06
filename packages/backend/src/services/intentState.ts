@@ -24,6 +24,11 @@ export type IntentEvent =
   | 'underpaid'
   /** A reorg dropped a succeeded payment back below its threshold. */
   | 'reorg_below_threshold'
+  /**
+   * The reported transaction was never seen on the chain for a day and its
+   * address received nothing: the broadcast is lost (ADR 0021 D9).
+   */
+  | 'broadcast_lost'
   // ── Either rail ──────────────────────────────────────────────────────────
   /** The expiry clock ran out on a payer who never paid (`abandoned`). */
   | 'expire'
@@ -57,6 +62,8 @@ function targetStatusFor(event: IntentEvent): PaymentIntentStatus {
     // Rewind of a succeeded intent — see the exception branch in applyEvent.
     case 'reorg_below_threshold':
       return 'processing';
+    case 'broadcast_lost':
+      return 'canceled';
     case 'expire':
     case 'cancel':
       return 'canceled';
@@ -84,6 +91,7 @@ const RAIL_OF: Record<IntentEvent, PaymentIntentRail | null> = {
   confirmed: 'faircoin',
   underpaid: 'faircoin',
   reorg_below_threshold: 'faircoin',
+  broadcast_lost: 'faircoin',
   expire: null,
   cancel: null,
   card_requires_payment_method: 'card',
@@ -121,6 +129,7 @@ const LEGAL_SOURCES: Record<IntentEvent, readonly PaymentIntentStatus[]> = {
   confirmed: ['processing'],
   underpaid: ['processing'],
   reorg_below_threshold: ['succeeded'],
+  broadcast_lost: ['processing'],
   expire: EXPIRABLE_STATUSES,
   cancel: CANCELLABLE,
   card_requires_payment_method: ['requires_confirmation', 'requires_action', 'processing'],

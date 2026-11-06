@@ -21,8 +21,9 @@ import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import {
   FaircoinWalletMissingError,
   faircoinRecipientOf,
-  reserveFaircoinAddress,
+  planFaircoinAddress,
 } from '../../services/faircoin/recipient';
+import { reservePlannedAddresses } from '../../services/faircoin/addressPool';
 import {
   confirmFaircoinHalf,
   insertConnectedAccount,
@@ -33,6 +34,13 @@ import { insertPaymentIntent } from '../payments/paymentIntentRepository';
 import { connectedAccounts } from '../schema';
 
 const FOREIGN_KEY_VIOLATION = '23503';
+
+/** One address in the recipient's wallet: planned, then reserved in its own transaction. */
+async function reserveFaircoinAddress(recipient: string, network: 'testnet' | 'mainnet') {
+  const plan = await planFaircoinAddress(recipient, network);
+  const [reserved] = await gatewayDb().transaction((tx) => reservePlannedAddresses(tx, [plan]));
+  return must(reserved);
+}
 const CHECK_VIOLATION = '23514';
 
 /** A platform with no FairCoin of its own in play — Mercaria's shape. */

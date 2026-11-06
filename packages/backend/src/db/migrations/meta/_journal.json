@@ -736,6 +736,20 @@
       "when": 1793940326401,
       "tag": "0104_checkout_locales_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793942261055,
+      "tag": "0105_faircoin_address_pool",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1793942262116,
+      "tag": "0106_mainnet_required_confirmations",
+      "breakpoints": true
     }
   ]
 }

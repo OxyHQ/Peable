@@ -12,7 +12,8 @@
  *  - `faircoin_network_closed` — this deployment does not open payments on the
  *    order's FairCoin network yet (ADR 0002's gate);
  *  - `price_unavailable` — no fresh FairCoin price exists to quote a fiat order;
- *  - `temporarily_unavailable` — whether the wallet exists could not be checked.
+ *  - `temporarily_unavailable` — whether the wallet exists could not be checked, or every
+ *    address the recipient can hold open is open (ADR 0021 D9) — try again shortly.
  */
 export const FAIRCOIN_UNAVAILABLE_REASONS = [
   'faircoin_wallet_missing',

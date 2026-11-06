@@ -22,7 +22,8 @@ import type { ConnectedAccountRow } from '../../db/accounts/connectedAccountRepo
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { config } from '../../config';
 import { faircoinPriceAvailable } from './quote';
-import { reserveNextSocialAddress, resolveIdentityPublicKey } from '../socialReceive';
+import { resolveIdentityPublicKey } from '../socialReceive';
+import { findRecyclableAddress, type PlannedAddress, recipientHasAddressRoom } from './addressPool';
 
 /** The recipient has no Peable wallet yet (no identity key), or is not known yet. */
 export class FaircoinWalletMissingError extends Error {
@@ -86,26 +87,29 @@ async function hasIdentityKey(accountId: string): Promise<boolean> {
 }
 
 /**
- * Reserve the next address in the recipient's Peable wallet — one statement on
- * its cursor (`db/social/receiveCursor.ts`), the identity key recorded with it
- * and answered, so the payment records it beside the address (ADR 0002,
- * amended 2026-11-06). The key is read fresh, never from a cache.
+ * Decide, before the payment's transaction, how the next address in the
+ * recipient's Peable wallet will be reserved: the gates (network, wallet), the
+ * recipient's PUBLIC identity key, and an address of theirs the chain shows
+ * unused that can be recycled (`addressPool.ts`, ADR 0021 D9). The reservation
+ * itself — the claim, or one statement on the cursor under the open-address
+ * cap — is `reservePlannedAddresses`, in the payment's transaction.
  *
  * @throws {FaircoinWalletMissingError} no recipient, or no identity key.
  * @throws {FaircoinNetworkClosedError} the deployment does not open `network`.
  */
-export async function reserveFaircoinAddress(
+export async function planFaircoinAddress(
   recipientAccountId: string | null,
   network: NetworkType,
-): Promise<{ address: string; recipientAccountId: string; identityPublicKey: string }> {
+): Promise<PlannedAddress> {
   if (!identityNetworkOpen(network)) throw new FaircoinNetworkClosedError(network);
   if (recipientAccountId === null) throw new FaircoinWalletMissingError();
-  const reserved = await reserveNextSocialAddress(recipientAccountId, network);
-  if (!reserved) throw new FaircoinWalletMissingError();
+  const identityPublicKey = await resolveIdentityPublicKey(recipientAccountId);
+  if (!identityPublicKey) throw new FaircoinWalletMissingError();
   return {
-    address: reserved.address,
     recipientAccountId,
-    identityPublicKey: reserved.identityPublicKey,
+    network,
+    identityPublicKey,
+    candidate: await findRecyclableAddress(recipientAccountId, network, identityPublicKey),
   };
 }
 
@@ -135,6 +139,13 @@ export async function faircoinAvailability(order: {
     return unavailable('temporarily_unavailable');
   }
   if (!hasKey) return unavailable('faircoin_wallet_missing');
+  // Every address the recipient can hold open is open (ADR 0021 D9): FairCoin
+  // waits for one to free up, and says so. Display only — the confirm decides
+  // under the pool's lock — so a pool that cannot be read does not hide it.
+  const room = await recipientHasAddressRoom(order.recipientAccountId, order.network).catch(
+    () => true,
+  );
+  if (!room) return unavailable('temporarily_unavailable');
   if (order.currency !== 'FAIR' && !(await faircoinPriceAvailable(order.currency))) {
     return unavailable('price_unavailable');
   }

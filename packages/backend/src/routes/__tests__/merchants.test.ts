@@ -121,7 +121,8 @@ describe('POST /v1/merchants', () => {
       expect(body.object).toBe('merchant');
       expect(body.environment).toBe('production');
       expect(body.network).toBe('mainnet');
-      expect(body.required_confirmations).toBe(1);
+      // ADR 0021 D10: a mainnet merchant that names no threshold settles at 6.
+      expect(body.required_confirmations).toBe(6);
     } finally {
       s.close();
     }

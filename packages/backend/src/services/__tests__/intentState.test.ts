@@ -29,6 +29,7 @@ const CARD: Record<IntentEvent, Row> = {
   confirmed: {},
   underpaid: {},
   reorg_below_threshold: {},
+  broadcast_lost: {},
   expire: { [RPM]: CX, [RC]: CX, [RA]: CX, [CX]: CX },
   cancel: { [RPM]: CX, [RC]: CX, [RA]: CX, [CAP]: CX, [CX]: CX },
   card_requires_payment_method: { [RPM]: RPM, [RC]: RPM, [RA]: RPM, [PR]: RPM },
@@ -46,6 +47,7 @@ const FAIRCOIN: Record<IntentEvent, Row> = {
   confirmed: { [PR]: OK, [OK]: OK },
   underpaid: { [PR]: CX, [CX]: CX },
   reorg_below_threshold: { [OK]: PR },
+  broadcast_lost: { [PR]: CX, [CX]: CX },
   // `requires_payment_method` / `requires_confirmation` cannot exist on the
   // chain (the CHECK refuses them), but the machine answers the table there.
   expire: { [RPM]: CX, [RC]: CX, [RA]: CX, [CX]: CX },
