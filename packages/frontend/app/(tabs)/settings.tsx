@@ -29,6 +29,7 @@ import * as Clipboard from 'expo-clipboard';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useWalletStore } from '../../src/wallet/wallet-store';
 import { useLockStore } from '../../src/wallet/lock-store';
+import { useReceiveGate } from '../../src/wallet/use-receive-gate';
 import {
   verifyPin,
   isBiometricsEnabled,
@@ -271,9 +272,16 @@ export default function SettingsScreen() {
   const rescanWallet = useWalletStore((s) => s.rescanWallet);
   const markBackedUp = useWalletStore((s) => s.markBackedUp);
   const activeWalletName = useWalletStore((s) => s.activeWalletName);
-  const receiveAddress = useWalletStore((s) => s.currentReceiveAddress);
+  // The header shows the receive address only while the one receive gate is
+  // open — the same gate as the Receive sheet (R6-1, R6-4).
+  const receiveGateKind = useReceiveGate().kind;
+  const currentReceiveAddress = useWalletStore((s) => s.currentReceiveAddress);
+  const receiveAddress = receiveGateKind === 'open' ? currentReceiveAddress : '';
   const switchNetwork = useWalletStore((s) => s.switchNetwork);
   const exportBackup = useWalletStore((s) => s.exportBackup);
+  const legacyWalletPresent = useWalletStore((s) => s.legacyWalletPresent);
+  const recoverLegacyWallet = useWalletStore((s) => s.recoverLegacyWallet);
+  const removeLegacyWallet = useWalletStore((s) => s.removeLegacyWallet);
   const importBackup = useWalletStore((s) => s.importBackup);
   const language = useLanguageStore((s) => s.language);
   const currentLanguageOption = useMemo(() => findLanguageOption(language), [language]);
@@ -282,6 +290,11 @@ export default function SettingsScreen() {
   const switchNetworkControl = useDialogControl();
   const resyncControl = useDialogControl();
   const recoveryControl = useDialogControl();
+  const legacyRemoveControl = useDialogControl();
+  // The pre-round-5 shared identity wallet, while this phone still holds it
+  // and no account has proven it theirs (R6-6).
+  const [legacyPresent, setLegacyPresent] = useState(false);
+  const [recoveringLegacy, setRecoveringLegacy] = useState(false);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -322,6 +335,54 @@ export default function SettingsScreen() {
       };
     }, []),
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      // Asked again whenever the screen is shown.
+      legacyWalletPresent()
+        .then((present) => {
+          if (!cancelled) setLegacyPresent(present);
+        })
+        .catch(() => {
+          if (!cancelled) setLegacyPresent(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [legacyWalletPresent]),
+  );
+
+  const handleRecoverLegacy = useCallback(async () => {
+    setRecoveringLegacy(true);
+    try {
+      const outcome = await recoverLegacyWallet();
+      if (outcome === 'moved' || outcome === 'merged') {
+        setLegacyPresent(false);
+        toast.success(t('settings.legacyWallet.recovered'));
+      } else if (outcome === 'not-owned') {
+        legacyRemoveControl.open();
+      } else if (outcome === 'none') {
+        setLegacyPresent(false);
+      } else {
+        toast.error(t('settings.legacyWallet.tryAgain'));
+      }
+    } catch {
+      toast.error(t('settings.legacyWallet.tryAgain'));
+    } finally {
+      setRecoveringLegacy(false);
+    }
+  }, [recoverLegacyWallet, legacyRemoveControl]);
+
+  const handleRemoveLegacy = useCallback(async () => {
+    try {
+      await removeLegacyWallet();
+      setLegacyPresent(false);
+      toast.success(t('settings.legacyWallet.removed'));
+    } catch {
+      toast.error(t('settings.legacyWallet.tryAgain'));
+    }
+  }, [removeLegacyWallet]);
 
   const handleManageAccount = useCallback(() => {
     showBottomSheet?.('ManageAccount');
@@ -620,6 +681,15 @@ export default function SettingsScreen() {
                 icon={<RowIcon name="account-group" />}
                 onPress={handleContacts}
               />
+              {legacyPresent ? (
+                <SettingsListItem
+                  title={t('settings.legacyWallet.recover')}
+                  description={t('settings.legacyWallet.description')}
+                  icon={<RowIcon name="history" />}
+                  disabled={recoveringLegacy}
+                  onPress={() => void handleRecoverLegacy()}
+                />
+              ) : null}
             </SettingsListGroup>
 
             {/* Security */}
@@ -808,6 +878,22 @@ export default function SettingsScreen() {
         actions={[
           { label: t('settings.resync.cta'), onPress: handleConfirmResync },
           { label: t('common.cancel'), color: 'cancel' },
+        ]}
+      />
+
+      {/* The earlier shared wallet is not this account's: remove it? (R6-6) */}
+      <Dialog
+        control={legacyRemoveControl}
+        placement="bottom"
+        title={t('settings.legacyWallet.notYours.title')}
+        description={t('settings.legacyWallet.notYours.description')}
+        actions={[
+          {
+            label: t('settings.legacyWallet.remove'),
+            onPress: () => void handleRemoveLegacy(),
+            color: 'destructive',
+          },
+          { label: t('settings.legacyWallet.keep'), color: 'cancel' },
         ]}
       />
 

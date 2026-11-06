@@ -20,15 +20,30 @@
  */
 
 import { useCallback, useState } from 'react';
-import { View, Text, Linking } from 'react-native';
+import { View, Text, Linking, Pressable, TextInput } from 'react-native';
 import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
 import { toast } from '@oxy.so/bloom/toast';
 import { Button } from './Button';
-import { FEE_RATES, PREVIOUS_KEY_MOVE_CHANGED, useWalletStore } from '../../wallet/wallet-store';
+import {
+  FEE_RATES,
+  type FeeLevel,
+  PREVIOUS_KEY_MOVE_CHANGED,
+  useWalletStore,
+} from '../../wallet/wallet-store';
 import { identitySubjectOfWalletId } from '../../wallet/identity-wallet';
 import { commonsOrganizationWalletUrl } from '../../wallet/organization-wallet';
-import { previousKeyCopy, type PreviousKeyMoveReady } from '../../wallet/previous-keys';
+import {
+  MOVE_FEE_RATE_MAX,
+  MOVE_FEE_RATE_MIN,
+  parseMoveFeeRate,
+  previousKeyCopy,
+  type PreviousKeyMoveReady,
+} from '../../wallet/previous-keys';
 import { formatFairAmount, t } from '../../i18n';
+
+/** The move's fee: a preset, or a custom rate within bounds (R6-11). */
+type MoveFeeChoice = FeeLevel | 'custom';
+const MOVE_FEE_CHOICES: readonly MoveFeeChoice[] = ['low', 'medium', 'high', 'custom'];
 
 export function PreviousKeyFunds() {
   const previousKeyBalance = useWalletStore((s) => s.previousKeyBalance);
@@ -45,6 +60,11 @@ export function PreviousKeyFunds() {
   // The plan the dialog SHOWS, captured when it opens: the move spends exactly
   // this one, or asks again (R4-13).
   const [confirmed, setConfirmed] = useState<PreviousKeyMoveReady | null>(null);
+  // The person chooses the fee: after a compromise a faster move can matter
+  // more than its cost, and on a quiet network the low rate is enough (R6-11).
+  const [feeChoice, setFeeChoice] = useState<MoveFeeChoice>('medium');
+  const [customRate, setCustomRate] = useState('');
+  const feeRate = feeChoice === 'custom' ? parseMoveFeeRate(customRate) : FEE_RATES[feeChoice];
 
   const subject = activeWalletId ? identitySubjectOfWalletId(activeWalletId) : null;
   const subjectKind = subject?.kind ?? 'personal';
@@ -54,8 +74,11 @@ export function PreviousKeyFunds() {
     previousKeyBalance > 0n
       ? keyMismatch || !keyConfirmed
         ? ({ kind: 'blocked' } as const)
-        : planMove(FEE_RATES.medium)
+        : feeRate === null
+          ? ({ kind: 'feeInvalid' } as const)
+          : planMove(feeRate)
       : null;
+  const showFeeChoice = plan !== null && plan.kind !== 'blocked';
 
   const handleMove = useCallback(async () => {
     if (!confirmed) return;
@@ -96,6 +119,54 @@ export function PreviousKeyFunds() {
             {t('wallet.previousKey.title', { amount: formatFairAmount(previousKeyBalance) })}
           </Text>
           <Text className="text-muted-foreground text-sm leading-5">{t(copy.body)}</Text>
+          {showFeeChoice ? (
+            <View className="gap-2">
+              <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
+                {t('send.networkFee')}
+              </Text>
+              <View className="flex-row gap-2">
+                {MOVE_FEE_CHOICES.map((choice) => {
+                  const selected = feeChoice === choice;
+                  return (
+                    <Pressable
+                      key={choice}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      className={`flex-1 py-2 items-center ${
+                        selected ? 'bg-primary/15 rounded-full' : 'bg-background rounded-2xl'
+                      }`}
+                      onPress={() => setFeeChoice(choice)}
+                    >
+                      <Text
+                        className={`text-xs font-semibold ${
+                          selected ? 'text-primary' : 'text-foreground'
+                        }`}
+                      >
+                        {choice === 'custom'
+                          ? t('wallet.previousKey.feeCustom')
+                          : t(`send.fee.${choice}`)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {feeChoice === 'custom' ? (
+                <TextInput
+                  value={customRate}
+                  onChangeText={setCustomRate}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder={t('wallet.previousKey.feeCustomPlaceholder', {
+                    min: MOVE_FEE_RATE_MIN,
+                    max: MOVE_FEE_RATE_MAX,
+                  })}
+                  accessibilityLabel={t('wallet.previousKey.feeCustom')}
+                  className="bg-background rounded-2xl px-4 py-2.5 text-foreground text-sm"
+                />
+              ) : null}
+            </View>
+          ) : null}
           {plan.kind === 'ready' ? (
             <Button
               title={t('wallet.previousKey.move')}
@@ -110,7 +181,12 @@ export function PreviousKeyFunds() {
             />
           ) : (
             <Text className="text-muted-foreground text-xs leading-4">
-              {t(`wallet.previousKey.${plan.kind}`)}
+              {plan.kind === 'feeInvalid'
+                ? t('wallet.previousKey.feeInvalid', {
+                    min: MOVE_FEE_RATE_MIN,
+                    max: MOVE_FEE_RATE_MAX,
+                  })
+                : t(`wallet.previousKey.${plan.kind}`)}
             </Text>
           )}
         </View>
@@ -141,6 +217,7 @@ export function PreviousKeyFunds() {
           })}
           description={t('wallet.previousKey.confirmBody', {
             fee: formatFairAmount(confirmed.fee),
+            rate: confirmed.feePerByte,
           })}
           actions={[
             { label: t('wallet.previousKey.confirm'), onPress: () => void handleMove() },

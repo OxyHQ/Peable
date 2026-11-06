@@ -76,7 +76,33 @@ export interface AddressRow {
   index_num: number;
   is_change: number;
   used: number;
+  /**
+   * The identity key (compressed hex) an identity wallet's row derives from
+   * (security review round 6, R6-1): set when the row is written, or bound on
+   * the first open after the upgrade when the open key's tree derives it.
+   * `null` for a BIP39 or watch-only wallet's rows (one key forever), and for
+   * an identity wallet's row no key it opened with derives — a previous key's,
+   * never offered for receiving.
+   */
+  identity_public_key: string | null;
 }
+
+/** An address the wallet may hand out as its own, with what proves it is. */
+export interface AddressInsert {
+  readonly address: string;
+  readonly path: string;
+  readonly index: number;
+  readonly isChange: boolean;
+  /** {@link AddressRow.identity_public_key}. */
+  readonly identityPublicKey: string | null;
+}
+
+/**
+ * Which rows of `addresses` a query answers for: an identity wallet's open key
+ * (only rows recorded under it), or `null` for a wallet whose key never
+ * changes (every row).
+ */
+export type AddressKeyScope = string | null;
 
 /** A row of `social_receive_set` (ADR 0021 D9, amended 2026-11-06). Times are Unix seconds. */
 export interface SocialReceiveSetRow {
@@ -257,7 +283,8 @@ const SCHEMA_SQL = `
     path TEXT NOT NULL,
     index_num INTEGER NOT NULL,
     is_change INTEGER DEFAULT 0,
-    used INTEGER DEFAULT 0
+    used INTEGER DEFAULT 0,
+    identity_public_key TEXT
   );
 
   -- The contiguous window before ADR 0021 D9's amendment (2026-11-06). Kept
@@ -385,6 +412,32 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_buy_orders_created ON buy_orders(created_at);
 `;
 
+/** What a proven owner keeps of a moved legacy namespace (`keepOnlyOwnerData`, R6-2). */
+export interface LegacyOwnerFilter {
+  /** Whether one of the owner's HD trees derives `address`. */
+  ownsHdAddress(address: string): boolean;
+  /** Whether `key` is one the owner has had (any encoding). */
+  keepsKey(key: string): boolean;
+  /** Whether one of the owner's keys derives this keyless social-receive row. */
+  derivesSocialRow(address: string, index: number): boolean;
+}
+
+/**
+ * The wallet's own tables, in the order a merge copies them (`mergeFrom`).
+ * Table names are constants here, never input.
+ */
+const MERGED_TABLES = [
+  'addresses',
+  'transactions',
+  'utxos',
+  'social_receive_set',
+  'previous_key_trees',
+  'contacts',
+  'tx_notes',
+  'address_labels',
+  'recent_recipients',
+] as const;
+
 /**
  * Columns added after the initial release. `CREATE TABLE IF NOT EXISTS` never
  * alters an existing table, so for wallets created before reorg tracking we add
@@ -437,6 +490,7 @@ export class Database {
     await this.migrateHeaderHashesToBlob();
     await this.db.execAsync(SCHEMA_SQL);
     await this.migrateUtxoColumns();
+    await this.migrateAddressKeyColumn();
     await this.migratePreviousKeyTreeColumns();
     await this.migrateSocialReceiveWindow();
     await this.repairHeaderStore();
@@ -583,6 +637,24 @@ export class Database {
     );
   }
 
+  /**
+   * `addresses.identity_public_key` (round 6, R6-1) on a wallet created before
+   * it. Existing rows stay `null` until an open binds them
+   * ({@link bindAddressRows}); the index lives here for the same reason as
+   * `idx_utxos_spent_height`.
+   */
+  private async migrateAddressKeyColumn(): Promise<void> {
+    const existing = await this.db.getAllAsync<{ name: string }>(
+      "SELECT name FROM pragma_table_info('addresses')",
+    );
+    if (!existing.some((column) => column.name === 'identity_public_key')) {
+      await this.db.execAsync('ALTER TABLE addresses ADD COLUMN identity_public_key TEXT');
+    }
+    await this.db.execAsync(
+      'CREATE INDEX IF NOT EXISTS idx_addresses_key ON addresses(identity_public_key, is_change, used)',
+    );
+  }
+
   /** `previous_key_trees.vouched_for` (round 5, R5-2) on a wallet created before it. */
   private async migratePreviousKeyTreeColumns(): Promise<void> {
     const existing = await this.db.getAllAsync<{ name: string }>(
@@ -620,38 +692,136 @@ export class Database {
   }
 
   /**
-   * Drop what another account could have left in a moved legacy namespace
-   * (R5-2): social-receive rows and previous-key trees under a key `keep`
-   * refuses, and where the gateway pull stood — the next pull reads the
-   * session account's whole set again (`INSERT OR IGNORE`).
+   * Keep only what the proving account's keys derive in a moved legacy
+   * namespace (R5-2, R6-2). The pre-round-5 namespace was every person's on
+   * this phone, so it can hold another account's HD addresses, coins and
+   * history beside the owner's. What stays:
+   *
+   * - `addresses` rows the owner's HD trees derive (current and vouched
+   *   previous keys this device holds, see `identity-namespace.ts`);
+   * - social-receive rows under a key the owner has had, and a keyless row
+   *   only when one of those keys derives it at its index;
+   * - previous-key trees under such a key, each to be vouched for again;
+   * - coins at an address kept above (or that a tree derives), and the
+   *   transactions that created or spent one; their notes and labels.
+   *
+   * Everything else goes: multisig watch addresses (nothing here proves whose
+   * they were), other coins, other history. Nothing on chain moves — a rescan
+   * finds the owner's coins again — and the gateway pull starts over (the full
+   * set is read again for the session's account, `INSERT OR IGNORE`).
+   * Contacts and recent recipients name nobody's keys and stay.
    */
-  async dropForeignIdentityData(keep: (storedKey: string | null) => boolean): Promise<void> {
-    const keys = await this.db.getAllAsync<{ identity_public_key: string | null }>(
-      'SELECT DISTINCT identity_public_key FROM social_receive_set',
-    );
+  async keepOnlyOwnerData(owner: LegacyOwnerFilter): Promise<void> {
+    const socialRows = await this.db.getAllAsync<{
+      address: string;
+      index_num: number;
+      identity_public_key: string | null;
+    }>('SELECT address, index_num, identity_public_key FROM social_receive_set');
     const trees = await this.db.getAllAsync<{ public_key: string }>(
       'SELECT DISTINCT public_key FROM previous_key_trees',
     );
+    const hdRows = await this.db.getAllAsync<{ address: string }>('SELECT address FROM addresses');
+    const coinAddresses = await this.db.getAllAsync<{ address: string }>(
+      'SELECT DISTINCT address FROM utxos',
+    );
+    const watchRows = await this.db.getAllAsync<{ address: string }>(
+      'SELECT address FROM watch_addresses',
+    );
+
+    const keptSocial = new Set<string>();
+    const droppedSocial: string[] = [];
+    for (const row of socialRows) {
+      const keep =
+        row.identity_public_key === null
+          ? owner.derivesSocialRow(row.address, row.index_num)
+          : owner.keepsKey(row.identity_public_key);
+      if (keep) keptSocial.add(row.address);
+      else droppedSocial.push(row.address);
+    }
+    const droppedHd = hdRows.map((row) => row.address).filter((a) => !owner.ownsHdAddress(a));
+    const droppedCoins = coinAddresses
+      .map((row) => row.address)
+      .filter((a) => !keptSocial.has(a) && !owner.ownsHdAddress(a));
+    const droppedAddresses = new Set([
+      ...droppedSocial,
+      ...droppedHd,
+      ...droppedCoins,
+      ...watchRows.map((row) => row.address),
+    ]);
+
     await this.db.withTransactionAsync(async () => {
-      for (const { identity_public_key: key } of keys) {
-        if (key !== null && !keep(key)) {
-          await this.db.runAsync(
-            'DELETE FROM social_receive_set WHERE identity_public_key = ?',
-            key,
-          );
-        }
+      for (const address of droppedSocial) {
+        await this.db.runAsync('DELETE FROM social_receive_set WHERE address = ?', address);
       }
       for (const { public_key: key } of trees) {
-        if (!keep(key)) {
+        if (!owner.keepsKey(key)) {
           await this.db.runAsync('DELETE FROM previous_key_trees WHERE public_key = ?', key);
         }
       }
-      // Every remaining tree must be vouched for again by its new owner.
+      for (const address of droppedHd) {
+        await this.db.runAsync('DELETE FROM addresses WHERE address = ?', address);
+      }
+      await this.db.runAsync('DELETE FROM watch_addresses');
+      for (const address of droppedCoins) {
+        await this.db.runAsync('DELETE FROM utxos WHERE address = ?', address);
+      }
+      for (const address of droppedAddresses) {
+        await this.db.runAsync('DELETE FROM address_labels WHERE address = ?', address);
+      }
+      // History only of the coins that stayed: what created one, or spent one.
+      await this.db.runAsync(
+        `DELETE FROM transactions WHERE txid NOT IN (
+           SELECT txid FROM utxos UNION SELECT spent_txid FROM utxos WHERE spent_txid != ''
+         )`,
+      );
+      await this.db.runAsync(
+        'DELETE FROM tx_notes WHERE txid NOT IN (SELECT txid FROM transactions)',
+      );
+      // Every remaining row and tree must be bound and vouched for again by
+      // its new owner when its wallet opens.
+      await this.db.runAsync('UPDATE addresses SET identity_public_key = NULL');
       await this.db.runAsync('UPDATE previous_key_trees SET vouched_for = NULL');
       await this.db.runAsync(
         "DELETE FROM schema_meta WHERE key IN ('social_receive_sync_cursor', 'social_receive_full_sync_after', 'social_receive_full_sync_at', 'identity_wallet_key')",
       );
     });
+  }
+
+  /**
+   * Add what `source` holds and this database does not (R6-6): a legacy
+   * namespace proven only after the account's own wallet was already in use.
+   * `INSERT OR IGNORE` everywhere — a row this wallet already has is newer
+   * than the legacy copy and wins. Headers and peers are chain state, not the
+   * wallet's, and are not copied. Afterwards a rescan from the lowest merged
+   * coin reconciles what was spent meanwhile; returns that height, or `null`
+   * when no coin was merged.
+   */
+  async mergeFrom(source: Database): Promise<number | null> {
+    let lowest: number | null = null;
+    for (const table of MERGED_TABLES) {
+      const rows = await source.db.getAllAsync<Record<string, SQLite.SQLiteBindValue>>(
+        `SELECT * FROM ${table}`,
+      );
+      if (rows.length === 0) continue;
+      await this.db.withTransactionAsync(async () => {
+        for (const row of rows) {
+          const columns = Object.keys(row);
+          await this.db.runAsync(
+            `INSERT OR IGNORE INTO ${table} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+            columns.map((column) => row[column] ?? null),
+          );
+        }
+      });
+      if (table === 'utxos') {
+        for (const row of rows) {
+          const height = Number(row.block_height);
+          if (Number.isSafeInteger(height) && height >= 0 && (lowest === null || height < lowest)) {
+            lowest = height;
+          }
+        }
+      }
+    }
+    return lowest;
   }
 
   /**
@@ -1100,33 +1270,80 @@ export class Database {
   // Addresses
   // -----------------------------------------------------------------------
 
-  async insertAddress(
-    address: string,
-    path: string,
-    index: number,
-    isChange: boolean,
-  ): Promise<void> {
+  /**
+   * Record an address the wallet handed out, with the key it derives from
+   * (R6-1). `INSERT OR IGNORE`: a row already stored keeps its state.
+   */
+  async insertAddress(row: AddressInsert): Promise<void> {
     await this.db.runAsync(
       `INSERT OR IGNORE INTO addresses
-        (address, path, index_num, is_change, used)
-       VALUES (?, ?, ?, ?, 0)`,
-      address,
-      path,
-      index,
-      isChange ? 1 : 0,
+        (address, path, index_num, is_change, used, identity_public_key)
+       VALUES (?, ?, ?, ?, 0, ?)`,
+      row.address,
+      row.path,
+      row.index,
+      row.isChange ? 1 : 0,
+      row.identityPublicKey,
     );
   }
 
+  /** Every stored address, whatever key it derives from. */
   async getAddresses(): Promise<AddressRow[]> {
     return this.db.getAllAsync<AddressRow>('SELECT * FROM addresses ORDER BY is_change, index_num');
   }
 
-  async getUnusedAddress(isChange: boolean): Promise<AddressRow | null> {
-    const row = await this.db.getFirstAsync<AddressRow>(
-      'SELECT * FROM addresses WHERE is_change = ? AND used = 0 ORDER BY index_num ASC LIMIT 1',
-      isChange ? 1 : 0,
+  /** The stored addresses `scope` answers for ({@link AddressKeyScope}). */
+  async getAddressesOf(scope: AddressKeyScope): Promise<AddressRow[]> {
+    if (scope === null) return this.getAddresses();
+    return this.db.getAllAsync<AddressRow>(
+      'SELECT * FROM addresses WHERE identity_public_key = ? ORDER BY is_change, index_num',
+      scope,
     );
-    return row ?? null;
+  }
+
+  /**
+   * The unused addresses of one chain `scope` answers for, lowest index first:
+   * the candidates for the receive address. The caller still checks each
+   * against the open tree (`ownsAddress`) before offering it (R6-1).
+   */
+  async getUnusedAddresses(isChange: boolean, scope: AddressKeyScope): Promise<AddressRow[]> {
+    if (scope === null) {
+      return this.db.getAllAsync<AddressRow>(
+        'SELECT * FROM addresses WHERE is_change = ? AND used = 0 ORDER BY index_num ASC',
+        isChange ? 1 : 0,
+      );
+    }
+    return this.db.getAllAsync<AddressRow>(
+      `SELECT * FROM addresses
+        WHERE is_change = ? AND used = 0 AND identity_public_key = ?
+        ORDER BY index_num ASC`,
+      isChange ? 1 : 0,
+      scope,
+    );
+  }
+
+  /**
+   * Bind the rows written before keys were recorded (R6-1): each row with no
+   * key that `derives` (the open key's tree) is its, and is recorded under
+   * `key`. A row no key the wallet opened with derives stays unbound, and is
+   * never offered for receiving. Returns how many rows it bound.
+   */
+  async bindAddressRows(key: string, derives: (address: string) => boolean): Promise<number> {
+    const unbound = await this.db.getAllAsync<{ address: string }>(
+      'SELECT address FROM addresses WHERE identity_public_key IS NULL',
+    );
+    const mine = unbound.map((row) => row.address).filter(derives);
+    if (mine.length === 0) return 0;
+    await this.db.withTransactionAsync(async () => {
+      for (const address of mine) {
+        await this.db.runAsync(
+          'UPDATE addresses SET identity_public_key = ? WHERE address = ? AND identity_public_key IS NULL',
+          key,
+          address,
+        );
+      }
+    });
+    return mine.length;
   }
 
   async markAddressUsed(address: string): Promise<void> {
@@ -1160,11 +1377,22 @@ export class Database {
    * index in the database (0 if none are used). Used to restore the BIP44
    * cursor on startup so used addresses are never re-issued (SPV_AUDIT.md §4.5).
    */
-  async getNextUnusedIndex(isChange: boolean): Promise<number> {
-    const row = await this.db.getFirstAsync<{ max_used: number | null }>(
-      'SELECT MAX(index_num) as max_used FROM addresses WHERE is_change = ? AND used = 1',
-      isChange ? 1 : 0,
-    );
+  async getNextUnusedIndex(isChange: boolean, scope: AddressKeyScope = null): Promise<number> {
+    // An identity wallet counts only its open key's rows: another key's used
+    // indices say nothing about this tree, and skipping them would push its
+    // first used address past a restore's gap window (R6-1).
+    const row =
+      scope === null
+        ? await this.db.getFirstAsync<{ max_used: number | null }>(
+            'SELECT MAX(index_num) as max_used FROM addresses WHERE is_change = ? AND used = 1',
+            isChange ? 1 : 0,
+          )
+        : await this.db.getFirstAsync<{ max_used: number | null }>(
+            `SELECT MAX(index_num) as max_used FROM addresses
+              WHERE is_change = ? AND used = 1 AND identity_public_key = ?`,
+            isChange ? 1 : 0,
+            scope,
+          );
     if (row?.max_used == null) {
       return 0;
     }

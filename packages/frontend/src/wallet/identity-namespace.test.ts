@@ -7,8 +7,12 @@ import { bytesToHex, getNetwork, hexToBytes } from '@fairco.in/core';
 import { getPublicKey } from '@noble/secp256k1';
 import { KeyManager } from '@peable.to/pay';
 import {
+  highestStoredIndices,
   keepsLegacyKey,
+  legacyCheckFingerprint,
+  legacyNamespaceClosed,
   legacyNamespaceStep,
+  markLegacyChecked,
   parseLegacyNamespaceMarker,
   proveLegacyOwnership,
 } from './identity-namespace';
@@ -23,13 +27,39 @@ const tree = (fill: number): string[] => {
 };
 
 describe('the legacy namespace marker', () => {
-  test('moves once, to one account; an account that failed does not retry', () => {
-    expect(legacyNamespaceStep(parseLegacyNamespaceMarker(null), A)).toBe('prove');
-    expect(legacyNamespaceStep(parseLegacyNamespaceMarker('{"boundTo":"x"}'), A)).toBe('skip');
-    expect(legacyNamespaceStep(parseLegacyNamespaceMarker('{"empty":true}'), A)).toBe('skip');
-    const checked = parseLegacyNamespaceMarker(JSON.stringify({ checked: [A] }));
-    expect(legacyNamespaceStep(checked, A)).toBe('skip');
-    expect(legacyNamespaceStep(checked, B)).toBe('prove');
+  const FP = legacyCheckFingerprint([KEY_A], []);
+
+  test('moves once, to one account; removed or empty is closed for everyone', () => {
+    expect(legacyNamespaceStep(parseLegacyNamespaceMarker(null), A, FP)).toBe('prove');
+    expect(legacyNamespaceStep(parseLegacyNamespaceMarker('{"boundTo":"x"}'), A, FP)).toBe('skip');
+    expect(legacyNamespaceStep(parseLegacyNamespaceMarker('{"empty":true}'), A, FP)).toBe('skip');
+    expect(legacyNamespaceClosed(parseLegacyNamespaceMarker('{"removed":true}'))).toBe(true);
+  });
+
+  test('a definite failure is not asked again against the same keys (R6-6)', () => {
+    const checked = markLegacyChecked({}, A, FP);
+    const stored = parseLegacyNamespaceMarker(JSON.stringify(checked));
+    expect(legacyNamespaceStep(stored, A, FP)).toBe('skip');
+    expect(legacyNamespaceStep(stored, B, FP)).toBe('prove');
+  });
+
+  test('a new key in the history or the ring asks again (R6-6)', () => {
+    const stored = markLegacyChecked({}, A, FP);
+    expect(legacyNamespaceStep(stored, A, legacyCheckFingerprint([KEY_A, KEY_B], []))).toBe(
+      'prove',
+    );
+    expect(legacyNamespaceStep(stored, A, legacyCheckFingerprint([KEY_A], [KEY_B]))).toBe('prove');
+  });
+
+  test('the fingerprint is canonical: encoding and order do not matter', () => {
+    expect(legacyCheckFingerprint([KEY_B, KEY_A.toUpperCase()], [])).toBe(
+      legacyCheckFingerprint([KEY_A, KEY_B], []),
+    );
+  });
+
+  test("round 5's list of checked accounts is no check at all (it may not have been definite)", () => {
+    const old = parseLegacyNamespaceMarker(JSON.stringify({ checked: [A] }));
+    expect(legacyNamespaceStep(old, A, FP)).toBe('prove');
   });
 
   test('an unreadable marker is no marker', () => {
@@ -57,12 +87,24 @@ describe('proveLegacyOwnership', () => {
   });
 });
 
+describe('highestStoredIndices', () => {
+  test("covers every stored row of each chain, so the owner's tree derives them all (R6-2)", () => {
+    expect(highestStoredIndices([])).toEqual({ external: -1, change: -1 });
+    expect(
+      highestStoredIndices([
+        { index_num: 3, is_change: 0 },
+        { index_num: 41, is_change: 0 },
+        { index_num: 7, is_change: 1 },
+      ]),
+    ).toEqual({ external: 41, change: 7 });
+  });
+});
+
 describe('keepsLegacyKey', () => {
-  test("keeps the proving account's keys and keyless rows, drops everything else", () => {
+  test("keeps the proving account's keys, drops everything else", () => {
     const history = new Set([KEY_A]);
     expect(keepsLegacyKey(KEY_A, history)).toBe(true);
     expect(keepsLegacyKey(KEY_A.toUpperCase(), history)).toBe(true);
-    expect(keepsLegacyKey(null, history)).toBe(true);
     expect(keepsLegacyKey(KEY_B, history)).toBe(false);
     expect(keepsLegacyKey('not a key', history)).toBe(false);
   });

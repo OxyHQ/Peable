@@ -22,7 +22,7 @@ import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { requestSocialReceiveResync, useWalletStore } from '../../wallet/wallet-store';
-import { isIdentityWalletId } from '../../wallet/identity-wallet';
+import { receiveGate } from '../../wallet/receive-gate';
 import { Button, ListItem } from '../components';
 import { t } from '../../i18n';
 import { FONT_PHUDU_BLACK } from '../../utils/fonts';
@@ -50,14 +50,22 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
   const socialReceiveDefaultAddress = useWalletStore((s) => s.socialReceiveDefaultAddress);
   const socialReceiveKeyMismatch = useWalletStore((s) => s.socialReceiveKeyMismatch);
   const identityReceiveConfirmed = useWalletStore((s) => s.identityReceiveConfirmed);
+  const adoptedWalletUnconfirmed = useWalletStore((s) => s.adoptedWalletUnconfirmed);
+  const confirmAdoptedWallet = useWalletStore((s) => s.confirmAdoptedWallet);
+  const activeWalletName = useWalletStore((s) => s.activeWalletName);
   const activeWalletId = useWalletStore((s) => s.activeWalletId);
   const { user } = useOxy();
-  // An identity wallet shows NOTHING to pay — no address, no QR, no list —
-  // until the gateway confirmed, since it opened, that the key it opened with
-  // is the account's `#key-1` (R5-1, R5-7). A BIP39 or watch-only wallet has
-  // no account key to confirm.
-  const receivable =
-    activeWalletId === null || !isIdentityWalletId(activeWalletId) || identityReceiveConfirmed;
+  // NOTHING to pay — no address, no QR, no list — until the one receive gate
+  // opens (`receive-gate.ts`): an identity wallet once the gateway confirmed,
+  // since it opened, that its key is the account's `#key-1` (R5-1, R5-7); a
+  // wallet carried over from the shared keychain group once the person
+  // confirmed it is theirs (R6-4).
+  const gate = receiveGate({
+    activeWalletId,
+    identityReceiveConfirmed,
+    socialReceiveKeyMismatch,
+    adoptedWalletUnconfirmed,
+  });
 
   // The person is about to be paid: make sure the wallet watches every address
   // the gateway has handed out, and that this phone's key is still the one the
@@ -158,17 +166,40 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
     );
   }
 
-  if (!receivable) {
+  if (gate.kind === 'adopted') {
+    return (
+      <View className="w-full self-center gap-5" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
+        <View className="bg-surface rounded-2xl px-4 py-3 gap-3">
+          <View>
+            <Text className="text-foreground text-sm font-semibold">
+              {t('receive.adopted.title')}
+            </Text>
+            <Text className="text-muted-foreground text-xs mt-1 leading-4">
+              {t('receive.adopted.body', { name: activeWalletName || t('wallet.defaultName') })}
+            </Text>
+          </View>
+          <Button
+            title={t('receive.adopted.confirm')}
+            onPress={() => void confirmAdoptedWallet()}
+            variant="primary"
+            fullWidth
+          />
+        </View>
+      </View>
+    );
+  }
+
+  if (gate.kind !== 'open') {
     return (
       <View className="w-full self-center gap-5" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
         <View className="bg-surface rounded-2xl px-4 py-3">
           <Text className="text-foreground text-sm font-semibold">
-            {socialReceiveKeyMismatch
+            {gate.kind === 'mismatch'
               ? t('receive.keyMismatch.title')
               : t('receive.unconfirmed.title')}
           </Text>
           <Text className="text-muted-foreground text-xs mt-1 leading-4">
-            {socialReceiveKeyMismatch
+            {gate.kind === 'mismatch'
               ? user?.kind === 'organization'
                 ? t('receive.keyMismatch.organization')
                 : t('receive.keyMismatch.personal')
