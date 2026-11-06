@@ -1,5 +1,5 @@
 import { test, expect, afterEach } from 'bun:test';
-import { fetchBalancesSat } from './explorer-address';
+import { fetchAddressActivity, fetchBalancesSat } from './explorer-address';
 
 // Shape pinned against the LIVE endpoint (probed 2026-09-06):
 //   GET https://explorer.fairco.in/api/address/:address?network=mainnet
@@ -129,4 +129,71 @@ test('still answers zero for the one case that means zero', async () => {
   const result = await fetchBalancesSat(['Funused'], 'mainnet');
   expect(result.byAddress.get('Funused')).toBe(0n);
   expect(result.totalSat).toBe(0n);
+});
+
+function respondPerRequest(handler: (address: string) => Response): { calls: string[] } {
+  const calls: string[] = [];
+  const fetchStub = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    return handler(decodeURIComponent(url.split('/api/address/')[1]?.split('?')[0] ?? ''));
+  };
+  globalThis.fetch = Object.assign(fetchStub, { preconnect: realFetch.preconnect });
+  return { calls };
+}
+
+function addressBody(utxos: unknown[]): Response {
+  return new Response(JSON.stringify({ addressInfo: { balanceSat: 0, txCount: 1, utxos } }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+test('activity: the confirmed heights of an address, ascending, and whether the mempool holds one', async () => {
+  respondPerRequest(() =>
+    addressBody([
+      { txid: 'aa', outputIndex: 0, satoshis: 1, height: 900 },
+      { txid: 'bb', outputIndex: 1, satoshis: 1, height: 0 },
+      { txid: 'cc', outputIndex: 0, satoshis: 1, height: 700 },
+    ]),
+  );
+  const result = await fetchAddressActivity(['Fa'], 'mainnet');
+  expect(result.get('Fa')).toEqual({ confirmedHeights: [700, 900], hasUnconfirmed: true });
+});
+
+test('activity: an address the explorer does not know holds nothing', async () => {
+  respondPerRequest(() => new Response('{}', { status: 404 }));
+  const result = await fetchAddressActivity(['Fa'], 'mainnet');
+  expect(result.get('Fa')).toEqual({ confirmedHeights: [], hasUnconfirmed: false });
+});
+
+// The caller records an index as checked once this answers. A 502 read as
+// "nothing here" would be a payment nobody ever looks for again.
+test('activity: any other failure throws rather than reading as unpaid', async () => {
+  respondPerRequest((address) =>
+    address === 'Fb' ? new Response('', { status: 502 }) : addressBody([]),
+  );
+  await expect(fetchAddressActivity(['Fa', 'Fb'], 'mainnet')).rejects.toThrow(/502/);
+  respondPerRequest(() => new Response(JSON.stringify({ addressInfo: {} }), { status: 200 }));
+  await expect(fetchAddressActivity(['Fa'], 'mainnet')).rejects.toThrow(/utxo list/);
+});
+
+test('activity: reads each address once, a bounded number at a time', async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const calls: string[] = [];
+  const fetchStub = async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    inFlight -= 1;
+    return addressBody([]);
+  };
+  globalThis.fetch = Object.assign(fetchStub, { preconnect: realFetch.preconnect });
+  const addresses = Array.from({ length: 40 }, (_, i) => `F${String(i)}`);
+  const result = await fetchAddressActivity([...addresses, 'F0'], 'mainnet');
+  expect(result.size).toBe(40);
+  expect(calls).toHaveLength(40);
+  expect(peak).toBeLessThanOrEqual(8);
 });

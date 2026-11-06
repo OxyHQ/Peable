@@ -94,3 +94,75 @@ export async function fetchBalancesSat(
   }
   return { byAddress, totalSat };
 }
+
+/**
+ * Where on the chain an address holds coins, as far as the Explorer knows:
+ * the block heights of its unspent outputs. It is a POINTER, never a credit:
+ * the wallet rescans those blocks through its own SPV path, which checks the
+ * merkle proof and records the transaction, rather than taking the Explorer's
+ * word for a coin it would then sign for.
+ */
+export interface AddressActivity {
+  /** Heights of the address's confirmed unspent outputs, ascending. */
+  readonly confirmedHeights: readonly number[];
+  /** Whether it has an unspent output still in the mempool (height 0). */
+  readonly hasUnconfirmed: boolean;
+}
+
+/** At most this many Explorer requests in flight at once. */
+const ACTIVITY_CONCURRENCY = 8;
+
+/**
+ * {@link AddressActivity} for each of `addresses`. Same failure rule as
+ * {@link fetchBalancesSat}: only a 404 means "nothing here"; any other failure
+ * THROWS, because the caller records an address as checked once this answers,
+ * and a 502 recorded as "never paid" would be a payment nobody looks for again.
+ */
+export async function fetchAddressActivity(
+  addresses: readonly string[],
+  network: NetworkType,
+): Promise<Map<string, AddressActivity>> {
+  const result = new Map<string, AddressActivity>();
+  const queue = [...new Set(addresses)];
+  const worker = async (): Promise<void> => {
+    for (let address = queue.shift(); address !== undefined; address = queue.shift()) {
+      result.set(address, await readAddressActivity(address, network));
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(ACTIVITY_CONCURRENCY, queue.length) }, () => worker()),
+  );
+  return result;
+}
+
+async function readAddressActivity(
+  address: string,
+  network: NetworkType,
+): Promise<AddressActivity> {
+  const url = `${EXPLORER_BASE_URL}/api/address/${encodeURIComponent(address)}?network=${network}`;
+  const response = await fetch(url);
+  if (response.status === UNKNOWN_ADDRESS) return { confirmedHeights: [], hasUnconfirmed: false };
+  if (!response.ok) {
+    throw new Error(
+      `Explorer address request for ${address} failed: ${String(response.status)} ${response.statusText}`,
+    );
+  }
+  const body: unknown = await response.json();
+  const utxos = (body as { addressInfo?: { utxos?: unknown } })?.addressInfo?.utxos;
+  if (!Array.isArray(utxos)) {
+    throw new Error(`Explorer address response for ${address} carried no utxo list`);
+  }
+  const confirmedHeights: number[] = [];
+  let hasUnconfirmed = false;
+  for (const entry of utxos) {
+    const height = (entry as { height?: unknown } | null)?.height;
+    if (typeof height === 'number' && Number.isSafeInteger(height) && height > 0) {
+      confirmedHeights.push(height);
+    } else {
+      // Height 0 (or absent) is what the Explorer reports for the mempool.
+      hasUnconfirmed = true;
+    }
+  }
+  confirmedHeights.sort((a, b) => a - b);
+  return { confirmedHeights, hasUnconfirmed };
+}

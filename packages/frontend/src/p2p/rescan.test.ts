@@ -13,7 +13,13 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { Rescanner, planRescan, type RescanCallbacks, type RescanProgress } from './rescan';
+import {
+  Rescanner,
+  planRescan,
+  rewindRescanProgress,
+  type RescanCallbacks,
+  type RescanProgress,
+} from './rescan';
 
 // ---------------------------------------------------------------------------
 // A fake SPV/header environment for the Rescanner.
@@ -184,5 +190,66 @@ describe('planRescan', () => {
 
   test('returns null when the tip is below the birthday', () => {
     expect(planRescan(null, 1000, 500)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rewindRescanProgress
+// ---------------------------------------------------------------------------
+
+describe('rewindRescanProgress', () => {
+  const done: RescanProgress = {
+    startHeight: 0,
+    nextHeight: 501,
+    targetHeight: 500,
+    completed: true,
+  };
+
+  // A social-receive address watched late was paid at 300, which the completed
+  // scan passed before the address was in the filter. Without a rewind
+  // `planRescan` would only ever catch up from 501.
+  test('sends a completed scan back to a block it already passed', () => {
+    const rewound = rewindRescanProgress(done, 300, 600);
+    expect(rewound).toEqual({
+      startHeight: 0,
+      nextHeight: 300,
+      targetHeight: 600,
+      completed: false,
+    });
+    expect(planRescan(rewound, 0, 600)).toEqual({
+      startHeight: 0,
+      resumeFrom: 300,
+      targetHeight: 600,
+    });
+  });
+
+  test('sends an in-flight scan back when it is already past the height', () => {
+    const running: RescanProgress = {
+      startHeight: 100,
+      nextHeight: 400,
+      targetHeight: 500,
+      completed: false,
+    };
+    expect(rewindRescanProgress(running, 50, 500)).toEqual({
+      startHeight: 50,
+      nextHeight: 50,
+      targetHeight: 500,
+      completed: false,
+    });
+  });
+
+  test('leaves a scan alone that has not reached the height yet', () => {
+    const running: RescanProgress = {
+      startHeight: 100,
+      nextHeight: 200,
+      targetHeight: 500,
+      completed: false,
+    };
+    expect(rewindRescanProgress(running, 300, 500)).toBe(running);
+    expect(rewindRescanProgress(done, 501, 600)).toBe(done);
+  });
+
+  test('is null when no scan has run: the first one covers it from the birthday', () => {
+    expect(rewindRescanProgress(null, 300, 600)).toBeNull();
   });
 });

@@ -39,7 +39,7 @@ import { queryClient } from '../../src/services/query-client';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Tabs, TabsTrigger } from '@oxy.so/bloom/tabs';
 import { useTransactionEnrichment } from '../../src/hooks/useTransactionEnrichment';
-import { t } from '../../src/i18n';
+import { formatFairAmount, t } from '../../src/i18n';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type HomeTab = 'overview' | 'activity';
@@ -114,6 +114,7 @@ function WalletHome() {
   const theme = useTheme();
 
   const balance = useWalletStore((s) => s.balance);
+  const strandedBalance = useWalletStore((s) => s.strandedBalance);
   const isSyncing = useWalletStore((s) => s.isSyncing);
   const syncProgress = useWalletStore((s) => s.syncProgress);
   const connectedPeers = useWalletStore((s) => s.connectedPeers);
@@ -287,6 +288,14 @@ function WalletHome() {
               size="lg"
               align="start"
             />
+            {/* Coins received under a previous identity key: still the
+                person's, but not spendable here. Shown on their own line,
+                never folded into a balance a send cannot reach. */}
+            {strandedBalance > 0n ? (
+              <Text className="text-muted-foreground text-xs mt-2 leading-4">
+                {t('wallet.strandedBalance', { amount: formatFairAmount(strandedBalance) })}
+              </Text>
+            ) : null}
           </View>
 
           {/* ---- Quick actions ---- */}

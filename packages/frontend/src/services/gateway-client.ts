@@ -110,6 +110,18 @@ export async function enrichAddresses(
 }
 
 /**
+ * The cursor as this wallet reads it. `account_identity_public_key` is the
+ * account's CURRENT DID `#key-1` (`null` when it publishes none) — the key the
+ * gateway derives the NEXT reservation from, which `identity_public_key` (the
+ * key the LAST one used) is not after a rotation. A gateway older than that
+ * field omits it, so it is optional here and its absence means "not known",
+ * never "no key".
+ */
+export type SocialReceiveCursor = SocialReceiveCursorResponse & {
+  readonly account_identity_public_key?: string | null;
+};
+
+/**
  * Resync this device's social-receive watch window against the backend's
  * reservation cursor (finding: cursor-sync HIGH). `reserveNextSocialAddress`
  * advances the recipient's cursor on every call regardless of whether the
@@ -125,10 +137,8 @@ export async function enrichAddresses(
  * cursor. Returning `.data` here would unwrap a second time and yield
  * `undefined`.
  */
-export async function getSocialReceiveCursor(
-  network: NetworkType,
-): Promise<SocialReceiveCursorResponse> {
-  return gateway.client.get<SocialReceiveCursorResponse>('/v1/social/me/cursor', {
+export async function getSocialReceiveCursor(network: NetworkType): Promise<SocialReceiveCursor> {
+  return gateway.client.get<SocialReceiveCursor>('/v1/social/me/cursor', {
     params: { network },
   });
 }
