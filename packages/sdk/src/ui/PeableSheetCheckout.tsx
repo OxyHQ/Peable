@@ -254,6 +254,12 @@ function SheetCheckout({
   const [tracked, setTracked] = useState<FaircoinPaymentIntent | null>(null);
   const [now, setNow] = useState(nowSeconds);
   const active = useRef(true);
+  const currentSource = useRef(source);
+  currentSource.current = source;
+  const contactUpdate = useRef<{
+    source: SheetCheckoutSource;
+    promise: Promise<CheckoutSessionPublic>;
+  } | null>(null);
   const hasReadOrder = useRef(false);
   const inFlight = useRef(false);
   const settled = useRef(false);
@@ -369,6 +375,9 @@ function SheetCheckout({
       // Validate the host's reviewed order before sending any payer contact.
       if (
         email &&
+        active.current &&
+        currentSource.current === source &&
+        !refused.current &&
         matchesExpectation(
           {
             amount: session.amount_subtotal,
@@ -378,9 +387,20 @@ function SheetCheckout({
           latest.current.expected,
         )
       ) {
-        session = await client.updateCheckoutSession(source.id, source.clientSecret, {
-          customer_details: { email },
-        });
+        // Polls can overlap a slow read. One contact write belongs to this
+        // capability; a new account/source must never inherit it.
+        if (contactUpdate.current?.source !== source) {
+          const promise = client.updateCheckoutSession(source.id, source.clientSecret, {
+            customer_details: { email },
+          });
+          const pending = { source, promise };
+          contactUpdate.current = pending;
+          const clear = () => {
+            if (contactUpdate.current === pending) contactUpdate.current = null;
+          };
+          void promise.then(clear, clear);
+        }
+        session = await contactUpdate.current.promise;
       }
       return { type: 'checkout_session', session };
     }

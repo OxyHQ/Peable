@@ -253,7 +253,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('create', () => {
     const missing = await payer(session, 'POST', '/confirm', {});
     expect(missing.status).toBe(400);
     expect(missing.body.error.param).toBe('customer_details[email]');
-    await payer(session, 'POST', '', { customer_details: { email: 'guest@example.test' } });
+    await payer(session, 'POST', '', {
+      customer_details: { name: 'Guest Buyer', address: { country: 'GB' } },
+    });
+    const collected = await payer(session, 'POST', '', {
+      customer_details: { email: 'guest@example.test' },
+    });
+    expect(collected.body.customer_details.name).toBe('Guest Buyer');
+    expect(collected.body.customer_details.address.country).toBe('GB');
     expect((await payer(session, 'POST', '/confirm', {})).status).toBe(200);
   });
 
