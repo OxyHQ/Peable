@@ -13,6 +13,7 @@
  * error while it continues to serve the last successful data.
  */
 
+import { EXPLORER_READ_TIMEOUT_MS } from './explorer-address';
 import { z } from 'zod';
 import { EXPLORER_BASE_URL, type NetworkType } from '@fairco.in/core';
 
@@ -64,6 +65,7 @@ export async function fetchPriceHistory(
 ): Promise<PriceHistoryPoint[]> {
   const response = await fetch(
     `${EXPLORER_API}/api/price/history?period=${encodeURIComponent(period)}&network=${network}`,
+    { signal: AbortSignal.timeout(EXPLORER_READ_TIMEOUT_MS) },
   );
   if (!response.ok) {
     throw new Error(`price history request failed: ${response.status}`);
@@ -77,7 +79,9 @@ export async function fetchPriceHistory(
  * schema rejects.
  */
 export async function fetchNetworkStats(network: NetworkType): Promise<NetworkStats> {
-  const response = await fetch(`${EXPLORER_API}/api/stats?network=${network}`);
+  const response = await fetch(`${EXPLORER_API}/api/stats?network=${network}`, {
+    signal: AbortSignal.timeout(EXPLORER_READ_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`network stats request failed: ${response.status}`);
   }

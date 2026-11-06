@@ -23,6 +23,7 @@ import {
   reserveSocialSendAddress,
   resolveIdentityPublicKeyHex,
   reuseUnpaidSocialAddress,
+  SocialSenderBoundError,
 } from '../services/socialReceive';
 import { FaircoinCapacityError } from '../services/faircoin/addressPool';
 import { getDb } from '../db/postgres';
@@ -195,8 +196,9 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         return;
       }
 
-      // A FRESH address: the sender's own hourly bound, then the recipient's
-      // daily one, the reservation and its record in one transaction
+      // A FRESH address: the sender's own hourly bound (this task), then the
+      // sender's and the recipient's daily ones (the database), the
+      // reservation and its record in one transaction
       // (`reserveSocialSendAddress`, ADR 0021 D9).
       (req as PairRateLimitedRequest).socialNextAddressSenderKey = senderUserId;
       if (!(await passesLimit(nextAddressSenderLimiter, req, res))) return;
@@ -210,6 +212,17 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
           ...(source ? { source } : {}),
         });
       } catch (err) {
+        if (err instanceof SocialSenderBoundError) {
+          // The sender's own daily bound for this recipient, held in the
+          // database so it holds on every task: a 429 like the limiters above.
+          sendError(
+            res,
+            429,
+            'rate_limit_error',
+            'this account was handed too many new addresses for this person today — try again tomorrow',
+          );
+          return;
+        }
         if (!(err instanceof FaircoinCapacityError)) throw err;
         // 503, not 409: a 409 on this route is the keyless recipient, and the
         // wallet and `@peable.to/pay` read it so from the status alone.

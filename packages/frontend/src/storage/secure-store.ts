@@ -12,21 +12,27 @@
 import { bytesToHex, hexToBytes } from '@fairco.in/core';
 import { getItemAsync, setItemAsync, deleteItemAsync } from './kv-store';
 import { buildPinRecord, verifyPinRecord } from './pin-kdf';
+import {
+  SECRET_KEYS,
+  SECRET_PREFIXES,
+  walletIdsOfIndex,
+  walletSecretKeys,
+  walletSeedKey,
+} from './wallet-keys';
 
 // ---------------------------------------------------------------------------
-// Storage keys
+// Storage keys — named once in `./wallet-keys`, which `clearAll` and the iOS
+// keychain move both enumerate, so neither can miss a key the other covers.
 // ---------------------------------------------------------------------------
 
-const MNEMONIC_KEY = 'fairwallet_mnemonic';
-const WALLET_PIN_KEY = 'fairwallet_pin';
-const WALLET_CREATED_KEY = 'fairwallet_created';
-
-// ---------------------------------------------------------------------------
-// Multi-wallet storage keys
-// ---------------------------------------------------------------------------
-
-const WALLETS_INDEX_KEY = 'fairwallet_wallets_index';
-const ACTIVE_WALLET_KEY = 'fairwallet_active_wallet';
+const MNEMONIC_KEY = SECRET_KEYS.legacyMnemonic;
+const WALLET_PIN_KEY = SECRET_KEYS.pin;
+const WALLET_CREATED_KEY = SECRET_KEYS.created;
+const WALLETS_INDEX_KEY = SECRET_KEYS.walletsIndex;
+const ACTIVE_WALLET_KEY = SECRET_KEYS.activeWallet;
+const BIOMETRICS_ENABLED_KEY = SECRET_KEYS.biometrics;
+const AUTO_LOCK_KEY = SECRET_KEYS.autoLock;
+const CURRENCY_KEY = SECRET_KEYS.currency;
 
 // ---------------------------------------------------------------------------
 // Multi-wallet types
@@ -125,7 +131,7 @@ export async function renameWallet(id: string, name: string): Promise<void> {
 // for each wallet. A missing key means "not backed up yet".
 // ---------------------------------------------------------------------------
 
-const BACKED_UP_PREFIX = 'fairwallet_backedup_';
+const BACKED_UP_PREFIX = SECRET_PREFIXES.backedUp;
 
 /** Whether the wallet's recovery phrase has been revealed / backed up. */
 export async function isWalletBackedUp(id: string): Promise<boolean> {
@@ -184,17 +190,17 @@ export async function setActiveWalletId(id: string): Promise<void> {
 
 /** Save mnemonic for a specific wallet */
 export async function saveWalletMnemonic(walletId: string, mnemonic: string): Promise<void> {
-  await setItemAsync(`fairwallet_mnemonic_${walletId}`, mnemonic);
+  await setItemAsync(`${SECRET_PREFIXES.mnemonic}${walletId}`, mnemonic);
 }
 
 /** Get mnemonic for a specific wallet */
 export async function getWalletMnemonic(walletId: string): Promise<string | null> {
-  return getItemAsync(`fairwallet_mnemonic_${walletId}`);
+  return getItemAsync(`${SECRET_PREFIXES.mnemonic}${walletId}`);
 }
 
 /** Delete mnemonic for a specific wallet */
 export async function deleteWalletMnemonic(walletId: string): Promise<void> {
-  await deleteItemAsync(`fairwallet_mnemonic_${walletId}`);
+  await deleteItemAsync(`${SECRET_PREFIXES.mnemonic}${walletId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,11 +213,8 @@ export async function deleteWalletMnemonic(walletId: string): Promise<void> {
  * skip that step on every launch after the first. The seed lives in the SAME
  * hardware-backed store as the mnemonic it comes from, so persisting it adds no
  * exposure beyond what's already stored — and it is deleted whenever the
- * wallet's mnemonic is deleted.
+ * wallet's mnemonic is deleted. Key: `walletSeedKey` (`./wallet-keys`).
  */
-function walletSeedKey(walletId: string): string {
-  return `fairwallet_seed_${walletId}`;
-}
 
 /** Get the cached BIP39 seed for a wallet, or null if not cached/corrupt. */
 export async function getCachedWalletSeed(walletId: string): Promise<Uint8Array | null> {
@@ -387,8 +390,6 @@ export async function hasPin(): Promise<boolean> {
 // Biometrics preference
 // ---------------------------------------------------------------------------
 
-const BIOMETRICS_ENABLED_KEY = 'fairwallet_biometrics';
-
 export async function setBiometricsEnabled(enabled: boolean): Promise<void> {
   await setItemAsync(BIOMETRICS_ENABLED_KEY, enabled ? '1' : '0');
 }
@@ -424,8 +425,6 @@ export async function hasWallet(): Promise<boolean> {
 // Auto-lock timeout
 // ---------------------------------------------------------------------------
 
-const AUTO_LOCK_KEY = 'fairwallet_auto_lock';
-
 export async function setAutoLockTimeout(minutes: number): Promise<void> {
   await setItemAsync(AUTO_LOCK_KEY, String(minutes));
 }
@@ -438,8 +437,6 @@ export async function getAutoLockTimeout(): Promise<number> {
 // ---------------------------------------------------------------------------
 // Display currency
 // ---------------------------------------------------------------------------
-
-const CURRENCY_KEY = 'fairwallet_currency';
 
 export async function setCurrency(currency: string): Promise<void> {
   await setItemAsync(CURRENCY_KEY, currency);
@@ -455,11 +452,11 @@ export async function getCurrency(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function saveWalletXpub(walletId: string, xpub: string): Promise<void> {
-  await setItemAsync(`fairwallet_xpub_${walletId}`, xpub);
+  await setItemAsync(`${SECRET_PREFIXES.xpub}${walletId}`, xpub);
 }
 
 export async function getWalletXpub(walletId: string): Promise<string | null> {
-  return getItemAsync(`fairwallet_xpub_${walletId}`);
+  return getItemAsync(`${SECRET_PREFIXES.xpub}${walletId}`);
 }
 
 export async function isWatchOnly(walletId: string): Promise<boolean> {
@@ -471,28 +468,17 @@ export async function isWatchOnly(walletId: string): Promise<boolean> {
 // Clear all secure data
 // ---------------------------------------------------------------------------
 
+/**
+ * Delete every secret this module writes, for every indexed wallet:
+ * `walletSecretKeys` (`./wallet-keys`), the same list the iOS keychain move
+ * covers — phrases, cached seeds (the `'default'` one included), xpubs, backup
+ * flags, the PIN record and the settings above, the index last.
+ */
 export async function clearAll(): Promise<void> {
-  // Clear legacy keys
-  await deleteItemAsync(MNEMONIC_KEY);
-  await deleteItemAsync(WALLET_PIN_KEY);
-  await deleteItemAsync(WALLET_CREATED_KEY);
-  await deleteItemAsync(BIOMETRICS_ENABLED_KEY);
-  await deleteItemAsync(AUTO_LOCK_KEY);
-  await deleteItemAsync(CURRENCY_KEY);
-
-  // Clear multi-wallet keys
-  const wallets = await getWalletIndex();
-  for (const wallet of wallets) {
-    await deleteWalletMnemonic(wallet.id);
-    await deleteCachedWalletSeed(wallet.id);
-    await deleteItemAsync(`fairwallet_xpub_${wallet.id}`);
+  const ids = walletIdsOfIndex(await getItemAsync(WALLETS_INDEX_KEY));
+  for (const key of walletSecretKeys(ids)) {
+    await deleteItemAsync(key);
   }
-  // Defensive: a seed can be cached under the "default" key on the transient
-  // path where no active wallet id is resolvable yet — clear it too so a wipe
-  // leaves no seed material behind.
-  await deleteCachedWalletSeed('default');
-  await deleteItemAsync(WALLETS_INDEX_KEY);
-  await deleteItemAsync(ACTIVE_WALLET_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,38 +486,17 @@ export async function clearAll(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Read every item this app keeps once, so `kv-store` moves each one out of the
- * keychain group every Oxy app can read into the wallet group (a read IS the
- * move, verify-before-delete; see `./keychain-groups`). Covers the items that
- * might otherwise wait a long time for a read: the phrases and cached seeds of
- * wallets that are not active. A no-op off iOS. Never throws.
+ * Start the one-shot move of the wallet's keychain items out of the group
+ * every Oxy app can read (`./keychain-groups`) at boot, rather than at the
+ * first read some screen makes. Every `kv-store` call awaits that one move, so
+ * any call starts it; the move enumerates `keychainMoveKeys` (`./wallet-keys`),
+ * the secret keys `clearAll` deletes plus the preferences. A no-op off iOS.
+ * Never throws.
  */
 export async function moveWalletItemsToOwnKeychainGroup(): Promise<void> {
-  let ids: string[] = [];
   try {
-    ids = (await getWalletIndex()).map((w) => w.id);
+    await getItemAsync(WALLETS_INDEX_KEY);
   } catch {
-    // The index stays where it is; the next launch tries again.
-  }
-  const keys = [
-    MNEMONIC_KEY,
-    WALLET_PIN_KEY,
-    WALLET_CREATED_KEY,
-    ACTIVE_WALLET_KEY,
-    BIOMETRICS_ENABLED_KEY,
-    AUTO_LOCK_KEY,
-    CURRENCY_KEY,
-    ...ids.flatMap((id) => [
-      `fairwallet_mnemonic_${id}`,
-      walletSeedKey(id),
-      `${BACKED_UP_PREFIX}${id}`,
-    ]),
-  ];
-  for (const key of keys) {
-    try {
-      await getItemAsync(key);
-    } catch {
-      // Locked: retried on the next read of this key or the next launch.
-    }
+    // The access probe failed; the next storage call asks again.
   }
 }

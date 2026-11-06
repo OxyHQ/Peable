@@ -342,6 +342,35 @@ is opened; the web build has no keys and so nothing to move; and none of this
 has been verified on a physical device (item (3) of the gate, waived by the
 owner, still undone).
 
+## Amendment (2026-11-06): review round 4 — every previous key's index 0, a checked key list, batched moves
+
+The fourth security review (findings R4-1, R4-13, R4-14, I-2) found the
+previous-key work above incomplete in four places, each fixed in the wallet:
+
+- **Every reachable previous key's index 0 is watched (R4-1, blocking).** The
+  gateway never hands out index 0, so no row it lists names it, and a phone
+  that rotated and was then reinstalled or replaced gave a Commons-listed
+  previous key an empty row list: coins at the old key's default address — the
+  one its Receive sheet and saved QR codes showed — were in no balance, no
+  stranded line and no move, even with the old phrase added.
+  `groupPreviousKeys` now gives every group its key's index-0 row (origin
+  `default`), and `watchPreviousSocialRows` persists it before reading, so the
+  next resync reads it through the Explorer at once. Tested from an empty set.
+- **Commons' list is checked against the account (R4-14).** A key Commons lists
+  (or a tree stored from one) is opened only when the account's own key history
+  names it — the person's `identity.keyHistory()`, the organization's key list
+  (`accounts.identityKey.get`); keys the gateway recorded on the account's
+  addresses need no check. With no history to ask, such a key waits.
+  (`previousKeyCandidates`.)
+- **New rows of an open previous key are watched at once (R4-14)**, not on the
+  wallet's next open, and **every gateway row is re-derived from its key at
+  its index before it is stored**; one that does not reproduce its address is
+  dropped and logged (I-2).
+- **The one-tap move is batched (R4-13).** One move spends at most 500 inputs
+  (about 74 000 bytes; ~670 would pass the 100 000-byte standard size and no
+  node would relay it), largest coins first; the prompt stays while coins are
+  left.
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second

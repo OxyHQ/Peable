@@ -21,6 +21,7 @@ const {
   getSocialReceiveCursor,
   listSocialReceiveAddresses,
   KeylessRecipientError,
+  GATEWAY_READ_DEADLINE_MS,
 } = await import('./gateway-client');
 
 beforeEach(() => {
@@ -102,6 +103,7 @@ describe('getSocialReceiveCursor', () => {
 
     expect(getMock).toHaveBeenCalledWith('/v1/social/me/cursor', {
       params: { network: 'testnet' },
+      deadline: GATEWAY_READ_DEADLINE_MS,
     });
     expect(result).toEqual(cursor);
   });
@@ -154,6 +156,7 @@ describe('listSocialReceiveAddresses', () => {
 
     expect(getMock).toHaveBeenCalledWith('/v1/social/me/receive_addresses', {
       params: { network: 'testnet', after: 3, limit: 50 },
+      deadline: GATEWAY_READ_DEADLINE_MS,
     });
     expect(result).toEqual(page);
   });
@@ -169,6 +172,7 @@ describe('listSocialReceiveAddresses', () => {
 
     expect(getMock).toHaveBeenCalledWith('/v1/social/me/receive_addresses', {
       params: { network: 'mainnet', after: 0, limit: 1_000 },
+      deadline: GATEWAY_READ_DEADLINE_MS,
     });
   });
 });

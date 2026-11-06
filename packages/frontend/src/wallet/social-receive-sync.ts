@@ -25,7 +25,7 @@
 
 import type { AddressActivity } from '../services/explorer-address';
 import type { WatchSetCheck, WatchSetRow } from './social-receive-watch';
-import { nextSocialReceiveCheckAt } from './social-receive-watch';
+import { nextSocialReceiveCheckAt, SOCIAL_RECEIVE_ACTIVE_FLOOR } from './social-receive-watch';
 
 /** How often a running wallet resyncs with nothing prompting it. */
 export const SOCIAL_RECEIVE_RESYNC_INTERVAL_MS = 2 * 60_000;
@@ -115,6 +115,8 @@ export interface SocialReceiveCheckDeps {
   /** False once the wallet closed or switched: stop without writing. */
   readonly isCurrent: () => boolean;
   readonly batchSize?: number;
+  /** Coins below this do not count as found (default {@link SOCIAL_RECEIVE_ACTIVE_FLOOR}). */
+  readonly floor?: bigint;
 }
 
 export interface SocialReceiveCheckResult {
@@ -138,6 +140,7 @@ export async function checkSocialReceiveDue(
   deps: SocialReceiveCheckDeps,
 ): Promise<SocialReceiveCheckResult> {
   const batchSize = deps.batchSize ?? CHECK_BATCH;
+  const floor = deps.floor ?? SOCIAL_RECEIVE_ACTIVE_FLOOR;
   let checked = 0;
   let rescanFrom: number | null = null;
   const found: string[] = [];
@@ -151,8 +154,15 @@ export async function checkSocialReceiveDue(
     for (const row of batch) {
       const seen = activity.get(row.address);
       const first = seen?.confirmedHeights[0];
-      if (first !== undefined && (lowest === null || first < lowest)) lowest = first;
-      const hasCoins = first !== undefined || seen?.hasUnconfirmed === true;
+      // Dust is not a payment to go back for (R4-2): an address holding less
+      // than the active floor is recorded as read, never made active and
+      // never rescanned for — so dusting dormant addresses buys an attacker
+      // neither Bloom filter slots nor rescans. A value the Explorer did not
+      // state (`null`) is taken as a payment.
+      const enough =
+        seen?.valueSat === null || seen?.valueSat === undefined || seen.valueSat >= floor;
+      const hasCoins = enough && (first !== undefined || seen?.hasUnconfirmed === true);
+      if (hasCoins && first !== undefined && (lowest === null || first < lowest)) lowest = first;
       if (hasCoins) found.push(row.address);
       checks.push({
         address: row.address,

@@ -1,4 +1,4 @@
-import { test, expect, beforeAll, afterAll, beforeEach, describe, mock } from 'bun:test';
+import { test, expect, beforeAll, afterAll, beforeEach, afterEach, describe, mock } from 'bun:test';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
@@ -109,9 +109,12 @@ mock.module('../../oxy', () => ({
 const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX, NEXT_ADDRESS_SENDER_MAX } = await import(
   '../social'
 );
-const { useDidTransport, useIdentityKeyResolver, useMaxFreshSocialAddresses } = await import(
-  '../../services/socialReceive'
-);
+const {
+  MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER,
+  useDidTransport,
+  useIdentityKeyResolver,
+  useMaxFreshSocialAddresses,
+} = await import('../../services/socialReceive');
 
 // This suite serves the DID document itself (the gateway reads it fresh,
 // through its transport): not the preloaded test keys.
@@ -371,6 +374,45 @@ describe('POST /v1/social/:username/next_address', () => {
     }
   });
 
+  test(`429s once a sender was handed ${MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER} fresh addresses of one recipient's today, on every task (the database's count)`, async () => {
+    const sender = 'user_dusting_sender';
+    // Every address it is handed reads used: the dust that defeats "hand back the unpaid one".
+    const previous = useAddressUsageReader(async () => 'used');
+    // Another task: a router of its own, with empty in-memory limiters.
+    const other = express();
+    other.use(express.json());
+    other.use(createSocialRouter({ requireOxyUser: stubRequireOxyUser }));
+    const otherServer = other.listen(0);
+    const otherUrl = `http://127.0.0.1:${(otherServer.address() as AddressInfo).port}`;
+    try {
+      for (let i = 1; i <= MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER; i += 1) {
+        const { status, body } = await postNextAddress('alice', { network: 'testnet' }, sender);
+        expect(status).toBe(200);
+        expect(body.index).toBe(i);
+      }
+      const res = await fetch(`${otherUrl}/v1/social/alice/next_address`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Test-User-Id': sender },
+        body: JSON.stringify({ network: 'testnet' }),
+      });
+      const body = (await res.json()) as NextAddressResponse;
+      expect(res.status).toBe(429);
+      expect(body.error?.type).toBe('rate_limit_error');
+      expect(body.address).toBeUndefined();
+      const rows = await gatewayDb()
+        .select()
+        .from(socialSendAttributions)
+        .where(eq(socialSendAttributions.senderUserId, sender));
+      expect(rows).toHaveLength(MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER);
+      // Another sender still pays alice.
+      const fresh = await postNextAddress('alice', { network: 'testnet' }, 'user_real_sender');
+      expect(fresh.status).toBe(200);
+    } finally {
+      useAddressUsageReader(previous);
+      await new Promise<void>((resolve) => otherServer.close(() => resolve()));
+    }
+  });
+
   test('409s with code keyless_recipient for a keyless recipient', async () => {
     const { status, body } = await postNextAddress('keylessbob', { network: 'testnet' });
     expect(status).toBe(409);
@@ -537,6 +579,17 @@ describe('POST /v1/social/:username/next_address', () => {
 });
 
 describe('POST /v1/social/:username/next_address — per-(sender,recipient) anti-grief rate limit', () => {
+  // This limiter counts ASKS (the held address handed back included), so the
+  // chain shows it unused: the sender holds one address and the daily fresh
+  // bound (`MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER`) is not what answers.
+  let previousReader: ReturnType<typeof useAddressUsageReader>;
+  beforeEach(() => {
+    previousReader = useAddressUsageReader(async () => 'unused');
+  });
+  afterEach(() => {
+    useAddressUsageReader(previousReader);
+  });
+
   test(`the ${NEXT_ADDRESS_PAIR_MAX + 1}th reservation against the same recipient from the same sender is rate-limited`, async () => {
     const sender = 'user_grief_sender_a';
     for (let i = 0; i < NEXT_ADDRESS_PAIR_MAX; i++) {

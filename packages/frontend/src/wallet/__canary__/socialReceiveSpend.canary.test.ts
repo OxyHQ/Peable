@@ -185,7 +185,7 @@ async function sweep(
   expect(watched).toHaveLength(rows.length);
   const indexOf = new Map(watched.map((entry) => [entry.address, entry.index]));
   for (const coin of wallet.received) expect(indexOf.has(coin.address)).toBe(true);
-  const active = planActiveSet({ watchable: watched, holdingCoins: new Set(), now });
+  const active = planActiveSet({ watchable: watched, holdingCoins: new Map(), now });
   for (const coin of wallet.received) expect(active.has(coin.address)).toBe(true);
 
   // 2b. The running wallet's look at every address not yet looked at (the
@@ -200,12 +200,13 @@ async function sweep(
     fetchActivity: async (addresses: readonly string[]) => {
       const activity = new Map<string, AddressActivity>();
       for (const address of addresses) {
-        const utxos = await rpc<{ height: number }[]>('getaddressutxos', [
+        const utxos = await rpc<{ height: number; satoshis: number }[]>('getaddressutxos', [
           { addresses: [address] },
         ]);
         activity.set(address, {
           confirmedHeights: utxos.map((utxo) => utxo.height).sort((a, b) => a - b),
           hasUnconfirmed: false,
+          valueSat: utxos.reduce((sum, utxo) => sum + BigInt(utxo.satoshis), 0n),
         });
       }
       return activity;

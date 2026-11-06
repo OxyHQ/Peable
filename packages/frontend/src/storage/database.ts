@@ -1224,14 +1224,29 @@ export class Database {
     });
   }
 
-  /** The set's addresses that hold an unspent output in this wallet's UTXO set. */
-  async getSocialReceiveAddressesHoldingCoins(): Promise<string[]> {
-    const rows = await this.db.getAllAsync<{ address: string }>(
-      `SELECT DISTINCT s.address FROM social_receive_set s
+  /**
+   * The set's addresses that hold an unspent output in this wallet's UTXO set,
+   * each with the value it holds (base units). The value decides whether the
+   * address is active (`planActiveSet`'s floor and funded cap, R4-2), so it
+   * is summed exactly as bigints, never in SQL arithmetic.
+   */
+  async getSocialReceiveCoinsHeld(): Promise<Map<string, bigint>> {
+    const rows = await this.db.getAllAsync<{ address: string; value: string }>(
+      `SELECT s.address, u.value FROM social_receive_set s
          JOIN utxos u ON u.address = s.address
         WHERE u.spent = 0`,
     );
-    return rows.map((row) => row.address);
+    const held = new Map<string, bigint>();
+    for (const row of rows) {
+      let value: bigint;
+      try {
+        value = BigInt(row.value);
+      } catch {
+        continue;
+      }
+      held.set(row.address, (held.get(row.address) ?? 0n) + value);
+    }
+    return held;
   }
 
   /** Where the pull of the gateway's set stands. */
