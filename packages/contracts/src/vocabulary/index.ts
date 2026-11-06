@@ -21,3 +21,4 @@ export * from './files';
 export * from './identity';
 export * from './merchants';
 export * from './paymentMethodConfigurations';
+export * from './realtime';

@@ -104,7 +104,13 @@ import { startEventSweeper, stopEventSweeper } from './services/eventSweeper';
 import { startRequestLogSweeper, stopRequestLogSweeper } from './services/requestLogSweeper';
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
-import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
+import {
+  initPayerSocket,
+  initSocket,
+  emitIntentUpdate,
+  payerSocketOptions,
+  type SocketAuth,
+} from './realtime/socket';
 import {
   REQUEST_ID_HEADER,
   createInternalErrorHandler,
@@ -167,7 +173,10 @@ export interface Gateway {
   /** The Express app `httpServer` serves; exposed so tests can read its settings (`trust proxy`). */
   app: express.Express;
   httpServer: HttpServer;
+  /** The Oxy Socket.IO server (`/socket.io/`, Oxy origins). */
   io: SocketServer;
+  /** The payer Socket.IO server (`PAYER_SOCKET_PATH`, any origin, no credentials). */
+  payerIo: SocketServer;
   watcher: SettlementWatcher;
 }
 
@@ -190,11 +199,11 @@ export interface Gateway {
  * own. Exported for direct testing (`__tests__/onIntentChange.test.ts`).
  */
 export async function onIntentChange(
-  io: SocketServer,
+  servers: readonly SocketServer[],
   intent: PaymentIntentRow,
   _safeFetch?: SafeFetchFn | undefined,
 ): Promise<void> {
-  emitIntentUpdate(io, intent);
+  for (const io of servers) emitIntentUpdate(io, intent);
   kickWebhookOutbox();
   await Promise.resolve();
 }
@@ -386,13 +395,19 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
     ...createOxySocketCors({ appOrigins: config.allowedOrigins, allowCredentials: false }),
   });
   initSocket(io, { socketAuth: deps.socketAuth });
+  // The PAYER socket (`PAYER_SOCKET_PATH`) answers any origin without
+  // credentials, the rule of the payer HTTP routes: a merchant's own site runs
+  // Pay with Peable, and `subscribe`'s client secret is the whole authority.
+  // A separate server because Socket.IO's CORS is per server.
+  const payerIo = new SocketServer(httpServer, payerSocketOptions());
+  initPayerSocket(payerIo);
 
   const watcher = new SettlementWatcher({
     getTransaction: deps.getTransaction ?? getTransaction,
-    onChange: (intent) => onIntentChange(io, intent, deps.safeFetch),
+    onChange: (intent) => onIntentChange([io, payerIo], intent, deps.safeFetch),
   });
 
-  return { app, httpServer, io, watcher };
+  return { app, httpServer, io, payerIo, watcher };
 }
 
 /**
@@ -450,6 +465,11 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
     stopAccountSync();
     stopReferenceSync();
     stopReferenceReconciliation();
+    // The payer server's own sockets and engine only: `close()` would also
+    // close the shared HTTP server, and the Oxy server's `close` below must be
+    // the one that does, or its callback waits on a `close` already emitted.
+    gateway.payerIo.disconnectSockets(true);
+    gateway.payerIo.engine.close();
     gateway.io.close(() => {
       void Promise.allSettled([stopEcosystemActivity(), flushRequestLogs()])
         .then(async (results) => {

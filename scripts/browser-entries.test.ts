@@ -101,15 +101,17 @@ interface Entry {
   readonly peable?: readonly string[];
 }
 
-// `@peable.to/sdk/checkout`: the error classes read `vocabulary/errors`.
+// `@peable.to/sdk/checkout`: the error classes read `vocabulary/errors`, and
+// the payer client's socket path `vocabulary/realtime`.
 // `/checkout/ui`: the method list reads `paymentMethodConfigurations` and the
 // fiat set in `money` it is built from; `PeableSheetCheckout` drives an order
-// through the payer client, whose errors read `vocabulary/errors`.
+// through the payer client, whose errors read `vocabulary/errors` and whose
+// socket path reads `vocabulary/realtime`.
 // `/display`, `@peable.to/pay/ui`: none.
 const ENTRIES: Readonly<Record<string, Entry>> = {
   '@peable.to/sdk/checkout': {
     source: 'packages/sdk/src/checkout.ts',
-    peable: ['contracts/vocabulary/errors.js'],
+    peable: ['contracts/vocabulary/errors.js', 'contracts/vocabulary/realtime.js'],
   },
   '@peable.to/sdk/checkout/ui': {
     source: 'packages/sdk/src/ui/index.ts',
@@ -117,6 +119,7 @@ const ENTRIES: Readonly<Record<string, Entry>> = {
       'contracts/vocabulary/errors.js',
       'contracts/vocabulary/money.js',
       'contracts/vocabulary/paymentMethodConfigurations.js',
+      'contracts/vocabulary/realtime.js',
     ],
   },
   '@peable.to/sdk/display': { source: 'packages/sdk/src/display.ts', peable: [] },

@@ -248,7 +248,7 @@ describe('subscribe', () => {
 
     expect(ioCalls).toHaveLength(1);
     expect(ioCalls[0]?.url).toBe(TEST_GATEWAY_URL);
-    expect(ioCalls[0]?.opts).toEqual({ transports: ['websocket'] });
+    expect(ioCalls[0]?.opts).toEqual({ path: '/payer-socket.io', transports: ['websocket'] });
     expect(socket.emitWithAck).toHaveBeenCalledWith('subscribe', {
       intent_id: 'pi_1',
       client_secret: 'secret_1',
