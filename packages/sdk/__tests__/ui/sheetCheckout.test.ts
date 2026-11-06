@@ -154,6 +154,14 @@ describe('what a session asks for', () => {
 
   test('an email only when the session has none', () => {
     expect(sessionCollection(session()).contact).toBe(true);
+    expect(sessionCollection(session({ contact_collection: 'merchant_account' })).contact).toBe(
+      false,
+    );
+    expect(
+      sessionCollection(
+        session({ contact_collection: 'merchant_account', billing_address_collection: 'required' }),
+      ).billingAddress,
+    ).toBe(true);
     expect(sessionRequest(session(), []).requiresContact).toBe(true);
   });
 

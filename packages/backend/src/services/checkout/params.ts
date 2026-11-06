@@ -1,3 +1,4 @@
+import type { CheckoutContactCollection } from '@peable.to/contracts/vocabulary/checkout';
 /**
  * Checkout's parsed requests (Orbit Phase 3), as the services consume them.
  *
@@ -32,6 +33,7 @@ export function substituteSessionId(url: string, sessionPublicId: string): strin
 }
 
 type CollectionInput = {
+  contact_collection?: CheckoutContactCollection | undefined;
   billing_address_collection?: 'auto' | 'required' | undefined;
   shipping_address_collection?: { allowed_countries: string[] } | undefined;
   phone_number_collection?: { enabled: boolean } | undefined;
@@ -42,6 +44,7 @@ type CollectionInput = {
 /** The stored collection a request's options describe. */
 export function storedCollectionOf(input: CollectionInput): StoredCheckoutCollection {
   return {
+    contactCollection: input.contact_collection ?? 'email',
     billingAddressCollection: input.billing_address_collection ?? 'auto',
     shippingCountries: input.shipping_address_collection
       ? [...new Set(input.shipping_address_collection.allowed_countries)]

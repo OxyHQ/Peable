@@ -1,3 +1,4 @@
+import type { CheckoutSessionPublic } from '@peable.to/shared-types';
 import type { ReactNode } from 'react';
 import type { CheckoutRequest } from '@oxy.so/bloom/checkout-sheet';
 import type { PeableCheckoutSheetProps } from './PeableCheckoutSheet';
@@ -125,4 +126,20 @@ export function canPrepareCheckout(
     [address.name, address.line1, address.city].every((value) => value.trim()) &&
     /^[a-z]{2}$/i.test(address.country.trim())
   );
+}
+
+/** Carry payer-entered contact to the capability-authorized session, never to a merchant store. */
+export function preparedContactEmail(
+  session: CheckoutSessionPublic,
+  email: string | undefined,
+): string | null {
+  if (
+    session.contact_collection === 'merchant_account' ||
+    session.customer_email_locked ||
+    session.customer_details.email ||
+    session.status !== 'open' ||
+    session.payment_intent
+  )
+    return null;
+  return email?.trim() || null;
 }

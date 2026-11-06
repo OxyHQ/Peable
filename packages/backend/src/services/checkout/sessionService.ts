@@ -1040,7 +1040,9 @@ function missingField(
   const collection = session.collection ?? DEFAULT_COLLECTION;
   const details = session.customerDetails;
   const email = emailOf(session);
-  if (!email) return invalid('parameter_missing', 'enter your email', 'customer_details[email]');
+  if (!email && collection.contactCollection !== 'merchant_account') {
+    return invalid('parameter_missing', 'enter your email', 'customer_details[email]');
+  }
   const addressNeeded = collection.billingAddressCollection === 'required' || session.automaticTax;
   if (addressNeeded) {
     if (!details?.address?.country) {

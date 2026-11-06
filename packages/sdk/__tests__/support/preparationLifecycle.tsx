@@ -1,3 +1,4 @@
+import type { CheckoutSessionPublic } from '@peable.to/shared-types';
 // Isolated process: presentation mocks and DOM globals must never leak into headless SDK tests.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
@@ -26,6 +27,15 @@ let fields: ComponentProps<typeof CheckoutPreparationFields> | undefined;
 let mounts = 0;
 let unmounts = 0;
 let reads = 0;
+let payerSession: CheckoutSessionPublic = {
+  ...publicSessionFixture,
+  id: 'cs_0123456789abcdef01234567',
+  customer_details: { ...publicSessionFixture.customer_details, email: 'payer@example.test' },
+};
+let readBlock: Promise<void> | undefined;
+let updateBlock: Promise<void> | undefined;
+const updates: { id: string; secret: string; body: { customer_details: { email: string } } }[] = [];
+const unavailable: string[] = [];
 mock.module('react-native', () => ({
   Platform: { OS: 'web' },
   Linking: { openURL: async () => {} },
@@ -62,15 +72,37 @@ mock.module('../../src/browser/payerClient', () => ({
   createPeableCheckout: () => ({
     getCheckoutSession: async () => {
       reads++;
-      return {
-        ...publicSessionFixture,
-        id: 'cs_0123456789abcdef01234567',
-        customer_details: { ...publicSessionFixture.customer_details, email: 'payer@example.test' },
+      const response = payerSession;
+      await readBlock;
+      return response;
+    },
+    updateCheckoutSession: async (
+      id: string,
+      secret: string,
+      body: { customer_details: { email: string } },
+    ) => {
+      updates.push({ id, secret, body });
+      await updateBlock;
+      payerSession = {
+        ...payerSession,
+        customer_details: { ...payerSession.customer_details, ...body.customer_details },
       };
+      return payerSession;
     },
   }),
 }));
-const { PeableSheetCheckout } = await import('../../src/ui/PeableSheetCheckout');
+const { PeableSheetCheckout, SHEET_POLL_MS } = await import('../../src/ui/PeableSheetCheckout');
+const nativeSetInterval = globalThis.setInterval;
+let poll: () => void = () => {
+  throw new Error('poll not installed');
+};
+globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+  if (args[1] === SHEET_POLL_MS && typeof args[0] === 'function') {
+    const callback = args[0];
+    poll = () => callback();
+  }
+  return nativeSetInterval(...args);
+}) as typeof setInterval;
 const { SheetPreparationError } = await import('../../src/ui/checkoutPreparation');
 
 function deferred<T>() {
@@ -120,7 +152,7 @@ async function render(preparation: SheetCheckoutPreparation, open = true) {
         open,
         onSettled: () => {},
         onUnavailable: (reason) => {
-          throw new Error(reason);
+          unavailable.push(reason);
         },
         onClose: () => {},
       }),
@@ -276,6 +308,210 @@ await act(async () => {
 assert.equal(reads, readsBefore);
 assert.equal(getSheet().frameKey, 'preparation');
 await reset();
+// A guest enters email once: the same mounted checkout collects it on the payer session.
+assert.deepEqual(unavailable, []);
+payerSession = {
+  ...payerSession,
+  customer_details: { ...payerSession.customer_details, email: null },
+};
+await render({
+  key: 'guest:contact',
+  request: { ...request, requiresContact: true },
+  createSession: async () => result,
+});
+await act(async () => {
+  getFields().onChange({ ...getFields().details, email: 'guest@example.test' });
+});
+await act(async () => {
+  getFields().onContinue();
+  getFields().onContinue();
+});
+assert.deepEqual(updates, [
+  {
+    id: result.source.id,
+    secret: result.source.clientSecret,
+    body: { customer_details: { email: 'guest@example.test' } },
+  },
+]);
+assert.equal(getSheet().request.requiresContact, false);
+await reset();
+
+// An account channel never sends a hidden email, even if account defaults contain one.
+payerSession = {
+  ...payerSession,
+  contact_collection: 'merchant_account',
+  customer_details: { ...payerSession.customer_details, email: null },
+};
+await render({
+  key: 'account:contact',
+  request,
+  initialDetails: { email: 'account@example.test' },
+  createSession: async () => result,
+});
+await act(async () => {
+  getFields().onContinue();
+});
+assert.equal(updates.length, 1);
+assert.equal(getSheet().request.requiresContact, false);
+await reset();
+
+// No private contact is sent when the returned order fails the host's reviewed price.
+payerSession = { ...payerSession, contact_collection: 'email', amount_subtotal: '99999' };
+await render({
+  key: 'guest:mismatch',
+  request,
+  initialDetails: { email: 'private@example.test' },
+  createSession: async () => result,
+});
+await act(async () => {
+  getFields().onContinue();
+});
+assert.equal(updates.length, 1);
+assert.deepEqual(unavailable, ['mismatch']);
+await reset();
+payerSession = { ...payerSession, amount_subtotal: '3000' };
+
+// GET may finish after unmount or an account switch: neither may initiate a private UPDATE.
+for (const scenario of ['unmount', 'account-switch']) {
+  const delayed = deferred<void>();
+  readBlock = delayed.promise;
+  await render({
+    key: `guest:${scenario}`,
+    request,
+    initialDetails: { email: 'private@example.test' },
+    createSession: async () => result,
+  });
+  await act(async () => {
+    getFields().onContinue();
+  });
+  if (scenario === 'unmount') await reset();
+  else await render({ key: 'new-account:cart', request, createSession: async () => result });
+  await act(async () => {
+    delayed.resolve(undefined);
+    await delayed.promise;
+  });
+  assert.equal(updates.length, 1);
+  readBlock = undefined;
+  await reset();
+}
+// Empty subscription prerequisites stay on review: Continue creates only the order.
+const emptyAttempt = deferred<SheetPreparedCheckout>();
+const emptyDetails: Readonly<SheetCheckoutDetails>[] = [];
+payerSession = { ...payerSession, contact_collection: 'merchant_account' };
+await render({
+  key: 'account:empty',
+  request,
+  createSession: async (details) => {
+    emptyDetails.push(details);
+    if (emptyDetails.length === 1) return emptyAttempt.promise;
+    return result;
+  },
+});
+assert.equal(emptyDetails.length, 0);
+await act(async () => {
+  getSheet().onStep('method');
+});
+assert.equal(emptyDetails.length, 1);
+assert.equal(getSheet().step, 'review');
+assert.equal(getSheet().brandState, 'loading');
+assert.equal(getSheet().continueDisabled, true);
+await act(async () => {
+  emptyAttempt.reject(new SheetPreparationError('Retry this order', 'unknown'));
+});
+assert.equal(getSheet().step, 'review');
+assert.equal(getSheet().notice, 'Retry this order');
+assert.equal(getSheet().continueDisabled, false);
+await act(async () => {
+  getSheet().onStep('method');
+});
+assert.equal(emptyDetails.length, 2);
+assert.equal(emptyDetails[0], emptyDetails[1]);
+assert.equal(getSheet().step, 'review');
+await reset();
+
+// Real prerequisites still get their details screen, including merchant-specific consent.
+for (const required of ['contact', 'shipping', 'additional']) {
+  let created = 0;
+  await render({
+    key: `account:required:${required}`,
+    request: {
+      ...request,
+      requiresContact: required === 'contact',
+      requiresShipping: required === 'shipping',
+    },
+    ...(required === 'additional'
+      ? { renderAdditionalDetails: () => createElement('span', null, 'Consent') }
+      : {}),
+    createSession: async () => {
+      created++;
+      return result;
+    },
+  });
+  await act(async () => {
+    getSheet().onStep('method');
+  });
+  assert.equal(getSheet().step, 'method');
+  assert.equal(created, 0);
+  await reset();
+}
+let blockedCreates = 0;
+await render({
+  key: 'account:blocked',
+  request,
+  canContinue: false,
+  createSession: async () => {
+    blockedCreates++;
+    return result;
+  },
+});
+assert.equal(getSheet().continueDisabled, true);
+await act(async () => {
+  getSheet().onStep('method');
+});
+assert.equal(blockedCreates, 0);
+await reset();
+payerSession = { ...payerSession, contact_collection: 'email' };
+
+// Overlapping polls share only the in-flight contact write; later reads retain fresh totals.
+const baselineUpdates = updates.length;
+const slowUpdate = deferred<void>();
+updateBlock = slowUpdate.promise;
+payerSession = {
+  ...payerSession,
+  customer_details: { ...payerSession.customer_details, email: null },
+};
+await render({
+  key: 'guest:overlap',
+  request,
+  initialDetails: { email: 'guest@example.test' },
+  createSession: async () => result,
+});
+await act(async () => {
+  getFields().onContinue();
+});
+assert.equal(updates.length, baselineUpdates + 1);
+await act(async () => {
+  poll();
+});
+assert.equal(updates.length, baselineUpdates + 1);
+await act(async () => {
+  slowUpdate.resolve(undefined);
+  await slowUpdate.promise;
+});
+updateBlock = undefined;
+assert.equal(getSheet().request.dueTodayMinorUnits, 2700);
+payerSession = {
+  ...payerSession,
+  amount_total: '2500',
+  customer_details: { ...payerSession.customer_details, email: null },
+};
+await act(async () => {
+  poll();
+});
+assert.equal(updates.length, baselineUpdates + 2);
+assert.equal(getSheet().request.dueTodayMinorUnits, 2500);
+await reset();
+globalThis.setInterval = nativeSetInterval;
 await act(async () => root.unmount());
 await window.happyDOM.close();
 console.log('Checkout preparation lifecycle: passed');

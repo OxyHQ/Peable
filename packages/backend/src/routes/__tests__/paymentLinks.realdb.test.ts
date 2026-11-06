@@ -177,10 +177,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant', () => {
       await storedEvents({ merchantId: merchant.id, type: 'payment_link.updated' })
     ).filter(({ event }) => (event.data.object as { id?: string }).id === link.id);
     expect(events).toHaveLength(1);
-    expect(Object.keys(must(events[0]).event.data.previous_attributes ?? {}).sort()).toEqual([
-      'allow_promotion_codes',
-      'restrictions',
-    ]);
+    const { updated_at, ...previous } = must(events[0]).event.data.previous_attributes ?? {};
+    expect(previous).toEqual({ allow_promotion_codes: false, restrictions: link.restrictions });
+    // A real second boundary adds the old timestamp to the same event diff.
+    expect(updated_at).toBe(
+      updated.body.updated_at === link.updated_at ? undefined : link.updated_at,
+    );
   });
 });
 

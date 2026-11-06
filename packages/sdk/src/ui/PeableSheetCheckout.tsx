@@ -1,3 +1,4 @@
+import { preparedContactEmail } from './checkoutPreparation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
 import { Button } from '@oxy.so/bloom/button';
@@ -253,6 +254,12 @@ function SheetCheckout({
   const [tracked, setTracked] = useState<FaircoinPaymentIntent | null>(null);
   const [now, setNow] = useState(nowSeconds);
   const active = useRef(true);
+  const currentSource = useRef(source);
+  currentSource.current = source;
+  const contactUpdate = useRef<{
+    source: SheetCheckoutSource;
+    promise: Promise<CheckoutSessionPublic>;
+  } | null>(null);
   const hasReadOrder = useRef(false);
   const inFlight = useRef(false);
   const settled = useRef(false);
@@ -359,19 +366,49 @@ function SheetCheckout({
     }
   }, []);
 
+  const preparedEmail = preparationState.prepared ? preparationState.details.email : undefined;
   const read = useCallback(async (): Promise<Order> => {
     if (!source) throw new Error('Checkout session not created');
     if (source.type === 'checkout_session') {
-      return {
-        type: 'checkout_session',
-        session: await client.getCheckoutSession(source.id, source.clientSecret),
-      };
+      let session = await client.getCheckoutSession(source.id, source.clientSecret);
+      const email = preparedContactEmail(session, preparedEmail);
+      // Validate the host's reviewed order before sending any payer contact.
+      if (
+        email &&
+        active.current &&
+        currentSource.current === source &&
+        !refused.current &&
+        matchesExpectation(
+          {
+            amount: session.amount_subtotal,
+            currency: session.currency,
+            livemode: session.livemode,
+          },
+          latest.current.expected,
+        )
+      ) {
+        // Polls can overlap a slow read. One contact write belongs to this
+        // capability; a new account/source must never inherit it.
+        if (contactUpdate.current?.source !== source) {
+          const promise = client.updateCheckoutSession(source.id, source.clientSecret, {
+            customer_details: { email },
+          });
+          const pending = { source, promise };
+          contactUpdate.current = pending;
+          const clear = () => {
+            if (contactUpdate.current === pending) contactUpdate.current = null;
+          };
+          void promise.then(clear, clear);
+        }
+        session = await contactUpdate.current.promise;
+      }
+      return { type: 'checkout_session', session };
     }
     return {
       type: 'payment_intent',
       intent: await client.getPaymentIntent(source.id, source.clientSecret),
     };
-  }, [client, source]);
+  }, [client, source, preparedEmail]);
 
   const refresh = useCallback(async () => {
     accept(await read());
@@ -686,6 +723,11 @@ function SheetCheckout({
 
   if (preparation && !order) {
     const preparing = preparationState.busy || !!preparationState.prepared;
+    const hasDetails = !!(
+      preparation.request.requiresShipping ||
+      preparation.request.requiresContact !== false ||
+      preparation.renderAdditionalDetails
+    );
     return (
       <PeableCheckoutSheet
         open={open}
@@ -714,7 +756,8 @@ function SheetCheckout({
         nextStep="method"
         methodTitle={t('preparation.title')}
         interactionBlocked={preparing}
-        continueDisabled={preparing}
+        continueDisabled={preparing || (!hasDetails && !preparationState.canContinue)}
+        notice={!hasDetails ? (preparationState.error ?? undefined) : undefined}
         brandState={preparing ? 'loading' : undefined}
         methodContent={
           <CheckoutPreparationFields
@@ -733,7 +776,10 @@ function SheetCheckout({
           />
         }
         onDraft={() => {}}
-        onStep={() => go('method')}
+        onStep={() => {
+          if (hasDetails) go('method');
+          else void preparationState.submit();
+        }}
         onBack={() => {
           if (!preparing) go('review', 'backward');
         }}

@@ -126,3 +126,7 @@ export const PAYMENT_LINK_LIMITS = Object.freeze({
   lineItemsMax: 20,
   customMessageMax: 500,
 });
+
+/** Who owns contact collection for a service-created checkout session. */
+export const CHECKOUT_CONTACT_COLLECTIONS = ['email', 'merchant_account'] as const;
+export type CheckoutContactCollection = (typeof CHECKOUT_CONTACT_COLLECTIONS)[number];

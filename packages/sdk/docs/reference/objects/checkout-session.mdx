@@ -15,6 +15,7 @@ Object type: `checkout_session`.
 | --- | --- | --- |
 | `id` | string |  |
 | `object` | `"checkout_session"` |  |
+| `contact_collection` | string | Contact policy fixed by the merchant at creation. Absent means email. merchant_account delegates contact and notifications to the merchant account channel; it does not assert a Peable-verified identity. One of `email`, `merchant_account`. |
 | `livemode` | boolean | `true` in live mode, `false` in test mode. |
 | `mode` | string | One of `payment`, `setup`, `subscription`. |
 | `status` | string | One of `open`, `complete`, `expired`. |

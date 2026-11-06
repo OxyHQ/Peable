@@ -65,3 +65,16 @@ test('a load failure is shown', async () => {
   renderAt(`/c/cs_0123456789abcdef01234567#cs=${SECRET}`);
   expect((await screen.findByRole('alert')).textContent).toBe('checkout session not found');
 });
+
+test('merchant account contact omits email without removing required billing details', async () => {
+  const session = sessionFixture({
+    contact_collection: 'merchant_account',
+    billing_address_collection: 'required',
+  });
+  session.customer_details.email = null;
+  mocks.getCheckoutSession.mockImplementation(async () => session);
+  renderAt(`/c/cs_0123456789abcdef01234567#cs=${SECRET}`);
+  expect(await screen.findByText('Order summary')).toBeTruthy();
+  expect(screen.queryByLabelText(/^Email/)).toBeNull();
+  expect(screen.getByLabelText(/^Country/)).toBeTruthy();
+});

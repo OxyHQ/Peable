@@ -29,6 +29,7 @@ import {
   promotionCodes,
 } from '../../db/schema';
 import { newId } from '../../lib/ids';
+import { createFaircoinPayerLimit } from '../../lib/faircoinPayerLimit';
 import { requestIdMiddleware } from '../../lib/requestId';
 import { reportFaircoinBroadcast } from '../../services/faircoinBroadcast';
 import { simulateFaircoinPayment } from '../../services/testHelpers';
@@ -75,6 +76,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
   next();
 };
 const passthrough: RequestHandler = (_req, _res, next) => next();
+let payerLimit = createFaircoinPayerLimit();
 
 /**
  * Peable Tax, faked at its service boundary: active settings, every billing
@@ -208,6 +210,7 @@ beforeAll(async () => {
     createCheckoutSessionsRouter({
       requireMerchant: stubRequireMerchant,
       publicRateLimit: passthrough,
+      faircoinPayerLimit: (req, res, next) => payerLimit(req, res, next),
       checkout: { tax: fakeTax },
     }),
   );
@@ -222,9 +225,94 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-beforeEach(() => registerSubscriptionCheckoutFulfiller(null));
+beforeEach(() => {
+  registerSubscriptionCheckoutFulfiller(null);
+  // Each case is an independent payer journey; retain the real per-payer limiter.
+  payerLimit = createFaircoinPayerLimit();
+});
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('create', () => {
+  test('default email collection cannot be disabled by the payer', async () => {
+    const price = await seedPrice(merchant, { currency: 'FAIR', unitAmount: '250000000' });
+    const { body: session } = await createSession({
+      line_items: [{ price: price.publicId, quantity: 1 }],
+    });
+    expect(session.contact_collection).toBe('email');
+    // Pre-policy sessions stored no collection: they must still require email.
+    await gatewayDb()
+      .update(checkoutSessions)
+      .set({ collection: null })
+      .where(eq(checkoutSessions.publicId, session.id));
+    expect((await payer(session, 'GET')).body.contact_collection).toBe('email');
+    for (const suffix of ['', '/confirm']) {
+      const override = await payer(session, 'POST', suffix, {
+        contact_collection: 'merchant_account',
+      });
+      expect(override.status).toBe(400);
+    }
+    const missing = await payer(session, 'POST', '/confirm', {});
+    expect(missing.status).toBe(400);
+    expect(missing.body.error.param).toBe('customer_details[email]');
+    await payer(session, 'POST', '', {
+      customer_details: { name: 'Guest Buyer', address: { country: 'GB' } },
+    });
+    const collected = await payer(session, 'POST', '', {
+      customer_details: { email: 'guest@example.test' },
+    });
+    expect(collected.body.customer_details.name).toBe('Guest Buyer');
+    expect(collected.body.customer_details.address.country).toBe('GB');
+    expect((await payer(session, 'POST', '/confirm', {})).status).toBe(200);
+  });
+
+  test('merchant account contact persists through retry and completion without invented email', async () => {
+    const price = await seedPrice(merchant, { currency: 'FAIR', unitAmount: '250000000' });
+    const { body: session } = await createSession({
+      contact_collection: 'merchant_account',
+      billing_address_collection: 'required',
+      line_items: [{ price: price.publicId, quantity: 1 }],
+    });
+    expect(session.contact_collection).toBe('merchant_account');
+    const initial = await payer(session, 'GET');
+    expect(initial.body.contact_collection).toBe('merchant_account');
+    expect(initial.body.customer_details.email).toBeNull();
+    const missingBilling = await payer(session, 'POST', '/confirm', {});
+    expect(missingBilling.status).toBe(400);
+    expect(missingBilling.body.error.param).toBe('customer_details[address]');
+    await payer(session, 'POST', '', {
+      customer_details: { name: 'Account Buyer', address: { country: 'US' } },
+    });
+    const confirmed = await payer(session, 'POST', '/confirm', {});
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.body.contact_collection).toBe('merchant_account');
+    const retry = await payer(session, 'POST', '/confirm', {});
+    expect(retry.body.payment_intent.id).toBe(confirmed.body.payment_intent.id);
+    expect(retry.body.contact_collection).toBe('merchant_account');
+    const intent = must(await findIntentByPublicId(gatewayDb(), confirmed.body.payment_intent.id));
+    expect(intent.receiptEmail).toBeNull();
+    expect((await reportFaircoinBroadcast(intent, 'e'.repeat(64))).kind).toBe('updated');
+    expect(
+      (
+        await simulateFaircoinPayment(
+          must(await findIntentByPublicId(gatewayDb(), intent.publicId)),
+          'settled',
+        )
+      ).kind,
+    ).toBe('ok');
+    const completed = await payer(session, 'GET');
+    expect(completed.body.payment_status).toBe('paid');
+    expect(completed.body.customer_details.email).toBeNull();
+    const row = must(await findSessionByPublicId(gatewayDb(), session.id));
+    const owed = await gatewayDb()
+      .select()
+      .from(customerEmails)
+      .where(eq(customerEmails.checkoutSessionId, row.id));
+    expect(owed).toEqual([]);
+    expect(await sessionEventTypes(session.id)).toEqual([
+      'checkout.session.completed',
+      'checkout.session.async_payment_succeeded',
+    ]);
+  });
+
   test('prices per-unit and tiered lines by quantity, with a hosted url and no client secret', async () => {
     const unit = await seedPrice(merchant, { currency: 'FAIR', unitAmount: '150000000' });
     const tiered = await seedPrice(merchant, {
@@ -819,6 +907,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('expiry', () => {
     });
     await payer(session, 'POST', '', { customer_details: { email: 'x@example.com' } });
     const confirmed = await payer(session, 'POST', '/confirm', {});
+    expect(confirmed.body.error).toBeUndefined();
     const expired = await call('POST', `/v1/checkout_sessions/${session.id}/expire`, {});
     expect(expired.body.status).toBe('expired');
     const intent = must(await findIntentByPublicId(gatewayDb(), confirmed.body.payment_intent.id));

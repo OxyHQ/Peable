@@ -819,7 +819,20 @@ saved address or edit it, and calls `createSession(details, { signal })` only on
 Continue. That callback returns `{ source, expected }` from the authoritative
 new order; the sheet reads it and shows its final total before payment. It never
 creates a session merely by opening, never charges on Continue, and never replaces
-the mounted Bloom sheet during this transition.
+the mounted Bloom sheet during this transition. When shipping and contact are
+both disabled and no additional details renderer exists, Continue submits directly
+from review, with loading and retry errors in that same frame. Shipping, guest
+contact and merchant-specific consent still open the details screen. A host's
+`canContinue: false` continues to block creation.
+
+Contact remains a backend policy. Session creation defaults to `contact_collection:
+'email'`. A merchant with its own authenticated account notifications may choose
+`'merchant_account'` on its server after verifying that buyer. This delegates
+contact and notifications to that merchant; it does not claim Peable verified the
+account. Payers cannot override it, and billing, shipping and tax requirements
+remain independent. Guest preparation email is sent directly to the payer session
+with its capability after the reviewed order matches, without another prompt or a
+merchant-side copy. Peable sends email receipts only when an email was collected.
 
 `preparation.key` must identify the account and cart attempt. Change it when either
 changes. `initialDetails` may arrive asynchronously from the account's address book;
