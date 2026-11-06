@@ -470,6 +470,24 @@ export function planPreviousKeyMove(input: {
 }
 
 /**
+ * The fee rates the person may choose for the move (security review round 6,
+ * R6-11), in base units per byte: the send screen's low/medium/high, or a
+ * custom rate within these bounds — at least the relay floor the presets
+ * start from, and at most ten times the high preset, so a slip of the finger
+ * cannot spend a move's worth of coins on fees.
+ */
+export const MOVE_FEE_RATE_MIN = 1;
+export const MOVE_FEE_RATE_MAX = 100;
+
+/** A custom move fee rate the person typed, or `null` when it is not a whole number within bounds. */
+export function parseMoveFeeRate(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^\d{1,4}$/.test(trimmed)) return null;
+  const rate = Number(trimmed);
+  return rate >= MOVE_FEE_RATE_MIN && rate <= MOVE_FEE_RATE_MAX ? rate : null;
+}
+
+/**
  * Whether the move planned now is the one the person confirmed (security
  * review round 4, R4-13): the same coins, the same amount, the same fee. The
  * move spends exactly the confirmed plan; a plan that changed between the

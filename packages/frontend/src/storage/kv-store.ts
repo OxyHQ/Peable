@@ -19,7 +19,9 @@
 
 import { Platform } from 'react-native';
 import { resolveKeychainAccess } from '@oxy.so/core/crypto';
-import { createGroupedKeychainAdapter } from './keychain-groups';
+import { loadKeychainReadWithoutInteraction } from '@oxy.so/protocol';
+import { readInstallEvidence } from './install-evidence';
+import { createGroupedKeychainAdapter, type SharedGroupPolicy } from './keychain-groups';
 
 // ---------------------------------------------------------------------------
 // Storage interface
@@ -40,7 +42,22 @@ function createNativeAdapter(): StorageAdapter {
   const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store');
   // iOS: this app's own keychain group, not the group every Oxy app reads
   // (`./keychain-groups`, oxy ADR 0062). Android: the same calls as before.
-  return createGroupedKeychainAdapter(SecureStore, resolveKeychainAccess);
+  // The shared group is read only without prompting, and only with this
+  // app's own evidence of an earlier install (R6-4).
+  let reader: Promise<Awaited<ReturnType<typeof loadKeychainReadWithoutInteraction>>> | null = null;
+  const loadReader = () => {
+    reader ??= loadKeychainReadWithoutInteraction().catch(() => null);
+    return reader;
+  };
+  const policy: SharedGroupPolicy = {
+    readWithoutInteraction: async (key, accessGroup) => {
+      const read = await loadReader();
+      // No reader in this native build: answer nothing rather than prompt.
+      return read ? read(key, undefined, accessGroup) : null;
+    },
+    evidence: readInstallEvidence,
+  };
+  return createGroupedKeychainAdapter(SecureStore, resolveKeychainAccess, policy);
 }
 
 // ---------------------------------------------------------------------------

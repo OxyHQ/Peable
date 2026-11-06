@@ -16,6 +16,7 @@ import {
   hexToBytes,
   bytesToHex,
   decodeAddress,
+  deriveSocialReceiveAddress,
   validateAddress,
   buildTransaction,
   serializeTransaction,
@@ -33,6 +34,7 @@ import { createSocketProvider } from '../p2p/socket-provider';
 import { KeyManager } from '@peable.to/pay';
 import { loadWatchAddressesIntoKeyManager } from './multisig';
 import { resolveMoveDestinationAddress } from './move-address';
+import { openReceiveAddress } from './receive-address';
 import {
   XPUB_MARKER_PREFIX,
   resolveWalletSeed,
@@ -78,7 +80,13 @@ import {
   isFreshlyCreatedWallet,
 } from '../storage/secure-store';
 import type { WalletInfo } from '../storage/secure-store';
-import { Database, type PreviousKeyTreeRow, type SocialReceiveSetRow } from '../storage/database';
+import {
+  type AddressRow,
+  Database,
+  type LegacyOwnerFilter,
+  type PreviousKeyTreeRow,
+  type SocialReceiveSetRow,
+} from '../storage/database';
 import {
   LEGACY_IDENTITY_WALLET_ID,
   SEED_SECRET_PREFIX,
@@ -93,14 +101,26 @@ import {
 } from './identity-wallet';
 import { decideIdentityKey, type AccountKeys } from './identity-key';
 import {
+  highestStoredIndices,
   keepsLegacyKey,
+  legacyCheckFingerprint,
+  legacyNamespaceClosed,
   legacyNamespaceStep,
+  markLegacyChecked,
   parseLegacyNamespaceMarker,
   proveLegacyOwnership,
   type CandidateTree,
 } from './identity-namespace';
 import { getItemAsync, setItemAsync, deleteItemAsync } from '../storage/kv-store';
-import { LEGACY_IDENTITY_NAMESPACE_MARKER, PREFERENCE_PREFIXES } from '../storage/wallet-keys';
+import {
+  KEYCHAIN_ADOPTED_WALLETS,
+  LEGACY_IDENTITY_NAMESPACE_MARKER,
+  parseAdoptedWallets,
+  PREFERENCE_PREFIXES,
+} from '../storage/wallet-keys';
+
+/** The Pockets list's preference prefix (`pockets-store.ts`): merged, not replaced. */
+const POCKETS_PREFERENCE_PREFIX = PREFERENCE_PREFIXES[0];
 import { hasIdentityKeystore } from './keystore';
 import {
   accountKeyFromDidDocument,
@@ -261,6 +281,14 @@ export interface WalletState {
    */
   identityReceiveConfirmed: boolean;
   /**
+   * Whether the open (BIP39 or watch-only) wallet was carried over from the
+   * keychain group every Oxy app shares and the person has not yet confirmed
+   * it is theirs (security review round 6, R6-4): another Oxy app could have
+   * planted it there, so it offers nothing to receive into until then
+   * (`receive-gate.ts`). Always false for an identity wallet.
+   */
+  adoptedWalletUnconfirmed: boolean;
+  /**
    * Coins stored by this wallet, on this network, at addresses no key this
    * device reaches owns — received under a previous identity key (a rotation,
    * a replaced organization key) that Commons does not hold here. Not in
@@ -414,6 +442,26 @@ export interface WalletState {
    * move in its place.
    */
   movePreviousKeyFunds: (confirmed: PreviousKeyMoveReady) => Promise<string>;
+  /** The person confirmed the open adopted wallet is theirs (R6-4): receiving opens. */
+  confirmAdoptedWallet: () => Promise<void>;
+  /**
+   * Whether this phone still holds the pre-round-5 shared identity wallet,
+   * not yet moved to its owner (R6-6): only asked for an open personal
+   * identity wallet.
+   */
+  legacyWalletPresent: () => Promise<boolean>;
+  /**
+   * "Recover an earlier wallet": check the pre-round-5 shared wallet against
+   * the open personal account now, whatever an earlier check recorded, and
+   * move or merge it when it is proven the account's (R6-6).
+   */
+  recoverLegacyWallet: () => Promise<LegacyWalletOutcome>;
+  /**
+   * Remove the pre-round-5 shared wallet's data from this phone, once the
+   * person confirmed it is not theirs (bounded life): no coin moves, only
+   * this phone's copy of someone's addresses, history and Pockets.
+   */
+  removeLegacyWallet: () => Promise<void>;
   hasWallet: () => Promise<boolean>;
   wipeWallet: () => Promise<void>;
   lockWallet: () => void;
@@ -604,6 +652,12 @@ let previousTrees: Map<string, KeyManager> = new Map();
 let socialReceiveAddressKey: Map<string, string> = new Map();
 /** Whose keys `previousTrees` belong to: the open identity wallet's subject, or `null`. */
 let previousKeySubject: IdentitySubject | null = null;
+/**
+ * Which `addresses` rows the open wallet answers for (R6-1): the identity key
+ * it opened with, or `null` for a wallet whose key never changes. Every
+ * address the wallet writes is recorded under it.
+ */
+let openAddressScope: string | null = null;
 // Handle of the recurring poll that mirrors peer / sync state from the SPV
 // client into the store (peer count, height, status text, periodic rescan).
 // Held at module scope so we can clear it from `resetWalletInternals` — without
@@ -1317,112 +1371,278 @@ async function readAccountKeys(subject: IdentitySubject): Promise<AccountKeys | 
 }
 
 /**
- * Move the pre-round-5 shared identity wallet (`oxy-identity`) to the account
- * it is PROVEN to belong to, once (R5-2, `identity-namespace.ts`): its HD
- * addresses must include one a key of `accountId` derives — a key Oxy names
- * as the account's now and this device holds. Each Pocket's database is
- * copied whole (`VACUUM INTO`) to `oxy-user-<accountId>`, stripped of every
- * social-receive row and previous-key tree under a key this account never had,
- * its gateway pull restarted, and the per-wallet preferences carried with it;
- * the legacy files go only after the marker records the move. A namespace this
- * account cannot prove stays closed for it. `unverified` when the proof needs
- * Oxy's answer and it could not be had.
+ * What a check of the pre-round-5 shared identity wallet (`oxy-identity`)
+ * came to (R5-2, R6-2, R6-6):
+ *
+ * - `none`: there is none (moved, removed, or it held no wallet);
+ * - `moved` / `merged`: it was this account's, and is now in its own
+ *   namespace — copied, or merged into the wallet it already had;
+ * - `not-owned`: definitely not this account's, against its keys now;
+ * - `unverified`: Oxy could not say which keys the account has;
+ * - `indefinite`: a key could not be asked (a derivation failed) — nothing
+ *   recorded, asked again next time.
  */
-async function moveLegacyIdentityNamespace(
-  accountId: string,
-  accountKeys: AccountKeys | null,
-): Promise<'done' | 'unverified'> {
-  const marker = parseLegacyNamespaceMarker(await getItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER));
-  if (legacyNamespaceStep(marker, accountId) === 'skip') return 'done';
+export type LegacyWalletOutcome =
+  | 'none'
+  | 'moved'
+  | 'merged'
+  | 'not-owned'
+  | 'unverified'
+  | 'indefinite';
 
-  const legacy = await Database.open(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT);
-  let legacyAddresses: Set<string> | null = null;
+const NETWORKS = ['mainnet', 'testnet'] as const;
+
+/** The open database of `walletId`'s Pocket `account`, if it is the one open now. */
+function openDatabaseOf(walletId: string, account: number): Database | null {
+  const state = useWalletStore.getState();
+  return database && state.activeWalletId === walletId && state.activeAccount === account
+    ? database
+    : null;
+}
+
+/**
+ * Copy one legacy Pocket into `target`, keeping only what `owner` keeps
+ * (R6-2): through a scratch copy that is stripped FIRST, so an interrupted
+ * move never leaves another account's rows in the target. A target that
+ * holds no wallet yet receives the stripped copy; one already in use
+ * receives what it lacks (`mergeFrom`, R6-6) and rescans from the lowest
+ * merged coin. `true` when it merged.
+ */
+async function importLegacyPocket(
+  target: string,
+  account: number,
+  owner: LegacyOwnerFilter,
+): Promise<boolean> {
+  const scratch = `${target}-legacy-import`;
+  await Database.deleteFile(scratch, account).catch(() => {});
+  const source = await Database.open(LEGACY_IDENTITY_WALLET_ID, account);
   try {
-    if (await legacy.hasWalletData()) {
-      legacyAddresses = new Set((await legacy.getAddresses()).map((row) => row.address));
-    }
+    await source.copyTo(scratch, account);
   } finally {
-    await legacy.close();
+    await source.close();
   }
-  if (legacyAddresses === null) {
-    await Database.deleteFile(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT).catch(() => {});
-    await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ empty: true }));
-    return 'done';
+  const imported = await Database.open(scratch, account);
+  try {
+    await imported.keepOnlyOwnerData(owner);
+    const mergeInto = async (db: Database): Promise<void> => {
+      const lowest = await db.mergeFrom(imported);
+      if (lowest !== null) await db.requestRescanFrom(lowest);
+    };
+    const open = openDatabaseOf(target, account);
+    if (open) {
+      await mergeInto(open);
+      return true;
+    }
+    const existing = await Database.open(target, account);
+    let inUse = false;
+    try {
+      inUse = await existing.hasWalletData();
+      if (inUse) await mergeInto(existing);
+    } finally {
+      await existing.close();
+    }
+    if (!inUse) {
+      await Database.deleteFile(target, account).catch(() => {});
+      await imported.copyTo(target, account);
+    }
+    return inUse;
+  } finally {
+    await imported.close();
+    await Database.deleteFile(scratch, account).catch(() => {});
   }
-  if (accountKeys === null) return 'unverified';
+}
 
-  const subject = personalSubject(accountId);
-  const keys = canonicalKeySet([accountKeys.current, ...accountKeys.history]);
-  const candidates: CandidateTree[] = [];
-  for (const key of keys) {
-    let seed: Uint8Array | null = null;
-    try {
-      seed = await deriveIdentitySeed(subject, key);
-    } catch {
-      seed = null;
-    }
-    if (!seed) continue;
-    try {
-      // The legacy file had no network in its name: either network's tree.
-      for (const network of ['mainnet', 'testnet'] as const) {
-        const tree = KeyManager.fromSeed(seed, getNetwork(network), MAIN_POCKET_ACCOUNT);
-        candidates.push({
-          key,
-          addresses: [...tree.getExternalAddresses(), ...tree.getChangeAddresses()],
-        });
-        tree.wipe();
-      }
-    } finally {
-      seed.fill(0);
-    }
-  }
-  if (proveLegacyOwnership(legacyAddresses, candidates) === null) {
-    await setItemAsync(
-      LEGACY_IDENTITY_NAMESPACE_MARKER,
-      JSON.stringify({ ...marker, checked: [...(marker.checked ?? []), accountId] }),
-    );
-    console.warn("[identity-namespace] the shared wallet is not this account's; it stays closed");
-    return 'done';
-  }
-
-  const target = identityWalletIdOf(subject);
-  const accounts = [
-    ...new Set([
-      MAIN_POCKET_ACCOUNT,
-      ...(await getPockets(LEGACY_IDENTITY_WALLET_ID)).map((pocket) => pocket.account),
-    ]),
-  ];
-  const history = new Set(keys);
-  for (const account of accounts) {
-    // A partial copy from an interrupted move is replaced; nothing else ever
-    // opened this namespace before the move (the boot waits for it).
-    await Database.deleteFile(target, account).catch(() => {});
-    const source = await Database.open(LEGACY_IDENTITY_WALLET_ID, account);
-    try {
-      await source.copyTo(target, account);
-    } finally {
-      await source.close();
-    }
-    const moved = await Database.open(target, account);
-    try {
-      await moved.dropForeignIdentityData((key) => keepsLegacyKey(key, history));
-    } finally {
-      await moved.close();
-    }
-  }
+/** The legacy wallet's per-wallet preferences, to the account that proved it; its own win. */
+async function carryLegacyPreferences(target: string): Promise<void> {
   for (const prefix of PREFERENCE_PREFIXES) {
     const value = await getItemAsync(`${prefix}${LEGACY_IDENTITY_WALLET_ID}`);
-    if (value !== null) await setItemAsync(`${prefix}${target}`, value);
+    if (value === null) continue;
+    const key = `${prefix}${target}`;
+    if ((await getItemAsync(key)) === null) {
+      await setItemAsync(key, value);
+    } else if (prefix === POCKETS_PREFERENCE_PREFIX) {
+      // Both have Pockets: the account keeps its own, and gains the legacy
+      // ones on accounts it does not use.
+      const mine = await getPockets(target);
+      const theirs = await getPockets(LEGACY_IDENTITY_WALLET_ID);
+      const used = new Set(mine.map((pocket) => pocket.account));
+      await savePockets(target, [...mine, ...theirs.filter((pocket) => !used.has(pocket.account))]);
+    }
   }
-  await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ boundTo: accountId }));
+}
+
+/** Delete every legacy Pocket's file and preference. Best effort per item. */
+async function deleteLegacyNamespace(accounts: readonly number[]): Promise<void> {
   for (const account of accounts) {
     await Database.deleteFile(LEGACY_IDENTITY_WALLET_ID, account).catch(() => {});
   }
   for (const prefix of PREFERENCE_PREFIXES) {
     await deleteItemAsync(`${prefix}${LEGACY_IDENTITY_WALLET_ID}`).catch(() => {});
   }
+}
+
+/** Every legacy Pocket's account, the main one first. */
+async function legacyPocketAccounts(): Promise<number[]> {
+  return [
+    ...new Set([
+      MAIN_POCKET_ACCOUNT,
+      ...(await getPockets(LEGACY_IDENTITY_WALLET_ID)).map((pocket) => pocket.account),
+    ]),
+  ];
+}
+
+/**
+ * Check the pre-round-5 shared identity wallet against `accountId` and move
+ * it there when it is PROVEN theirs (R5-2; `identity-namespace.ts`): its HD
+ * addresses must include one a key of the account derives — a key Oxy names
+ * as the account's now (current or in its history) and this device holds.
+ *
+ * Every candidate is asked; a derivation that fails makes the answer
+ * `indefinite` and nothing is recorded (R6-6). A definite failure is recorded
+ * with the keys it was judged against, and asked again when they change. What
+ * moves keeps only the account's own (R6-2). `force` asks again whatever the
+ * record says (Settings' "Recover an earlier wallet").
+ */
+async function checkLegacyNamespaceNow(
+  accountId: string,
+  accountKeys: AccountKeys | null,
+  force: boolean,
+): Promise<LegacyWalletOutcome> {
+  const marker = parseLegacyNamespaceMarker(await getItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER));
+  if (legacyNamespaceClosed(marker)) return 'none';
+
+  const accounts = await legacyPocketAccounts();
+  const legacy = await Database.open(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT);
+  let mainRows: AddressRow[] | null = null;
+  try {
+    if (await legacy.hasWalletData()) mainRows = await legacy.getAddresses();
+  } finally {
+    await legacy.close();
+  }
+  if (mainRows === null) {
+    await Database.deleteFile(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT).catch(() => {});
+    await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ empty: true }));
+    return 'none';
+  }
+  if (accountKeys === null) return 'unverified';
+
+  const subject = personalSubject(accountId);
+  const history = canonicalKeySet([accountKeys.current, ...accountKeys.history]);
+  const fingerprint = legacyCheckFingerprint(history, await listPreviousKeyHints(subject));
+  if (!force && legacyNamespaceStep(marker, accountId, fingerprint) === 'skip') {
+    return 'not-owned';
+  }
+
+  // Each Pocket's stored rows, so the account's trees cover every one of them.
+  const rowsByAccount = new Map<number, AddressRow[]>([[MAIN_POCKET_ACCOUNT, mainRows]]);
+  for (const account of accounts) {
+    if (rowsByAccount.has(account)) continue;
+    const pocket = await Database.open(LEGACY_IDENTITY_WALLET_ID, account);
+    try {
+      rowsByAccount.set(account, await pocket.getAddresses());
+    } finally {
+      await pocket.close();
+    }
+  }
+
+  const mainLegacy = new Set(mainRows.map((row) => row.address));
+  /** Every address a key of the account derives here: each Pocket, both networks. */
+  const owned = new Set<string>();
+  /** Each held key's main-Pocket addresses: the proof (`proveLegacyOwnership`). */
+  const candidates: CandidateTree[] = [];
+  let indefinite = false;
+  for (const key of history) {
+    let seed: Uint8Array | null;
+    try {
+      seed = await deriveIdentitySeed(subject, key);
+    } catch (error) {
+      console.warn('[identity-namespace] a key could not be asked; checking again later:', error);
+      indefinite = true;
+      continue;
+    }
+    if (!seed) continue;
+    try {
+      const mainAddresses: string[] = [];
+      for (const account of accounts) {
+        const { external, change } = highestStoredIndices(rowsByAccount.get(account) ?? []);
+        for (const network of NETWORKS) {
+          // The legacy file had no network in its name: either network's tree.
+          const tree = KeyManager.fromSeed(seed, getNetwork(network), account);
+          tree.restoreCursors(external + 1, change + 1);
+          for (const address of [...tree.getExternalAddresses(), ...tree.getChangeAddresses()]) {
+            owned.add(address);
+            if (account === MAIN_POCKET_ACCOUNT) mainAddresses.push(address);
+          }
+          tree.wipe();
+        }
+      }
+      candidates.push({ key, addresses: mainAddresses });
+    } finally {
+      seed.fill(0);
+    }
+  }
+
+  if (proveLegacyOwnership(mainLegacy, candidates) === null) {
+    if (indefinite) return 'indefinite';
+    await setItemAsync(
+      LEGACY_IDENTITY_NAMESPACE_MARKER,
+      JSON.stringify(markLegacyChecked(marker, accountId, fingerprint)),
+    );
+    console.warn("[identity-namespace] the shared wallet is not this account's; it stays closed");
+    return 'not-owned';
+  }
+
+  const owner: LegacyOwnerFilter = {
+    ownsHdAddress: (address) => owned.has(address),
+    keepsKey: (key) => keepsLegacyKey(key, history),
+    derivesSocialRow: (address, index) => {
+      for (const key of history) {
+        for (const network of NETWORKS) {
+          try {
+            if (
+              deriveSocialReceiveAddress(hexToBytes(key), index, getNetwork(network)) === address
+            ) {
+              return true;
+            }
+          } catch {
+            // An index the derivation refuses derives nothing.
+          }
+        }
+      }
+      return false;
+    },
+  };
+  const target = identityWalletIdOf(subject);
+  let merged = false;
+  for (const account of accounts) {
+    if (await importLegacyPocket(target, account, owner)) merged = true;
+  }
+  await carryLegacyPreferences(target);
+  await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ boundTo: accountId }));
+  await deleteLegacyNamespace(accounts);
   console.warn('[identity-namespace] moved the shared wallet to the account it belongs to');
-  return 'done';
+  return merged ? 'merged' : 'moved';
+}
+
+/**
+ * {@link checkLegacyNamespaceNow}, one at a time and never beside a wallet
+ * init (R6-7): in the init queue, which every open, switch and close also
+ * goes through, so two boots (a focus re-run, "Check again", an account
+ * switch) never copy or delete the same files at once. The record is read
+ * first outside the queue so a phone with nothing to move never waits.
+ */
+async function checkLegacyNamespace(
+  accountId: string,
+  accountKeys: AccountKeys | null,
+  force = false,
+): Promise<LegacyWalletOutcome> {
+  const marker = parseLegacyNamespaceMarker(await getItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER));
+  if (legacyNamespaceClosed(marker)) return 'none';
+  let outcome: LegacyWalletOutcome = 'indefinite';
+  await queueWalletInit(async () => {
+    outcome = await checkLegacyNamespaceNow(accountId, accountKeys, force);
+  });
+  return outcome;
 }
 
 /** {@link readAccountKeys}' history alone, for vouching for a previous key. */
@@ -2413,6 +2633,7 @@ function resetWalletInternals(): void {
   previousTrees = new Map();
   socialReceiveAddressKey = new Map();
   previousKeySubject = null;
+  openAddressScope = null;
   previousKeyRefresh.reset();
   strandedUtxos = [];
   utxoSet = null;
@@ -2452,6 +2673,7 @@ const DEFAULT_WALLET_STATE = {
   socialReceiveDefaultAddress: null as string | null,
   socialReceiveKeyMismatch: false,
   identityReceiveConfirmed: false,
+  adoptedWalletUnconfirmed: false,
   strandedBalance: 0n,
   previousKeyBalance: 0n,
   activeAccount: 0,
@@ -2531,6 +2753,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   socialReceiveDefaultAddress: null,
   socialReceiveKeyMismatch: false,
   identityReceiveConfirmed: false,
+  adoptedWalletUnconfirmed: false,
   strandedBalance: 0n,
   previousKeyBalance: 0n,
   activeAccount: 0,
@@ -2656,35 +2879,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
         utxoSet = new UTXOSet();
 
+        // Restore any multisig watch addresses registered in a previous
+        // session (Layer 1 multisig -- see src/wallet/multisig.ts) so they are
+        // owned and Bloom-filter-watched again immediately.
+        await loadWatchAddressesIntoKeyManager(database, keyManager);
+
         // Restore the BIP44 derivation cursors from persisted state so used
         // addresses are never re-issued across restarts and the lookahead window
         // (hence the Bloom filter) keeps watching the right addresses
-        // (SPV_AUDIT.md §4.5). KeyManager.fromMnemonic resets the cursors to 0.
-        const nextExternal = await database.getNextUnusedIndex(false);
-        const nextChange = await database.getNextUnusedIndex(true);
-        keyManager.restoreCursors(nextExternal, nextChange);
-
-        // Restore any multisig watch addresses registered in a previous
-        // session (Layer 1 multisig -- see src/wallet/multisig.ts) so they are
-        // owned and Bloom-filter-watched again immediately, same as the HD
-        // cursor restore just above.
-        await loadWatchAddressesIntoKeyManager(database, keyManager);
-
-        // Load persisted addresses from database
-        const dbAddresses = await database.getAddresses();
-        const addressList = dbAddresses.map((a) => a.address);
-
-        // Get receive address
-        const unused = await database.getUnusedAddress(false);
-        let receiveAddress: string;
-        if (unused) {
-          receiveAddress = unused.address;
-        } else {
-          const derived = keyManager.getNextAddress();
-          await database.insertAddress(derived.address, derived.path, derived.index, false);
-          receiveAddress = derived.address;
-          addressList.push(derived.address);
-        }
+        // (SPV_AUDIT.md §4.5), and choose the receive address. An identity
+        // wallet counts and offers only rows of the key it opened with, that
+        // the open tree derives: after a rotation its file still holds the
+        // replaced key's rows, and those are never offered (R6-1).
+        const identitySubject = activeId ? identitySubjectOfWalletId(activeId) : null;
+        openAddressScope =
+          identitySubject !== null && activeId ? (openedIdentityKeys.get(activeId) ?? null) : null;
+        const { receiveAddress, addresses: addressList } = await openReceiveAddress(
+          database,
+          keyManager,
+          openAddressScope,
+        );
 
         // Load wallet info. `activeId` was already resolved above (alongside
         // the active Pocket) so the DB-open path and this lookup agree.
@@ -2696,13 +2910,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // Has the user backed up this wallet's recovery phrase? Drives the home
         // "back up your wallet" reminder. Watch-only wallets have no phrase to
         // back up, so they never prompt.
-        const identitySubject = activeId ? identitySubjectOfWalletId(activeId) : null;
         const backedUp =
           identitySubject !== null
             ? true
             : activeId && !watchOnly
               ? await isWalletBackedUp(activeId)
               : true;
+        // Carried over from the keychain group every Oxy app shares: nothing
+        // to receive into until the person confirms it is theirs (R6-4).
+        const adoptedWalletUnconfirmed =
+          identitySubject === null && activeId !== null
+            ? parseAdoptedWallets(await getItemAsync(KEYCHAIN_ADOPTED_WALLETS)).includes(activeId)
+            : false;
 
         // Bring up the social-receive branch (spec §4.3) for the identity
         // wallet's MAIN Pocket only (account 0) on EVERY initialize() call, not
@@ -2823,6 +3042,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           activeWalletId: activeId,
           activeWalletName: activeWallet?.name ?? '',
           hasBackedUp: backedUp,
+          adoptedWalletUnconfirmed,
           wallets,
           isWatchOnly: watchOnly,
           activeAccount: resolvedAccount,
@@ -3051,8 +3271,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // Once, the pre-round-5 shared wallet moves to the account it is proven
     // to belong to, before this account's namespace is first opened (R5-2).
     if (subject.kind === 'personal') {
-      const moved = await moveLegacyIdentityNamespace(subject.accountId, accountKeys);
-      if (moved === 'unverified') return 'unverified';
+      // Only Oxy's silence blocks: a key that could not be asked is asked
+      // again next time, and a later proof merges into the wallet this
+      // account will have opened meanwhile (R6-6).
+      const legacy = await checkLegacyNamespace(subject.accountId, accountKeys);
+      if (legacy === 'unverified') return 'unverified';
     }
     if (epoch !== lockEpoch) return 'superseded';
     // WHICH key the wallet is (R5-1): one the account vouches for, proven held
@@ -3209,7 +3432,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // Persist to database asynchronously
     if (database) {
       database
-        .insertAddress(derived.address, derived.path, derived.index, false)
+        .insertAddress({
+          address: derived.address,
+          path: derived.path,
+          index: derived.index,
+          isChange: false,
+          identityPublicKey: openAddressScope,
+        })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : 'Unknown database error';
           set({ error: `Failed to persist address: ${message}` });
@@ -3493,6 +3722,73 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
   },
 
+  confirmAdoptedWallet: async (): Promise<void> => {
+    const walletId = get().activeWalletId;
+    if (!walletId) return;
+    const listed = parseAdoptedWallets(await getItemAsync(KEYCHAIN_ADOPTED_WALLETS));
+    const rest = listed.filter((id) => id !== walletId);
+    if (rest.length !== listed.length) {
+      await setItemAsync(KEYCHAIN_ADOPTED_WALLETS, JSON.stringify(rest));
+    }
+    if (get().activeWalletId === walletId) set({ adoptedWalletUnconfirmed: false });
+  },
+
+  legacyWalletPresent: async (): Promise<boolean> => {
+    const walletId = get().activeWalletId;
+    const subject = walletId ? identitySubjectOfWalletId(walletId) : null;
+    if (subject?.kind !== 'personal') return false;
+    const marker = parseLegacyNamespaceMarker(await getItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER));
+    if (legacyNamespaceClosed(marker)) return false;
+    let present = false;
+    await queueWalletInit(async () => {
+      const legacy = await Database.open(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT);
+      try {
+        present = await legacy.hasWalletData();
+      } finally {
+        await legacy.close();
+      }
+      if (!present) {
+        // Nothing there (opening it made an empty file): closed for everyone.
+        await Database.deleteFile(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT).catch(() => {});
+        await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ empty: true }));
+      }
+    });
+    return present;
+  },
+
+  recoverLegacyWallet: async (): Promise<LegacyWalletOutcome> => {
+    const walletId = get().activeWalletId;
+    const subject = walletId ? identitySubjectOfWalletId(walletId) : null;
+    if (subject?.kind !== 'personal') return 'none';
+    const outcome = await checkLegacyNamespace(
+      subject.accountId,
+      await readAccountKeys(subject),
+      true,
+    );
+    if (outcome === 'merged' && get().activeWalletId === walletId) {
+      // Merged into the open wallet: what it holds now joins the balance, and
+      // the rescan the merge asked for reconciles what was spent meanwhile.
+      await reloadUtxoSetFromDatabase();
+      publishBalance(set);
+      requestSocialReceiveResync();
+      void runHistoricalRescan(set, get).catch(() => {
+        // Best-effort; the peer tick retries.
+      });
+    }
+    return outcome;
+  },
+
+  removeLegacyWallet: async (): Promise<void> => {
+    await queueWalletInit(async () => {
+      const marker = parseLegacyNamespaceMarker(
+        await getItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER),
+      );
+      if (legacyNamespaceClosed(marker)) return;
+      await deleteLegacyNamespace(await legacyPocketAccounts());
+      await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ removed: true }));
+    });
+  },
+
   movePreviousKeyFunds: async (confirmed: PreviousKeyMoveReady): Promise<string> => {
     // An explicit, prominent prompt, never automatic (ADR 0002, amended
     // 2026-11-06): a move spends a fee and the person should see it happen;
@@ -3541,12 +3837,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // A FRESH address of the current key's wallet, persisted like any
       // receive address so the next open still watches it.
       const destination = localKeyManager.getNextAddress();
-      await localDatabase.insertAddress(
-        destination.address,
-        destination.path,
-        destination.index,
-        false,
-      );
+      await localDatabase.insertAddress({
+        address: destination.address,
+        path: destination.path,
+        index: destination.index,
+        isChange: false,
+        identityPublicKey: openAddressScope,
+      });
       if (localSpvClient) {
         localSpvClient.setBloomFilter(buildCombinedBloomFilterHashes(localKeyManager));
       }
@@ -3938,9 +4235,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const destDb = await Database.open(walletId, toAccount);
     let destAddress: string;
     try {
-      const nextIndex = await destDb.getNextUnusedIndex(false);
+      // The destination Pocket derives from the same key as this one (R6-1).
+      const nextIndex = await destDb.getNextUnusedIndex(false, openAddressScope);
       const dest = resolveMoveDestinationAddress(seed, networkConfig, toAccount, nextIndex);
-      await destDb.insertAddress(dest.address, dest.path, dest.index, false);
+      await destDb.insertAddress({
+        address: dest.address,
+        path: dest.path,
+        index: dest.index,
+        isChange: false,
+        identityPublicKey: openAddressScope,
+      });
       // Mark it used immediately: this address is about to receive the move, so
       // treating it as unused until the destination Pocket next syncs would let
       // a second move (before that sync) derive and reuse the SAME address —

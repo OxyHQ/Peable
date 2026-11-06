@@ -388,7 +388,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.previousKey.move': 'Move to my current key',
     'wallet.previousKey.confirmTitle': 'Move {amount} FAIR to your current key?',
     'wallet.previousKey.confirmBody':
-      'Everything under the previous key goes to a new address of your current key, in one transaction. Network fee: {fee} FAIR.',
+      'Everything under the previous key goes to a new address of your current key, in one transaction. Network fee: {fee} FAIR ({rate} units per byte).',
     'wallet.previousKey.confirm': 'Move now',
     'wallet.previousKey.moved': 'Moving to your current key. It is final once confirmed.',
     'wallet.previousKey.changed':
@@ -404,6 +404,25 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.previousKey.stranded.organization':
       "{amount} FAIR was received under a previous key of this organization that this phone cannot reach, so it is not in the balance. Add the organization's previous phrase in Commons (Settings → Organizations → Organization wallets → Add the key you were given) to spend it here.",
     'wallet.previousKey.openCommons': 'Open Commons',
+    'wallet.previousKey.feeCustom': 'Custom',
+    'wallet.previousKey.feeCustomPlaceholder': 'Units per byte, {min} to {max}',
+    'wallet.previousKey.feeInvalid': 'Enter a whole number of units per byte from {min} to {max}.',
+    'receive.adopted.title': 'Is this wallet yours?',
+    'receive.adopted.body':
+      '"{name}" was carried over from an earlier install of Peable on this phone, from a place other Oxy apps can also write to. Check it is yours (its name, its balance, its recovery phrase in Settings) before anyone pays into it.',
+    'receive.adopted.confirm': 'This wallet is mine',
+    'settings.legacyWallet.recover': 'Recover an earlier wallet',
+    'settings.legacyWallet.description':
+      'This phone still holds a wallet from before each account had its own. Check whether it is yours.',
+    'settings.legacyWallet.recovered': 'The earlier wallet is now part of this one.',
+    'settings.legacyWallet.tryAgain':
+      'It could not be checked right now. Stay connected and try again.',
+    'settings.legacyWallet.notYours.title': 'The earlier wallet is not yours',
+    'settings.legacyWallet.notYours.description':
+      "None of your keys made it. If someone else used Peable on this phone, it was theirs: removing it deletes only this phone's copy of its addresses and history, and no coins move. They can still recover it by signing in here before you remove it.",
+    'settings.legacyWallet.remove': 'Remove from this phone',
+    'settings.legacyWallet.keep': 'Keep it',
+    'settings.legacyWallet.removed': 'The earlier wallet was removed from this phone.',
     'receive.copy': 'Copy Address',
     'receive.share': 'Share',
     'receive.new_address': 'New Address',
@@ -1313,7 +1332,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.previousKey.move': 'Mover a mi clave actual',
     'wallet.previousKey.confirmTitle': '\u00bfMover {amount} FAIR a tu clave actual?',
     'wallet.previousKey.confirmBody':
-      'Todo lo que hay bajo la clave anterior va a una direcci\u00f3n nueva de tu clave actual, en una sola transacci\u00f3n. Comisi\u00f3n de red: {fee} FAIR.',
+      'Todo lo que hay bajo la clave anterior va a una direcci\u00f3n nueva de tu clave actual, en una sola transacci\u00f3n. Comisi\u00f3n de red: {fee} FAIR ({rate} unidades por byte).',
     'wallet.previousKey.confirm': 'Mover ahora',
     'wallet.previousKey.moved':
       'Moviendo a tu clave actual. Ser\u00e1 definitivo cuando se confirme.',
@@ -1331,6 +1350,26 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.previousKey.stranded.organization':
       '{amount} FAIR se recibieron con una clave anterior de esta organizaci\u00f3n que este tel\u00e9fono no alcanza, as\u00ed que no est\u00e1n en el saldo. A\u00f1ade la frase anterior de la organizaci\u00f3n en Commons (Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones \u2192 A\u00f1adir la clave que te dieron) para gastarlos aqu\u00ed.',
     'wallet.previousKey.openCommons': 'Abrir Commons',
+    'wallet.previousKey.feeCustom': 'Personalizada',
+    'wallet.previousKey.feeCustomPlaceholder': 'Unidades por byte, de {min} a {max}',
+    'wallet.previousKey.feeInvalid':
+      'Introduce un n\u00famero entero de unidades por byte entre {min} y {max}.',
+    'receive.adopted.title': '\u00bfEsta billetera es tuya?',
+    'receive.adopted.body':
+      '\u201c{name}\u201d viene de una instalaci\u00f3n anterior de Peable en este tel\u00e9fono, de un lugar en el que otras apps de Oxy tambi\u00e9n pueden escribir. Comprueba que es tuya (su nombre, su saldo, su frase de recuperaci\u00f3n en Ajustes) antes de que nadie pague en ella.',
+    'receive.adopted.confirm': 'Esta billetera es m\u00eda',
+    'settings.legacyWallet.recover': 'Recuperar una billetera anterior',
+    'settings.legacyWallet.description':
+      'Este tel\u00e9fono a\u00fan guarda una billetera de antes de que cada cuenta tuviera la suya. Comprueba si es tuya.',
+    'settings.legacyWallet.recovered': 'La billetera anterior ya forma parte de esta.',
+    'settings.legacyWallet.tryAgain':
+      'No se pudo comprobar ahora. Mantente conectado e int\u00e9ntalo de nuevo.',
+    'settings.legacyWallet.notYours.title': 'La billetera anterior no es tuya',
+    'settings.legacyWallet.notYours.description':
+      'Ninguna de tus claves la cre\u00f3. Si otra persona us\u00f3 Peable en este tel\u00e9fono, era suya: quitarla borra solo la copia de sus direcciones e historial en este tel\u00e9fono, y no se mueve ninguna moneda. Esa persona a\u00fan puede recuperarla iniciando sesi\u00f3n aqu\u00ed antes de que la quites.',
+    'settings.legacyWallet.remove': 'Quitar de este tel\u00e9fono',
+    'settings.legacyWallet.keep': 'Conservarla',
+    'settings.legacyWallet.removed': 'La billetera anterior se quit\u00f3 de este tel\u00e9fono.',
     'receive.copy': 'Copiar Direcci\u00f3n',
     'receive.share': 'Compartir',
     'receive.new_address': 'Nueva Direcci\u00f3n',

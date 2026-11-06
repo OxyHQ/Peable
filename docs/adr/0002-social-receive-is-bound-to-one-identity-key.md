@@ -468,6 +468,99 @@ account-bound retired ring), and R5-3..R5-6 (keychain items, backup), are
 fixed in OxyHQ/oxy; Peable names every key it uses, so a planted key in the
 shared group is never one it derives from, signs with or shows.
 
+## Amendment (2026-11-07): review round 6 — the receive address is the open key's, nothing is adopted without proof
+
+The sixth security review (Peable `e0a2a987`) found one blocking defect and
+five smaller ones in the wallet (findings R6-1, R6-2, R6-4, R6-6, R6-7, R6-11,
+and an informational note). Fixed in the wallet; the gate stays closed:
+
+- **The receive address is the open key's (R6-1, blocking).** An identity
+  wallet's database outlives its key: after a rotation the same
+  `oxy-user-<id>` file opens on the new key, and `getUnusedAddress` took the
+  first unused `addresses` row — the REPLACED key's — for the Receive sheet
+  (default on non-main Pockets, the address list on the main one) and the
+  Settings header, which also skipped the receive gate. After a rotation forced
+  by a compromise, that is an address whoever holds the old key can spend
+  from. Now every `addresses` row records the identity key it derives from
+  (`identity_public_key`, a migration of the wallet's SQLite schema; `null` for
+  a BIP39 or watch-only wallet, whose key never changes), and
+  `wallet/receive-address.ts` offers a row only when it is recorded under the
+  key the wallet opened with AND the open tree derives it (`ownsAddress`).
+  Rows written before keys were recorded are bound on open (the open tree's
+  get its key; any other stays unbound and is never offered — it still
+  advances a previous key's tree when that key is reached). Another key's used
+  rows no longer move the open tree's cursor. Every surface that shows a
+  receive address goes through ONE gate (`wallet/receive-gate.ts`,
+  `useReceiveGate`): the Receive sheet as before, and now the Settings header.
+- **A moved legacy namespace keeps only its owner's data (R6-2).** The
+  pre-round-5 `oxy-identity` file was every person's on the phone; it went
+  whole to the first account that proved one address. Now the move keeps only
+  what the proving account's keys derive (current and vouched previous keys
+  this device holds, each tree extended over every stored row, on both
+  networks): HD addresses, social-receive rows under the account's keys (a
+  keyless one only when such a key derives it), previous-key trees, the coins
+  at those addresses and the transactions that created or spent them, with
+  their notes and labels. Another account's addresses, coins, history and
+  labels, and every multisig watch address (nothing proves whose), are
+  dropped — the coins are on chain, and a rescan finds whatever was the
+  owner's. The stripping happens on a scratch copy before anything reaches the
+  account's namespace, so an interrupted move never leaves another account's
+  rows there.
+- **Nothing is adopted from the shared keychain group without proof (R6-4).**
+  With no move marker — every fresh install — the keychain move adopted the
+  wallet index, the active-wallet pointer, the PIN record and phrases from
+  `group.so.oxy.shared`, which every Oxy app can write, and plain reads also
+  tried `:auth` copies (Face ID prompts). Now the shared group is a source
+  only with this app's own evidence of an earlier install: the wallet
+  databases its sandbox held when this build first looked, recorded once in
+  the sandbox (`storage/install-evidence.ts`; never a keychain item). No
+  evidence, nothing. A cached seed or the pre-multi-wallet phrase, never. The
+  index, the active-wallet pointer and every per-wallet key only for a wallet
+  with evidence; the PIN record and the other single keys only with some
+  evidence. Every shared-group read is the non-prompting native read
+  (`OxyIdentity.readKeychainItemWithoutInteraction`, through
+  `@oxy.so/protocol`'s `loadKeychainReadWithoutInteraction`, the same reader
+  core's `readSharedWithoutInteraction` uses; core does not export it from
+  `@oxy.so/core/crypto`); a native build without it never reads the shared
+  group. A wallet whose phrase or xpub was taken from the shared group is
+  recorded (`peable_keychain_adopted_v1`, own group, before the value is
+  copied) and offers nothing to receive into until the person confirms it is
+  theirs on the Receive sheet. What is not taken stays where it is. Residual,
+  recorded: on a phone that ran a pre-split build, an item another app wrote
+  over that build's own copy before the move finished is indistinguishable
+  from it; the confirmation covers its phrase.
+- **A check is recorded only when it is definite (R6-6).** A candidate whose
+  derivation threw was dropped, and one failed check marked the account
+  checked for ever. Now a thrown derivation makes the check `indefinite`:
+  nothing is recorded and the wallet opens (a key that cannot be asked never
+  blocks it); only Oxy's silence still blocks, as before. A definite failure
+  is recorded with the fingerprint of the key history and the retired ring it
+  was judged against, and is asked again when either changes (a rotation, a
+  previous phrase added in Commons). A proof that comes after the account's
+  own wallet was already in use MERGES into it (`Database.mergeFrom`, the
+  wallet's rows win, a rescan from the lowest merged coin reconciles) rather
+  than copying over it. Settings offers "Recover an earlier wallet", the same
+  check on demand.
+- **One move at a time (R6-7).** The check and move run in the wallet's init
+  queue, so two boots (a focus re-run, "Check again", an account switch)
+  never copy or delete the same files at once, and no wallet opens beside it.
+- **The move's fee is the person's choice (R6-11).** Low, medium, high, or a
+  custom whole rate from 1 to 100 units per byte; the confirmation shows the
+  fee and the rate, and the move still spends exactly the confirmed plan.
+- **The legacy namespace has a bounded life (informational).** When the
+  on-demand check says the legacy wallet is not this account's, Settings offers
+  to remove it from the phone, with a warning that it may be someone else's
+  who can still recover it by signing in here first; removal deletes only this
+  phone's copy (no coin moves) and closes the namespace for everyone. It is
+  NOT deleted automatically: the wallet cannot enumerate every account that
+  ever signed in on this phone, so "every account checked" cannot be known.
+  Preferences (Pockets, the active Pocket, the notification subscription)
+  follow the proving account, which keeps its own where it has them (Pockets
+  are merged by account). Contacts and recent recipients name nobody's keys
+  and move with the file — documented, accepted.
+
+Oxy-side round-6 findings (R6-3, R6-5, R6-8 to R6-16) are fixed in OxyHQ/oxy.
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second

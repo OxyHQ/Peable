@@ -116,6 +116,7 @@
         "@oxy.so/bloom": "17.15.0",
         "@oxy.so/contracts": "6.13.0",
         "@oxy.so/core": "7.36.0",
+        "@oxy.so/protocol": "^1.11.0",
         "@oxy.so/services": "^14.13.0",
         "@peable.to/contracts": "workspace:6.1.0",
         "@peable.to/pay": "workspace:^",

@@ -88,6 +88,109 @@ export const KEYCHAIN_MOVE_MARKER = 'peable_keychain_split_v1';
  */
 export const LEGACY_IDENTITY_NAMESPACE_MARKER = 'peable_identity_namespace_v1';
 
+/**
+ * The wallets the keychain move adopted from the SHARED group (R6-4): a JSON
+ * list of wallet ids, written to the wallet's own group before the move's
+ * marker. Another Oxy app could have planted what was adopted there, so each
+ * such wallet offers nothing to receive into until the person confirms it is
+ * theirs (`wallet/receive-gate.ts`), which removes its id. Not a wallet key:
+ * never adopted from the shared group, and `clearAll` leaves it.
+ */
+export const KEYCHAIN_ADOPTED_WALLETS = 'peable_keychain_adopted_v1';
+
+/** The wallet ids {@link KEYCHAIN_ADOPTED_WALLETS} lists, or `[]` for an absent or unreadable one. */
+export function parseAdoptedWallets(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? uniqueSafeIds(parsed.filter((id): id is string => typeof id === 'string'))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Evidence that THIS app ran before on this phone, from its own sandbox and
+ * never from a keychain group (R6-4): the wallet ids whose SQLite file the
+ * sandbox held when this build first looked (`fairwallet.db` is the id-less
+ * wallet, `''`). Another app cannot write here.
+ */
+export interface InstallEvidence {
+  readonly walletIds: ReadonlySet<string>;
+}
+
+const DATABASE_FILE = /^fairwallet(?:_(.+?))?(?:_acct\d+)?\.db$/;
+
+/** The wallet id a wallet database file name belongs to (`db-name.ts`), or `null` for another file. */
+export function walletIdOfDatabaseFile(name: string): string | null {
+  const match = DATABASE_FILE.exec(name);
+  if (!match) return null;
+  return match[1] ?? '';
+}
+
+/** The per-wallet key's wallet id, or `null` for a key that names none. */
+function walletIdOfKey(key: string): string | null {
+  for (const prefix of [...Object.values(SECRET_PREFIXES), ...PREFERENCE_PREFIXES]) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length);
+  }
+  return null;
+}
+
+/**
+ * What the keychain move may take from the SHARED group for `key`, given
+ * `value` found there, or `null` to take nothing (R6-4). Every Oxy app can
+ * write that group, so nothing is taken without evidence that this app ran
+ * here before (`evidence`):
+ *
+ * - no evidence at all (every fresh install): nothing;
+ * - a cached seed: never — it is re-derived from the phrase, and a planted one
+ *   would open the wallet on someone else's keys;
+ * - the pre-multi-wallet phrase: never — this app only ever migrates it;
+ * - the wallet index: only its entries whose wallet has evidence;
+ * - the active-wallet pointer and every per-wallet key: only for a wallet
+ *   with evidence;
+ * - the PIN record and the other single keys: only with some evidence.
+ */
+export function adoptableFromShared(
+  key: string,
+  value: string,
+  evidence: InstallEvidence,
+): string | null {
+  const ids = evidence.walletIds;
+  if (ids.size === 0) return null;
+  if (key === SECRET_KEYS.legacyMnemonic || key.startsWith(SECRET_PREFIXES.seed)) return null;
+  if (key === SECRET_KEYS.walletsIndex) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (!Array.isArray(parsed)) return null;
+      const kept = parsed.filter(
+        (w: unknown) =>
+          w !== null &&
+          typeof w === 'object' &&
+          typeof (w as { id?: unknown }).id === 'string' &&
+          ids.has((w as { id: string }).id),
+      );
+      return kept.length > 0 ? JSON.stringify(kept) : null;
+    } catch {
+      return null;
+    }
+  }
+  if (key === SECRET_KEYS.activeWallet) return ids.has(value) ? value : null;
+  const walletId = walletIdOfKey(key);
+  if (walletId !== null) return ids.has(walletId) ? value : null;
+  return value;
+}
+
+/** The wallet a key's adopted value makes spendable here (its phrase or xpub), or `null`. */
+export function walletOfAdoptedSecret(key: string): string | null {
+  for (const prefix of [SECRET_PREFIXES.mnemonic, SECRET_PREFIXES.xpub]) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length);
+  }
+  return null;
+}
+
 /** The characters `expo-secure-store` accepts in a key; anything else it never wrote. */
 const KEY_SAFE_ID = /^[A-Za-z0-9._-]+$/;
 

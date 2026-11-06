@@ -24,6 +24,9 @@ import {
   canonicalKey,
   discoverPreviousTree,
   groupPreviousKeys,
+  MOVE_FEE_RATE_MAX,
+  MOVE_FEE_RATE_MIN,
+  parseMoveFeeRate,
   PREVIOUS_KEY_MOVE_MAX_INPUTS,
   planPreviousKeyMove,
   samePreviousKeyMovePlan,
@@ -613,5 +616,26 @@ describe('the copy for a previous key this phone cannot reach', () => {
     expect(source).not.toContain('outside Peable');
     expect(source).not.toContain("can be spent only with that key's recovery phrase");
     expect(source).not.toContain('wallet.strandedBalance');
+  });
+});
+
+describe('the move fee the person chooses (R6-11)', () => {
+  test('a custom rate is a whole number within bounds', () => {
+    expect(parseMoveFeeRate('1')).toBe(MOVE_FEE_RATE_MIN);
+    expect(parseMoveFeeRate(' 25 ')).toBe(25);
+    expect(parseMoveFeeRate(String(MOVE_FEE_RATE_MAX))).toBe(MOVE_FEE_RATE_MAX);
+    for (const bad of ['0', '101', '2.5', '-3', '', 'abc', '99999']) {
+      expect(parseMoveFeeRate(bad)).toBeNull();
+    }
+  });
+
+  test('the chosen rate is the plan’s, and a plan at another rate is not the confirmed one', () => {
+    const coins = [coin('Ta', 50_000_000n)];
+    const low = planPreviousKeyMove({ coins, feePerByte: 1, dustThreshold: TESTNET.minRelayFee });
+    const high = planPreviousKeyMove({ coins, feePerByte: 40, dustThreshold: TESTNET.minRelayFee });
+    if (low.kind !== 'ready' || high.kind !== 'ready') throw new Error('expected ready plans');
+    expect(low.feePerByte).toBe(1);
+    expect(high.fee > low.fee).toBe(true);
+    expect(samePreviousKeyMovePlan(low, high)).toBe(false);
   });
 });
