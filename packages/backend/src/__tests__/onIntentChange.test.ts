@@ -73,7 +73,7 @@ test('the outbox row exists before onIntentChange runs, not because of it', asyn
   expect(beforeAnnounce[0]?.lastStatus).toBe('pending');
 
   const { io, rooms } = fakeIo();
-  await onIntentChange(io, settled);
+  await onIntentChange([io], settled);
 
   // Announcing emits, and creates nothing.
   expect(rooms()).toEqual([`intent:${settled.publicId}`]);
@@ -96,5 +96,5 @@ test('announcing an intent whose merchant has no webhook does not throw', async 
   const intent = await seedIntent(merchant);
 
   const { io } = fakeIo();
-  await expect(onIntentChange(io, intent)).resolves.toBeUndefined();
+  await expect(onIntentChange([io], intent)).resolves.toBeUndefined();
 });

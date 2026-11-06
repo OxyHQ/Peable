@@ -1,6 +1,7 @@
 import { observeEcosystemSocket } from '../ecosystemActivity';
 import type { IncomingMessage } from 'node:http';
-import type { Server, Socket } from 'socket.io';
+import type { Server, ServerOptions, Socket } from 'socket.io';
+import { PAYER_SOCKET_PATH } from '@peable.to/contracts/vocabulary';
 import { oxy } from '../oxy';
 import { resolveClientIp, verifySecret } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
@@ -191,37 +192,23 @@ export function ipConnectionThrottle(limiter: FixedWindowLimiter): SocketAuth {
 }
 
 /**
- * Wire the realtime layer. The CONNECTION is identity-optional (see
- * `optionalSocketAuth`) — a checkout/embed payer with no Oxy session can
- * still connect, subject to `ipConnectionThrottle` above. Joining a specific
- * intent's room is capability-scoped: it requires proving possession of that
- * intent's `client_secret`, verified in constant time, regardless of whether
- * the socket carries an identity — so ANY holder of a valid client_secret can
- * subscribe to that intent (and only that intent), never enumerate someone
- * else's, subject to the per-socket `SUBSCRIBE_MAX_PER_WINDOW` throttle. The
- * payer's wallet then receives live `intent.updated` events as the
- * settlement watcher advances the intent. `subscribe` is the only event this
- * layer handles; if a future event needs to be identity/merchant-scoped, it
- * must check `socket.user` itself — the optional connection auth does NOT
- * imply every event is safe for an anonymous socket.
- */
-/**
- * The Socket.IO server this process is serving on, if any.
+ * The Socket.IO servers this process is serving on: the Oxy one
+ * (`initSocket`) and the payer one (`initPayerSocket`).
  *
  * A module-level handle rather than a parameter, because the paths that now
  * need to announce a change — a route handler, the expiry sweeper — are not
  * handed one and threading `io` through every caller would put a transport
  * detail in signatures that have no other reason to know about transports.
  *
- * Last `initSocket` wins. In production there is exactly one server; a test
- * that builds two gateways announces into the second, which is why
- * `emitIntentUpdate(io, …)` stays exported for suites that assert on a
- * specific instance.
+ * Last `initSocket` / `initPayerSocket` wins, per kind. In production there is
+ * exactly one of each; a test that builds two gateways announces into the
+ * second, which is why `emitIntentUpdate(io, …)` stays exported for suites
+ * that assert on a specific instance.
  */
-let activeIo: Server | null = null;
+const active: { oxy: Server | null; payer: Server | null } = { oxy: null, payer: null };
 
 /**
- * Emit an intent update to whichever server is active, if one is.
+ * Emit an intent update to whichever servers are active, if any.
  *
  * A no-op with no server registered, deliberately: a realtime frame is a
  * convenience on top of a durable state change and a durable outbox row, and
@@ -229,8 +216,8 @@ let activeIo: Server | null = null;
  * wrong trade in every direction.
  */
 export function emitIntentUpdateToActive(intent: PaymentIntentRow): void {
-  if (activeIo === null) return;
-  emitIntentUpdate(activeIo, intent);
+  if (active.oxy !== null) emitIntentUpdate(active.oxy, intent);
+  if (active.payer !== null) emitIntentUpdate(active.payer, intent);
 }
 
 /** Oxy's handshake verifier, as a `SocketAuth` (socket.io hands it a real `Socket`). */
@@ -239,48 +226,147 @@ function oxySocketAuth(): SocketAuth {
   return (socket, next) => verify(socket as Parameters<typeof verify>[0], next);
 }
 
-export function initSocket(io: Server, deps: SocketDeps = {}): void {
-  activeIo = io;
-  const identityAuth: SocketAuth = deps.socketAuth ?? oxySocketAuth();
-  const ipConnectLimiter = new FixedWindowLimiter(IP_CONNECT_WINDOW_MS, IP_CONNECT_MAX);
-  const subscribeLimiter = new FixedWindowLimiter(SUBSCRIBE_WINDOW_MS, SUBSCRIBE_MAX_PER_WINDOW);
-
-  // Swept on a shared interval — unref'd so it never keeps the event loop
-  // (or a test run) alive, matching `SettlementWatcher`'s convention.
+/** Both throttles, swept on a shared interval — unref'd so it never keeps the event loop (or a test run) alive. */
+function createThrottles(): { connect: FixedWindowLimiter; subscribe: FixedWindowLimiter } {
+  const connect = new FixedWindowLimiter(IP_CONNECT_WINDOW_MS, IP_CONNECT_MAX);
+  const subscribe = new FixedWindowLimiter(SUBSCRIBE_WINDOW_MS, SUBSCRIBE_MAX_PER_WINDOW);
   const sweepTimer = setInterval(() => {
-    ipConnectLimiter.sweep();
-    subscribeLimiter.sweep();
+    connect.sweep();
+    subscribe.sweep();
   }, LIMITER_SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
+  return { connect, subscribe };
+}
 
-  io.use(ipConnectionThrottle(ipConnectLimiter));
+/**
+ * The `subscribe` capability check, the same on both servers: joining an
+ * intent's room requires that intent's `client_secret`, verified in constant
+ * time, and an unknown intent answers exactly like a wrong secret.
+ */
+function handleSubscribe(socket: Socket, subscribeLimiter: FixedWindowLimiter): void {
+  socket.on('subscribe', async (payload: unknown, ack?: (result: { ok: boolean }) => void) => {
+    // Keyed by `socket.id` (unique per connection, assigned by
+    // socket.io) — independent of the per-IP connection throttle.
+    if (!subscribeLimiter.consume(socket.id)) {
+      ack?.({ ok: false });
+      return;
+    }
+
+    const request = parseSubscribe(payload);
+    if (request === null) {
+      ack?.({ ok: false });
+      return;
+    }
+
+    const intent = await findIntentByPublicId(getDb(), request.intentId);
+    if (intent === null || !verifySecret(request.clientSecret, intent.clientSecret)) {
+      ack?.({ ok: false });
+      return;
+    }
+
+    await socket.join(intentRoom(request.intentId));
+    ack?.({ ok: true });
+  });
+}
+
+/**
+ * Wire the OXY realtime layer — the default `/socket.io/` server, behind
+ * `createOxySocketCors` (Oxy origins only, `server.ts`). The CONNECTION is
+ * identity-optional (see `optionalSocketAuth`): the wallet connects with its
+ * Oxy token, and an anonymous payer on an Oxy origin can still connect (SDKs
+ * before the payer server, `initPayerSocket`, subscribe here), subject to
+ * `ipConnectionThrottle`. Joining a specific intent's room is capability-scoped
+ * (`handleSubscribe`), regardless of whether the socket carries an identity.
+ * `subscribe` is the only event this layer handles; if a future event needs to
+ * be identity/merchant-scoped, it must check `socket.user` itself — the
+ * optional connection auth does NOT imply every event is safe for an
+ * anonymous socket — and it belongs on THIS server only.
+ */
+export function initSocket(io: Server, deps: SocketDeps = {}): void {
+  active.oxy = io;
+  const identityAuth: SocketAuth = deps.socketAuth ?? oxySocketAuth();
+  const throttles = createThrottles();
+
+  io.use(ipConnectionThrottle(throttles.connect));
   io.use(optionalSocketAuth(identityAuth));
 
   io.on('connection', (socket: Socket) => {
     observeEcosystemSocket(socket);
-    socket.on('subscribe', async (payload: unknown, ack?: (result: { ok: boolean }) => void) => {
-      // Keyed by `socket.id` (unique per connection, assigned by
-      // socket.io) — independent of the per-IP connection throttle above.
-      if (!subscribeLimiter.consume(socket.id)) {
-        ack?.({ ok: false });
-        return;
-      }
+    handleSubscribe(socket, throttles.subscribe);
+  });
+}
 
-      const request = parseSubscribe(payload);
-      if (request === null) {
-        ack?.({ ok: false });
-        return;
-      }
+/**
+ * The PAYER server's options: its own path (`PAYER_SOCKET_PATH`, from the
+ * contracts, which the SDK connects to) and CORS for ANY origin without
+ * credentials — `*` is exactly "no credentials", and the only request header
+ * it admits is the one long-polling sends. No `allowRequest`: a WebSocket
+ * upgrade from any origin is admitted, because nothing on this server is
+ * reachable without the intent's own `client_secret`.
+ *
+ * Socket.IO decides CORS per SERVER, before it knows a connection's namespace
+ * or token, which is why this is a second server rather than a namespace of
+ * the Oxy one: the Oxy server keeps `createOxySocketCors` whole.
+ * `destroyUpgrade: false`, because the Oxy server on the same HTTP server
+ * already ends a stray upgrade neither of them handles.
+ */
+export function payerSocketOptions(): Partial<ServerOptions> {
+  return {
+    path: PAYER_SOCKET_PATH,
+    cors: {
+      origin: '*',
+      credentials: false,
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['Content-Type'],
+    },
+    destroyUpgrade: false,
+  };
+}
 
-      const intent = await findIntentByPublicId(getDb(), request.intentId);
-      if (intent === null || !verifySecret(request.clientSecret, intent.clientSecret)) {
-        ack?.({ ok: false });
-        return;
-      }
+/**
+ * Refuse a payer-server handshake that carries a credential: an Oxy token in
+ * the handshake `auth`, or an `Authorization` header. The payer server has no
+ * identity verifier, so a token here would be silently ignored — refusing it
+ * keeps "a socket with an identity" on the Oxy server, behind the Oxy
+ * origins, the way `payerAwareCors` sends a request with `Authorization` to
+ * the Oxy CORS.
+ */
+export const refusePayerCredentials: SocketAuth = (socket, next) => {
+  const handshake = (
+    socket as {
+      handshake?: {
+        auth?: Record<string, unknown>;
+        headers?: Record<string, string | string[] | undefined>;
+      };
+    }
+  ).handshake;
+  const token = handshake?.auth?.token;
+  if (token !== undefined && token !== null && token !== '') {
+    next(new Error('the payer socket takes no credentials'));
+    return;
+  }
+  if (handshake?.headers?.authorization !== undefined) {
+    next(new Error('the payer socket takes no credentials'));
+    return;
+  }
+  next();
+};
 
-      await socket.join(intentRoom(request.intentId));
-      ack?.({ ok: true });
-    });
+/**
+ * Wire the PAYER realtime layer (`payerSocketOptions`): anonymous connections
+ * from any origin, the same per-IP connection throttle, and `subscribe` by
+ * client secret — the ONLY event, and the only thing a payer socket can reach.
+ */
+export function initPayerSocket(io: Server): void {
+  active.payer = io;
+  const throttles = createThrottles();
+
+  io.use(ipConnectionThrottle(throttles.connect));
+  io.use(refusePayerCredentials);
+
+  io.on('connection', (socket: Socket) => {
+    observeEcosystemSocket(socket);
+    handleSubscribe(socket, throttles.subscribe);
   });
 }
 

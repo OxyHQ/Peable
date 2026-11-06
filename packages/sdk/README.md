@@ -823,7 +823,9 @@ placeholders (`messages.test.ts`). A host never translates the sheet;
 The payer routes it calls answer any origin without credentials
 (`Access-Control-Allow-Origin: *`; the gateway's `lib/payerCors.ts`), because
 their authority is the client secret, so a merchant's own site can host it.
-Merchant and dashboard routes keep the Oxy-only CORS.
+Its live updates use the gateway's payer socket (`PAYER_SOCKET_PATH`), which
+answers any origin without credentials on the same terms. Merchant and dashboard
+routes, and the Oxy socket a signed-in app uses, keep the Oxy-only CORS.
 
 ### Checkout presentation primitives
 

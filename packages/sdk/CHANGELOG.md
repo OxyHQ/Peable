@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.2.0 — live payment updates on a merchant's own site
+
+Requires `@peable.to/contracts` 5.2.0 and `@peable.to/shared-types` 5.2.0.
+
+Changed:
+
+- `subscribe` (and everything built on it: `mountCheckout`, `createPeableElements`,
+  `PeableSheetCheckout`) opens the gateway's PAYER socket (`PAYER_SOCKET_PATH`,
+  `/payer-socket.io`), which answers any origin without credentials, as the payer
+  routes do. Pay with Peable on a non-Oxy site now hears its payment move live
+  instead of falling back to polling. Authority is still the intent's
+  `client_secret` alone; the socket refuses a handshake token.
+
 ## 5.1.0 — a FairCoin address is bound to the key it was derived from
 
 Requires `@peable.to/contracts` 5.1.0 and `@peable.to/shared-types` 5.1.0 (ADR 0002,

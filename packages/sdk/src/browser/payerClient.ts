@@ -11,6 +11,7 @@
 // machinery, so reusing it here (instead of throwing bare `Error`) does not
 // carry any of the merchant-authed code `checkout.ts` warns against into the
 // browser bundle.
+import { PAYER_SOCKET_PATH } from '@peable.to/contracts/vocabulary/realtime';
 import { io, type Socket } from 'socket.io-client';
 import type {
   CheckoutSessionPublic,
@@ -255,6 +256,11 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
    * so an anonymous checkout/embed payer can reach it. `subscribe`'s ack is
    * the real authorization check — it requires this intent's `client_secret`
    * — so nothing here needs an Oxy session.
+   *
+   * It opens the PAYER socket (`PAYER_SOCKET_PATH`), which the Gateway answers
+   * from any origin without credentials, so a merchant's own site hears its
+   * payment live instead of polling. The Oxy socket (`/socket.io/`) admits Oxy
+   * origins only.
    */
   async function subscribe(
     id: string,
@@ -263,6 +269,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
     onConnectionChange?: (state: RealtimeConnectionState) => void,
   ): Promise<{ unsubscribe(): void }> {
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(baseUrl, {
+      path: PAYER_SOCKET_PATH,
       transports: ['websocket'],
     });
 

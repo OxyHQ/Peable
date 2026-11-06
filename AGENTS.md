@@ -986,7 +986,12 @@ user-authenticated router (none builds its own). `getRequiredOxyUserId`
 to read the caller, `oxy.middleware.service()` / `.requireScope()` for merchant
 service tokens (EdDSA plus live authority; canonical own audience, bounded external legacy audience), `oxy.middleware.socket()`
 for Socket.IO behind `createOxySocketCors` (the same origins as `createOxyCors`,
-on polling and on the WebSocket handshake), plus `createOxyCors` and
+on polling and on the WebSocket handshake) — the Oxy socket, and the only one an
+identity may connect to; the PAYER socket is a second Socket.IO server on
+`PAYER_SOCKET_PATH` (`realtime/socket.ts` `initPayerSocket`) that answers any
+origin without credentials, refuses a handshake token and handles only
+`subscribe` by client secret, the payer routes' rule (Socket.IO's CORS is per
+server, so it cannot be a namespace), plus `createOxyCors` and
 `createOxyRateLimit` in `server.ts`. There is no
 `requireOxyAuth` call site in this repo. Frontend uses `OxyProvider` and `useOxy`
 from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
