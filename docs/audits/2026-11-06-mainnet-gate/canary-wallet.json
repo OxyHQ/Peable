@@ -1,7 +1,7 @@
 {
-  "started_at": "2026-11-06T06:04:10.570Z",
+  "started_at": "2026-11-06T07:13:43.556Z",
   "person": {
-    "at": "2026-11-06T06:04:14.687Z",
+    "at": "2026-11-06T07:13:50.678Z",
     "account": "canary_person_0001",
     "reserved_through": 2,
     "watched_indices": [
@@ -10,27 +10,27 @@
     ],
     "key_verdict": "match",
     "checked_through": 22,
-    "rescan_from_height": 54,
+    "rescan_from_height": 70,
     "spent": [
       {
-        "address": "TDZy9KXSNu7qUVHW3ttMeh2vSUYkLaxweo",
+        "address": "TFqLPKpqFHdCeWqCTYPTNtD3prJNkMmY2N",
         "index": 1,
-        "outpoint": "efc5a1400c05c30481524ccb74c5ed7c017caedd28e14d7473c5abcdb2b22fce:0",
+        "outpoint": "4de6553a12270a0bb65dd2dea9e9c746a11f6d52320a0104121498a4c40bfff1:0",
         "satoshis": 2500000000
       },
       {
-        "address": "TFjSdJRfMSAYZwkMepMkrUnNAcpieQSChT",
+        "address": "TKd1gHZg4tYVn3bLNfiidEfDGVqMyU3m8Q",
         "index": 2,
-        "outpoint": "4593335ca965eb3ffeff7e7d48bacbcb9f3785a73b36918ae64ce86166bf0cc9:0",
+        "outpoint": "31ef87dc9db21908f28a912b323a3e501bff79476f78dd3fda28e28799866b7c:0",
         "satoshis": 2858438045
       }
     ],
-    "sweep_txid": "5b1d90757c4a91ca6505056e1821aed494d342aa499cb0a23acb62c98c24ed0c",
+    "sweep_txid": "6e37afa0b480ea878d0d5956e69e865a9e7677f20cb6443700a4a820520dd9ab",
     "confirmations": 1,
-    "tip": 59
+    "tip": 75
   },
   "organization": {
-    "at": "2026-11-06T06:04:18.659Z",
+    "at": "2026-11-06T07:13:59.815Z",
     "account": "canary_org_0001",
     "reserved_through": 1,
     "watched_indices": [
@@ -39,18 +39,18 @@
     ],
     "key_verdict": "match",
     "checked_through": 21,
-    "rescan_from_height": 57,
+    "rescan_from_height": 73,
     "spent": [
       {
-        "address": "TS4H12P3LtEADM8GoF6uBU5GwqQ7bB7K8Q",
+        "address": "TFbFdQXh7QRB53TdbEwneqvpKpqBV7Xx84",
         "index": 1,
-        "outpoint": "7d68508c0f40b933ae29c66b0699469ef5fc896a27f650b0e205f5910bb2c0be:0",
+        "outpoint": "794a8dcd8169dbf03a009564221cbe1265f5d4aaf07ed21e580189b2e33a08cb:0",
         "satoshis": 1500000000
       }
     ],
-    "sweep_txid": "88865c7c153d0eef066120b0597597b8b3fcb9beb41cb7da434852ab524c2bff",
+    "sweep_txid": "df19b6d08897065fb6741a132f91b697020021ed3cc66bf7ca1029d5eacb3e54",
     "confirmations": 1,
-    "tip": 60
+    "tip": 76
   },
-  "finished_at": "2026-11-06T06:04:18.659Z"
+  "finished_at": "2026-11-06T07:13:59.815Z"
 }

@@ -7,13 +7,14 @@ mainnet as soon as both pass, without waiting for (2), the legal opinion, or
 (3), physical-device verification. The waiver itself is recorded in ADR 0002
 ("Owner's mainnet waiver"). This folder is the evidence for (1) and (4).
 
-**Result: the gate is NOT opened.** The canary passed. The security review
-refused sign-off twice; the second refusal names two new code defects (being
-fixed) and four risks only the owner can accept in writing. Production keeps
-`PEABLE_SOCIAL_PAY_NETWORK` unset (testnet; checked on the running
-`oxy-peable:248` at the start and `oxy-peable:256` after the fixes deployed), so the gateway still answers
-`faircoin_network_closed` for a live order's FairCoin option
-(`identityNetworkOpen`, `services/faircoin/recipient.ts`).
+**Result: the gate is NOT opened.** The canary passed. The security review,
+after three rounds and the fixes below, signs off **conditional on five written
+owner risk acceptances** (listed at the end) that the owner's waiver does not
+cover; no code defect blocks it any more. Until the owner accepts them, the gate
+stays closed: production keeps `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet;
+checked on the running `oxy-peable:248` at the start and `oxy-peable:256` after
+the fixes deployed), so the gateway answers `faircoin_network_closed` for a live
+order's FairCoin option (`identityNetworkOpen`, `services/faircoin/recipient.ts`).
 
 ## (1) Security review
 
@@ -58,13 +59,26 @@ partially; F5 and F12 not. New:
 - Address recycling: one payment cannot settle two intents; a late payment to a
   recycled address can settle the new holder's order (D9's written residual).
 
-N1–N5 are being fixed in a follow-up gateway PR. **Sign-off, per round 2,
-additionally needs the owner's written acceptance** of: F5 (iOS keychain, or the
+N1–N5 were fixed in #262. **Sign-off, per round 2, additionally needs the
+owner's written acceptance** of: F5 (iOS keychain, or the
 split shipped), F1's residual (no way to spend from a previous phrase in
 Peable), F9's residual (one third-party Explorer decides settlement; a rewind
 does not revoke fulfilment) and D9's recycled-address late-payer residual. The
 owner's waiver of (2) and (3) does not cover these: they are risks the review
 found, not prerequisites the owner set aside.
+
+### Round 3 (Peable `0bcb4f5b`, oxy `c2e96b3df`): sign-off conditional on owner acceptances
+
+N1 fixed: the gateway never mints index 1,980 or above, enforced in the
+reservation's own statement (`db/social/receiveCursor.ts`), and every path
+(merchant, seller, invoice, raw intent, split outputs, `@username`, recycled
+addresses) goes through that cursor, so every address handed out is inside the
+wallet's window (0–1,999). N2 fixed: each confirm leases a different recycling
+candidate and a loser claims another under the lock before minting. N3, N4, N5
+fixed. No code defect blocks mainnet. Three low findings (one dusted index
+above the ceiling hides `@username`; the closed-gate retire path can cancel a
+payment that was broadcast but not reported; the recycling query lacks an index
+filter) plus an Explorer timeout and stale AGENTS.md lines go to a follow-up PR.
 
 ## (4) Testnet canary: passed
 
@@ -95,24 +109,24 @@ is covered by the review and `socialReceive.test.ts`); `explorerShim.ts` serves
 the Explorer's endpoints from the node (the price endpoint is the real
 Explorer's); the device's secure storage (item (3), waived).
 
-Run on Peable `89942340` (every review fix through #255), tip 52 → 60:
+Run on Peable `0bcb4f5b` (every review fix through #262), tip 68 → 76:
 
 | When (UTC) | Step | Evidence |
 |---|---|---|
-| 06:03:54 | social: `POST /v1/social/canaryperson/next_address` | index 1, `TDZy9KXSNu7qUVHW3ttMeh2vSUYkLaxweo` |
-| 06:03:54 | payer pays 25 FAIR | `efc5a1400c05c30481524ccb74c5ed7c017caedd28e14d7473c5abcdb2b22fce` |
-| 06:03:59 | EUR 12.50 session (person-owned merchant), confirmed with FairCoin at the live quote (0.4908 USD/FAIR, 1.1224 USD/EUR → 28.58438045 FAIR) | `pi_360e20dcbc412c4a3d20f344`, index 2 on the SAME cursor, `TFjSdJRfMSAYZwkMepMkrUnNAcpieQSChT` |
-| 06:03:59 | payer pays | `4593335ca965eb3ffeff7e7d48bacbcb9f3785a73b36918ae64ce86166bf0cc9` |
-| 06:04:05 | watcher: `processing` → `succeeded` at 2 confirmations; session `complete` / `paid` | tip 56 |
-| 06:04:05 | 15 FAIR session (organization-owned merchant) | `pi_89b2148eaa5450926644c3ca`, organization cursor index 1, `TS4H12P3LtEADM8GoF6uBU5GwqQ7bB7K8Q` |
-| 06:04:05 | payer pays | `7d68508c0f40b933ae29c66b0699469ef5fc896a27f650b0e205f5910bb2c0be` |
-| 06:04:10 | watcher: `succeeded`; session `complete` / `paid` | tip 58 |
-| 06:04:14 | the person's wallet: key `match`, window 0–22, indices checked through 22, rescan sent to 54, spends both coins | `5b1d90757c4a91ca6505056e1821aed494d342aa499cb0a23acb62c98c24ed0c`, confirmed at 59 |
-| 06:04:18 | the organization's wallet (`{ accountId }` signing): key `match`, window 0–21, spends its coin | `88865c7c153d0eef066120b0597597b8b3fcb9beb41cb7da434852ab524c2bff`, confirmed at 60 |
+| 07:13:23 | social: `POST /v1/social/canaryperson/next_address` | index 1, `TFqLPKpqFHdCeWqCTYPTNtD3prJNkMmY2N` |
+| 07:13:23 | payer pays 25 FAIR | `4de6553a12270a0bb65dd2dea9e9c746a11f6d52320a0104121498a4c40bfff1` |
+| 07:13:34 | EUR 12.50 session (person-owned merchant), confirmed with FairCoin at the live quote (0.4908 USD/FAIR, 1.1224 USD/EUR → 28.58438045 FAIR) | `pi_c69dbdde3de5a386565a76ed`, index 2 on the SAME cursor, `TKd1gHZg4tYVn3bLNfiidEfDGVqMyU3m8Q` |
+| 07:13:34 | payer pays | `31ef87dc9db21908f28a912b323a3e501bff79476f78dd3fda28e28799866b7c` |
+| 07:13:41 | watcher: `processing` → `succeeded` at 2 confirmations; session `complete` / `paid` | tip 72 |
+| 07:13:41 | 15 FAIR session (organization-owned merchant) | `pi_d9f0cd404d2bc7c87aa5b356`, organization cursor index 1, `TFbFdQXh7QRB53TdbEwneqvpKpqBV7Xx84` |
+| 07:13:41 | payer pays | `794a8dcd8169dbf03a009564221cbe1265f5d4aaf07ed21e580189b2e33a08cb` |
+| 07:13:43 | watcher: `succeeded`; session `complete` / `paid` | tip 74 |
+| 07:13:50 | the person's wallet: key `match`, window 0–22, indices checked through 22, rescan sent to 70, spends both coins | `6e37afa0b480ea878d0d5956e69e865a9e7677f20cb6443700a4a820520dd9ab`, confirmed at 75 |
+| 07:13:59 | the organization's wallet (`{ accountId }` signing): key `match`, window 0–21, spends its coin | `df19b6d08897065fb6741a132f91b697020021ed3cc66bf7ca1029d5eacb3e54`, confirmed at 76 |
 
-The same run had passed on `9e0e1853` (before the fixes) at 03:54–03:57; the
-recorded one is the run on the fixed code. Full records: `canary-gateway.json`,
-`canary-wallet.json`.
+The same canary also passed on `9e0e1853` (before any fix, 03:54–03:57) and on
+`89942340` (after #253–#255, 06:03–06:04); the recorded run is the one on the
+final code. Full records: `canary-gateway.json`, `canary-wallet.json`.
 
 What the canary does not prove: the production deployment's path to
 `explorer.fairco.in` on testnet (there is no testnet there to read), the DID
@@ -128,3 +142,42 @@ with the usual `TEST_DATABASE_URL`/`DATABASE_URL`) and the wallet half
 (`CANARY_NODE_CONF=… CANARY_KEYS=… CANARY_GATEWAY_EVIDENCE=… CANARY_WALLET_EVIDENCE_OUT=…
 bun test src/wallet/__canary__/` in `packages/frontend`). Both skip without
 their variables, so CI never runs them.
+
+## What the owner must still do
+
+1. **Accept, in writing, the five risks round 3 names** (or have them fixed
+   first). Each is one sentence the owner would be signing:
+   1. F5 — "On iOS, any Oxy app can read the personal and organization identity
+      private keys and recovery phrases that control mainnet FairCoin receive,
+      and I accept that for mainnet money." (Alternative: ship the keychain
+      split in `oxy/docs/identity/ios-keychain-access-groups.md`.)
+   2. F1 — "After a personal key rotation, Peable has no way to spend coins
+      received under the previous phrase; funds not moved before rotating are
+      recoverable only outside Peable."
+   3. F9 — "One third-party Explorer, on a chain with negligible stake weight,
+      alone decides whether a payment settled or was reorganised, and a rewind
+      never revokes fulfilment already granted."
+   4. ADR 0021 D9 (late payer) — "A payer who pays a cancelled quote more than
+      about an hour late, after its address was recycled, pays the new holder's
+      order, and that holder may claim the transaction as their own payment;
+      the coins remain the recipient's."
+   5. D9 tree exhaustion — "Each recipient, including Oxy's own organization for
+      all first-party products, has a lifetime budget of 1,979 FairCoin
+      addresses that were actually used. An attacker can burn it for well under
+      1 FAIR (or free with Oxy accounts, or during an Explorer outage), after
+      which FairCoin is permanently unavailable for that recipient until a
+      sparse watch set ships; cards are unaffected."
+2. **Before opening**, a read-only production check that no mainnet
+   `social_receive_cursors` row exists at or above the ceiling (mainnet minting
+   was never open, so none should).
+3. **Opening** (once accepted), the supported way: register a new `oxy-peable`
+   revision from the RUNNING one with only `PEABLE_SOCIAL_PAY_NETWORK=mainnet`
+   added, `update-service`, wait for a steady state and `/health` 200; mirror
+   the variable in `oxy-infra` `terraform-uswest2/app-peable.tf`; flip
+   `packages/frontend/src/pay/social-network.ts` `SOCIAL_PAY_NETWORK` to
+   `mainnet` (web deploy + OTA) so the wallet agrees; then check, read-only,
+   that a live order's FairCoin option no longer answers
+   `faircoin_network_closed` (for the `oxy`-owned merchants it will answer
+   `faircoin_wallet_missing` until an owner creates the organization's wallet in
+   Commons).
+

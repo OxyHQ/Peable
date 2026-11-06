@@ -218,16 +218,20 @@ waiver does not touch the other two items: the gate opens only on a
   no chain (the Explorer reports height 0 with no peers; its DNS seeds do not
   resolve). Social, EUR-priced merchant and organization-owned merchant
   payments were reserved, paid, settled by the watcher and spent by the
-  recipients' wallets on Peable `89942340`.
-- **Security review: refused twice.** Round 1's findings were fixed in #253,
-  #254, #255 and OxyHQ/oxy#2183; round 2 found two new blocking defects (the
-  gateway can mint past the wallet's 2,000-index window; concurrent confirms
-  defeat address recycling), being fixed, and conditions sign-off on the
-  owner's written acceptance of risks this waiver does NOT cover: iOS keychain
-  sharing of identity keys and recovery phrases (F5), no path to spend from a
-  previous phrase after a rotation (F1), a single third-party Explorer deciding
-  settlement and a rewind not revoking fulfilment (F9), and a late payment to a
-  recycled address settling the new holder's order (ADR 0021 D9).
-- **Gate: closed.** Production leaves `PEABLE_SOCIAL_PAY_NETWORK` unset
-  (testnet), and the wallet's `SOCIAL_PAY_NETWORK` stays `testnet`.
+  recipients' wallets on Peable `0bcb4f5b` (every fix through #262).
+- **Security review: signed off conditionally.** Rounds 1 and 2 refused;
+  their findings were fixed in #253, #254, #255, #262 and OxyHQ/oxy#2183.
+  Round 3 (Peable `0bcb4f5b`) found no blocking code defect and signs off
+  **conditional on the owner's written acceptance** of five risks this waiver
+  does NOT cover: iOS keychain sharing of identity keys and recovery phrases
+  (F5); no path in Peable to spend from a previous phrase after a rotation
+  (F1); one third-party Explorer deciding settlement, with a rewind never
+  revoking fulfilment (F9); a late payment to a recycled address settling the
+  new holder's order (ADR 0021 D9); and a recipient's lifetime budget of 1,979
+  used addresses, which an attacker can exhaust cheaply, after which FairCoin is
+  permanently unavailable for that recipient (ADR 0021 D9). The exact sentences
+  are in the audit record.
+- **Gate: closed** until those acceptances are written down here. Production
+  leaves `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet), and the wallet's
+  `SOCIAL_PAY_NETWORK` stays `testnet`.
 
