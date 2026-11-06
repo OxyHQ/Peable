@@ -16,7 +16,7 @@
  * wallet shell to show — full and read-only — into `(tabs)`.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { Redirect, useFocusEffect } from 'expo-router';
 import { useAuth } from '@oxy.so/services/ui/client';
@@ -101,16 +101,29 @@ export default function IndexScreen() {
     setHasPinConfigured(null);
   }
 
+  // Only the LATEST boot, for the account the session acts as NOW, may open
+  // or close a wallet. A focus re-run, "Check again" and an account switch
+  // each start a new boot; every earlier one is stale the moment that happens,
+  // whatever it is still awaiting (Oxy, Commons over IPC).
+  const latestBoot = useRef(0);
+  const actingAccountId = useRef(accountId);
+  actingAccountId.current = accountId;
+
   const boot = useCallback(
     async (isCancelled: () => boolean) => {
       if (!isAuthResolved || !isAuthenticated || !accountId) return;
+      latestBoot.current += 1;
+      const generation = latestBoot.current;
+      const stale = () =>
+        isCancelled() || latestBoot.current !== generation || actingAccountId.current !== accountId;
       try {
         const pinSet = await hasPin();
         const target = await resolveWalletTarget({ id: accountId, kind: accountKind });
-        if (isCancelled()) return;
+        if (stale()) return;
         if (target.kind !== 'open') {
-          // Nothing of the PREVIOUS account's may stay open under this one.
-          if (useWalletStore.getState().initialized) closeWallet();
+          // Nothing of the PREVIOUS account's may stay open under this one —
+          // nor open later: closing also abandons an init still in flight.
+          closeWallet();
           setBlock(target.kind === 'blocked' ? target.block : null);
           setHasPinConfigured(pinSet);
           setIdentityInit(target.kind === 'read-only' ? 'no-keystore' : null);
@@ -126,13 +139,16 @@ export default function IndexScreen() {
         // leave room for an account switch to have closed or replaced it.
         const live = useWalletStore.getState();
         const current = live.initialized && live.activeWalletId === walletId;
-        if (live.initialized && !current) closeWallet();
+        // Close even when nothing is up yet: it also abandons an init for the
+        // previous account that is still deriving, which would otherwise win
+        // the queue and stay open under this one.
+        if (!current) closeWallet();
         const result: IdentityInitResult = current
           ? 'initialized'
           : await initializeFromIdentity(() => {}, target.subject, target.publishedPublicKey);
         // Superseded: closed (another account switch) while deriving; the
         // boot that closed it decides what opens next.
-        if (isCancelled() || result === 'superseded') return;
+        if (stale() || result === 'superseded') return;
         if (result === 'no-identity' && target.subject.kind === 'organization') {
           // The key vanished between the check and the derivation (Commons
           // removed it, or an older Commons cannot answer for an
@@ -155,7 +171,7 @@ export default function IndexScreen() {
           markNoPinUnlocked();
         }
       } catch (err: unknown) {
-        if (!isCancelled()) {
+        if (!stale()) {
           setErrorMsg(err instanceof Error ? err.message : t('index.error.load'));
         }
       }
