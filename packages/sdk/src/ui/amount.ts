@@ -1,8 +1,11 @@
+import { intlLocale } from './messages';
+
 /** FairCoin's base unit: 1 FAIR = 10⁸ m⊜. Intl has no currency code for it. */
 const FAIR_DECIMALS = 8;
 
 /** A FAIR amount from its base-unit string, in the payer's digits, exact (no float). */
-export function formatFairAmount(baseUnits: string, locale: string): string {
+export function formatFairAmount(baseUnits: string, payerLocale: string): string {
+  const locale = intlLocale(payerLocale);
   if (!/^(0|[1-9]\d*)$/.test(baseUnits)) throw new RangeError('Invalid FairCoin amount');
   const units = BigInt(baseUnits);
   const scale = 10n ** BigInt(FAIR_DECIMALS);
@@ -19,8 +22,9 @@ export function formatFairAmount(baseUnits: string, locale: string): string {
 export function formatCheckoutAmount(
   amountMinorUnits: number,
   currency: string,
-  locale: string,
+  payerLocale: string,
 ): string {
+  const locale = intlLocale(payerLocale);
   if (!Number.isSafeInteger(amountMinorUnits) || amountMinorUnits < 0)
     throw new RangeError('Invalid checkout amount');
   if (currency.toUpperCase() === 'FAIR') return formatFairAmount(String(amountMinorUnits), locale);

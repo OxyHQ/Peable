@@ -3,7 +3,7 @@ import { CardForm, CardFormHostedField } from '@oxy.so/bloom/card-form';
 import { Button } from '@oxy.so/bloom/button';
 import { Text, fontFamilies, TYPE_SCALE } from '@oxy.so/bloom/typography';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { checkoutMessage } from './messages';
+import { checkoutMessage, providerLocale } from './messages';
 import { loadProviderSdk, type ProviderElement } from '../browser/providerJs';
 import { prepareCardAuthorization, type ProviderCardPreparation } from './preparedCard';
 import type { PeableProviderFieldsProps } from './providerFieldTypes';
@@ -124,9 +124,7 @@ export function PeableProviderCardFields({
     void loadProviderSdk()
       .then((factory) => {
         if (!active) return;
-        const provider = factory(publishableKey, {
-          locale: locale.startsWith('es') ? 'es' : locale.startsWith('en') ? 'en' : 'auto',
-        });
+        const provider = factory(publishableKey, { locale: providerLocale(locale) });
         if (!provider.createPaymentMethod) {
           fail();
           return;

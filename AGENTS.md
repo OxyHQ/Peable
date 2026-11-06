@@ -979,6 +979,14 @@ from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
 The hosted checkout is deliberately **anonymous**: a payer has no Oxy session, so
 do not add an Oxy auth requirement to a payer-facing route.
 
+**Payer routes answer any origin, without credentials** (`lib/payerCors.ts`):
+every `auth: 'public'` contract plus the four dual-auth reads a payer makes with
+a client secret (`PAYER_OPERATIONS`) get `Access-Control-Allow-Origin: *`, an
+allow-list without `Authorization`, and no cookies — a merchant's own site runs
+Pay with Peable. A request carrying `Authorization` is not a payer's and falls
+to the Oxy CORS; every other route keeps it. `payerCors.test.ts` walks every
+contract both ways.
+
 ### What a signed-in person may do: one module, one map
 
 **`services/oxyAccess.ts` is the ONLY place Peable asks Oxy what a person may

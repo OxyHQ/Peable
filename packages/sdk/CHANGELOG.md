@@ -1,5 +1,32 @@
 # Changelog
 
+## 4.3.0 — Apple Pay and Google Pay in the sheet; the sheet in fifteen languages
+
+Requires `@peable.to/contracts` 4.1.0 and `@peable.to/shared-types` 4.1.0.
+
+Added (`@peable.to/sdk/checkout/ui`):
+
+- **Wallets in `PeableSheetCheckout`.** On the web the card step opens with
+  the provider's Express Checkout element (Apple Pay, Google Pay) over the
+  order's REAL card payment, so the wallets offered are exactly what the
+  merchant's payment method configuration (and a registered wallet domain)
+  allows on this device, at the payment's own amount. Nothing is shown when no
+  wallet is offered. A session that prices from the payer's location asks for
+  the billing country first, so the card and the wallets pay the taxed total.
+  From a native app the card is Peable's secure page, which offers the same
+  wallets; the sheet now says so. `PeableWalletButtons` is exported.
+- **One catalog, fifteen languages.** The sheet's copy ships in ar, bn, ca,
+  de, en, es, fr, hi, id, it, ja, pt (Brazilian), ru, tr and zh (Simplified):
+  `CHECKOUT_UI_LOCALES`, `resolveCheckoutLocale`. `locale` takes a BCP 47 tag
+  (`pt-BR`, `zh-Hans`) or `'auto'` (the browser or device), like Stripe's.
+  Hosts should drop their own translations of the sheet; `messages` stays for
+  product copy overrides only.
+- `mountCardElements` (`@peable.to/sdk/checkout`) takes `paymentTarget: null`
+  to mount the wallets alone.
+
+Changed: `locale` defaults to `'auto'` (was English). The card provider's own
+fields follow the payer's language where the provider has it.
+
 ## 4.2.1 — the sheet compares a session's price before tax
 
 Fixed (`PeableSheetCheckout`): `expected.amount` is compared with a session's

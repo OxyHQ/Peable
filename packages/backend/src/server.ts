@@ -38,6 +38,7 @@ import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
 import { oxyGuard, requireOxyUser as oxyUserAuth } from './lib/http';
+import { payerAwareCors } from './lib/payerCors';
 import { createMerchantsRouter } from './routes/merchants';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
 import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
@@ -252,11 +253,17 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // Socket.IO's `createOxySocketCors` below reads.
   // A browser reading a response may see which request it was and whether it
   // is a replay of an earlier one (ADR 0014 D1, D3).
+  //
+  // The PAYER routes (`lib/payerCors.ts`) answer any origin without
+  // credentials: their authority is the client secret, not the page, and a
+  // merchant's own site runs Pay with Peable. Every other route keeps this.
   app.use(
-    createOxyCors({
-      appOrigins: config.allowedOrigins,
-      exposedHeaders: [REQUEST_ID_HEADER, IDEMPOTENT_REPLAYED_HEADER],
-    }),
+    payerAwareCors(
+      createOxyCors({
+        appOrigins: config.allowedOrigins,
+        exposedHeaders: [REQUEST_ID_HEADER, IDEMPOTENT_REPLAYED_HEADER],
+      }),
+    ),
   );
 
   // ─── MOUNTED BEFORE `express.json()` AND BEFORE THE GLOBAL RATE LIMITER ───

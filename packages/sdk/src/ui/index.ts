@@ -13,6 +13,13 @@ export type {
 export type { PeableMethodDetails } from './PeableMethodContent';
 
 export { checkoutFeedbackSounds } from './feedback';
+export {
+  CHECKOUT_UI_LOCALES,
+  resolveCheckoutLocale,
+  type CheckoutLocale,
+  type CheckoutUiLocale,
+} from './messages';
+export { PeableWalletButtons, type PeableWalletButtonsProps } from './PeableWalletButtons';
 
 export type { WalletObservation } from './walletView';
 export {
