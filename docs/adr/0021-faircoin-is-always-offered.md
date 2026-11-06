@@ -1,7 +1,7 @@
 # ADR 0021 — FairCoin is always offered
 
 **Status:** accepted.
-**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review), both amended 2026-11-06 (review rounds 2 and 3); D9 replaced 2026-11-06 by the sparse watch set (owner's decision).
+**Date:** 2026-11-05; D5 amended 2026-11-06; D6 amended 2026-11-06 (multi-recipient), D8 added; D9 and D10 added 2026-11-06 (mainnet security review), both amended 2026-11-06 (review rounds 2 and 3); D9 replaced 2026-11-06 by the sparse watch set (owner's decision), amended 2026-11-06 (review round 4).
 **Amends:** ADR 0012 (D5 `connected_account` on a fiat order, D12 the platform
 fee), ADR 0015 §5 (the FairCoin ledger entry gains its fiat equivalent), ADR 0018
 ("as built" §3 *the rail follows the currency*, and the "not built" item
@@ -323,58 +323,104 @@ reserved, froze past 150 000. The rules now:
   default address, is never handed out and is always the wallet's own.
 - **What the wallet does with a set that only grows**
   (`packages/frontend/src/wallet/social-receive-watch.ts`). ACTIVE — in the SPV
-  Bloom filter — are index 0, every address holding coins, every address the
-  Explorer showed coins at in the last 7 days, and the newest addresses handed
-  out in the last 7 days, at most 2 000 in all (the size the contiguous window
-  proved safe; the filter saturates near 15 000 entries). Every other address is
-  DORMANT and read on the Explorer on a doubling schedule: a new address once
-  (unless no historical rescan has begun, whose first pass covers it), then
-  again after as long as it has existed — between a day and a year — so about
-  six reads in its first year and one a year for ever; at most 200 reads per
-  resync (every 2 minutes while the wallet runs, and on foreground, push and the
-  Receive sheet), never-read first, then most overdue, and a batch is recorded
-  only when every read in it answered (an outage records nothing). Coins found
-  at a dormant address make it active and send the SPV rescan back to their
-  block, so they are credited through the same merkle-checked path and are
-  spendable. So a late payment to ANY address ever handed out is found: within
-  minutes while it is recent, within its schedule (at most a year) after that,
-  and immediately when its transaction pays an active address too. The HD
-  (non-social) wallet is untouched.
+  Bloom filter — are index 0 (of the current key and of every previous key the
+  wallet reaches), the at most **1 000** best-funded addresses (highest value
+  first) holding at least **0.001 FAIR** (`SOCIAL_RECEIVE_ACTIVE_FLOOR`, ten
+  times the relay fee floor) or shown that much by the Explorer in the last
+  7 days, and the newest addresses handed out in the last 7 days — at most
+  **2 000 in all, whatever anyone pays anywhere** (the size the contiguous
+  window proved safe; the filter saturates near 15 000 entries). **Amended
+  2026-11-06 (review round 4, R4-2):** every funded address, dust included, used
+  to be active, so dusting ~1 000 fresh addresses a day pushed the set past the
+  bound and froze the wallet (F4 again). Below the floor coins no longer make an
+  address active, a dormant address showing only dust is recorded as read and
+  never rescanned for, and funded addresses past the 1 000 are dormant like any
+  other (their coins stay held and spendable); a test pins the 2 000 against
+  any mix of funded, found and recent rows. Every other address is DORMANT and
+  read on the Explorer on a doubling schedule: a new address once (unless no
+  historical rescan has begun, whose first pass covers it), then again after as
+  long as it has existed — between a day and **30 days** (a year until round 4)
+  — so reads at about 1, 2, 4, 8, 16 and 32 days of age and every 30 days for
+  ever; at most 200 reads per resync (every 2 minutes while the wallet runs,
+  and on foreground, push and the Receive sheet), never-read first, then most
+  overdue, and a batch is recorded only when every read in it answered (an
+  outage records nothing; every Explorer read times out after 15 s and every
+  watch-set gateway read after 20 s, so a read that never answers cannot stall
+  the scheduler — R4-10). Coins found at a dormant address make it active and
+  send the SPV rescan back to their block, so they are credited through the
+  same merkle-checked path and are spendable. **The late-payment bound, stated
+  once:** a payment of at least 0.001 FAIR to ANY address ever handed out
+  appears within minutes while the address is in its first week, and otherwise
+  at most **30 days after the address was last read, plus the time until the
+  wallet next runs long enough to reach it in the queue** (immediately when its
+  transaction pays an active address too). The queue is reached in time while
+  the dormant set needs no more than the 200-reads-per-resync budget a running
+  wallet spends: a recipient with 30 000 addresses needs ~1 000 reads a day
+  (five resyncs); one held at D9's worst sustained abuse for a year (below)
+  needs ~12 000 a day, about two hours of a running wallet, and past that the
+  bound stretches in proportion — the reads are queued most-overdue first, so
+  nothing is skipped, only later. The wallet re-derives every row the gateway
+  lists from its key at its index before storing it and drops (and logs) a row
+  that does not reproduce its address (I-2). The HD (non-social) wallet is
+  untouched.
 - **What bounds the set is a rate per recipient, not a budget it can run out
   of.** A new PAYMENT address is handed out only while fewer than **500** of
   the recipient's payment addresses of the last **24 hours** (per network) are
   unpaid — their payment anything but `succeeded`: waiting, cancelled, or
   `processing` (a reported txid that never settles still counts, so a made-up
   one buys nothing) — and a new `@username` address only while fewer than
-  **500** were handed out fresh to the recipient in the last 24 hours (a
-  sender asking again for one it holds and has not paid is handed it back and
-  adds nothing). Both counts and the reservation are one decision under a
-  per-recipient advisory lock in the reservation's transaction, so concurrent
-  confirms cannot both pass. Past either, FairCoin is refused **503
-  `faircoin_capacity_reached`** for that recipient (`temporarily_unavailable`
-  on the order) and every other method keeps working; nothing anyone does to one
-  recipient touches another, and paid addresses never count, so real volume is
-  never limited. **Per payer**, in front of that: a hosted checkout's FairCoin
-  confirm and a hosted invoice's FairCoin pay take at most **20 per client
-  address per hour** (`lib/faircoinPayerLimit.ts`, beside the public limiter's
-  30 requests per 15 minutes); an Oxy account is handed at most **30 fresh
-  `@username` addresses an hour** across all recipients and asks about one
-  recipient at most 6 times in 10 minutes, holding at most one unpaid address
-  per recipient. These are in-memory, so per ECS task.
-- **The bound, written down.** Under a sustained attack that costs nothing but
-  client addresses and Oxy accounts, one recipient's set grows by at most
-  1 000 unpaid addresses a day per network (500 payment, 500 `@username`) —
-  365 000 a year — plus one per real payment. The wallet syncs it a page of up
-  to 1 000 at a time and keeps at most 2 000 of it active; the dormant
-  schedule then costs about 6 000 Explorer reads a day of such an attack in its
-  first year (a few minutes of a running wallet's budget) and one read per
-  address per year after. The cost of the bound is the same trade as before,
-  without the permanence: while an attacker holds a recipient at 500 unpaid
-  addresses a day, FairCoin is `temporarily_unavailable` for that recipient
-  until the window rolls — a fiat order still takes a card, a `FAIR`-priced
-  order waits. No recipient ever runs out: the lifetime budget of 1 979 used
-  addresses (round 3's residual) and the late-payer residual (a late payment
-  settling another order at a recycled address) are gone.
+  **500** were handed out fresh to the recipient in the last 24 hours, or
+  fewer than **250** when the asking sender was already handed one of the
+  recipient's in that window (a sender asking again for one it holds and has
+  not paid is handed it back and adds nothing). **Per (sender, recipient)**
+  (review round 4, R4-3): one Oxy account is handed at most **5** fresh
+  `@username` addresses of one recipient's per network per 24 hours, however
+  it treats them — dusting each address it is handed defeats the hand-back
+  (the address now reads used) and buys at most 5; a sixth is answered **429
+  `rate_limit_error`** to that sender alone. Every one of these counts is read
+  from the database (`payment_intent_outputs`, `social_send_attributions`) in
+  the reservation's transaction, under a per-recipient advisory lock, with the
+  reservation as one decision — so concurrent confirms or asks cannot both
+  pass, and they hold across every ECS task. Past a recipient bound, FairCoin
+  is refused **503 `faircoin_capacity_reached`** for that recipient
+  (`temporarily_unavailable` on the order) and every other method keeps
+  working; nothing anyone does to one recipient touches another, and paid
+  addresses never count, so real volume is never limited. **Per payer**, in
+  front of that: a hosted checkout's FairCoin confirm and a hosted invoice's
+  FairCoin pay take at most **20 per client network per hour** — an IPv4
+  address, or an IPv6 **/56** as `@oxy.so/core`'s rate limiter buckets it, so
+  a host rotating through its IPv6 allocation is one payer
+  (`lib/faircoinPayerLimit.ts`, beside the public limiter's 30 requests per
+  15 minutes); an Oxy account is handed at most **30 fresh `@username`
+  addresses an hour** across all recipients and asks about one recipient at
+  most 6 times in 10 minutes, holding at most one unpaid address per
+  recipient. Those three per-payer limits are in-memory, so per ECS task; the
+  5 a day per (sender, recipient) and both recipient bounds are not.
+- **The bound, written down.** Under a sustained attack, one recipient's set
+  grows by at most 1 000 unpaid addresses a day per network (500 payment, 500
+  `@username`) — 365 000 a year — plus one per real payment. The payment half
+  costs client networks: each IPv4 address or IPv6 /56 takes 20 an hour per
+  task, so 25 network-hours reach the 500. The `@username` half costs Oxy
+  accounts: an account adds at most 5 a day of one recipient's, and past 250
+  only senders the recipient has not served that day are served, so filling
+  the 500 takes at least **300 distinct Oxy accounts per recipient per day**
+  (50 filling the first 250 at 5 each, then 250 more at one each) — more than
+  the 500 / 5 = 100 the per-sender bound alone would require — and refusing a
+  sender the recipient already served today takes at least 50. One account
+  dusting each address it is handed no longer pauses `@username` for anyone
+  but itself. The wallet syncs the set a page of up to 1 000 at a time and
+  keeps at most 2 000 of it active; the dormant schedule (each address read
+  about six times in its first month, then every 30 days — round 4) costs
+  about 6 000 reads a day for each day's 1 000 new addresses plus one read per
+  older address per 30 days: ~12 000 a day after a year of such an attack,
+  about two hours of a running wallet's 200-per-2-minutes budget, past which
+  the late-payment bound stretches in proportion (see the wallet bullet). The cost of the bound is the same trade as before, without the
+  permanence: while an attacker holds a recipient at 500 unpaid addresses a
+  day, FairCoin is `temporarily_unavailable` for that recipient until the
+  window rolls — a fiat order still takes a card, a `FAIR`-priced order waits.
+  No recipient ever runs out: the lifetime budget of 1 979 used addresses
+  (round 3's residual) and the late-payer residual (a late payment settling
+  another order at a recycled address) are gone.
 - **The holes that fed it stay closed.** A confirm that loses its session
   (`moved`) cancels the FairCoin payment it created in the transaction that saw
   it orphaned (`abandoned`). A repeated FairCoin confirm on an order whose

@@ -11,6 +11,7 @@ import {
   type SocialReceiveSyncState,
 } from './social-receive-sync';
 import type { WatchSetCheck, WatchSetRow } from './social-receive-watch';
+import { SOCIAL_RECEIVE_ACTIVE_FLOOR } from './social-receive-watch';
 
 /** A promise and the function that settles it. */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -136,7 +137,7 @@ describe('createResyncScheduler', () => {
   });
 });
 
-const EMPTY: AddressActivity = { confirmedHeights: [], hasUnconfirmed: false };
+const EMPTY: AddressActivity = { confirmedHeights: [], hasUnconfirmed: false, valueSat: 0n };
 const DAY = 24 * 60 * 60;
 const NOW = 1_800_000_000;
 
@@ -172,7 +173,9 @@ function harness(overrides: Partial<SocialReceiveCheckDeps> & { paid?: Record<st
       return new Map(
         addresses.map((address) => [
           address,
-          paid[address] ? { confirmedHeights: paid[address], hasUnconfirmed: false } : EMPTY,
+          paid[address]
+            ? { confirmedHeights: paid[address], hasUnconfirmed: false, valueSat: 10n ** 8n }
+            : EMPTY,
         ]),
       );
     },
@@ -238,13 +241,45 @@ describe('checkSocialReceiveDue', () => {
         new Map(
           addresses.map((address) => [
             address,
-            address === 'F3' ? { confirmedHeights: [], hasUnconfirmed: true } : EMPTY,
+            address === 'F3'
+              ? { confirmedHeights: [], hasUnconfirmed: true, valueSat: null }
+              : EMPTY,
           ]),
         ),
     });
     const result = await checkSocialReceiveDue(deps);
     expect(rescans).toEqual([]);
     expect(result.found).toEqual(['F3']);
+  });
+
+  test('dust at a dormant address is read, never found and never rescanned for (R4-2)', async () => {
+    const { deps, rescans, recorded } = harness({
+      fetchActivity: async (addresses) =>
+        new Map(
+          addresses.map((address) => [
+            address,
+            address === 'F5'
+              ? {
+                  confirmedHeights: [700],
+                  hasUnconfirmed: false,
+                  valueSat: SOCIAL_RECEIVE_ACTIVE_FLOOR - 1n,
+                }
+              : address === 'F6'
+                ? {
+                    confirmedHeights: [800],
+                    hasUnconfirmed: false,
+                    valueSat: SOCIAL_RECEIVE_ACTIVE_FLOOR,
+                  }
+                : EMPTY,
+          ]),
+        ),
+    });
+    const result = await checkSocialReceiveDue(deps);
+    expect(result.found).toEqual(['F6']);
+    expect(rescans).toEqual([800]);
+    const checks = recorded.flat();
+    expect(checks.find((c) => c.address === 'F5')?.foundAt).toBeUndefined();
+    expect(checks.find((c) => c.address === 'F5')?.checkedAt).toBe(NOW);
   });
 
   test('a wallet closed mid-check writes nothing more', async () => {

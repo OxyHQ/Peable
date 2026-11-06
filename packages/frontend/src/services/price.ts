@@ -3,6 +3,7 @@
  * Polls the Explorer API for current price data and caches it locally.
  */
 
+import { EXPLORER_READ_TIMEOUT_MS } from './explorer-address';
 import { z } from 'zod';
 import { EXPLORER_BASE_URL } from '@fairco.in/core';
 
@@ -69,7 +70,9 @@ export function subscribeToPrice(listener: () => void): () => void {
  */
 export async function fetchPrice(): Promise<PriceData | null> {
   try {
-    const response = await fetch(`${EXPLORER_API}/api/price`);
+    const response = await fetch(`${EXPLORER_API}/api/price`, {
+      signal: AbortSignal.timeout(EXPLORER_READ_TIMEOUT_MS),
+    });
     if (!response.ok) return cachedPrice;
 
     const parsed = priceResponseSchema.safeParse(await response.json());

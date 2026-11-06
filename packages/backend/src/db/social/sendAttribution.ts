@@ -230,19 +230,31 @@ export async function updateAttributionSource(
 
 /**
  * How many `@username` addresses were handed out FRESH to `recipientUserId` on
- * `network` in the last `windowSeconds` — the recipient's daily `@username`
- * bound (ADR 0021 D9, amended 2026-11-06). An address handed again to the
- * sender that already holds it is not a new row and does not count. The
- * DATABASE's clock, the one `created_at` was stamped with.
+ * `network` in the last `windowSeconds` — in all, and to `senderUserId` alone —
+ * the two daily `@username` bounds (ADR 0021 D9, amended 2026-11-06). An
+ * address handed again to the sender that already holds it is not a new row
+ * and does not count. The DATABASE's clock, the one `created_at` was stamped
+ * with.
+ *
+ * ONE statement over the recipient's rows of the window
+ * (`social_send_attributions_recipient_created_idx`), which the recipient
+ * bound itself keeps to a few hundred, so the sender's share costs no index of
+ * its own. Read under the recipient's advisory lock, in the reservation's
+ * transaction, so both counts and the reservation are one decision on every
+ * task.
  */
-export async function countAttributionsSince(
+export async function countFreshAttributionsSince(
   db: DatabaseOrTransaction,
   recipientUserId: string,
+  senderUserId: string,
   network: NetworkType,
   windowSeconds: number,
-): Promise<number> {
+): Promise<{ readonly recipient: number; readonly sender: number }> {
   const [row] = await db
-    .select({ fresh: sql<number>`count(*)::int` })
+    .select({
+      recipient: sql<number>`count(*)::int`,
+      sender: sql<number>`(count(*) filter (where ${eq(socialSendAttributions.senderUserId, senderUserId)}))::int`,
+    })
     .from(socialSendAttributions)
     .where(
       and(
@@ -254,5 +266,5 @@ export async function countAttributionsSince(
         ),
       ),
     );
-  return Number(row?.fresh ?? 0);
+  return { recipient: Number(row?.recipient ?? 0), sender: Number(row?.sender ?? 0) };
 }

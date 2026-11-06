@@ -18,6 +18,7 @@
  * native pieces (notifications, wallet store, prefs) inside its body.
  */
 
+import { EXPLORER_READ_TIMEOUT_MS } from './explorer-address';
 import { parseFairToUnits } from '@fairco.in/core';
 
 // ---------------------------------------------------------------------------
@@ -201,7 +202,9 @@ export async function handleIncomingPush(data: { txid: string; event: string }):
           await delay(TX_FETCH_BACKOFF_MS * attempt);
         }
         try {
-          const response = await fetch(url);
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(EXPLORER_READ_TIMEOUT_MS),
+          });
           if (!response.ok) continue;
           const body: unknown = await response.json();
           if (body === null || typeof body !== 'object') continue;

@@ -108,6 +108,7 @@ import {
 import {
   planActiveSet,
   planSocialReceiveChecks,
+  verifyGatewayRows,
   watchableRows,
   type WatchSetCheck,
   type WatchSetRow,
@@ -123,7 +124,10 @@ import {
   canonicalKey,
   discoverPreviousTree,
   groupPreviousKeys,
+  canonicalKeySet,
   planPreviousKeyMove,
+  previousKeyCandidates,
+  previousKeyDefaultRow,
   probePreviousKeys,
   signWalletInput,
   type InputSigner,
@@ -743,7 +747,7 @@ function applySocialReceiveChecks(checks: readonly WatchSetCheck[]): void {
  * set say now. Returns whether it changed — the caller rebuilds the filter.
  */
 async function refreshSocialReceiveActive(db: Database): Promise<boolean> {
-  const holdingCoins = new Set(await db.getSocialReceiveAddressesHoldingCoins());
+  const holdingCoins = await db.getSocialReceiveCoinsHeld();
   const next = planActiveSet({
     watchable: Array.from(socialReceiveWatched.values()),
     holdingCoins,
@@ -971,8 +975,17 @@ async function syncSocialReceiveSet(
             origin: 'gateway',
           });
         }
-        await db.insertSocialReceiveSet(rows);
-        for (const row of rows) if (!socialReceiveWatched.has(row.address)) fresh.push(row);
+        // Each row is derived again from its key at its index before it is
+        // stored (I-2): a gateway answer naming an address its key does not
+        // produce is neither watched nor signed for.
+        const { kept, dropped } = verifyGatewayRows(rows, network);
+        if (dropped.length > 0) {
+          console.warn(
+            `[social-receive] dropped ${String(dropped.length)} gateway row(s) whose address its key does not derive (first index ${String(dropped[0]?.index)})`,
+          );
+        }
+        await db.insertSocialReceiveSet(kept);
+        for (const row of kept) if (!socialReceiveWatched.has(row.address)) fresh.push(row);
         // Yield between pages: a large set is many derivation-free inserts,
         // but the JS thread still has a UI to draw.
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -989,7 +1002,28 @@ async function syncSocialReceiveSet(
   if (!current() || fresh.length === 0) return false;
   const mine = watchableRows(fresh, deviceKey, network);
   addWatchedSocialRows(mine);
-  return mine.length > 0;
+  // A new row of a previous key this wallet already opened is watched now,
+  // not on the wallet's next open (R4-14): a late payer of an address handed
+  // out under the old key is seen like any other.
+  let previousGrew = false;
+  if (previousTrees.size > 0) {
+    const mineSet = new Set(mine.map((row) => row.address));
+    const groups = groupPreviousKeys({
+      rows: fresh.filter((row) => !mineSet.has(row.address)),
+      currentKeys: [...currentKeysOf(subject, deviceKey)],
+      network,
+      now: nowSeconds(),
+    });
+    for (const group of groups) {
+      if (!previousTrees.has(group.key)) continue;
+      // Index 0 of an open key is already watched (watchPreviousSocialRows).
+      const rows = group.rows.filter((row) => !socialReceiveWatched.has(row.address));
+      addWatchedSocialRows(rows);
+      for (const row of rows) socialReceiveAddressKey.set(row.address, group.key);
+      if (rows.length > 0) previousGrew = true;
+    }
+  }
+  return mine.length > 0 || previousGrew;
 }
 
 /**
@@ -1133,6 +1167,26 @@ function currentKeysOf(subject: IdentitySubject, deviceKey: string | null): Set<
   return keys;
 }
 
+/**
+ * Every key the account has had, canonical, as Oxy answers it: the person's
+ * root history (`identity.keyHistory()`), or the organization's key list.
+ * `null` when it cannot be read now — the caller then opens no key the
+ * history would have had to vouch for.
+ */
+async function readAccountKeyHistory(subject: IdentitySubject): Promise<Set<string> | null> {
+  try {
+    if (subject.kind === 'organization') {
+      const state = await oxyServices.accounts.identityKey.get(subject.accountId);
+      return canonicalKeySet([state.publicKey, ...state.keys.map((entry) => entry.publicKey)]);
+    }
+    const history = await oxyServices.identity.keyHistory();
+    return canonicalKeySet([history.publicKey, ...history.retired.map((entry) => entry.publicKey)]);
+  } catch (error) {
+    console.warn('[previous-keys] the account key history could not be read:', error);
+    return null;
+  }
+}
+
 /** A previous key's HD tree, for the open Pocket, from a seed the caller zeroes. */
 function buildPreviousTree(network: NetworkConfig, account: number) {
   return (_key: string, seed: Uint8Array): KeyManager =>
@@ -1154,6 +1208,22 @@ async function watchPreviousSocialRows(
   const deviceKey = socialReceiveIdentityPublicKey;
   if (!deviceKey || keys.length === 0) return;
   const wanted = new Set(keys);
+  // Every reachable previous key's index 0 — its old Receive sheet's address,
+  // which no gateway row lists — is in the set, persisted so its reads are
+  // recorded (R4-1). Idempotent: an index 0 already stored is kept as it is.
+  const now = nowSeconds();
+  await db.insertSocialReceiveSet(
+    keys.map((key) => {
+      const zero = previousKeyDefaultRow(key, network, now);
+      return {
+        address: zero.address,
+        index: 0,
+        identityPublicKey: key,
+        createdAt: now,
+        origin: 'default' as const,
+      };
+    }),
+  );
   const stored = (await db.getSocialReceiveSetKeys()).filter((key) => {
     const canonical = canonicalKey(key);
     return canonical !== null && wanted.has(canonical);
@@ -1164,6 +1234,7 @@ async function watchPreviousSocialRows(
     currentKeys: [...currentKeysOf(subject, deviceKey)],
     extraKeys: keys,
     network,
+    now,
   });
   for (const group of groups) {
     if (!wanted.has(group.key)) continue;
@@ -1239,13 +1310,29 @@ async function refreshPreviousKeys(): Promise<void> {
   const hints = await listPreviousKeyHints(subject);
   const trees = await db.getPreviousKeyTrees(networkType);
   if (!current()) return;
-  const candidates = new Set<string>();
-  for (const key of [...recorded, ...hints, ...trees.map((row) => row.public_key)]) {
+  // Commons' list (and a tree stored from it) is checked against the
+  // account's own key history: a key that was never this account's is not
+  // opened (R4-14). The gateway's recorded keys need no check.
+  const recordedKeys = canonicalKeySet(recorded);
+  const unvouched = [...hints, ...trees.map((row) => row.public_key)].some((key) => {
     const canonical = canonicalKey(key);
-    if (canonical && !excluded.has(canonical) && !previousTrees.has(canonical)) {
-      candidates.add(canonical);
-    }
-  }
+    return (
+      canonical !== null &&
+      !recordedKeys.has(canonical) &&
+      !excluded.has(canonical) &&
+      !previousTrees.has(canonical)
+    );
+  });
+  const history = unvouched ? await readAccountKeyHistory(subject) : null;
+  if (!current()) return;
+  const candidates = previousKeyCandidates({
+    recorded,
+    hints,
+    stored: trees.map((row) => row.public_key),
+    history,
+    excluded,
+    open: previousTrees,
+  });
   if (candidates.size === 0) return;
   // Every key not open yet is asked again each time: one the person has just
   // added in Commons is reached on the next refresh.

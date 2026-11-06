@@ -8,7 +8,7 @@ import { getDb } from '../db/postgres';
 import { lockRecipientPool } from '../db/payments/faircoinAddressPool';
 import { readReservedThrough } from '../db/social/receiveCursor';
 import {
-  countAttributionsSince,
+  countFreshAttributionsSince,
   findLatestAttributionForPair,
   insertSendAttribution,
 } from '../db/social/sendAttribution';
@@ -169,10 +169,35 @@ export async function resolveIdentityPublicKeyHex(oxyUserId: string): Promise<st
  * Fresh `@username` addresses per recipient per network per day (ADR 0021 D9,
  * amended 2026-11-06). A sender asking again before paying is handed the
  * address it already holds ({@link reuseUnpaidSocialAddress}) and adds
- * nothing, so this bounds what DISTINCT senders can add to a recipient's watch
- * set — far above how many new people pay one person in a day.
+ * nothing, so this bounds what senders can add to a recipient's watch set —
+ * far above how many new people pay one person in a day.
+ *
+ * A sender's FIRST fresh address of the window is served up to this bound; a
+ * further one (it paid, or dusted, the one it held) only while the recipient
+ * is below HALF of it ({@link repeatSenderBound}). So the second half is
+ * reserved for senders the recipient has not served today: filling it takes a
+ * distinct Oxy account per address, so refusing a new sender takes at least
+ * 300 accounts (50 filling the first half at
+ * {@link MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER} each, then 250 more) — never
+ * one account, or a handful, dusting each address it is handed.
  */
 export const MAX_FRESH_SOCIAL_ADDRESSES = 500;
+
+/**
+ * Fresh `@username` addresses of ONE recipient's that ONE sender may be handed
+ * per network per day (ADR 0021 D9, review round 4) — counted from
+ * `social_send_attributions` under the recipient's lock, so it holds on every
+ * ECS task, unlike the in-memory limiters in `routes/social.ts`.
+ *
+ * A sender is handed a fresh address only once the one it holds was paid (or
+ * the recipient's key changed, or the Explorer could not tell), so 5 is five
+ * payments to one person in a day — far above a real sender's — while it makes
+ * the recipient's repeat-sender half ({@link repeatSenderBound}) cost an
+ * attacker at least 50 accounts and the whole bound at least 300. (This bound
+ * alone would make the whole bound 500 / 5 = 100 accounts; the half kept for
+ * new senders, which only new accounts can fill, makes it 300.)
+ */
+export const MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER = 5;
 
 let maxFreshSocial = MAX_FRESH_SOCIAL_ADDRESSES;
 
@@ -183,9 +208,27 @@ export function useMaxFreshSocialAddresses(next: number | null): number {
   return previous;
 }
 
+/** Below how many of the recipient's fresh addresses of the day a sender already served today is served again. */
+function repeatSenderBound(): number {
+  return Math.floor(maxFreshSocial / 2);
+}
+
+/**
+ * One sender was handed {@link MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER} fresh
+ * addresses of this recipient's in the last day; nothing reserved. The sender's
+ * own limit, not the recipient's capacity — the route answers it 429, like its
+ * other per-sender limits.
+ */
+export class SocialSenderBoundError extends Error {
+  constructor() {
+    super('this sender was handed its fresh @username addresses of this recipient for today');
+    this.name = 'SocialSenderBoundError';
+  }
+}
+
 /**
  * Hand `senderUserId` a FRESH address of `recipientUserId`'s Peable wallet and
- * record it — ONE transaction: the recipient's lock, its daily bound, the
+ * record it — ONE transaction: the recipient's lock, the daily bounds, the
  * cursor's one statement (`reserveFreshAddress`) and the attribution row. The
  * attribution is the address's record — what the recipient's wallet syncs
  * (`GET /v1/social/me/receive_addresses`) — so an address is never handed out
@@ -197,9 +240,12 @@ export function useMaxFreshSocialAddresses(next: number | null): number {
  * Returns `null` when the recipient is keyless (no identity key to derive
  * from) — callers surface the "invite them to set up Peable" flow (spec §4.5).
  *
+ * @throws {SocialSenderBoundError} this sender was handed
+ *   {@link MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER} fresh addresses of this
+ *   recipient's in the last day; nothing reserved.
  * @throws {FaircoinCapacityError} {@link MAX_FRESH_SOCIAL_ADDRESSES} fresh
- *   `@username` addresses of the recipient's were handed out in the last day;
- *   nothing reserved.
+ *   `@username` addresses of the recipient's were handed out in the last day
+ *   (half of that, for a sender it already served today); nothing reserved.
  */
 export async function reserveSocialSendAddress(input: {
   readonly senderUserId: string;
@@ -237,13 +283,19 @@ export async function reserveSocialSendAddress(input: {
         };
       }
     }
-    const fresh = await countAttributionsSince(
+    const fresh = await countFreshAttributionsSince(
       tx,
       input.recipientUserId,
+      input.senderUserId,
       input.network,
       UNPAID_WINDOW_SECONDS,
     );
-    if (fresh >= maxFreshSocial) throw new FaircoinCapacityError();
+    if (fresh.sender >= MAX_FRESH_SOCIAL_ADDRESSES_PER_SENDER) throw new SocialSenderBoundError();
+    // A sender the recipient has not served today may take the whole bound; one
+    // it has, only the first half — so dusting each address it is handed never
+    // lets one account, or a few, crowd new senders out.
+    const bound = fresh.sender === 0 ? maxFreshSocial : repeatSenderBound();
+    if (fresh.recipient >= bound) throw new FaircoinCapacityError();
     const reserved = await reserveFreshAddress(
       tx,
       input.recipientUserId,

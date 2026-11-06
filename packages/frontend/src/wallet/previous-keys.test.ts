@@ -24,8 +24,10 @@ import {
   canonicalKey,
   discoverPreviousTree,
   groupPreviousKeys,
+  PREVIOUS_KEY_MOVE_MAX_INPUTS,
   planPreviousKeyMove,
   previousKeyCopy,
+  previousKeyDefaultRow,
   probePreviousKeys,
   signWalletInput,
   type DiscoveryUsage,
@@ -91,6 +93,38 @@ describe('groupPreviousKeys', () => {
   const old = identityKey();
   const older = identityKey();
 
+  test("from an EMPTY database, a key Commons lists has its index 0 — the old Receive sheet's address — watched (R4-1)", () => {
+    // A phone that rotated, then was reinstalled: no stored row, no gateway row
+    // for index 0 (the gateway never hands it out). Only Commons' list.
+    const groups = groupPreviousKeys({
+      rows: [],
+      currentKeys: [current.compressed],
+      extraKeys: [old.uncompressed],
+      network: TESTNET,
+      now: 1_800_000_000,
+    });
+    expect(groups).toHaveLength(1);
+    const zero = groups[0]?.rows[0];
+    expect(zero?.index).toBe(0);
+    expect(zero?.origin).toBe('default');
+    expect(zero?.identityPublicKey).toBe(old.compressed);
+    expect(zero?.checkedAt).toBeNull();
+    expect(zero?.address).toBe(socialRow(old, 0, null).address);
+    // It is the old key's default address, never the current key's.
+    expect(zero?.address).not.toBe(socialRow(current, 0, null).address);
+  });
+
+  test('a key whose gateway rows are listed also gets index 0, once (a stored index 0 is not doubled)', () => {
+    const stored = { ...socialRow(old, 0, old.compressed), origin: 'default' as const };
+    const groups = groupPreviousKeys({
+      rows: [stored, socialRow(old, 4, old.compressed)],
+      currentKeys: [current.compressed],
+      network: TESTNET,
+    });
+    expect(groups[0]?.rows.map((r) => r.index)).toEqual([0, 4]);
+    expect(groups[0]?.rows[0]).toBe(stored);
+  });
+
   test('one key in two encodings is ONE previous key; the current key is never one', () => {
     const groups = groupPreviousKeys({
       rows: [
@@ -103,7 +137,7 @@ describe('groupPreviousKeys', () => {
       network: TESTNET,
     });
     expect(groups.map((g) => g.key)).toEqual([old.compressed]);
-    expect(groups[0]?.rows.map((r) => r.index)).toEqual([1, 2]);
+    expect(groups[0]?.rows.map((r) => r.index)).toEqual([0, 1, 2]);
   });
 
   test('the published key is not a previous key either, whatever the device holds', () => {
@@ -127,7 +161,7 @@ describe('groupPreviousKeys', () => {
       network: TESTNET,
     });
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.rows.map((r) => r.index)).toEqual([1, 7]);
+    expect(groups[0]?.rows.map((r) => r.index)).toEqual([0, 1, 7]);
   });
 
   test("extra keys (Commons' ring) join with no rows; garbage keys are ignored", () => {
@@ -137,7 +171,9 @@ describe('groupPreviousKeys', () => {
       extraKeys: [older.uncompressed, current.uncompressed, 'zz'],
       network: TESTNET,
     });
-    expect(groups).toEqual([{ key: older.compressed, rows: [] }]);
+    expect(groups).toEqual([
+      { key: older.compressed, rows: [previousKeyDefaultRow(older.compressed, TESTNET, 0)] },
+    ]);
     expect(canonicalKey('zz')).toBeNull();
   });
 });
@@ -473,7 +509,10 @@ describe('moving previous-key coins to the current key', () => {
       dustThreshold: TESTNET.minRelayFee,
     });
     if (plan.kind !== 'ready') throw new Error(`plan is ${plan.kind}`);
-    expect(plan.inputs).toEqual(previous);
+    expect([...plan.inputs].sort((a, b) => a.txid.localeCompare(b.txid))).toEqual(
+      [...previous].sort((a, b) => a.txid.localeCompare(b.txid)),
+    );
+    expect(plan.remaining).toBe(0);
     const total = sumCoinValues(previous);
     expect(plan.amount + plan.fee).toBe(total);
     // What the store builds, exactly.
@@ -492,6 +531,32 @@ describe('moving previous-key coins to the current key', () => {
     );
     await signAll(tx, plan.inputs, wallet.signers(wallet.sign));
     expectEveryInputSignedByItsOwner(tx, plan.inputs);
+  });
+
+  test('many small coins move in batches under the standard transaction size (R4-13)', () => {
+    // ~670 inputs pass 100 000 bytes; a key dusted with 1 200 coins still moves.
+    const coins = Array.from({ length: 1_200 }, (_, i) =>
+      coin(`T${String(i)}`, BigInt(100_000 + i)),
+    );
+    const plan = planPreviousKeyMove({
+      coins,
+      feePerByte: 5,
+      dustThreshold: TESTNET.minRelayFee,
+    });
+    if (plan.kind !== 'ready') throw new Error(`plan is ${plan.kind}`);
+    expect(plan.inputs).toHaveLength(PREVIOUS_KEY_MOVE_MAX_INPUTS);
+    expect(plan.remaining).toBe(1_200 - PREVIOUS_KEY_MOVE_MAX_INPUTS);
+    // The largest coins first.
+    expect(plan.inputs[0]?.value).toBe(100_000n + 1_199n);
+    // 10 bytes of envelope, 148 per input, 34 per output: the no-change size.
+    expect(10 + 148 * plan.inputs.length + 34).toBeLessThan(100_000);
+    const rest = planPreviousKeyMove({
+      coins: coins.filter((c) => !plan.inputs.includes(c)),
+      feePerByte: 5,
+      dustThreshold: TESTNET.minRelayFee,
+    });
+    if (rest.kind !== 'ready') throw new Error(`rest is ${rest.kind}`);
+    expect(rest.remaining).toBe(1_200 - 2 * PREVIOUS_KEY_MOVE_MAX_INPUTS);
   });
 
   test('dust is refused, and unconfirmed coins wait', () => {

@@ -61,6 +61,32 @@ export interface PreviousKeyGroup {
 }
 
 /**
+ * Index 0 of a previous key — its stable default address, the one its Receive
+ * sheet and saved QR codes showed — as a watch-set row (security review round
+ * 4, R4-1). The gateway never hands index 0 out, so it is in no row the
+ * gateway lists: a phone that rotated, then was reinstalled or replaced,
+ * learns of it only from here. Never read (`checkedAt: null`), so the next
+ * resync reads it through the Explorer at once.
+ */
+export function previousKeyDefaultRow(
+  key: string,
+  network: NetworkConfig,
+  now: number,
+): WatchSetRow {
+  return {
+    address: deriveSocialReceiveAddress(hexToBytes(key), 0, network),
+    index: 0,
+    identityPublicKey: key,
+    createdAt: now,
+    used: false,
+    checkedAt: null,
+    nextCheckAt: null,
+    foundAt: null,
+    origin: 'default',
+  };
+}
+
+/**
  * The account's previous keys: every key its social-receive set records that
  * is none of `currentKeys` (the key this device's wallet derives from, and the
  * account's published `#key-1` when known — a published key this device does
@@ -71,12 +97,18 @@ export interface PreviousKeyGroup {
  * A row recorded without a key (written before keys were recorded) joins the
  * previous key that reproduces its address at its index; one no previous key
  * reproduces is left out (the current key's are D9's `watchableRows`).
+ *
+ * EVERY group carries its key's index 0 ({@link previousKeyDefaultRow}),
+ * whether or not any row recorded it (R4-1): from an empty database, a key
+ * Commons lists still has its default address watched.
  */
 export function groupPreviousKeys(input: {
   readonly rows: readonly WatchSetRow[];
   readonly currentKeys: readonly (string | null | undefined)[];
   readonly extraKeys?: readonly (string | null | undefined)[];
   readonly network: NetworkConfig;
+  /** Unix seconds, the `createdAt` of an index-0 row this adds. */
+  readonly now?: number;
 }): PreviousKeyGroup[] {
   const current = new Set<string>();
   for (const key of input.currentKeys) {
@@ -116,9 +148,53 @@ export function groupPreviousKeys(input: {
       }
     }
   }
+  for (const [key, rows] of groups) {
+    const zero = previousKeyDefaultRow(key, input.network, input.now ?? 0);
+    if (!rows.some((row) => row.index === 0 && row.address === zero.address)) rows.unshift(zero);
+  }
   return [...groups.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, rows]) => ({ key, rows }));
+}
+
+/**
+ * The keys to try to open as previous keys (security review round 4, R4-14):
+ * every key the gateway recorded on the account's addresses (it handed those
+ * out, under that key, to this account), plus Commons' list and the trees
+ * stored on this device ONLY when the account's own key history names them —
+ * the person's `identity.keyHistory()` or the organization's key list. A key
+ * that was never this account's (a ring entry planted in Commons, another
+ * account's key) is ignored; with no history to ask (`null`: offline, an old
+ * server) such a key waits for a refresh that can. Never one of `excluded`
+ * (this device's and the published key) or of `open` (already open).
+ */
+export function previousKeyCandidates(input: {
+  readonly recorded: readonly (string | null | undefined)[];
+  readonly hints: readonly (string | null | undefined)[];
+  readonly stored: readonly (string | null | undefined)[];
+  readonly history: ReadonlySet<string> | null;
+  readonly excluded: ReadonlySet<string>;
+  readonly open: { has(key: string): boolean };
+}): Set<string> {
+  const candidates = new Set<string>();
+  const consider = (key: string | null | undefined, vouched: boolean): void => {
+    const canonical = canonicalKey(key);
+    if (!canonical || input.excluded.has(canonical) || input.open.has(canonical)) return;
+    if (vouched || input.history?.has(canonical) === true) candidates.add(canonical);
+  };
+  for (const key of input.recorded) consider(key, true);
+  for (const key of [...input.hints, ...input.stored]) consider(key, false);
+  return candidates;
+}
+
+/** `keys` canonicalised, unparseable ones dropped: a key history to compare against. */
+export function canonicalKeySet(keys: readonly (string | null | undefined)[]): Set<string> {
+  const set = new Set<string>();
+  for (const key of keys) {
+    const canonical = canonicalKey(key);
+    if (canonical) set.add(canonical);
+  }
+  return set;
 }
 
 /**
@@ -341,6 +417,8 @@ export type PreviousKeyMovePlan =
       /** What reaches the current key: the inputs less the fee. */
       readonly amount: bigint;
       readonly fee: bigint;
+      /** Confirmed coins left for the next move (past {@link PREVIOUS_KEY_MOVE_MAX_INPUTS}). */
+      readonly remaining: number;
     }
   /** No confirmed previous-key coin to move (coins still confirming move later). */
   | { readonly kind: 'nothing' }
@@ -348,8 +426,19 @@ export type PreviousKeyMovePlan =
   | { readonly kind: 'dust'; readonly total: bigint; readonly fee: bigint };
 
 /**
- * Plan the one-tap move: EVERY confirmed previous-key coin in, ONE output to
- * the current key, no change — a sweep. The fee is `buildTransaction`'s own
+ * The most inputs one move spends (security review round 4, R4-13). A
+ * pay-to-public-key-hash input is about 148 bytes, so ~670 of them pass the
+ * 100 000-byte standard transaction size and no node relays the move; 500 stay
+ * near 74 000 bytes. A previous key holding more coins moves in batches: each
+ * tap moves the largest {@link PREVIOUS_KEY_MOVE_MAX_INPUTS}, and the prompt
+ * stays while any are left.
+ */
+export const PREVIOUS_KEY_MOVE_MAX_INPUTS = 500;
+
+/**
+ * Plan the one-tap move: the confirmed previous-key coins in — all of them,
+ * or the {@link PREVIOUS_KEY_MOVE_MAX_INPUTS} largest — ONE output to the
+ * current key, no change — a sweep. The fee is `buildTransaction`'s own
  * no-change sizing for that many inputs and one output, so the fee shown is
  * the fee built. Refused as `dust` when what would arrive is at or below the
  * network's dust threshold: a move that costs (nearly) all it moves is not
@@ -359,15 +448,21 @@ export function planPreviousKeyMove(input: {
   readonly coins: readonly UTXO[];
   readonly feePerByte: number;
   readonly dustThreshold: bigint;
+  readonly maxInputs?: number;
 }): PreviousKeyMovePlan {
-  const inputs = input.coins.filter((coin) => coin.confirmed);
+  const maxInputs = input.maxInputs ?? PREVIOUS_KEY_MOVE_MAX_INPUTS;
+  const confirmed = input.coins
+    .filter((coin) => coin.confirmed)
+    .sort((a, b) => (a.value === b.value ? 0 : a.value > b.value ? -1 : 1));
+  const inputs = confirmed.slice(0, maxInputs);
+  const remaining = confirmed.length - inputs.length;
   if (inputs.length === 0) return { kind: 'nothing' };
   let total = 0n;
   for (const coin of inputs) total += coin.value;
   const fee = estimateFeeForInputs(inputs.length, input.feePerByte, 1);
   const amount = total - fee;
   if (amount <= input.dustThreshold) return { kind: 'dust', total, fee };
-  return { kind: 'ready', inputs, amount, fee };
+  return { kind: 'ready', inputs, amount, fee, remaining };
 }
 
 /**

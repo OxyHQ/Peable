@@ -26,6 +26,14 @@ import { GATEWAY_API_URL } from '@/config';
 export const gateway = oxyServices.createLinkedClient({ baseURL: GATEWAY_API_URL });
 
 /**
+ * The whole-call budget of the watch-set reads the resync scheduler awaits
+ * (security review round 4, R4-10): a read that never answers would hold the
+ * scheduler — which never runs twice at once — for good. Past it the read
+ * throws; the stored set stands and the next resync asks again.
+ */
+export const GATEWAY_READ_DEADLINE_MS = 20_000;
+
+/**
  * Report a broadcast FairCoin txid for a payment intent — the payer path.
  * Possession of the intent's `client_secret` is the authorization; the reported
  * txid is what the Gateway's settlement watcher then verifies on-chain.
@@ -146,6 +154,7 @@ export type SocialReceiveCursor = Omit<
 export async function getSocialReceiveCursor(network: NetworkType): Promise<SocialReceiveCursor> {
   return gateway.client.get<SocialReceiveCursor>('/v1/social/me/cursor', {
     params: { network },
+    deadline: GATEWAY_READ_DEADLINE_MS,
   });
 }
 
@@ -166,6 +175,7 @@ export async function listSocialReceiveAddresses(
 ): Promise<SocialReceiveAddressesResponse> {
   return gateway.client.get<SocialReceiveAddressesResponse>('/v1/social/me/receive_addresses', {
     params: { network, after, limit },
+    deadline: GATEWAY_READ_DEADLINE_MS,
   });
 }
 

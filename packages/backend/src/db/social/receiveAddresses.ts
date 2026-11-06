@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, isNotNull, lte, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { paymentIntentOutputs, socialSendAttributions } from '../schema';
-import type { DatabaseOrTransaction } from '../postgres';
+import type { Database, DatabaseOrTransaction } from '../postgres';
 
 /**
  * Every FairCoin address the gateway handed out in one account's Peable wallet
@@ -130,8 +130,29 @@ type RawRow = {
  * Each table is read by its `(recipient, network, derivation_index)` index,
  * bounded by the page, so a page costs the same at the millionth address as
  * at the first.
+ *
+ * Every read of a page is in ONE `repeatable read` snapshot (review round 4):
+ * the "an index commits only after every lower one" property holds within a
+ * snapshot, not across two. Read in two, an output at index 5 committing
+ * between the outputs read and the attributions read leaves a page that holds
+ * the attribution at 6 and not the output at 5 — and `sync_cursor` 6 skips 5
+ * for good. Hence a `Database`, never a caller's transaction, whose snapshot
+ * this function could not choose.
  */
 export async function listReceiveAddresses(
+  db: Database,
+  accountId: string,
+  network: NetworkType,
+  after: number,
+  limit: number,
+): Promise<ReceiveAddressPage> {
+  return db.transaction((tx) => readReceiveAddressPage(tx, accountId, network, after, limit), {
+    isolationLevel: 'repeatable read',
+    accessMode: 'read only',
+  });
+}
+
+async function readReceiveAddressPage(
   db: DatabaseOrTransaction,
   accountId: string,
   network: NetworkType,

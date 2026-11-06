@@ -1,5 +1,24 @@
 import { test, expect, afterEach } from 'bun:test';
-import { fetchAddressActivity, fetchBalancesSat } from './explorer-address';
+import {
+  EXPLORER_READ_TIMEOUT_MS,
+  fetchAddressActivity,
+  fetchAddressUsage,
+  fetchBalancesSat,
+} from './explorer-address';
+
+function stubFetch(handler: (url: string, init?: RequestInit) => Promise<Response>): void {
+  globalThis.fetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) => handler(String(input), init),
+    { preconnect: realFetch.preconnect },
+  );
+}
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
 
 // Shape pinned against the LIVE endpoint (probed 2026-09-06):
 //   GET https://explorer.fairco.in/api/address/:address?network=mainnet
@@ -158,13 +177,17 @@ test('activity: the confirmed heights of an address, ascending, and whether the 
     ]),
   );
   const result = await fetchAddressActivity(['Fa'], 'mainnet');
-  expect(result.get('Fa')).toEqual({ confirmedHeights: [700, 900], hasUnconfirmed: true });
+  expect(result.get('Fa')).toEqual({
+    confirmedHeights: [700, 900],
+    hasUnconfirmed: true,
+    valueSat: 3n,
+  });
 });
 
 test('activity: an address the explorer does not know holds nothing', async () => {
   respondPerRequest(() => new Response('{}', { status: 404 }));
   const result = await fetchAddressActivity(['Fa'], 'mainnet');
-  expect(result.get('Fa')).toEqual({ confirmedHeights: [], hasUnconfirmed: false });
+  expect(result.get('Fa')).toEqual({ confirmedHeights: [], hasUnconfirmed: false, valueSat: 0n });
 });
 
 // The caller records an index as checked once this answers. A 502 read as
@@ -196,4 +219,33 @@ test('activity: reads each address once, a bounded number at a time', async () =
   expect(result.size).toBe(40);
   expect(calls).toHaveLength(40);
   expect(peak).toBeLessThanOrEqual(8);
+});
+
+test('activity: a utxo without a usable satoshis leaves the value unknown, never zero', async () => {
+  stubFetch(async () =>
+    jsonResponse({
+      addressInfo: {
+        utxos: [
+          { txid: 'aa', satoshis: 5, height: 9 },
+          { txid: 'bb', height: 9 },
+        ],
+      },
+    }),
+  );
+  const result = await fetchAddressActivity(['Fa'], 'mainnet');
+  expect(result.get('Fa')?.valueSat).toBeNull();
+});
+
+test('every Explorer read carries a timeout signal (R4-10)', async () => {
+  const signals: (AbortSignal | undefined)[] = [];
+  stubFetch(async (_url, init) => {
+    signals.push(init?.signal ?? undefined);
+    return jsonResponse({ addressInfo: { balanceSat: 0, txCount: 0, utxos: [] } });
+  });
+  await fetchAddressActivity(['Fa'], 'mainnet');
+  await fetchAddressUsage(['Fb'], 'mainnet');
+  await fetchBalancesSat(['Fc'], 'mainnet');
+  expect(signals).toHaveLength(3);
+  for (const signal of signals) expect(signal).toBeInstanceOf(AbortSignal);
+  expect(EXPLORER_READ_TIMEOUT_MS).toBeLessThanOrEqual(30_000);
 });

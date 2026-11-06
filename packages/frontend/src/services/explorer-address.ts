@@ -34,6 +34,20 @@ export interface AddressBalances {
 const UNKNOWN_ADDRESS = 404;
 
 /**
+ * How long one Explorer read may take before it is abandoned (security review
+ * round 4, R4-10). A read that never answered used to hang the resync
+ * scheduler for good — it never starts a second run while one is in flight —
+ * so the wallet stopped looking at its addresses until it restarted. A
+ * timed-out read THROWS, like any other failure: nothing is recorded and the
+ * next resync asks again.
+ */
+export const EXPLORER_READ_TIMEOUT_MS = 15_000;
+
+function explorerGet(url: string): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(EXPLORER_READ_TIMEOUT_MS) });
+}
+
+/**
  * What each address holds right now, and their total, in base units.
  *
  * ## Zero means zero, and only the Explorer may say so
@@ -66,7 +80,7 @@ export async function fetchBalancesSat(
   const balances = await Promise.all(
     unique.map(async (address) => {
       const url = `${EXPLORER_BASE_URL}/api/address/${encodeURIComponent(address)}?network=${network}`;
-      const response = await fetch(url);
+      const response = await explorerGet(url);
       if (response.status === UNKNOWN_ADDRESS) return [address, 0n] as const;
       if (!response.ok) {
         throw new Error(
@@ -107,6 +121,11 @@ export interface AddressActivity {
   readonly confirmedHeights: readonly number[];
   /** Whether it has an unspent output still in the mempool (height 0). */
   readonly hasUnconfirmed: boolean;
+  /**
+   * What its unspent outputs hold, in base units; `null` when an entry did not
+   * state a usable `satoshis` (then the caller treats the coins as a payment).
+   */
+  readonly valueSat: bigint | null;
 }
 
 /** At most this many Explorer requests in flight at once. */
@@ -135,13 +154,38 @@ export async function fetchAddressActivity(
   return result;
 }
 
+/** Heights, mempool presence and value of an Explorer `utxos` list. */
+function activityOf(utxos: readonly unknown[]): AddressActivity {
+  const confirmedHeights: number[] = [];
+  let hasUnconfirmed = false;
+  let valueSat: bigint | null = 0n;
+  for (const entry of utxos) {
+    const { height, satoshis } = (entry ?? {}) as { height?: unknown; satoshis?: unknown };
+    if (typeof height === 'number' && Number.isSafeInteger(height) && height > 0) {
+      confirmedHeights.push(height);
+    } else {
+      // Height 0 (or absent) is what the Explorer reports for the mempool.
+      hasUnconfirmed = true;
+    }
+    if (typeof satoshis === 'number' && Number.isSafeInteger(satoshis) && satoshis >= 0) {
+      if (valueSat !== null) valueSat += BigInt(satoshis);
+    } else {
+      valueSat = null;
+    }
+  }
+  confirmedHeights.sort((a, b) => a - b);
+  return { confirmedHeights, hasUnconfirmed, valueSat };
+}
+
 async function readAddressActivity(
   address: string,
   network: NetworkType,
 ): Promise<AddressActivity> {
   const url = `${EXPLORER_BASE_URL}/api/address/${encodeURIComponent(address)}?network=${network}`;
-  const response = await fetch(url);
-  if (response.status === UNKNOWN_ADDRESS) return { confirmedHeights: [], hasUnconfirmed: false };
+  const response = await explorerGet(url);
+  if (response.status === UNKNOWN_ADDRESS) {
+    return { confirmedHeights: [], hasUnconfirmed: false, valueSat: 0n };
+  }
   if (!response.ok) {
     throw new Error(
       `Explorer address request for ${address} failed: ${String(response.status)} ${response.statusText}`,
@@ -152,19 +196,7 @@ async function readAddressActivity(
   if (!Array.isArray(utxos)) {
     throw new Error(`Explorer address response for ${address} carried no utxo list`);
   }
-  const confirmedHeights: number[] = [];
-  let hasUnconfirmed = false;
-  for (const entry of utxos) {
-    const height = (entry as { height?: unknown } | null)?.height;
-    if (typeof height === 'number' && Number.isSafeInteger(height) && height > 0) {
-      confirmedHeights.push(height);
-    } else {
-      // Height 0 (or absent) is what the Explorer reports for the mempool.
-      hasUnconfirmed = true;
-    }
-  }
-  confirmedHeights.sort((a, b) => a - b);
-  return { confirmedHeights, hasUnconfirmed };
+  return activityOf(utxos);
 }
 
 /**
@@ -204,9 +236,9 @@ export async function fetchAddressUsage(
 
 async function readAddressUsage(address: string, network: NetworkType): Promise<AddressUsage> {
   const url = `${EXPLORER_BASE_URL}/api/address/${encodeURIComponent(address)}?network=${network}`;
-  const response = await fetch(url);
+  const response = await explorerGet(url);
   if (response.status === UNKNOWN_ADDRESS) {
-    return { usage: 'unused', confirmedHeights: [], hasUnconfirmed: false };
+    return { usage: 'unused', confirmedHeights: [], hasUnconfirmed: false, valueSat: 0n };
   }
   if (!response.ok) {
     throw new Error(
@@ -219,22 +251,12 @@ async function readAddressUsage(address: string, network: NetworkType): Promise<
   if (!info || !Array.isArray(utxos)) {
     throw new Error(`Explorer address response for ${address} carried no utxo list`);
   }
-  const confirmedHeights: number[] = [];
-  let hasUnconfirmed = false;
-  for (const entry of utxos) {
-    const height = (entry as { height?: unknown } | null)?.height;
-    if (typeof height === 'number' && Number.isSafeInteger(height) && height > 0) {
-      confirmedHeights.push(height);
-    } else {
-      hasUnconfirmed = true;
-    }
-  }
-  confirmedHeights.sort((a, b) => a - b);
+  const { confirmedHeights, hasUnconfirmed, valueSat } = activityOf(utxos);
   const txCount = typeof info.txCount === 'number' ? info.txCount : 0;
   const received = typeof info.totalReceivedSat === 'number' ? info.totalReceivedSat : 0;
   let usage: AddressUsage['usage'];
   if (txCount !== 0 || received !== 0 || utxos.length !== 0) usage = 'used';
   else if (info.isValid === false || info.note !== undefined) usage = 'unknown';
   else usage = 'unused';
-  return { usage, confirmedHeights, hasUnconfirmed };
+  return { usage, confirmedHeights, hasUnconfirmed, valueSat };
 }

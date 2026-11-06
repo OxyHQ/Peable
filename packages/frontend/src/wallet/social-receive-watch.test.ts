@@ -3,13 +3,16 @@ import { bytesToHex, deriveSocialReceiveAddress, getNetwork, hexToBytes } from '
 import { getPublicKey } from '@noble/secp256k1';
 import {
   SOCIAL_RECEIVE_ACTIVE_AGE_SECONDS,
+  SOCIAL_RECEIVE_ACTIVE_FLOOR,
   SOCIAL_RECEIVE_ACTIVE_MAX,
+  SOCIAL_RECEIVE_FUNDED_MAX,
   SOCIAL_RECEIVE_CHECKS_PER_RESYNC,
   SOCIAL_RECEIVE_RECHECK_MAX_SECONDS,
   SOCIAL_RECEIVE_RECHECK_MIN_SECONDS,
   nextSocialReceiveCheckAt,
   planActiveSet,
   planSocialReceiveChecks,
+  verifyGatewayRows,
   watchableRows,
   type WatchSetRow,
 } from './social-receive-watch';
@@ -47,7 +50,9 @@ describe('the constants', () => {
     expect(SOCIAL_RECEIVE_ACTIVE_MAX).toBe(2_000);
     expect(SOCIAL_RECEIVE_CHECKS_PER_RESYNC).toBe(200);
     expect(SOCIAL_RECEIVE_RECHECK_MIN_SECONDS).toBe(DAY);
-    expect(SOCIAL_RECEIVE_RECHECK_MAX_SECONDS).toBe(365 * DAY);
+    expect(SOCIAL_RECEIVE_RECHECK_MAX_SECONDS).toBe(30 * DAY);
+    expect(SOCIAL_RECEIVE_ACTIVE_FLOOR).toBe(100_000n);
+    expect(SOCIAL_RECEIVE_FUNDED_MAX).toBe(1_000);
   });
 });
 
@@ -92,7 +97,7 @@ describe('watchableRows', () => {
     });
     const watched = watchableRows([far], DEVICE_COMPRESSED, TESTNET);
     expect(watched).toEqual([far]);
-    const active = planActiveSet({ watchable: watched, holdingCoins: new Set(), now: NOW });
+    const active = planActiveSet({ watchable: watched, holdingCoins: new Map(), now: NOW });
     expect(active.has(far.address)).toBe(true);
     const plan = planSocialReceiveChecks({
       watchable: watched,
@@ -114,7 +119,7 @@ describe('planActiveSet', () => {
     const old = row(5, { createdAt: NOW - 8 * DAY });
     const active = planActiveSet({
       watchable: [zero, holding, found, foundLongAgo, recent, old],
-      holdingCoins: new Set([holding.address]),
+      holdingCoins: new Map([[holding.address, 10n ** 8n]]),
       now: NOW,
     });
     expect([...active].sort()).toEqual(['F0', 'F1', 'F2', 'F4']);
@@ -128,30 +133,99 @@ describe('planActiveSet', () => {
         row(1, { createdAt: NOW - 400 * DAY }),
         ...recent,
       ],
-      holdingCoins: new Set(['F1']),
+      holdingCoins: new Map([['F1', 10n ** 8n]]),
       now: NOW,
       activeMax: 5,
     });
     expect([...active].sort()).toEqual(['F0', 'F1', 'F10', 'F11', 'F12']);
   });
 
+  test('dust does not make an address active; the funded tier is capped by value (R4-2)', () => {
+    // An attacker dusts 5 000 fresh addresses (1 000 a day for five days) and
+    // pays 3 000 old ones just above the floor; the owner holds real coins at
+    // two old addresses and has ten addresses handed out today.
+    const dusted = Array.from({ length: 5_000 }, (_, i) =>
+      row(i + 10_000, { createdAt: NOW - 30 * DAY }),
+    );
+    const aboveFloor = Array.from({ length: 3_000 }, (_, i) =>
+      row(i + 20_000, { createdAt: NOW - 30 * DAY }),
+    );
+    const realA = row(1, { createdAt: NOW - 400 * DAY });
+    const realB = row(2, { createdAt: NOW - 400 * DAY });
+    const today = Array.from({ length: 10 }, (_, i) => row(i + 100, { createdAt: NOW - i * 60 }));
+    const holdingCoins = new Map<string, bigint>();
+    for (const r of dusted) holdingCoins.set(r.address, SOCIAL_RECEIVE_ACTIVE_FLOOR - 1n);
+    for (const r of aboveFloor) holdingCoins.set(r.address, SOCIAL_RECEIVE_ACTIVE_FLOOR);
+    holdingCoins.set(realA.address, 50n * 10n ** 8n);
+    holdingCoins.set(realB.address, 2n * 10n ** 8n);
+    const active = planActiveSet({
+      watchable: [row(0, { origin: 'default' }), realA, realB, ...today, ...dusted, ...aboveFloor],
+      holdingCoins,
+      now: NOW,
+    });
+    expect(active.size).toBeLessThanOrEqual(SOCIAL_RECEIVE_ACTIVE_MAX);
+    for (const r of dusted) expect(active.has(r.address)).toBe(false);
+    expect(active.has('F0')).toBe(true);
+    expect(active.has(realA.address)).toBe(true);
+    expect(active.has(realB.address)).toBe(true);
+    for (const r of today) expect(active.has(r.address)).toBe(true);
+    const funded = [...active].filter((a) => holdingCoins.has(a));
+    expect(funded.length).toBe(SOCIAL_RECEIVE_FUNDED_MAX);
+  });
+
+  test('the bound holds against any attacker spend: no mix of funded, found and recent rows passes it', () => {
+    const rows: WatchSetRow[] = [row(0, { origin: 'default' })];
+    const holdingCoins = new Map<string, bigint>();
+    for (let i = 1; i <= 6_000; i += 1) {
+      const r = row(i, {
+        createdAt: NOW - (i % 3) * DAY,
+        foundAt: i % 2 === 0 ? NOW - DAY : null,
+      });
+      rows.push(r);
+      if (i % 5 === 0) holdingCoins.set(r.address, BigInt(i) * 10n ** 8n);
+    }
+    const active = planActiveSet({ watchable: rows, holdingCoins, now: NOW });
+    expect(active.size).toBe(SOCIAL_RECEIVE_ACTIVE_MAX);
+    expect(active.has('F0')).toBe(true);
+  });
+
   test('a set of a million rows stays at the cap', () => {
     const many = Array.from({ length: 1_000_000 }, (_, i) =>
       row(i + 1, { createdAt: NOW - (i % 5) * DAY }),
     );
-    const active = planActiveSet({ watchable: many, holdingCoins: new Set(), now: NOW });
+    const active = planActiveSet({ watchable: many, holdingCoins: new Map(), now: NOW });
     expect(active.size).toBe(SOCIAL_RECEIVE_ACTIVE_MAX);
   });
 });
 
+describe('verifyGatewayRows (I-2)', () => {
+  test('keeps a row its key derives at its index, drops one it does not, keeps keyless rows', () => {
+    const good = row(3, { address: addressOf(DEVICE_COMPRESSED, 3) });
+    const otherIndex = row(4, { address: addressOf(DEVICE_COMPRESSED, 5) });
+    const otherKey = row(6, { address: addressOf(PREVIOUS_KEY, 6) });
+    const badKey = row(7, { address: addressOf(DEVICE_COMPRESSED, 7), identityPublicKey: 'zz' });
+    const keyless = row(8, { address: 'Tnobody', identityPublicKey: null });
+    const previous = row(9, {
+      address: addressOf(PREVIOUS_KEY, 9),
+      identityPublicKey: PREVIOUS_KEY,
+    });
+    const { kept, dropped } = verifyGatewayRows(
+      [good, otherIndex, otherKey, badKey, keyless, previous],
+      TESTNET,
+    );
+    expect(kept).toEqual([good, keyless, previous]);
+    expect(dropped).toEqual([otherIndex, otherKey, badKey]);
+  });
+});
+
 describe('nextSocialReceiveCheckAt', () => {
-  test('waits as long as the row has existed, between a day and a year', () => {
+  test('waits as long as the row has existed, between a day and 30 days', () => {
     expect(nextSocialReceiveCheckAt(NOW - 60, NOW)).toBe(NOW + DAY);
-    expect(nextSocialReceiveCheckAt(NOW - 30 * DAY, NOW)).toBe(NOW + 30 * DAY);
-    expect(nextSocialReceiveCheckAt(NOW - 3 * 365 * DAY, NOW)).toBe(NOW + 365 * DAY);
+    expect(nextSocialReceiveCheckAt(NOW - 10 * DAY, NOW)).toBe(NOW + 10 * DAY);
+    expect(nextSocialReceiveCheckAt(NOW - 3 * 365 * DAY, NOW)).toBe(NOW + 30 * DAY);
   });
 
-  test('a row is read about six times in its first year, then yearly, for ever', () => {
+  test('a dormant row is never left unread more than 30 days (the late-payment bound)', () => {
     const created = 0;
     let at = 7 * DAY;
     const reads: number[] = [];
@@ -160,10 +234,10 @@ describe('nextSocialReceiveCheckAt', () => {
       at = nextSocialReceiveCheckAt(created, at);
     }
     const firstYear = reads.filter((read) => read < 365 * DAY).length;
-    expect(firstYear).toBeGreaterThanOrEqual(5);
-    expect(firstYear).toBeLessThanOrEqual(7);
+    expect(firstYear).toBeGreaterThanOrEqual(14);
+    expect(firstYear).toBeLessThanOrEqual(16);
     for (let i = 1; i < reads.length; i += 1) {
-      expect(must(reads[i]) - must(reads[i - 1])).toBeLessThanOrEqual(365 * DAY);
+      expect(must(reads[i]) - must(reads[i - 1])).toBeLessThanOrEqual(30 * DAY);
     }
   });
 });
