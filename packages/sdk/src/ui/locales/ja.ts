@@ -6,6 +6,7 @@ export default {
   'preparation.editAddress': '住所を編集',
   'preparation.line2': '建物名・部屋番号など（任意）',
   'preparation.state': '都道府県（任意）',
+  'preparation.billingMatchesShipping': '配送先住所を請求先に使用',
   'preparation.phone': '電話番号（任意）',
   'provider.card.number': 'カード番号',
   'provider.card.expiry': '有効期限',

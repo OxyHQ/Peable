@@ -6,6 +6,7 @@ export default {
   'preparation.editAddress': '编辑地址',
   'preparation.line2': '公寓、楼层等（可选）',
   'preparation.state': '州 / 省（可选）',
+  'preparation.billingMatchesShipping': '使用送货地址作为账单地址',
   'preparation.phone': '电话号码（可选）',
   'provider.card.number': '卡号',
   'provider.card.expiry': '有效期',

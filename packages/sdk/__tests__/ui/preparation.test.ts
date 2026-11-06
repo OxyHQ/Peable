@@ -58,6 +58,13 @@ describe('checkout prerequisites', () => {
     expect(Object.isFrozen(frozen)).toBe(true);
     expect(Object.isFrozen(frozen.shipping)).toBe(true);
   });
+  test('billing reuse requires explicit consent and is frozen with the address', () => {
+    const details = initialCheckoutDetails({});
+    expect(freezeCheckoutDetails(details).useShippingForBilling).toBe(false);
+    expect(
+      freezeCheckoutDetails({ ...details, useShippingForBilling: true }).useShippingForBilling,
+    ).toBe(true);
+  });
   test('country choices remain usable on native runtimes without DisplayNames', () => {
     const descriptor = Object.getOwnPropertyDescriptor(Intl, 'DisplayNames');
     try {

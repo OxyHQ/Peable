@@ -18,6 +18,8 @@ export interface SheetShippingAddress {
 
 export interface SheetCheckoutDetails {
   readonly email: string;
+  /** Explicit payer consent, never inferred from choosing a shipping destination. */
+  readonly useShippingForBilling?: boolean;
   readonly shipping: SheetShippingAddress;
   /** Selection metadata only; the frozen full address is what the payer reviewed. */
   readonly selectedAddressId: string | null;
@@ -94,6 +96,7 @@ export function freezeCheckoutDetails(
 ): Readonly<SheetCheckoutDetails> {
   return Object.freeze({
     email: details.email.trim(),
+    useShippingForBilling: details.useShippingForBilling === true,
     selectedAddressId: details.selectedAddressId,
     shipping: Object.freeze({
       ...details.shipping,

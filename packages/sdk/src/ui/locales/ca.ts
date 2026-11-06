@@ -6,6 +6,7 @@ export default {
   'preparation.editAddress': 'Edita l’adreça',
   'preparation.line2': 'Apartament, pis, etc. (opcional)',
   'preparation.state': 'Estat / província (opcional)',
+  'preparation.billingMatchesShipping': 'Utilitza l’adreça d’enviament per a la facturació',
   'preparation.phone': 'Telèfon (opcional)',
   'provider.card.number': 'Número de targeta',
   'provider.card.expiry': 'Data de caducitat',

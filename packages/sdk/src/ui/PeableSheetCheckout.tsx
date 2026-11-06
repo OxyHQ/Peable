@@ -235,6 +235,17 @@ function SheetCheckout({
   const [methodView, setMethodView] = useState<MethodView | null>(null);
   const [draft, setDraft] = useState<CheckoutDraft>(emptyCheckoutDraft);
   const [billing, setBilling] = useState<BillingLocation>({ country: '', postcode: '' });
+  const billingPrefilled = useRef(false);
+  useEffect(() => {
+    if (billingPrefilled.current || !preparationState.prepared) return;
+    billingPrefilled.current = true;
+    if (preparation?.request.requiresShipping && preparationState.details.useShippingForBilling) {
+      setBilling({
+        country: preparationState.details.shipping.country,
+        postcode: preparationState.details.shipping.postalCode,
+      });
+    }
+  }, [preparationState.prepared, preparationState.details, preparation?.request.requiresShipping]);
   const [preparedCard, setPreparedCard] = useState<CheckoutCard | null>(null);
   const [cardReady, setCardReady] = useState(false);
   const [busy, setBusy] = useState(false);

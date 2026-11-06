@@ -6,6 +6,7 @@ export default {
   'preparation.editAddress': 'تعديل العنوان',
   'preparation.line2': 'الشقة والطابق وما إلى ذلك (اختياري)',
   'preparation.state': 'الولاية / المقاطعة (اختياري)',
+  'preparation.billingMatchesShipping': 'استخدام عنوان الشحن للفوترة',
   'preparation.phone': 'الهاتف (اختياري)',
   'provider.card.number': 'رقم البطاقة',
   'provider.card.expiry': 'تاريخ انتهاء الصلاحية',

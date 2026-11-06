@@ -6,6 +6,7 @@ export default {
   'preparation.editAddress': 'Adresi düzenle',
   'preparation.line2': 'Daire, kat vb. (isteğe bağlı)',
   'preparation.state': 'Eyalet / il (isteğe bağlı)',
+  'preparation.billingMatchesShipping': 'Faturalandırma için teslimat adresini kullan',
   'preparation.phone': 'Telefon (isteğe bağlı)',
   'provider.card.number': 'Kart numarası',
   'provider.card.expiry': 'Son kullanma tarihi',

@@ -8,6 +8,7 @@ const en = {
   'preparation.editAddress': 'Edit address',
   'preparation.line2': 'Apartment, suite, etc. (optional)',
   'preparation.state': 'State / province (optional)',
+  'preparation.billingMatchesShipping': 'Use shipping address for billing',
   'preparation.phone': 'Phone (optional)',
   'provider.card.number': 'Card number',
   'provider.card.expiry': 'Expiration date',

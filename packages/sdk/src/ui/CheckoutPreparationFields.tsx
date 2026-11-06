@@ -1,3 +1,4 @@
+import { Switch } from '@oxy.so/bloom/switch';
 import { View } from 'react-native';
 import { Button } from '@oxy.so/bloom/button';
 import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
@@ -139,6 +140,22 @@ export function CheckoutPreparationFields({
               />
             </>
           )}
+          <GroupedSection>
+            <GroupedSectionItem
+              title={label('preparation.billingMatchesShipping')}
+              showChevron={false}
+              rightElement={
+                <Switch
+                  checked={details.useShippingForBilling === true}
+                  disabled={disabled}
+                  accessibilityLabel={label('preparation.billingMatchesShipping')}
+                  onCheckedChange={(useShippingForBilling) =>
+                    onChange({ ...details, useShippingForBilling })
+                  }
+                />
+              }
+            />
+          </GroupedSection>
         </>
       )}
       {preparation.renderAdditionalDetails?.({ disabled })}

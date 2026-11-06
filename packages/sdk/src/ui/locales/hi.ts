@@ -6,6 +6,7 @@ export default {
   'preparation.editAddress': 'पता बदलें',
   'preparation.line2': 'अपार्टमेंट, मंज़िल आदि (वैकल्पिक)',
   'preparation.state': 'राज्य / प्रांत (वैकल्पिक)',
+  'preparation.billingMatchesShipping': 'बिलिंग के लिए शिपिंग पता इस्तेमाल करें',
   'preparation.phone': 'फ़ोन (वैकल्पिक)',
   'provider.card.number': 'कार्ड नंबर',
   'provider.card.expiry': 'समाप्ति तिथि',
