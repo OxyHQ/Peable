@@ -789,7 +789,25 @@ to make the seller the merchant of record.
 money stayed. Events: `account.updated`, `application_fee.created|refunded`,
 `payout.created|updated|paid|failed|canceled` and `balance.available`.
 
-### Optional checkout presentation (local development)
+### Pay with Peable: the payment sheet
+
+`PeableSheetCheckout` (`@peable.to/sdk/checkout/ui`) is the one way an Oxy app
+pays an order in-app: the Bloom detached bottom sheet over a Checkout Session
+(`sessionSource(clientSecret)`, or `sheetSourceFromUrl(hostedUrl)` when your
+backend hands you Peable's hosted URL) or a single PaymentIntent
+(`intentSource(id, clientSecret)` plus an `order`). It reads the order through
+the anonymous payer client, asks only for what the session collects (an email
+when it has none, a shipping address only with `shipping_address_collection`,
+a billing country when tax needs one), pays the card in the secure fields below
+(Peable's secure page where no DOM can host them) and always lists FairCoin —
+quoted, paid through the Peable wallet's `peable://pay` request (button on a
+phone, QR elsewhere), or disabled with the gateway's reason. `onSettled` fires
+once when the gateway closes the order; success is shown only when the host's
+own backend answers `outcome: 'succeeded'`, and `expected` refuses an order
+that is not the reviewed one. Mention Plus and Mercaria (plans and the
+marketplace) use it; there is no host copy of this logic.
+
+### Checkout presentation primitives
 
 `@peable.to/sdk/checkout/ui` exposes the controlled `PeableCheckoutSheet` and
 checkout view-model types. It composes Bloom's `CheckoutSheet` with Peable's
@@ -806,11 +824,6 @@ This entry is ESM/React Native only, with optional React, React Native and Bloom
 peers. Neither the server root nor the anonymous `/checkout` core imports it;
 the module-graph isolation test enforces that boundary. The Peable logo is
 copied into the ESM build and included in the package artifact.
-
-This UI currently requires the coordinated **local** Bloom checkout/status-ring
-build and local SDK build. Registry version 0.5.0 does not acquire these APIs
-until a separately authorized package release. Local Mention development uses
-an explicit source resolver/artifact override; no publication is implied.
 
 The controlled UI also accepts `methodDetails` for a provider handoff or
 FairCoin wallet/external-wallet presentation. Available choices come from host
@@ -865,7 +878,10 @@ The split hosted Elements are an explicit compatibility choice for this layout;
 they remain supported, while Payment Element is the provider's preferred general
 integration. This choice never routes raw card values through React or Peable.
 
-A host may supply `cardConfiguration: { publishableKey }` before `action` exists.
+A host may supply `cardConfiguration: { publishableKey }` before `action` exists,
+and `authorize(billing)` to obtain the action only when the payer continues (the
+sheet records the billing location, confirms the session by card and fetches
+the payment's client action there).
 This read-only configuration mounts the secure fields immediately; it is not
 payment authority. Supplying a matching verified `client_secret` action later
 preserves the mounted fields and entered data. Until then, or if the keys differ,

@@ -32,12 +32,11 @@ export {
   buildPayDeepLink,
   type PayDeepLinkParams,
   PeableRailUnsupportedError,
-} from './browser/mount';
+} from './browser/payDeepLink';
 
 export {
   mountCheckout,
   mountCheckoutIn,
-  DEFAULT_CHECKOUT_URL,
   type MountCheckoutOptions,
   type EmbeddedCheckoutInstance,
   type EmbeddedCheckoutEnvironment,
@@ -65,6 +64,7 @@ export {
 } from './browser/elements';
 
 export {
+  DEFAULT_CHECKOUT_URL,
   EMBED_MESSAGE_SOURCE,
   EMBED_PROTOCOL_VERSION,
   type EmbedFrameMessage,

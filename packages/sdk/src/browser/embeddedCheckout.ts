@@ -16,9 +16,8 @@ import {
   normalizeOrigin,
   readFrameMessage,
   sessionIdFromClientSecret,
+  DEFAULT_CHECKOUT_URL,
 } from './embedProtocol';
-
-export const DEFAULT_CHECKOUT_URL = 'https://checkout.peable.to';
 
 export interface MountCheckoutOptions {
   /** The session's `client_secret` (`cs_…_secret_…`), from an `ui_mode: 'embedded'` session. */

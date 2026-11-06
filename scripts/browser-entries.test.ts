@@ -103,7 +103,9 @@ interface Entry {
 
 // `@peable.to/sdk/checkout`: the error classes read `vocabulary/errors`.
 // `/checkout/ui`: the method list reads `paymentMethodConfigurations` and the
-// fiat set in `money` it is built from. `/display`, `@peable.to/pay/ui`: none.
+// fiat set in `money` it is built from; `PeableSheetCheckout` drives an order
+// through the payer client, whose errors read `vocabulary/errors`.
+// `/display`, `@peable.to/pay/ui`: none.
 const ENTRIES: Readonly<Record<string, Entry>> = {
   '@peable.to/sdk/checkout': {
     source: 'packages/sdk/src/checkout.ts',
@@ -112,6 +114,7 @@ const ENTRIES: Readonly<Record<string, Entry>> = {
   '@peable.to/sdk/checkout/ui': {
     source: 'packages/sdk/src/ui/index.ts',
     peable: [
+      'contracts/vocabulary/errors.js',
       'contracts/vocabulary/money.js',
       'contracts/vocabulary/paymentMethodConfigurations.js',
     ],

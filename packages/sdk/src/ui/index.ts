@@ -47,3 +47,31 @@ export type {
 } from './orderRewards';
 
 export type { PreparedCardAuthorization, ProviderCardPreparation } from './preparedCard';
+
+export {
+  PeableSheetCheckout,
+  SHEET_POLL_MS,
+  type PeableSheetCheckoutProps,
+} from './PeableSheetCheckout';
+export {
+  baseUnits,
+  faircoinTransferState,
+  hostedUrlFor,
+  intentSource,
+  matchesExpectation,
+  sessionCollection,
+  sessionFaircoin,
+  sessionSource,
+  sheetSourceFromUrl,
+  type FaircoinTransferState,
+  type SessionCollection,
+  type SheetCheckoutSource,
+  type SheetExpectation,
+  type SheetFaircoinAvailability,
+  type SheetFaircoinReason,
+  type SheetOrder,
+  type SheetOutcome,
+  type SheetPresentation,
+  type SheetSettlement,
+} from './sheetCheckout';
+export { formatFairAmount } from './amount';
