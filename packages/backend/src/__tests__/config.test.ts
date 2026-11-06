@@ -35,3 +35,19 @@ test('Oxy Files: the reconciliation applies by default, and a typo is refused ra
     'whsec_x',
   );
 });
+
+test('the browsers Pay with Peable runs in are admitted with no deployment override', () => {
+  const origins = loadConfig({ ...DB }).allowedOrigins;
+  for (const origin of [
+    'https://checkout.peable.to',
+    'https://orbit.peable.to',
+    'https://mention.earth',
+    'https://mercaria.co',
+    'https://dashboard.mercaria.co',
+  ])
+    expect(origins).toContain(origin);
+  // An override adds to them; it never replaces Peable's own clients.
+  expect(
+    loadConfig({ ...DB, PEABLE_ALLOWED_ORIGINS: 'https://dashboard.peable.to' }).allowedOrigins,
+  ).toEqual(expect.arrayContaining(['https://mercaria.co', 'https://dashboard.peable.to']));
+});
