@@ -26,6 +26,7 @@ import {
   groupPreviousKeys,
   PREVIOUS_KEY_MOVE_MAX_INPUTS,
   planPreviousKeyMove,
+  samePreviousKeyMovePlan,
   previousKeyCopy,
   previousKeyDefaultRow,
   probePreviousKeys,
@@ -43,6 +44,7 @@ import {
 } from './spendable';
 
 const TESTNET = getNetwork('testnet');
+const PERSON = { kind: 'personal', accountId: '0123456789abcdef01234567' } as const;
 
 const scriptForAddress = (address: string, _network: unknown): Uint8Array =>
   createP2PKHScript(decodeAddress(address).hash);
@@ -412,7 +414,7 @@ function mixedWallet() {
       address: string,
       publicKey: string | null,
     ) =>
-      signSocialReceiveInput(tx, i, spk, index, address, TESTNET, undefined, {
+      signSocialReceiveInput(tx, i, spk, index, address, TESTNET, PERSON, {
         sign: signWith,
         ...(publicKey === null ? {} : { publicKey }),
       }),
@@ -531,6 +533,21 @@ describe('moving previous-key coins to the current key', () => {
     );
     await signAll(tx, plan.inputs, wallet.signers(wallet.sign));
     expectEveryInputSignedByItsOwner(tx, plan.inputs);
+  });
+
+  test('the move spends the CONFIRMED plan, or asks again (R4-13)', () => {
+    const coins = [coin('Ta', 500_000n), coin('Tb', 400_000n)];
+    const plan = (list: UTXO[], feePerByte = 5) =>
+      planPreviousKeyMove({ coins: list, feePerByte, dustThreshold: TESTNET.minRelayFee });
+    const confirmed = plan(coins);
+    if (confirmed.kind !== 'ready') throw new Error(`plan is ${confirmed.kind}`);
+    expect(confirmed.feePerByte).toBe(5);
+    expect(samePreviousKeyMovePlan(confirmed, plan([...coins].reverse()))).toBe(true);
+    // A coin arrived, one was spent, the rate moved: each is a different move.
+    expect(samePreviousKeyMovePlan(confirmed, plan([...coins, coin('Tc', 300_000n)]))).toBe(false);
+    expect(samePreviousKeyMovePlan(confirmed, plan(coins.slice(0, 1)))).toBe(false);
+    expect(samePreviousKeyMovePlan(confirmed, plan(coins, 6))).toBe(false);
+    expect(samePreviousKeyMovePlan(confirmed, { kind: 'nothing' })).toBe(false);
   });
 
   test('many small coins move in batches under the standard transaction size (R4-13)', () => {

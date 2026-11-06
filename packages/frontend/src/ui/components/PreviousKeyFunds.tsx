@@ -24,10 +24,10 @@ import { View, Text, Linking } from 'react-native';
 import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
 import { toast } from '@oxy.so/bloom/toast';
 import { Button } from './Button';
-import { FEE_RATES, useWalletStore } from '../../wallet/wallet-store';
+import { FEE_RATES, PREVIOUS_KEY_MOVE_CHANGED, useWalletStore } from '../../wallet/wallet-store';
 import { identitySubjectOfWalletId } from '../../wallet/identity-wallet';
 import { commonsOrganizationWalletUrl } from '../../wallet/organization-wallet';
-import { previousKeyCopy } from '../../wallet/previous-keys';
+import { previousKeyCopy, type PreviousKeyMoveReady } from '../../wallet/previous-keys';
 import { formatFairAmount, t } from '../../i18n';
 
 export function PreviousKeyFunds() {
@@ -38,9 +38,13 @@ export function PreviousKeyFunds() {
   // Subscribed so the card re-plans when this phone's key stops (or starts
   // again) being the account's current one.
   const keyMismatch = useWalletStore((s) => s.socialReceiveKeyMismatch);
+  const keyConfirmed = useWalletStore((s) => s.identityReceiveConfirmed);
   const moveFunds = useWalletStore((s) => s.movePreviousKeyFunds);
   const confirmControl = useDialogControl();
   const [moving, setMoving] = useState(false);
+  // The plan the dialog SHOWS, captured when it opens: the move spends exactly
+  // this one, or asks again (R4-13).
+  const [confirmed, setConfirmed] = useState<PreviousKeyMoveReady | null>(null);
 
   const subject = activeWalletId ? identitySubjectOfWalletId(activeWalletId) : null;
   const subjectKind = subject?.kind ?? 'personal';
@@ -48,26 +52,28 @@ export function PreviousKeyFunds() {
   // Read at render: the store's balance figures re-render this as coins move.
   const plan =
     previousKeyBalance > 0n
-      ? keyMismatch
+      ? keyMismatch || !keyConfirmed
         ? ({ kind: 'blocked' } as const)
         : planMove(FEE_RATES.medium)
       : null;
 
   const handleMove = useCallback(async () => {
+    if (!confirmed) return;
     setMoving(true);
     try {
-      await moveFunds(FEE_RATES.medium);
+      await moveFunds(confirmed);
       toast.success(t('wallet.previousKey.moved'));
     } catch (error) {
-      toast.error(
-        t('wallet.previousKey.failed', {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      // The coins or the fee moved since the dialog showed them: show the new
+      // plan and ask again, never send a move nobody confirmed.
+      if (message === PREVIOUS_KEY_MOVE_CHANGED) toast.error(t('wallet.previousKey.changed'));
+      else toast.error(t('wallet.previousKey.failed', { message }));
     } finally {
       setMoving(false);
+      setConfirmed(null);
     }
-  }, [moveFunds]);
+  }, [moveFunds, confirmed]);
 
   const openCommons = useCallback(async () => {
     if (subject?.kind !== 'organization') return;
@@ -93,7 +99,10 @@ export function PreviousKeyFunds() {
           {plan.kind === 'ready' ? (
             <Button
               title={t('wallet.previousKey.move')}
-              onPress={() => confirmControl.open()}
+              onPress={() => {
+                setConfirmed(plan);
+                confirmControl.open();
+              }}
               variant="primary"
               loading={moving}
               disabled={moving}
@@ -123,12 +132,16 @@ export function PreviousKeyFunds() {
         </View>
       ) : null}
 
-      {plan?.kind === 'ready' ? (
+      {confirmed ? (
         <Dialog
           control={confirmControl}
           placement="bottom"
-          title={t('wallet.previousKey.confirmTitle', { amount: formatFairAmount(plan.amount) })}
-          description={t('wallet.previousKey.confirmBody', { fee: formatFairAmount(plan.fee) })}
+          title={t('wallet.previousKey.confirmTitle', {
+            amount: formatFairAmount(confirmed.amount),
+          })}
+          description={t('wallet.previousKey.confirmBody', {
+            fee: formatFairAmount(confirmed.fee),
+          })}
           actions={[
             { label: t('wallet.previousKey.confirm'), onPress: () => void handleMove() },
             { label: t('common.cancel'), color: 'cancel' },

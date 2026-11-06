@@ -27,7 +27,7 @@ import {
   bytesToHex,
   serializeTransaction,
 } from '@fairco.in/core';
-import { getPublicKey } from '@noble/secp256k1';
+import { Point, getPublicKey } from '@noble/secp256k1';
 
 const CONF = process.env.CANARY_NODE_CONF;
 const KEYS = process.env.CANARY_KEYS;
@@ -63,35 +63,51 @@ const ORG_ACCOUNT = gateway?.wallets.organization.account ?? 'org';
 // The key's holder, as on a phone: the person's key for personal requests, the
 // organization's for `{ accountId }` — and never one for the other.
 const realOxyCrypto = { ...(await import('@oxy.so/core/crypto')) };
+// A `publicKey` selector reaches only the key it names (oxy ADR 0061 D7).
+type KeySelector = { accountId?: string; publicKey?: string };
+const holderOf = (opts?: KeySelector): string | null => {
+  const key =
+    opts?.accountId !== undefined
+      ? opts.accountId === ORG_ACCOUNT
+        ? keys.org
+        : null
+      : keys.person;
+  if (key === null) return null;
+  if (
+    opts?.publicKey !== undefined &&
+    Point.fromHex(opts.publicKey.toLowerCase()).toHex(true) !==
+      bytesToHex(getPublicKey(hexToBytes(key), true))
+  ) {
+    return null;
+  }
+  return key;
+};
 mock.module('@oxy.so/core/crypto', () => ({
   ...realOxyCrypto,
   getOrganizationPublicKey: async (accountId: string) =>
     accountId === ORG_ACCOUNT ? bytesToHex(getPublicKey(hexToBytes(keys.org), false)) : null,
   KeyManager: {
     getSharedPublicKey: async () => bytesToHex(getPublicKey(hexToBytes(keys.person), false)),
-    signSocialReceive: async (index: number, digest: string, opts?: { accountId?: string }) => {
-      if (opts?.accountId !== undefined) {
-        return opts.accountId === ORG_ACCOUNT
-          ? realOxyCrypto.signSocialReceiveDigest(keys.org, index, digest)
-          : null;
-      }
-      return realOxyCrypto.signSocialReceiveDigest(keys.person, index, digest);
+    deriveScopedSeed: async (info: string, opts?: KeySelector) => {
+      const key = holderOf(opts);
+      return key ? realOxyCrypto.deriveScopedSeedFromKey(key, info) : null;
+    },
+    signSocialReceive: async (index: number, digest: string, opts?: KeySelector) => {
+      const key = holderOf(opts);
+      return key ? realOxyCrypto.signSocialReceiveDigest(key, index, digest) : null;
     },
   },
 }));
 
-const {
-  deriveSocialReceiveWatchWindow,
-  getIdentityPublicKeyHex,
-  judgeSocialReceiveKey,
-  signSocialReceiveInput,
-} = await import('../social-receive');
+const { deriveSocialReceiveWatchWindow, judgeSocialReceiveKey, signSocialReceiveInput } =
+  await import('../social-receive');
 const { checkSocialReceiveDue } = await import('../social-receive-sync');
 const { planActiveSet, planSocialReceiveChecks, watchableRows } = await import(
   '../social-receive-watch'
 );
 type WatchSetRow = import('../social-receive-watch').WatchSetRow;
-const { PERSONAL_SUBJECT } = await import('../identity-wallet');
+const { deriveIdentitySeed, personalSubject } = await import('../identity-wallet');
+const { decideIdentityKey } = await import('../identity-key');
 type IdentitySubject = import('../identity-wallet').IdentitySubject;
 type AddressActivity = import('../../services/explorer-address').AddressActivity;
 
@@ -130,10 +146,22 @@ async function sweep(
   wallet: WalletEvidence,
   subject: IdentitySubject,
 ) {
-  // 1. The key this phone holds is the key the account publishes (the cursor
-  // carries the DID's current `#key-1`) — `setUpSocialReceive`'s verdict.
-  const deviceKey = await getIdentityPublicKeyHex(subject);
-  expect(deviceKey).not.toBeNull();
+  // 1. The wallet opens with the key the account publishes (the cursor carries
+  // the DID's current `#key-1`), proven held by deriving its seed with the key
+  // named (R5-1) — and `syncSocialReceiveSet`'s verdict confirms it.
+  const decision = await decideIdentityKey({
+    accountKeys: {
+      current: wallet.cursor.account_identity_public_key ?? null,
+      history: new Set<string>(),
+    },
+    storedKey: null,
+    deviceHint: async () => null,
+    derive: (key) => deriveIdentitySeed(subject, key),
+  });
+  expect(decision.kind).toBe('current');
+  if (decision.kind === 'none') throw new Error('the account key is not held');
+  decision.seed.fill(0);
+  const deviceKey = decision.key;
   const verdict = judgeSocialReceiveKey({
     deviceKey: String(deviceKey),
     accountKey: wallet.cursor.account_identity_public_key,
@@ -301,7 +329,7 @@ describe.skipIf(!ENABLED)(
     test('the person (social + person-owned merchant) and the organization', async () => {
       const wallets = gateway?.wallets;
       if (!wallets) throw new Error('no gateway evidence');
-      await sweep('person', wallets.person, PERSONAL_SUBJECT);
+      await sweep('person', wallets.person, personalSubject(wallets.person.account));
       await sweep('organization', wallets.organization, {
         kind: 'organization',
         accountId: ORG_ACCOUNT,

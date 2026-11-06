@@ -20,14 +20,14 @@ import { useCallback, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { Redirect, useFocusEffect } from 'expo-router';
 import { useAuth } from '@oxy.so/services/ui/client';
-import { getOrganizationPublicKey } from '@oxy.so/core/crypto';
+import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
 import { useWalletStore, type IdentityInitResult } from '../src/wallet/wallet-store';
 import { useLockStore } from '../src/wallet/lock-store';
 import { hasPin } from '../src/storage/secure-store';
 import { decideEntryRoute, type WalletBlock } from '../src/wallet/entry-route';
 import {
-  PERSONAL_SUBJECT,
   identityWalletIdOf,
+  personalSubject,
   type IdentitySubject,
 } from '../src/wallet/identity-wallet';
 import { hasIdentityKeystore } from '../src/wallet/keystore';
@@ -53,14 +53,19 @@ async function resolveWalletTarget(account: {
   | { kind: 'blocked'; block: WalletBlock }
 > {
   const acting = decideActingSubject(account);
-  if (acting.kind === 'personal') return { kind: 'open', subject: PERSONAL_SUBJECT };
+  // The person's own wallet is THEIR account's (R5-2): one per account id.
+  if (acting.kind === 'personal') {
+    return { kind: 'open', subject: personalSubject(acting.accountId) };
+  }
   if (acting.kind === 'unsupported') return { kind: 'blocked', block: { kind: 'unsupported' } };
 
   const { accountId } = acting;
   const status = await resolveOrganizationWallet(accountId, {
     hasIdentityKeystore: hasIdentityKeystore(),
     readIdentityKey: (id) => oxyServices.accounts.identityKey.get(id),
-    readDevicePublicKey: (id) => getOrganizationPublicKey(id),
+    // The key this phone can SPEND with (core 7.33.0, R5-1), never the shared
+    // group's public item another app could have written.
+    readDevicePublicKey: (id) => IdentityKeyManager.getIdentityPublicKeyForMoney({ accountId: id }),
   });
   switch (status.status) {
     case 'ready':
@@ -149,6 +154,15 @@ export default function IndexScreen() {
         // Superseded: closed (another account switch) while deriving; the
         // boot that closed it decides what opens next.
         if (stale() || result === 'superseded') return;
+        if (result === 'unverified') {
+          // No key the account vouches for could be decided (Oxy unreachable
+          // and nothing stored from an earlier check): ask again, never open
+          // on a key nobody vouched for (R5-1, R5-2).
+          setBlock({ kind: 'unverified' });
+          setHasPinConfigured(pinSet);
+          markNoPinUnlocked();
+          return;
+        }
         if (result === 'no-identity' && target.subject.kind === 'organization') {
           // The key vanished between the check and the derivation (Commons
           // removed it, or an older Commons cannot answer for an

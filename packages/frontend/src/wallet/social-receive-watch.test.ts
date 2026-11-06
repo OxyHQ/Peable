@@ -12,6 +12,7 @@ import {
   nextSocialReceiveCheckAt,
   planActiveSet,
   planSocialReceiveChecks,
+  splitKnownRows,
   verifyGatewayRows,
   watchableRows,
   type WatchSetRow,
@@ -215,6 +216,22 @@ describe('verifyGatewayRows (I-2)', () => {
     );
     expect(kept).toEqual([good, keyless, previous]);
     expect(dropped).toEqual([otherIndex, otherKey, badKey]);
+  });
+});
+
+describe('splitKnownRows (R5-8)', () => {
+  test('only a row stored with the same index and key skips verification', () => {
+    const stored = row(3, { address: addressOf(DEVICE_COMPRESSED, 3) });
+    const same = { ...stored, createdAt: NOW };
+    const movedIndex = row(5, { address: stored.address });
+    const otherKey = row(3, { address: stored.address, identityPublicKey: PREVIOUS_KEY });
+    const fresh = row(4, { address: addressOf(DEVICE_COMPRESSED, 4) });
+    const { known, unknown } = splitKnownRows(
+      [same, movedIndex, otherKey, fresh],
+      [{ address: stored.address, index_num: 3, identity_public_key: DEVICE_COMPRESSED }],
+    );
+    expect(known).toEqual([same]);
+    expect(unknown).toEqual([movedIndex, otherKey, fresh]);
   });
 });
 

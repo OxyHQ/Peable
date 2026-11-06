@@ -283,6 +283,38 @@ export function planSocialReceiveChecks(input: {
 }
 
 /**
+ * Split a gateway page into the rows already stored with the same index and
+ * key (`known`, verified when they were stored) and the rest (`unknown`, to
+ * verify). A stored row with another index or key is `unknown`: verifying it
+ * drops a lie, and storing it is a no-op either way.
+ */
+export function splitKnownRows(
+  rows: readonly WatchSetRow[],
+  stored: readonly {
+    readonly address: string;
+    readonly index_num: number;
+    readonly identity_public_key: string | null;
+  }[],
+): { known: WatchSetRow[]; unknown: WatchSetRow[] } {
+  const byAddress = new Map(stored.map((row) => [row.address, row]));
+  const known: WatchSetRow[] = [];
+  const unknown: WatchSetRow[] = [];
+  for (const row of rows) {
+    const prior = byAddress.get(row.address);
+    if (
+      prior !== undefined &&
+      prior.index_num === row.index &&
+      prior.identity_public_key === row.identityPublicKey
+    ) {
+      known.push(row);
+    } else {
+      unknown.push(row);
+    }
+  }
+  return { known, unknown };
+}
+
+/**
  * The gateway's rows this wallet can take at their word: each row recorded
  * under a key is derived again from that key at its index, and kept only when
  * it reproduces the address (security review round 4, I-2). A row that does

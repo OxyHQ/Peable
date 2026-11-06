@@ -100,6 +100,13 @@ export interface PreviousKeyTreeRow {
   change_next: number;
   /** When its first discovery ran (Unix seconds); `null`: not yet. */
   discovered_at: number | null;
+  /**
+   * The Oxy account that vouched for this key when the tree was recorded
+   * (R5-2): its key history named it, or the gateway recorded it on that
+   * account's addresses. A tree opens on load only for that account; `null`
+   * (recorded before round 5) waits for a refresh to vouch for it again.
+   */
+  vouched_for: string | null;
 }
 
 /** One address to add to the set. */
@@ -287,6 +294,7 @@ const SCHEMA_SQL = `
     external_next INTEGER NOT NULL DEFAULT 0,
     change_next INTEGER NOT NULL DEFAULT 0,
     discovered_at INTEGER,
+    vouched_for TEXT,
     PRIMARY KEY (public_key, network)
   );
 
@@ -429,6 +437,7 @@ export class Database {
     await this.migrateHeaderHashesToBlob();
     await this.db.execAsync(SCHEMA_SQL);
     await this.migrateUtxoColumns();
+    await this.migratePreviousKeyTreeColumns();
     await this.migrateSocialReceiveWindow();
     await this.repairHeaderStore();
   }
@@ -574,8 +583,95 @@ export class Database {
     );
   }
 
+  /** `previous_key_trees.vouched_for` (round 5, R5-2) on a wallet created before it. */
+  private async migratePreviousKeyTreeColumns(): Promise<void> {
+    const existing = await this.db.getAllAsync<{ name: string }>(
+      "SELECT name FROM pragma_table_info('previous_key_trees')",
+    );
+    if (existing.some((column) => column.name === 'vouched_for')) return;
+    await this.db.execAsync('ALTER TABLE previous_key_trees ADD COLUMN vouched_for TEXT');
+  }
+
   async close(): Promise<void> {
     await this.db.closeAsync();
+  }
+
+  /** Delete a wallet + Pocket's database file. The caller has closed every handle to it. */
+  static async deleteFile(walletId: string, account = 0): Promise<void> {
+    await SQLite.deleteDatabaseAsync(databaseFileName(walletId, account));
+  }
+
+  /** Whether this database holds a wallet: any HD address stored. */
+  async hasWalletData(): Promise<boolean> {
+    const row = await this.db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM addresses');
+    return (row?.n ?? 0) > 0;
+  }
+
+  /**
+   * Copy this database, whole and consistent, to the file `walletId` +
+   * `account` would open (`VACUUM INTO`, which also folds in the WAL). The
+   * target must not exist; the caller deletes a partial one first.
+   */
+  async copyTo(walletId: string, account = 0): Promise<void> {
+    const path = this.db.databasePath;
+    const directory = path.slice(0, path.lastIndexOf('/') + 1);
+    const target = `${directory}${databaseFileName(walletId, account)}`;
+    await this.db.runAsync('VACUUM INTO ?', target);
+  }
+
+  /**
+   * Drop what another account could have left in a moved legacy namespace
+   * (R5-2): social-receive rows and previous-key trees under a key `keep`
+   * refuses, and where the gateway pull stood — the next pull reads the
+   * session account's whole set again (`INSERT OR IGNORE`).
+   */
+  async dropForeignIdentityData(keep: (storedKey: string | null) => boolean): Promise<void> {
+    const keys = await this.db.getAllAsync<{ identity_public_key: string | null }>(
+      'SELECT DISTINCT identity_public_key FROM social_receive_set',
+    );
+    const trees = await this.db.getAllAsync<{ public_key: string }>(
+      'SELECT DISTINCT public_key FROM previous_key_trees',
+    );
+    await this.db.withTransactionAsync(async () => {
+      for (const { identity_public_key: key } of keys) {
+        if (key !== null && !keep(key)) {
+          await this.db.runAsync(
+            'DELETE FROM social_receive_set WHERE identity_public_key = ?',
+            key,
+          );
+        }
+      }
+      for (const { public_key: key } of trees) {
+        if (!keep(key)) {
+          await this.db.runAsync('DELETE FROM previous_key_trees WHERE public_key = ?', key);
+        }
+      }
+      // Every remaining tree must be vouched for again by its new owner.
+      await this.db.runAsync('UPDATE previous_key_trees SET vouched_for = NULL');
+      await this.db.runAsync(
+        "DELETE FROM schema_meta WHERE key IN ('social_receive_sync_cursor', 'social_receive_full_sync_after', 'social_receive_full_sync_at', 'identity_wallet_key')",
+      );
+    });
+  }
+
+  /**
+   * The identity key this wallet last opened with (compressed hex), vouched
+   * for by its account when it was stored (R5-1): the only key an identity
+   * wallet opens with while Oxy cannot be asked. In this file, never in a
+   * keychain group another app can write.
+   */
+  async getIdentityWalletKey(): Promise<string | null> {
+    const row = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'identity_wallet_key'",
+    );
+    return row?.value ?? null;
+  }
+
+  async setIdentityWalletKey(key: string): Promise<void> {
+    await this.db.runAsync(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('identity_wallet_key', ?)",
+      key,
+    );
   }
 
   /**
@@ -1130,10 +1226,17 @@ export class Database {
     return rows;
   }
 
-  /** Every key the set records (as stored: the gateway's encoding), for finding previous keys. */
-  async getSocialReceiveSetKeys(): Promise<string[]> {
+  /**
+   * Every key the set records (as stored: the gateway's encoding), for finding
+   * previous keys — with `gatewayOnly`, only keys on rows the GATEWAY handed
+   * out to this wallet's account (`origin = 'gateway'`), the only rows that
+   * vouch for a key without the account's key history (R5-2, R4-5).
+   */
+  async getSocialReceiveSetKeys(gatewayOnly = false): Promise<string[]> {
     const rows = await this.db.getAllAsync<{ identity_public_key: string }>(
-      'SELECT DISTINCT identity_public_key FROM social_receive_set WHERE identity_public_key IS NOT NULL',
+      `SELECT DISTINCT identity_public_key FROM social_receive_set WHERE identity_public_key IS NOT NULL${
+        gatewayOnly ? " AND origin = 'gateway'" : ''
+      }`,
     );
     return rows.map((row) => row.identity_public_key);
   }
@@ -1178,17 +1281,19 @@ export class Database {
    */
   async savePreviousKeyTree(row: PreviousKeyTreeRow): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO previous_key_trees (public_key, network, external_next, change_next, discovered_at)
-         VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO previous_key_trees (public_key, network, external_next, change_next, discovered_at, vouched_for)
+         VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (public_key, network) DO UPDATE SET
          external_next = MAX(external_next, excluded.external_next),
          change_next = MAX(change_next, excluded.change_next),
-         discovered_at = COALESCE(discovered_at, excluded.discovered_at)`,
+         discovered_at = COALESCE(discovered_at, excluded.discovered_at),
+         vouched_for = COALESCE(excluded.vouched_for, vouched_for)`,
       row.public_key,
       row.network,
       row.external_next,
       row.change_next,
       row.discovered_at,
+      row.vouched_for,
     );
   }
 

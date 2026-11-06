@@ -37,8 +37,13 @@ const ORG_KEY = 'cc'.repeat(32);
 const ORG_PUB = bytesToHex(getPublicKey(hexToBytes(ORG_KEY), false));
 let orgHolderKey: string | null = ORG_KEY;
 let orgPublicKeyResult: string | null = null;
-const getSharedPublicKey = mock(async () => sharedPublicKeyResult);
-const getOrganizationPublicKey = mock(async (_accountId: string) => orgPublicKeyResult);
+const getIdentityPublicKeyForMoney = mock(async (opts?: { accountId?: string }) =>
+  opts?.accountId !== undefined
+    ? opts.accountId === ORG_ID
+      ? orgPublicKeyResult
+      : null
+    : sharedPublicKeyResult,
+);
 const signSocialReceive = mock(
   async (index: number, digest: string, opts?: { accountId?: string }) => {
     if (opts?.accountId !== undefined) {
@@ -51,13 +56,12 @@ const signSocialReceive = mock(
 );
 mock.module('@oxy.so/core/crypto', () => ({
   ...realOxyCrypto,
-  getOrganizationPublicKey,
-  KeyManager: { getSharedPublicKey, signSocialReceive },
+  KeyManager: { getIdentityPublicKeyForMoney, signSocialReceive },
 }));
 
 const {
   compressedPublicKeyHex,
-  getIdentityPublicKeyHex,
+  readDeviceKeyHint,
   deriveSocialReceiveWatchWindow,
   signSocialReceiveInput,
   highestIndex,
@@ -67,30 +71,32 @@ const {
 
 const TESTNET = getNetwork('testnet');
 
-describe('getIdentityPublicKeyHex', () => {
+const PERSON = { kind: 'personal', accountId: '76543210fedcba9876543210' } as const;
+
+describe('readDeviceKeyHint (an UNTRUSTED hint, R5-1)', () => {
   test("is the shared identity's public key, compressed", async () => {
     sharedPublicKeyResult = IDENTITY_PUB_A;
-    expect(await getIdentityPublicKeyHex()).toBe(IDENTITY_PUB_A_COMPRESSED);
+    expect(await readDeviceKeyHint(PERSON)).toBe(IDENTITY_PUB_A_COMPRESSED);
   });
 
   test('is null when no identity holder answers (web, keyless, Commons absent)', async () => {
     sharedPublicKeyResult = null;
-    expect(await getIdentityPublicKeyHex()).toBeNull();
+    expect(await readDeviceKeyHint(PERSON)).toBeNull();
     sharedPublicKeyResult = IDENTITY_PUB_A;
   });
 
   test("for an organization, is the ORGANIZATION's key this phone reaches", async () => {
     orgPublicKeyResult = ORG_PUB;
     const subject = { kind: 'organization', accountId: ORG_ID } as const;
-    expect(await getIdentityPublicKeyHex(subject)).toBe(compressedPublicKeyHex(ORG_PUB));
-    expect(getOrganizationPublicKey).toHaveBeenLastCalledWith(ORG_ID);
+    expect(await readDeviceKeyHint(subject)).toBe(compressedPublicKeyHex(ORG_PUB));
+    expect(getIdentityPublicKeyForMoney).toHaveBeenLastCalledWith({ accountId: ORG_ID });
   });
 
   test("for an organization this phone cannot reach, is null — never the person's key", async () => {
     orgPublicKeyResult = null;
     sharedPublicKeyResult = IDENTITY_PUB_A;
     const subject = { kind: 'organization', accountId: ORG_ID } as const;
-    expect(await getIdentityPublicKeyHex(subject)).toBeNull();
+    expect(await readDeviceKeyHint(subject)).toBeNull();
   });
 });
 
@@ -155,17 +161,27 @@ describe('signSocialReceiveInput', () => {
 
   test('is byte-identical to signing locally with the child key', async () => {
     holderKey = IDENTITY_KEY_A;
-    const remote = await signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET);
+    const remote = await signSocialReceiveInput(
+      tx,
+      0,
+      scriptPubKey,
+      1,
+      SOCIAL_ADDR_1,
+      TESTNET,
+      PERSON,
+    );
     const childKey = deriveSocialReceiveSpendingKey(hexToBytes(IDENTITY_KEY_A), 1);
     expect(remote).toEqual(signInput(tx, 0, scriptPubKey, childKey));
     // The holder was asked for child 1 over the input's sighash, never for a key.
-    expect(signSocialReceive).toHaveBeenLastCalledWith(1, expect.stringMatching(/^[0-9a-f]{64}$/));
+    expect(signSocialReceive).toHaveBeenLastCalledWith(1, expect.stringMatching(/^[0-9a-f]{64}$/), {
+      ownerAccountId: PERSON.accountId,
+    });
   });
 
   test('throws when no identity holder answers', async () => {
     holderKey = null;
     await expect(
-      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET),
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET, PERSON),
     ).rejects.toThrow(/without the Oxy identity/);
     holderKey = IDENTITY_KEY_A;
   });
@@ -209,7 +225,7 @@ describe('signSocialReceiveInput', () => {
   test('refuses a signature from a key that does not own the address', async () => {
     holderKey = 'bb'.repeat(32);
     await expect(
-      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET),
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET, PERSON),
     ).rejects.toThrow(/does not own/);
     holderKey = IDENTITY_KEY_A;
   });

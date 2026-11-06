@@ -20,7 +20,10 @@ import { commonsOrganizationWalletUrl } from '../../wallet/organization-wallet';
 import type { WalletBlock } from '../../wallet/entry-route';
 import { t } from '../../i18n';
 
-type BlockReason = Extract<WalletBlock, { kind: 'organization' }>['status'] | 'unsupported';
+type BlockReason =
+  | Extract<WalletBlock, { kind: 'organization' }>['status']
+  | 'unsupported'
+  | 'unverified';
 
 /** Translation keys per reason; `cta` only where Commons is the fix. */
 const COPY: Record<BlockReason, { title: string; body: string; cta?: string }> = {
@@ -46,6 +49,10 @@ const COPY: Record<BlockReason, { title: string; body: string; cta?: string }> =
     title: 'organizationWallet.unsupported.title',
     body: 'organizationWallet.unsupported.body',
   },
+  unverified: {
+    title: 'organizationWallet.unverified.title',
+    body: 'organizationWallet.unverified.body',
+  },
 };
 
 export function WalletBlockedView({
@@ -58,7 +65,7 @@ export function WalletBlockedView({
 }) {
   const { user, openAccountDialog } = useOxy();
   const [notice, setNotice] = useState<string | null>(null);
-  const copy = COPY[block.kind === 'organization' ? block.status : 'unsupported'];
+  const copy = COPY[block.kind === 'organization' ? block.status : block.kind];
   const name =
     user?.name?.displayName ??
     (user?.username ? `@${user.username}` : t('organizationWallet.thisOrganization'));

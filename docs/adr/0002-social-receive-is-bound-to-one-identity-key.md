@@ -371,6 +371,103 @@ previous-key work above incomplete in four places, each fixed in the wallet:
   node would relay it), largest coins first; the prompt stays while coins are
   left.
 
+## Amendment (2026-11-06): review round 5 — the wallet's key is vouched for, each account has its own wallet
+
+The fifth security review found two blocking defects and three smaller ones in
+the wallet (findings R5-1, R5-2, R5-7, R5-8, R5-10, and the remainders of R4-5
+and R4-13). Fixed in the wallet:
+
+- **The wallet's key is decided, never read from a shared store (R5-1,
+  blocking).** The wallet took its identity public key from
+  `KeyManager.getSharedPublicKey`, which on iOS reads the keychain group every
+  Oxy app can write, and showed index 0 before the gateway's key check, keeping
+  it when the check failed: a malicious or OTA-compromised Oxy app could make
+  the Receive QR show its own address. Now `wallet/identity-key.ts` decides the
+  key an identity wallet opens with, from what the ACCOUNT vouches for: its
+  current `#key-1` as Oxy answers it now; else the key the wallet last opened
+  with, stored in its own SQLite file (never a keychain group) and still in the
+  account's key history; else the key the device says it holds, only when the
+  account's history names it. Possession is proven by the selector: every seed
+  derivation and every social-receive signature names its key
+  (`deriveScopedSeed` / `signSocialReceive` with `publicKey`), which reaches
+  only that key. Offline, only the stored key opens; with none, the wallet does
+  not open (`unverified`, retried from the entry screen) rather than open on a
+  key nobody vouched for. The device's own read is a hint and nothing more.
+- **Nothing is receivable until the gateway confirms the key (R5-1, R5-7).**
+  `identityReceiveConfirmed` is true only once the gateway's cursor, read for
+  this wallet's account since it opened, names the open key as `#key-1`. Until
+  then, and on any mismatch, the Receive sheet shows no `@username`, no
+  address, no QR and no address list — for the main Pocket, every other Pocket
+  (`confirmPocketReceive`) and organization wallets alike — and the one-tap
+  move of previous-key coins is blocked. A confirmation made since the wallet
+  opened survives a resync that could not ask; a contradiction never does.
+- **Each person's wallet is their account's (R5-2, blocking).** Every person's
+  identity wallet on a phone was one SQLite namespace, `oxy-identity`; stored
+  previous-key trees opened with no history check and local `social_receive_set`
+  keys vouched for themselves, so after A rotated and B signed in on the same
+  phone, B could see and move A's old-key coins. The person's wallet is now
+  `oxy-user-<accountId>` (organizations stay `oxy-org-<accountId>`), and every
+  per-wallet store follows the id: the SQLite files (each Pocket's), the
+  social-receive set, the previous-key trees, and the Pockets, active-Pocket and
+  notification preferences. A previous key now opens only when the account
+  vouches for it: Commons' list, every stored tree and every row the device
+  derived itself are checked against the account's key history; the only keys
+  that vouch on their own are those on rows the GATEWAY handed out to this
+  account (`origin = 'gateway'`, pulled while the session acts as the wallet's
+  account). A stored tree records the account that vouched for it
+  (`previous_key_trees.vouched_for`) and opens on load only for that account.
+- **The legacy namespace moves once, to its proven owner.** On the first open
+  for a personal account after the upgrade, `oxy-identity` is moved only if the
+  account proves it: the HD addresses the legacy database stores must include
+  one derived from a key Oxy names as the account's now (current or in its
+  history) and that this device holds. Then each Pocket's database is copied
+  whole (`VACUUM INTO`) to `oxy-user-<accountId>`, stripped of every
+  social-receive row and previous-key tree under a key the account never had,
+  its gateway pull restarted (the full set is read again for the session's
+  account) and every stored tree's voucher cleared; the per-wallet preferences
+  follow; a kv-store marker (`peable_identity_namespace_v1`, not a wallet key,
+  so the keychain move never adopts it) records the move; then the legacy files
+  are deleted. A legacy namespace with no wallet data is deleted. One the
+  account cannot prove stays closed for that account and is never opened as
+  anyone's (another account on the phone may still prove it). The proof needs
+  Oxy's answer: offline, the first open after the upgrade waits (`unverified`).
+  Coins of another account's HD tree left in the moved file are not spendable
+  (no key reaches them) and can show in the stranded line until spent elsewhere.
+- **The full re-read derives only what is new (R5-8).** A gateway row already
+  stored with the same address, index and key is not derived again
+  (`splitKnownRows`); only new or changed rows are verified.
+- **The move spends exactly what was confirmed (R4-13).** The confirmation
+  dialog captures the plan (inputs, amount, fee, rate); the tap re-plans and is
+  refused (`previous-key-move-changed`, "review and confirm again") when the
+  coins, amount or fee differ, and the built transaction must pay exactly the
+  confirmed fee before anything is signed.
+- **R5-10, documented, not changed.** An attacker can create up to 500 open
+  payment addresses per day for a recipient (ADR 0021 D9's open bound) and so
+  crowd a real recent address out of the Bloom filter's recent slots
+  (`SOCIAL_RECEIVE_ACTIVE_MAX`). Prioritising addresses with an open payment
+  would not help: the attacker's addresses are open payments too, so the sync
+  route gains no field. Nothing is lost — every gateway row is still read
+  through the Explorer on D9's schedule, never-read rows first, and a coin found
+  there rewinds the scan — the payment is seen later, not missed.
+- **R4-5, what remains.** Rotations before oxy migration 0235 are not in the
+  account's key history. Such a key is still opened, without the history, when
+  the GATEWAY recorded it on one of this account's addresses: the gateway
+  recorded each address under the `#key-1` it derived from, and that row
+  vouches. Once open, its index 0 and HD tree are watched and discovered like
+  any previous key's, so those coins are spendable too — provided this device
+  reaches the key (Commons kept it in its retired ring). What stays stranded:
+  a pre-0235 key that never received through the gateway (only at its index 0
+  or its HD tree) — no history and no row vouch for it — and any pre-0235 key
+  this device cannot reach, since Commons accepts a previous phrase only when
+  the key history names it. Spending those needs the old phrase in another
+  FairCoin wallet.
+
+What this does not change: the oxy side of R5-1 (a core API giving the
+wallet's own public key from its restricted keychain group) and R5-2 (an
+account-bound retired ring), and R5-3..R5-6 (keychain items, backup), are
+fixed in OxyHQ/oxy; Peable names every key it uses, so a planted key in the
+shared group is never one it derives from, signs with or shows.
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second

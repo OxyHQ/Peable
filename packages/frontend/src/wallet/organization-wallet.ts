@@ -84,7 +84,7 @@ export interface OrganizationWalletDeps {
   readonly hasIdentityKeystore: boolean;
   /** `oxy.accounts.identityKey.get` — throws on 403 for a non-owner/admin. */
   readonly readIdentityKey: (accountId: string) => Promise<{ publicKey: string | null }>;
-  /** `getOrganizationPublicKey` — the key THIS phone reaches, or `null`. */
+  /** `KeyManager.getIdentityPublicKeyForMoney({ accountId })` — the key THIS phone spends with, or `null`. */
   readonly readDevicePublicKey: (accountId: string) => Promise<string | null>;
 }
 

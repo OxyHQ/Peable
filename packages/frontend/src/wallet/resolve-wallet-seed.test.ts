@@ -3,7 +3,7 @@
  * `moveBetweenPockets` reconstructed a wallet's spending secret via
  * `getWalletMnemonic`/`getCachedWalletSeed` only, which works for BIP39
  * wallets but not Peable's PRIMARY wallet — the identity-derived wallet
- * (`OXY_IDENTITY_WALLET_ID`), whose seed is NEVER persisted (re-derived from
+ * (`oxy-user-<accountId>`), whose seed is NEVER persisted (re-derived from
  * the Oxy identity each boot, see identity-wallet.ts). Every Peable user is
  * on the identity wallet, so this broke Pockets switch/move for all of them.
  *
@@ -14,7 +14,10 @@
  */
 
 import { describe, test, expect, mock } from 'bun:test';
-import { OXY_IDENTITY_WALLET_ID, identityWalletIdOf } from './identity-wallet';
+import { identityWalletIdOf, personalSubject } from './identity-wallet';
+
+const PERSON_ID = '0123456789abcdef0123abcd';
+const PERSONAL_WALLET_ID = identityWalletIdOf(personalSubject(PERSON_ID));
 import {
   resolveWalletSeed,
   getOrDeriveBip39Seed,
@@ -41,17 +44,17 @@ function makeDeps(overrides: Partial<ResolveWalletSeedDeps> = {}): ResolveWallet
 describe('resolveWalletSeed — identity wallet', () => {
   test('resolves via deriveIdentitySeed, never touching secure-store', async () => {
     const deps = makeDeps();
-    const seed = await resolveWalletSeed(OXY_IDENTITY_WALLET_ID, deps);
+    const seed = await resolveWalletSeed(PERSONAL_WALLET_ID, deps);
     expect(seed).toEqual(IDENTITY_SEED);
     expect(deps.deriveIdentitySeed).toHaveBeenCalledTimes(1);
-    expect(deps.deriveIdentitySeed).toHaveBeenCalledWith({ kind: 'personal' });
+    expect(deps.deriveIdentitySeed).toHaveBeenCalledWith(personalSubject(PERSON_ID));
     expect(deps.getWalletMnemonic).not.toHaveBeenCalled();
     expect(deps.getCachedWalletSeed).not.toHaveBeenCalled();
   });
 
   test('throws a clear error when the identity is unavailable (web / keyless)', async () => {
     const deps = makeDeps({ deriveIdentitySeed: mock(async () => null) });
-    await expect(resolveWalletSeed(OXY_IDENTITY_WALLET_ID, deps)).rejects.toThrow(/identity/i);
+    await expect(resolveWalletSeed(PERSONAL_WALLET_ID, deps)).rejects.toThrow(/identity/i);
   });
 });
 
