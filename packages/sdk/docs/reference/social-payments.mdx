@@ -74,6 +74,8 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 
 `GET /v1/social/me/cursor`
 
+How far the caller's receive tree has been reserved, the key the last reservation used, and the caller's current `#key-1` read fresh from Oxy (ADR 0002). A 503 when Oxy cannot be asked for the current key.
+
 - **Authentication:** [Oxy user session](/reference#oxy-user-session)
 
 **Parameters**

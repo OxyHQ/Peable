@@ -95,6 +95,7 @@ const INTENT: PaymentIntent = paymentIntentFixture({
     confirmations: 0,
     required_confirmations: 1,
     quote: null,
+    recipient_key_replaced_at: null,
   },
   client_secret: 'secret_1',
   expires_at: 1784505600,
@@ -192,6 +193,7 @@ describe('submitTx', () => {
         confirmations: 0,
         required_confirmations: 1,
         quote: null,
+        recipient_key_replaced_at: null,
       },
     });
     const { fetch: fetchImpl, requests } = createMockFetch(() => ({

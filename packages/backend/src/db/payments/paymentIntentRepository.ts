@@ -131,6 +131,14 @@ export interface PaymentIntentRow {
   readonly faircoinQuote: FaircoinQuote | null;
   /** The Oxy account whose Peable wallet this FairCoin payment pays (ADR 0021 D5). */
   readonly faircoinRecipientAccountId: string | null;
+  /**
+   * The identity key output 0's address derived from (ADR 0002, amended
+   * 2026-11-06); `null` before keys were recorded. Optional so older fixtures
+   * still describe a row.
+   */
+  readonly faircoinIdentityPublicKey?: string | null;
+  /** When a replaced recipient key was found on this broadcast payment; `null` otherwise. */
+  readonly faircoinRecipientKeyReplacedAt?: Date | null;
   readonly lastPaymentError: PaymentIntentLastPaymentError | null;
   readonly cancellationReason: PaymentIntentCancellationReason | null;
   readonly canceledAt: Date | null;
@@ -221,12 +229,14 @@ const INTENT_COLUMNS = {
   shipping: paymentIntents.shipping,
   faircoinQuote: paymentIntents.faircoinQuote,
   faircoinRecipientAccountId: paymentIntents.faircoinRecipientAccountId,
+  faircoinIdentityPublicKey: paymentIntents.faircoinIdentityPublicKey,
+  faircoinRecipientKeyReplacedAt: paymentIntents.faircoinRecipientKeyReplacedAt,
   lastPaymentError: paymentIntents.lastPaymentError,
   cancellationReason: paymentIntents.cancellationReason,
   canceledAt: paymentIntents.canceledAt,
   amountReceived: paymentIntents.amountReceived,
   faircoinOutputs: sql<StoredFaircoinOutput[] | null>`${sql.raw(
-    `(select jsonb_agg(jsonb_build_object('position', o.position, 'address', o.address, 'amount', o.amount, 'connectedAccountId', o.connected_account_id, 'connectedAccountPublicId', ca.public_id, 'recipientAccountId', o.recipient_account_id) order by o.position) from payment_intent_outputs o left join connected_accounts ca on ca.id = o.connected_account_id where o.payment_intent_id = "payment_intents"."id")`,
+    `(select jsonb_agg(jsonb_build_object('position', o.position, 'address', o.address, 'amount', o.amount, 'connectedAccountId', o.connected_account_id, 'connectedAccountPublicId', ca.public_id, 'recipientAccountId', o.recipient_account_id, 'identityPublicKey', o.identity_public_key) order by o.position) from payment_intent_outputs o left join connected_accounts ca on ca.id = o.connected_account_id where o.payment_intent_id = "payment_intents"."id")`,
   )}`,
   amountRefunded: sql<string>`${sql.raw(
     `(select coalesce(sum(r.amount::numeric), 0)::text from refunds r where r.payment_intent_id = "payment_intents"."id" and r.status = 'succeeded')`,
@@ -270,6 +280,12 @@ export interface StoredFaircoinOutput {
   readonly connectedAccountPublicId: string | null;
   /** The Oxy account whose Peable wallet the address belongs to. */
   readonly recipientAccountId: string | null;
+  /**
+   * The identity key the address was derived from (ADR 0002, amended
+   * 2026-11-06); `null` on an output written before keys were recorded.
+   * Optional so older fixtures still describe an output.
+   */
+  readonly identityPublicKey?: string | null;
 }
 
 /**
@@ -289,6 +305,7 @@ export function faircoinOutputsOf(intent: PaymentIntentRow): readonly StoredFair
       connectedAccountId: intent.connectedAccountId ?? null,
       connectedAccountPublicId: intent.connectedAccountPublicId ?? null,
       recipientAccountId: intent.faircoinRecipientAccountId ?? null,
+      identityPublicKey: intent.faircoinIdentityPublicKey ?? null,
     },
   ];
 }
@@ -297,6 +314,8 @@ export interface InsertFaircoinOutputParams {
   readonly connectedAccountId: string | null;
   readonly recipientAccountId: string;
   readonly address: string;
+  /** The recipient's identity key the address was derived from, read fresh at the reservation. */
+  readonly identityPublicKey: string;
   readonly amount: string;
 }
 
@@ -323,6 +342,7 @@ export async function insertFaircoinOutputs(
       recipientAccountId: output.recipientAccountId,
       address: output.address,
       amount: output.amount,
+      identityPublicKey: output.identityPublicKey,
     })),
   );
 }
@@ -379,6 +399,8 @@ export interface InsertPaymentIntentParams {
   readonly shipping?: Shipping | null;
   readonly faircoinQuote?: FaircoinQuote | null;
   readonly faircoinRecipientAccountId?: string | null;
+  /** Output 0's identity key, the one its address was derived from. */
+  readonly faircoinIdentityPublicKey?: string | null;
   readonly clientSecret: string;
   readonly idempotencyKey: string;
   readonly metadata: Record<string, string>;
@@ -433,6 +455,7 @@ export async function insertPaymentIntent(
       shipping: params.shipping ?? null,
       faircoinQuote: params.faircoinQuote ?? null,
       faircoinRecipientAccountId: params.faircoinRecipientAccountId ?? null,
+      faircoinIdentityPublicKey: params.faircoinIdentityPublicKey ?? null,
       clientSecret: params.clientSecret,
       idempotencyKey: params.idempotencyKey,
       metadata: params.metadata,
@@ -839,6 +862,34 @@ export async function findWatchableIntents(
   return rows.map(toIntentRow);
 }
 
+/**
+ * The FairCoin payments whose recipient keys the key sweep checks (ADR 0002,
+ * amended 2026-11-06): identity payments (a recipient account recorded) still
+ * waiting for the payer, and broadcast ones not yet found under a replaced key.
+ * A keyset page after `afterId`, oldest first, so a pass walks every row and
+ * the next pass resumes where this one stopped.
+ */
+export async function findKeyBoundFaircoinIntents(
+  db: DatabaseOrTransaction,
+  afterId: string | null,
+  limit: number,
+): Promise<PaymentIntentRow[]> {
+  const rows = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.rail, 'faircoin'),
+        isNotNull(paymentIntents.faircoinRecipientAccountId),
+        sql`(${paymentIntents.status} = 'requires_action' or (${paymentIntents.status} = 'processing' and ${paymentIntents.faircoinRecipientKeyReplacedAt} is null))`,
+        afterId === null ? undefined : sql`${paymentIntents.id} > ${afterId}`,
+      ),
+    )
+    .orderBy(paymentIntents.id)
+    .limit(limit);
+  return rows.map(toIntentRow);
+}
+
 export interface IntentStateChange {
   /**
    * The status this transition was decided FROM, and the compare half of the
@@ -868,6 +919,13 @@ export interface IntentStateChange {
    * un-receives it.
    */
   readonly amountReceived?: string | undefined;
+  /**
+   * A broadcast FairCoin payment whose recipient key was replaced after the
+   * reservation (ADR 0002, amended 2026-11-06): stamps
+   * `faircoin_recipient_key_replaced_at` in the transition's own statement, once
+   * — a stamp already there is kept, and nothing ever clears it.
+   */
+  readonly recipientKeyReplaced?: true | undefined;
 }
 
 /**
@@ -931,6 +989,11 @@ export async function updateIntentState(
           : sql`${paymentIntents.amount}`,
     ...(change.txid !== undefined ? { txid: change.txid } : {}),
     ...(change.confirmations !== undefined ? { confirmations: change.confirmations } : {}),
+    ...(change.recipientKeyReplaced
+      ? {
+          faircoinRecipientKeyReplacedAt: sql`coalesce(${paymentIntents.faircoinRecipientKeyReplacedAt}, date_trunc('milliseconds', now()))`,
+        }
+      : {}),
   };
 
   const [row] = await db

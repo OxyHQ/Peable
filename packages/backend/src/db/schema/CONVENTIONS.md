@@ -591,6 +591,27 @@ body it answered. Decisions a reader would otherwise undo:
   expired row and the claim takes one over.
 
 
+## FairCoin keys (ADR 0002, amended 2026-11-06)
+
+- **Every reserved address records the key it was derived from**, as lowercase
+  hex of the DID's `#key-1` (`IDENTITY_PUBLIC_KEY_PATTERN`, compressed or
+  uncompressed secp256k1): `payment_intent_outputs.identity_public_key`,
+  `payment_intents.faircoin_identity_public_key` (output 0, beside `address` and
+  `faircoin_recipient_account_id`) and `social_send_attributions.identity_public_key`.
+- **Nullable, and no CHECK requires it.** Rows written before have none, and a
+  `NOT VALID` CHECK is still enforced on every UPDATE — a status transition of
+  one of those rows would be refused. The CHECKs only bound the spelling (and
+  the rail on `payment_intents`).
+- **`payment_intents.faircoin_recipient_key_replaced_at`** is written only by
+  `updateIntentState` (`recipientKeyReplaced`), as `coalesce(existing, now())`
+  in the transition's own statement: set once, never cleared — a reorg's
+  `succeeded → processing` keeps it.
+- `recipient_key_changed` widens `payment_intents_cancellation_reason_check`.
+- Migrations: `0099` (pre) the hot `payment_intents` DDL alone — two nullable
+  columns, no default, its CHECKs and the widened reasons re-added `NOT VALID` by
+  hand; `0100` (pre) the outputs' and attributions' columns, CHECKs `NOT VALID`;
+  `0101` (post) validates them.
+
 ## Payments core (ADR 0019)
 
 - **`payment_intents` statuses are Stripe's seven**; `CARD_ONLY_STATUSES`

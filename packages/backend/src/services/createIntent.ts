@@ -910,6 +910,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
         connectedAccountId: entry.account?.id ?? null,
         recipientAccountId: reservedOutput.recipientAccountId,
         address: reservedOutput.address,
+        identityPublicKey: reservedOutput.identityPublicKey,
         amount: entry.amount,
       });
     }
@@ -972,6 +973,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       shipping: input.shipping ?? null,
       faircoinQuote: input.faircoinQuote ?? null,
       faircoinRecipientAccountId: reserved?.recipientAccountId ?? null,
+      faircoinIdentityPublicKey: reserved?.identityPublicKey ?? null,
       clientSecret,
       idempotencyKey: key,
       metadata: metadata ?? {},

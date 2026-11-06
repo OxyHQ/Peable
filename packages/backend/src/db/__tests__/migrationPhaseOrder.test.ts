@@ -130,6 +130,12 @@ const SHIPPED_BEFORE: Record<string, string> = {
     'applied in production; ledger read 2026-11-06 held 0000–0094 before 0095 was authored',
   '0094_faircoin_identity_wallet_validate':
     'applied in production; ledger read 2026-11-06 held 0000–0094 before 0095 was authored',
+  // The multi-recipient outputs' validate half shipped with #252, whose deploy
+  // of 9e0e1853 (Deploy to AWS run 42158141167, 2026-11-06) ran its post
+  // phase successfully before the key-binding migrations `0099`–`0101` were
+  // authored.
+  '0098_faircoin_outputs_validate':
+    'released with #252; its post phase applied by the 9e0e1853 deploy (run 42158141167)',
 };
 
 interface Migration {

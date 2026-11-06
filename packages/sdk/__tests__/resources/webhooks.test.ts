@@ -74,6 +74,7 @@ const EVENT: WebhookEvent = {
         confirmations: 6,
         required_confirmations: 6,
         quote: null,
+        recipient_key_replaced_at: null,
       },
       expires_at: TIMESTAMP,
       created: TIMESTAMP,

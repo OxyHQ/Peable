@@ -58,6 +58,7 @@ import { renderInvoice } from '../../lib/serializeBilling';
 import { cancelCardPaymentAtProvider } from '../cardCancellation';
 import { confirmCardIntent } from '../confirmIntent';
 import { createIntent } from '../createIntent';
+import { retireIfRecipientKeyReplaced } from '../faircoin/keyBinding';
 import { FaircoinNetworkClosedError, FaircoinWalletMissingError } from '../faircoin/recipient';
 import { announceIntentChange, transitionIntent, transitionIntentIn } from '../intentTransition';
 import {
@@ -451,16 +452,27 @@ export async function payerIntentForInvoice(
   const db = getDb();
   const merchant = await findMerchantById(db, invoice.merchantId);
   if (!merchant) throw new Error('invoice merchant vanished');
-  const linked = invoice.paymentIntentId ? await findIntentById(db, invoice.paymentIntentId) : null;
+  let current = invoice;
+  let linked = invoice.paymentIntentId ? await findIntentById(db, invoice.paymentIntentId) : null;
+  // A FairCoin payment whose recipient key was replaced is never handed to a
+  // payer again (ADR 0002, amended 2026-11-06): it is retired, the invoice
+  // forgets it in that transaction, and the payer is answered a fresh one.
+  if (linked?.rail === 'faircoin' && linked.status === 'requires_action') {
+    const after = await retireIfRecipientKeyReplaced(linked);
+    if (after.status === 'canceled') {
+      current = (await findInvoiceById(db, invoice.id)) ?? invoice;
+      linked = null;
+    }
+  }
   if (
     linked &&
     REPLACEABLE.has(linked.status) &&
     linked.txid === null &&
     (linked.rail !== rail || !quoteHasTime(linked))
   ) {
-    return replaceInvoicePayment(merchant, invoice, linked, rail);
+    return replaceInvoicePayment(merchant, current, linked, rail);
   }
-  return intentFor(merchant, invoice, rail, null);
+  return intentFor(merchant, current, rail, null);
 }
 
 /** Statuses in which no money has started to move, so a payment can still be replaced. */

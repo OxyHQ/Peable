@@ -194,6 +194,11 @@ export const paymentIntentFaircoinSchema = defineComponent(
         .describe(
           'The fiat order this payment pays, as quoted (ADR 0021); `null` on a FAIR-priced payment.',
         ),
+      recipient_key_replaced_at: unixSeconds
+        .nullable()
+        .describe(
+          "When Peable found that a recipient's identity key had been replaced after this payment's address was reserved, while the payer had already broadcast (ADR 0002, amended 2026-11-06). The coins are at the address reserved under the PREVIOUS key: spendable only with that key, which the recipient may no longer hold. `null` when every recorded key is still the recipient's `#key-1`, and on a payment written before keys were recorded. A payment nobody had paid yet is never left open under a replaced key: it is canceled with `cancellation_reason: recipient_key_changed`.",
+        ),
     })
     .strict(),
 );

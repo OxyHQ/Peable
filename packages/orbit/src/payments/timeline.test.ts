@@ -31,6 +31,7 @@ describe('paymentTimeline', () => {
           confirmations: 1,
           required_confirmations: 2,
           quote: null,
+          recipient_key_replaced_at: null,
         },
       }),
     );
@@ -124,6 +125,7 @@ describe('paymentTimeline', () => {
           confirmations: 1,
           required_confirmations: 2,
           quote: null,
+          recipient_key_replaced_at: null,
         },
       }),
     );

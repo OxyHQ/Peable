@@ -105,6 +105,7 @@ export const CANCELLATION_REASON_VALUES = [
   'automatic',
   'duplicate',
   'fraudulent',
+  'recipient_key_changed',
   'requested_by_customer',
   'underpaid',
 ] as const satisfies readonly PaymentIntentCancellationReason[];
@@ -535,6 +536,14 @@ export const MAX_DERIVATION_INDEX = 2147483647;
  * the TypeScript source; `schema/__tests__/valueSets.test.ts` pins that.
  */
 export const BASE_UNIT_STRING_PATTERN = '^(0|[1-9][0-9]*)$';
+
+/**
+ * A secp256k1 public key as lowercase hex — compressed (33 bytes, `02`/`03`)
+ * or uncompressed (65 bytes, `04`) — the identity key a FairCoin address is
+ * derived from (ADR 0002). `bytesToHex` of the key the DID publishes, so one
+ * key has exactly one spelling and two recorded keys compare as strings.
+ */
+export const IDENTITY_PUBLIC_KEY_PATTERN = '^(0[23][0-9a-f]{64}|04[0-9a-f]{128})$';
 
 /**
  * The kinds of Peable entity that USE an Oxy file (ADR 0043 D4): the

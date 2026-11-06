@@ -151,6 +151,9 @@ const { findIntentForMerchant, findIntentById } = await import(
 const { transitionIntent } = await import('../../services/intentTransition');
 const { balanceTransactions, taxTransactions } = await import('../../db/schema');
 const { eq } = await import('drizzle-orm');
+const { useIdentityKeyResolver } = await import('../../services/socialReceive');
+const { forgetRecentIdentityKeys } = await import('../../services/faircoin/keyBinding');
+const { testIdentityPublicKey } = await import('../../__tests__/setup/identityKeys');
 type MerchantRow = import('../../db/merchants/merchantRepository').MerchantRow;
 type TaxProvider = import('../../services/tax/provider').TaxProvider;
 
@@ -950,6 +953,49 @@ describe('usage, entitlements, FairCoin, portal', () => {
       })
     ).map(({ event }) => (event.data.object as Json).entitlements.data.length);
     expect(summaries).toEqual([1, 0]);
+  });
+
+  test("an invoice's FairCoin payment under a replaced recipient key is retired and paid afresh (ADR 0002)", async () => {
+    const tc = await clock();
+    const payer = await customer(tc.id, { card: false });
+    const fair = await price('100000000', { currency: 'FAIR' });
+    const sub = await ok('POST', '/v1/subscriptions', {
+      customer: payer.id,
+      items: [{ price: fair.id }],
+      payment_behavior: 'default_incomplete',
+      expand: ['latest_invoice'],
+    });
+    const token = String(sub.latest_invoice.hosted_invoice_url).split('/invoice/')[1];
+    const first = await ok('POST', `/v1/invoices/public/${token}/pay`, {});
+    const before = must(
+      await findIntentForMerchant(gatewayDb(), first.payment_intent, merchant.id),
+    );
+    // The owner replaces the key (a rotation, or an organization's new key).
+    const previous = useIdentityKeyResolver(async (accountId) =>
+      testIdentityPublicKey(`${accountId}:rotated`),
+    );
+    forgetRecentIdentityKeys();
+    try {
+      const second = await ok('POST', `/v1/invoices/public/${token}/pay`, {});
+      expect(second.payment_intent).not.toBe(first.payment_intent);
+      expect(must(await findIntentById(gatewayDb(), before.id))).toMatchObject({
+        status: 'canceled',
+        cancellationReason: 'recipient_key_changed',
+      });
+      const after = must(
+        await findIntentForMerchant(gatewayDb(), second.payment_intent, merchant.id),
+      );
+      expect(after.status).toBe('requires_action');
+      expect(after.faircoinIdentityPublicKey).toBe(
+        Buffer.from(
+          testIdentityPublicKey(`${must(after.faircoinRecipientAccountId)}:rotated`),
+        ).toString('hex'),
+      );
+      expect((await ok('GET', `/v1/invoices/${sub.latest_invoice.id}`)).status).toBe('open');
+    } finally {
+      useIdentityKeyResolver(previous);
+      forgetRecentIdentityKeys();
+    }
   });
 
   test('FairCoin renews by explicit payer payment, never a debit', async () => {

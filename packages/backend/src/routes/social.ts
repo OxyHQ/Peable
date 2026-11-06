@@ -14,7 +14,12 @@ import {
   socialReceiveCursorQuery,
 } from '@peable.to/contracts';
 import { config } from '../config';
-import { reserveNextSocialAddress, getReservedThrough } from '../services/socialReceive';
+import {
+  getReservedThrough,
+  IdentityDocumentUnavailableError,
+  reserveNextSocialAddress,
+  resolveIdentityPublicKeyHex,
+} from '../services/socialReceive';
 import { getDb } from '../db/postgres';
 import { insertSendAttribution, listAttributionsForViewer } from '../db/social/sendAttribution';
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
@@ -171,6 +176,7 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         senderUserId,
         recipientUserId: recipient.id,
         derivationIndex: reservation.index,
+        identityPublicKey: reservation.identityPublicKey,
         // Recorded AFTER the reservation and an input to nothing before it. The
         // address comes from the recipient's identity key and their cursor, so
         // a request carrying a source and one carrying none reserve the same
@@ -205,9 +211,21 @@ export function createSocialRouter(deps: { requireOxyUser: RequestHandler }): Ro
         oxyUserId,
         parsed.data.network,
       );
+      // The caller's CURRENT `#key-1`, read fresh (ADR 0002, amended
+      // 2026-11-06): the device compares its key with THIS — the cursor's key
+      // says only what the last reservation used, and may be a replaced one.
+      let accountIdentityPublicKey: string | null;
+      try {
+        accountIdentityPublicKey = await resolveIdentityPublicKeyHex(oxyUserId);
+      } catch (err) {
+        if (!(err instanceof IdentityDocumentUnavailableError)) throw err;
+        sendError(res, 503, 'api_error', 'your identity key could not be read; try again');
+        return;
+      }
       const body: SocialReceiveCursorResponse = {
         reserved_through: reservedThrough,
         identity_public_key: identityPublicKey,
+        account_identity_public_key: accountIdentityPublicKey,
       };
       res.status(200).json(body);
     }),

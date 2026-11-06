@@ -31844,6 +31844,7 @@
           "Social payments"
         ],
         "summary": "Retrieve the caller's receive cursor",
+        "description": "How far the caller's receive tree has been reserved, the key the last reservation used, and the caller's current `#key-1` read fresh from Oxy (ADR 0002). A 503 when Oxy cannot be asked for the current key.",
         "security": [
           {
             "oxyUserSession": []
@@ -59050,6 +59051,7 @@
                   "automatic",
                   "duplicate",
                   "fraudulent",
+                  "recipient_key_changed",
                   "requested_by_customer",
                   "underpaid"
                 ]
@@ -59421,6 +59423,20 @@
               }
             ],
             "description": "The fiat order this payment pays, as quoted (ADR 0021); `null` on a FAIR-priced payment."
+          },
+          "recipient_key_replaced_at": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Unix seconds."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When Peable found that a recipient's identity key had been replaced after this payment's address was reserved, while the payer had already broadcast (ADR 0002, amended 2026-11-06). The coins are at the address reserved under the PREVIOUS key: spendable only with that key, which the recipient may no longer hold. `null` when every recorded key is still the recipient's `#key-1`, and on a payment written before keys were recorded. A payment nobody had paid yet is never left open under a replaced key: it is canceled with `cancellation_reason: recipient_key_changed`."
           }
         },
         "required": [
@@ -59430,7 +59446,8 @@
           "txid",
           "confirmations",
           "required_confirmations",
-          "quote"
+          "quote",
+          "recipient_key_replaced_at"
         ],
         "additionalProperties": false
       },
@@ -63311,7 +63328,14 @@
             "description": "The highest social-receive index ever reserved for the caller on this network; `0` when none was."
           },
           "identity_public_key": {
-            "description": "The identity public key (hex) those addresses derive from; `null` exactly when no address was ever reserved.",
+            "description": "The identity public key (hex) those addresses derive from — the key recorded at the LAST reservation; `null` exactly when no address was ever reserved.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "account_identity_public_key": {
+            "description": "The caller's CURRENT identity public key: their DID's `#key-1`, read from Oxy at request time (never cached), as lowercase hex of the key exactly as the DID publishes it (`publicKeyHex`, the compressed secp256k1 key) — the same encoding as `identity_public_key`. Compare the device's key with THIS, not with `identity_public_key`, which only says what the last reservation used. `null` for a keyless (custodial) account.",
             "type": [
               "string",
               "null"
@@ -63320,7 +63344,8 @@
         },
         "required": [
           "reserved_through",
-          "identity_public_key"
+          "identity_public_key",
+          "account_identity_public_key"
         ],
         "additionalProperties": false
       },

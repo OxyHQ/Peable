@@ -1,7 +1,6 @@
 import { test, expect, beforeEach, afterAll, mock } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
-import { oxy as realOxy } from '../../oxy';
-import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
+import { testIdentityPublicKey } from '../../__tests__/setup/identityKeys';
 import type { DidDocument } from '@oxy.so/contracts';
 import {
   resetGatewayTables,
@@ -37,24 +36,32 @@ const resolveDidMock = mock(async (userId: string) =>
   didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX),
 );
 
-// `mock.module` is process-wide in bun: only the methods this file needs are
-// replaced; the rest of `oxy` (its middleware included) stays real.
-mock.module('../../oxy', () => ({
-  oxy: overrideOxy(realOxy, { identity: { resolveDid: resolveDidMock } }),
-}));
+/** Every DID request the gateway made: its URL and its init. */
+const didRequests: { url: string; init: RequestInit }[] = [];
 
 const {
   resolveIdentityPublicKey,
+  resolveIdentityPublicKeyHex,
   reserveNextSocialAddress,
   getReservedThrough,
+  IdentityDocumentUnavailableError,
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
+  useDidTransport,
   useIdentityKeyResolver,
 } = await import('../socialReceive');
 
-// This suite is about the DID read itself: not the preloaded test keys.
+// This suite is about the DID read itself: not the preloaded test keys. The
+// transport is the seam (Oxy's own fetch in production); the gateway's request
+// and its parsing are real.
 const previousResolver = useIdentityKeyResolver(null);
+const previousTransport = useDidTransport(async (url, init) => {
+  didRequests.push({ url, init });
+  const userId = decodeURIComponent(must(must(/\/u\/([^/]+)\/did\.json$/.exec(url))[1]));
+  return Response.json(await resolveDidMock(userId));
+});
 afterAll(() => {
   useIdentityKeyResolver(previousResolver);
+  useDidTransport(previousTransport);
 });
 
 useGatewayDatabase();
@@ -62,6 +69,7 @@ useGatewayDatabase();
 beforeEach(async () => {
   await resetGatewayTables();
   resolveDidMock.mockClear();
+  didRequests.length = 0;
   resolveDidMock.mockImplementation(async (userId: string) =>
     didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX),
   );
@@ -134,8 +142,16 @@ test('reserveNextSocialAddress claims index 1, 2, 3 in order with distinct addre
   const second = await reserveNextSocialAddress('user_a', 'testnet');
   const third = await reserveNextSocialAddress('user_a', 'testnet');
 
-  expect(first).toEqual({ index: 1, address: 'TERWsvgi5BFcdDKgpM1PsHMqenLuGggZqQ' });
-  expect(second).toEqual({ index: 2, address: 'TVsFKn7zkDN1QnMNe1thrJUEXBGiqnu19g' });
+  expect(first).toEqual({
+    index: 1,
+    address: 'TERWsvgi5BFcdDKgpM1PsHMqenLuGggZqQ',
+    identityPublicKey: IDENTITY_PUB_A_UNCOMPRESSED_HEX,
+  });
+  expect(second).toEqual({
+    index: 2,
+    address: 'TVsFKn7zkDN1QnMNe1thrJUEXBGiqnu19g',
+    identityPublicKey: IDENTITY_PUB_A_UNCOMPRESSED_HEX,
+  });
   expect(third?.index).toBe(3);
 
   const addresses = new Set([first?.address, second?.address, third?.address]);
@@ -179,4 +195,48 @@ test('getReservedThrough is scoped per network', async () => {
   await reserveNextSocialAddress('user_c', 'testnet');
   expect((await getReservedThrough('user_c', 'testnet')).reservedThrough).toBe(1);
   expect((await getReservedThrough('user_c', 'mainnet')).reservedThrough).toBe(0);
+});
+
+// F6 (ADR 0002, amended 2026-11-06): the SDK's `resolveDid` caches the
+// document for a minute, so a reservation right after a rotation derived from
+// the replaced key and wrote it back onto the cursor. Every read is fresh now.
+test('every key read asks Oxy again — no cached document, no-store', async () => {
+  await resolveIdentityPublicKey('user_fresh');
+  await resolveIdentityPublicKey('user_fresh');
+
+  expect(didRequests).toHaveLength(2);
+  const request = must(didRequests[0]);
+  expect(request.url.endsWith('/u/user_fresh/did.json')).toBe(true);
+  expect(request.init.cache).toBe('no-store');
+  expect(new Headers(request.init.headers).get('cache-control')).toBe('no-cache');
+});
+
+test('a rotation between two reservations: the second derives from, and records, the new key', async () => {
+  const rotated = Buffer.from(testIdentityPublicKey('user_rotating:after')).toString('hex');
+  const before = must(await reserveNextSocialAddress('user_rotating', 'testnet'));
+  resolveDidMock.mockImplementation(async (userId: string) => didWithKey(userId, rotated));
+  const after = must(await reserveNextSocialAddress('user_rotating', 'testnet'));
+
+  expect(before.identityPublicKey).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+  expect(after.identityPublicKey).toBe(rotated);
+  expect(after.address).not.toBe(before.address);
+  expect((await getReservedThrough('user_rotating', 'testnet')).identityPublicKey).toBe(rotated);
+});
+
+test('the key is answered as lowercase hex, the spelling every recorded key uses', async () => {
+  resolveDidMock.mockImplementationOnce(async (userId: string) =>
+    didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX.toUpperCase()),
+  );
+  expect(await resolveIdentityPublicKeyHex('user_upper')).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+});
+
+test('Oxy not answering is an error, never "keyless"', async () => {
+  const previous = useDidTransport(async () => new Response('busy', { status: 503 }));
+  try {
+    await expect(resolveIdentityPublicKey('user_outage')).rejects.toBeInstanceOf(
+      IdentityDocumentUnavailableError,
+    );
+  } finally {
+    useDidTransport(previous);
+  }
 });
