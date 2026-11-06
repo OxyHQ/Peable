@@ -690,7 +690,11 @@ function SheetCheckout({
       <PeableCheckoutSheet
         open={open}
         locale={locale}
-        messages={sheetMessages}
+        messages={
+          preparation.amountLabel
+            ? { ...sheetMessages, dueToday: preparation.amountLabel }
+            : sheetMessages
+        }
         request={preparation.request}
         accountSummary={preparation.accountSummary}
         draft={{

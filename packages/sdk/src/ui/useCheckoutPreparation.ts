@@ -68,8 +68,10 @@ export function useCheckoutPreparation(
     } catch (failure) {
       if (!active.current || controller.signal.aborted) return;
       if (failure instanceof SheetPreparationError) {
-        frozen.current = null;
-        setLocked(false);
+        if (failure.outcome === 'not_created') {
+          frozen.current = null;
+          setLocked(false);
+        }
         setError(failure.message);
       } else {
         // Network and unexpected errors are ambiguous. Never reset the host's order key.

@@ -43,6 +43,8 @@ export interface SheetCheckoutPreparation {
   readonly key: string;
   /** A host quote for review, not an authorization to charge. Peable reads the final order. */
   readonly request: CheckoutRequest;
+  /** Label for a provisional quote, before destination-dependent pricing exists. */
+  readonly amountLabel?: string;
   readonly initialDetails?: Partial<
     Pick<SheetCheckoutDetails, 'email' | 'shipping' | 'selectedAddressId'>
   >;
@@ -62,10 +64,10 @@ export interface SheetCheckoutPreparation {
   ) => Promise<SheetPreparedCheckout>;
 }
 
-/** A host-confirmed refusal before order creation. Never use this for a network timeout. */
+/** A host-safe error message. Only not_created proves fields may be edited; unknown preserves the attempt. */
 export class SheetPreparationError extends Error {
-  readonly outcome = 'not_created';
-  constructor(message: string, outcome: 'not_created') {
+  readonly outcome: 'not_created' | 'unknown';
+  constructor(message: string, outcome: 'not_created' | 'unknown') {
     super(message);
     this.name = 'SheetPreparationError';
     this.outcome = outcome;

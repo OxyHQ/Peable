@@ -177,7 +177,8 @@ const retryPreparation: SheetCheckoutPreparation = {
   initialDetails: { email: 'old@example.test', selectedAddressId: 'address-1' },
   createSession: async (details) => {
     attempts.push(details);
-    if (attempts.length === 1) throw new Error('network lost');
+    if (attempts.length === 1)
+      throw new SheetPreparationError('The merchant needs attention', 'unknown');
     return retry.promise;
   },
 };
@@ -195,6 +196,7 @@ await act(async () => {
   getFields().onChange({ ...getFields().details, email: 'changed@example.test' });
 });
 assert.equal(getFields().details.email, 'old@example.test');
+assert.equal(getFields().error, 'The merchant needs attention');
 await act(async () => {
   getFields().onContinue();
 });
