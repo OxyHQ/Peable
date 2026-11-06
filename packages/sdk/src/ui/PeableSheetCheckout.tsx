@@ -109,6 +109,8 @@ interface SheetCheckoutCommonProps {
   outcome?: SheetOutcome;
   /** The order cannot be paid here: unreadable at first read, or not the one reviewed. */
   onUnavailable(reason: 'unreadable' | 'mismatch'): void;
+  /** Keep the same controller mounted across dismissal and reopening. Defaults to true. */
+  open?: boolean;
   onClose(): void;
 }
 
@@ -191,6 +193,7 @@ function SheetCheckout({
   outcome = null,
   onUnavailable,
   onClose,
+  open = true,
 }: PeableSheetCheckoutProps) {
   const t = useCallback(
     (key: string, values?: Record<string, string | number>) =>
@@ -674,7 +677,7 @@ function SheetCheckout({
     const preparing = preparationState.busy || !!preparationState.prepared;
     return (
       <PeableCheckoutSheet
-        open
+        open={open}
         locale={locale}
         messages={sheetMessages}
         request={preparation.request}
@@ -979,7 +982,7 @@ function SheetCheckout({
 
   return (
     <PeableCheckoutSheet
-      open
+      open={open}
       locale={locale}
       messages={sheetMessages}
       accountSummary={accountSummary ?? preparation?.accountSummary}

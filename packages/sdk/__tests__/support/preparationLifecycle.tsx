@@ -112,11 +112,12 @@ function getSheet() {
   assert.ok(sheet);
   return sheet;
 }
-async function render(preparation: SheetCheckoutPreparation) {
+async function render(preparation: SheetCheckoutPreparation, open = true) {
   await act(async () => {
     root.render(
       createElement(PeableSheetCheckout, {
         preparation,
+        open,
         onSettled: () => {},
         onUnavailable: (reason) => {
           throw new Error(reason);
@@ -170,7 +171,7 @@ await reset();
 // An ambiguous response freezes the same object across retries, including selected address metadata.
 const attempts: Readonly<SheetCheckoutDetails>[] = [];
 const retry = deferred<SheetPreparedCheckout>();
-await render({
+const retryPreparation: SheetCheckoutPreparation = {
   key: 'account-a:cart-b',
   request,
   initialDetails: { email: 'old@example.test', selectedAddressId: 'address-1' },
@@ -179,10 +180,16 @@ await render({
     if (attempts.length === 1) throw new Error('network lost');
     return retry.promise;
   },
-});
+};
+await render(retryPreparation);
 await act(async () => {
   getFields().onContinue();
 });
+assert.equal(getFields().disabled, true);
+await render(retryPreparation, false);
+assert.equal(getSheet().open, false);
+await render(retryPreparation, true);
+assert.equal(getSheet().open, true);
 assert.equal(getFields().disabled, true);
 await act(async () => {
   getFields().onChange({ ...getFields().details, email: 'changed@example.test' });
