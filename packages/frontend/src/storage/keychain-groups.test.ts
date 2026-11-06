@@ -6,9 +6,11 @@
  */
 import { describe, expect, test } from 'bun:test';
 import type { KeychainAccess } from '@oxy.so/core/crypto';
+import { readSharedWithoutInteraction } from '@oxy.so/core/session';
 import {
   createGroupedKeychainAdapter,
   type KeychainStore,
+  nonPromptingSharedRead,
   type SharedGroupPolicy,
 } from './keychain-groups';
 import {
@@ -520,5 +522,49 @@ describe('other platforms', () => {
     await kv.deleteItem('fairwallet_currency');
     expect(k.calls.map((c) => c.op)).toEqual(['set', 'get', 'delete']);
     expect(k.calls.every((c) => c.options === undefined)).toBe(true);
+  });
+});
+
+describe("the shared group is read through core's readSharedWithoutInteraction (R6-16)", () => {
+  test('with the native reader: one non-prompting read of the named group', async () => {
+    const seen: unknown[] = [];
+    const read = nonPromptingSharedRead(async (_store, key, options, shared) => {
+      seen.push({ key, options, shared });
+      return 'planted?';
+    });
+    expect(await read('fairwallet_pin', SHARED)).toBe('planted?');
+    expect(seen).toEqual([{ key: 'fairwallet_pin', options: {}, shared: { accessGroup: SHARED } }]);
+  });
+
+  test("without it, core's fallback store answers nothing: no expo-secure-store read", async () => {
+    // Core falls back to the store it is given on a native module that predates
+    // the reader; the store it is given here never reads the keychain.
+    const read = nonPromptingSharedRead((store, key, options, shared) =>
+      store.getItemAsync(key, { ...options, ...shared }),
+    );
+    expect(await read('fairwallet_pin', SHARED)).toBeNull();
+  });
+
+  test('the real core function, with no native module, reads nothing', async () => {
+    const read = nonPromptingSharedRead(readSharedWithoutInteraction);
+    expect(await read('fairwallet_pin', SHARED)).toBeNull();
+  });
+
+  test('a thrown read (a locked keychain) propagates; it is never "absent"', async () => {
+    const read = nonPromptingSharedRead(async () => {
+      throw new Error('errSecInteractionNotAllowed');
+    });
+    await expect(read('fairwallet_pin', SHARED)).rejects.toThrow('errSecInteractionNotAllowed');
+  });
+
+  test('the fallback store refuses writes and deletes', async () => {
+    const given: KeychainStore[] = [];
+    await nonPromptingSharedRead(async (store) => {
+      given.push(store);
+      return null;
+    })('k', SHARED);
+    expect(given).toHaveLength(1);
+    await expect(given[0].setItemAsync('k', 'v')).rejects.toThrow();
+    await expect(given[0].deleteItemAsync('k')).rejects.toThrow();
   });
 });
