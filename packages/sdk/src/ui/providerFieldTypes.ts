@@ -9,6 +9,18 @@ export interface PeableProviderFieldsProps {
   billingDetails?: { readonly country: string; readonly postcode: string; readonly email?: string };
   locale?: string;
   disabled?: boolean;
+  /**
+   * Payment authority obtained only when the payer continues, for an order
+   * whose payment does not exist yet (a Checkout Session): the host records
+   * the entered billing location, creates or resumes the card payment and
+   * returns its client action. Its key must match the mounted fields'; a
+   * thrown error's message is shown as the field error. Ignored while
+   * `action` is supplied.
+   */
+  authorize?(billing: {
+    readonly country: string;
+    readonly postcode: string;
+  }): Promise<PeableClientAction>;
   /** Only require a postal code when the host has an explicit billing requirement. */
   requirePostalCode?: boolean;
   returnUrl: string;

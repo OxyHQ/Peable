@@ -10,15 +10,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { PaymentIntent } from '@peable.to/shared-types';
 import { getNetwork, validateAddress } from '@fairco.in/core';
+import { createEmitter, deriveIntentId } from '../../src/browser/mount';
 import {
   buildPayDeepLink,
   payDeepLinkFor,
   PeableRailUnsupportedError,
-  createEmitter,
-  deriveIntentId,
   isMobileUserAgent,
   type PayDeepLinkParams,
-} from '../../src/browser/mount';
+} from '../../src/browser/payDeepLink';
 import { PeableInvalidRequestError, PeableAPIError, PeableError } from '../../src/core/errors';
 // The wallet's REAL deep-link parser — imported directly (not re-implemented)
 // so the round-trip test below proves byte-for-byte compatibility instead of

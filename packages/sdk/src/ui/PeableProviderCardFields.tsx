@@ -8,6 +8,7 @@ import { loadProviderSdk, type ProviderElement } from '../browser/providerJs';
 import { prepareCardAuthorization, type ProviderCardPreparation } from './preparedCard';
 import type { PeableProviderFieldsProps } from './providerFieldTypes';
 import { matchingCardAction } from './cardReadiness';
+import { billingCountries } from './countries';
 
 type SecureField = 'number' | 'expiry' | 'securityCode';
 const fields: readonly SecureField[] = ['number', 'expiry', 'securityCode'];
@@ -16,11 +17,6 @@ const providerTypes = {
   expiry: 'cardExpiry',
   securityCode: 'cardCvc',
 } as const;
-// Billing-address choices, not a payment-method eligibility policy.
-const countryCodes =
-  'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(
-    ' ',
-  );
 
 /** The same Bloom CardForm layout, with only its three sensitive inputs hosted by the processor. */
 export function PeableProviderCardFields({
@@ -31,6 +27,7 @@ export function PeableProviderCardFields({
   disabled = false,
   requirePostalCode = false,
   returnUrl,
+  authorize,
   onReady,
   onError,
   loadingLabel = checkoutMessage(locale, 'provider.loading'),
@@ -40,6 +37,9 @@ export function PeableProviderCardFields({
   const publishableKey = cardConfiguration?.publishableKey ?? action?.publishable_key;
   const actionRef = useRef(action);
   actionRef.current = action;
+  const authorizeRef = useRef(authorize);
+  authorizeRef.current = authorize;
+  const lazy = !action && !!authorize;
   const [localBilling, setBilling] = useState<{
     country: string;
     postcode: string;
@@ -58,12 +58,7 @@ export function PeableProviderCardFields({
   const confirm = useRef<(() => Promise<ProviderCardPreparation>) | null>(null);
   const callbacks = useRef({ onReady, onError });
   callbacks.current = { onReady, onError };
-  const countries = useMemo(() => {
-    const names = new Intl.DisplayNames([locale], { type: 'region' });
-    return countryCodes
-      .map((value) => ({ value, label: names.of(value) ?? value }))
-      .sort((a, b) => a.label.localeCompare(b.label, locale));
-  }, [locale]);
+  const countries = useMemo(() => billingCountries(locale), [locale]);
   const fieldStyle = useMemo(
     () => ({
       base: {
@@ -86,7 +81,8 @@ export function PeableProviderCardFields({
   const publish = () =>
     callbacks.current.onReady(
       !disabled &&
-        matchingCardAction(actionRef.current, publishableKey) &&
+        (matchingCardAction(actionRef.current, publishableKey) ||
+          (!actionRef.current && authorizeRef.current)) &&
         fields.every((field) => complete.current[field]) &&
         billingRef.current.country &&
         (!requirePostalCode || billingRef.current.postcode.trim())
@@ -98,7 +94,7 @@ export function PeableProviderCardFields({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Billing completeness updates the published callback without remounting secure fields.
   useEffect(() => {
     publishRef.current();
-  }, [billing, requirePostalCode, disabled, action, publishableKey]);
+  }, [billing, requirePostalCode, disabled, action, publishableKey, lazy]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit retry recreates provider-owned fields for this same intent.
   useEffect(() => {
     let active = true;
@@ -181,13 +177,36 @@ export function PeableProviderCardFields({
             return provider.confirmCardPayment(secret, data);
           },
         };
+        // The authority a lazy `authorize` returned, for this mount only.
+        let obtained: ReturnType<typeof matchingCardAction>;
+        const currentAuthority = () =>
+          matchingCardAction(actionRef.current, publishableKey) ?? obtained;
         confirm.current = async () => {
           const card = elements.current.number;
-          const authority = matchingCardAction(actionRef.current, publishableKey);
-          if (!active || busy || !card || !authority || disabledRef.current)
+          if (!active || busy || !card || disabledRef.current)
             return { prepared: false, error: checkoutMessage(locale, 'provider.busy') };
           busy = true;
           try {
+            let authority = matchingCardAction(actionRef.current, publishableKey);
+            if (!authority && !actionRef.current && authorizeRef.current) {
+              try {
+                obtained = matchingCardAction(
+                  await authorizeRef.current(billingRef.current),
+                  publishableKey,
+                );
+              } catch (error) {
+                return {
+                  prepared: false,
+                  error:
+                    error instanceof Error && error.message
+                      ? error.message
+                      : checkoutMessage(locale, 'provider.failed'),
+                };
+              }
+              authority = obtained;
+            }
+            if (!active || !authority)
+              return { prepared: false, error: checkoutMessage(locale, 'provider.failed') };
             const result = await prepareCardAuthorization({
               provider: tokenProvider,
               card,
@@ -201,7 +220,7 @@ export function PeableProviderCardFields({
                 failed: checkoutMessage(locale, 'provider.failed'),
               },
             });
-            if (!active || actionRef.current?.value !== authority.value) {
+            if (!active || currentAuthority()?.value !== authority.value) {
               if (result.prepared) result.authorization.dispose();
               return { prepared: false, error: checkoutMessage(locale, 'provider.closed') };
             }
@@ -213,8 +232,7 @@ export function PeableProviderCardFields({
                 card: authorization.card,
                 dispose: () => authorization.dispose(),
                 confirm: () => {
-                  const current = matchingCardAction(actionRef.current, publishableKey);
-                  if (current?.value !== authority.value) {
+                  if (currentAuthority()?.value !== authority.value) {
                     authorization.dispose();
                     return Promise.resolve({
                       accepted: false,

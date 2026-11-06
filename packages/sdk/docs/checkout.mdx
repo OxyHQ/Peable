@@ -135,6 +135,55 @@ server log. `complete` is posted only after the gateway says so — re-read the
 session on your server before fulfilling anyway. `appearance` is described in
 [Elements](/elements#appearance).
 
+## Pay with Peable in your app
+
+An Oxy app (React Native or React Native Web, with Bloom) opens the **Peable
+sheet** instead of leaving for a page: `PeableSheetCheckout` from
+`@peable.to/sdk/checkout/ui`, a Bloom detached bottom sheet that pays a real
+order end to end. Create the session on your server with
+`ui_mode: 'embedded'` and hand its `client_secret` to the app:
+
+```tsx
+import { PeableSheetCheckout, sessionSource } from '@peable.to/sdk/checkout/ui';
+
+const source = sessionSource(clientSecret); // cs_…_secret_…, null if it is not one
+
+<PeableSheetCheckout
+  source={source}
+  locale={language}
+  expected={{ amount: '999', currency: 'EUR' }} // what the payer reviewed
+  presentation={{ recurring: { interval: 'month' } }}
+  onSettled={() => refetchFromYourServer()} // the gateway closed the order
+  outcome={yourServerSays} // 'succeeded' | 'failed' | null
+  onUnavailable={(reason) => offerTheHostedPage(reason)}
+  onClose={close}
+/>;
+```
+
+The sheet asks only for what the order needs: an email when the session has
+none, a **shipping address only when the session collects one**
+(`shipping_address_collection`) and a billing country when Peable Tax or
+`billing_address_collection: 'required'` needs it — a plan, a download or a
+service is never asked where to deliver. It lists the card (Peable's secure
+fields where they can mount; Peable's secure page from a native app) and
+**FairCoin, always**: chosen, it quotes the order and shows the request the
+Peable wallet opens — a button on a phone, a QR code elsewhere; unavailable,
+it is listed disabled with the reason in words. A session that collects
+something the sheet does not (a phone number, a tax id, a required custom
+field, terms consent) offers Peable's secure page instead.
+
+Every state is the gateway's, re-read every few seconds. `onSettled` fires once
+when the gateway closes the order (`complete` or `expired`); the sheet then
+waits on `outcome`, which your app reads from **its own server** — the sheet
+shows success only when you say so, and never because it was closed or a
+browser came back. `expected` refuses an order that is not the one the payer
+reviewed (`onUnavailable('mismatch')`).
+
+A single PaymentIntent — one payment on one rail — is paid the same way with
+`source={intentSource(id, clientSecret)}` and an `order` naming its payee and
+lines. Use a session when FairCoin must be offered beside the card: a card
+PaymentIntent stays on the card rail.
+
 ## Branding
 
 `GET` / `POST /v1/merchants/me/branding` (`peable.merchants.branding`, or

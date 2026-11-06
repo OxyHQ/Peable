@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.2.0 — Pay with Peable: one payment sheet for every Oxy app
+
+Requires `@peable.to/contracts` 4.1.0 and `@peable.to/shared-types` 4.1.0. Additive.
+
+Added (`@peable.to/sdk/checkout/ui`):
+
+- **`PeableSheetCheckout`** — the Bloom detached bottom sheet driving a real
+  order end to end, over a Checkout Session or a single PaymentIntent. It asks
+  for a shipping address only when the session collects one, an email only when
+  it has none and a billing country only when tax needs one; pays the card in
+  Peable's secure fields (or Peable's secure page where they cannot mount);
+  always lists FairCoin (ADR 0021) — quoted, paid through the Peable wallet's
+  request, or disabled with its reason. `onSettled` reports the gateway closing
+  the order; success is shown only on the host's `outcome`.
+- `sessionSource`, `intentSource`, `sheetSourceFromUrl`, `hostedUrlFor`,
+  `sessionCollection`, `sessionFaircoin`, `faircoinTransferState`,
+  `matchesExpectation`, `baseUnits` and `formatFairAmount`.
+- `PeableProviderFields` takes `authorize(billing)`: payment authority obtained
+  when the payer continues, for an order whose payment does not exist yet.
+- FAIR amounts format exactly from base units in the sheet (`formatCheckoutAmount(…, 'FAIR')`).
+
+Changed: the `peable://pay` helpers live in their own module (still exported
+from `@peable.to/sdk/checkout`), and `DEFAULT_CHECKOUT_URL` with the embed
+protocol; nothing an integrator imports moved.
 ## 4.1.0 — a FairCoin-only fiat order
 
 Requires `@peable.to/contracts` 4.1.0 and `@peable.to/shared-types` 4.1.0.

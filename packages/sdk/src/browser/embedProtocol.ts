@@ -23,6 +23,9 @@
 // a server or CDN log.
 
 /** Every message carries this, so stray `postMessage` traffic is ignored. */
+/** Peable's hosted checkout — the origin of `/c/:id`, `/i/:id` and the embedded frame. */
+export const DEFAULT_CHECKOUT_URL = 'https://checkout.peable.to';
+
 export const EMBED_MESSAGE_SOURCE = 'peable-checkout';
 export const EMBED_PROTOCOL_VERSION = 1;
 

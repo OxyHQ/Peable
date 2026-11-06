@@ -164,6 +164,38 @@ const messages = {
     orderTotal: 'Order total',
     'installments.fees': 'Fees',
     'installments.choose': 'Choose this plan',
+    // PeableSheetCheckout
+    'method.faircoin': 'FairCoin',
+    'faircoin.available': 'Pay from your Peable wallet',
+    'faircoin.unavailable.faircoin_wallet_missing': "{{merchant}}'s Peable wallet isn't set up yet",
+    'faircoin.unavailable.faircoin_network_closed':
+      "FairCoin payments aren't open on this network yet",
+    'faircoin.unavailable.price_unavailable': 'No current FairCoin price. Try again in a minute',
+    'faircoin.unavailable.temporarily_unavailable':
+      "FairCoin can't be checked right now. Try again in a minute",
+    'faircoin.unavailable.not_offered': 'Not offered on this payment',
+    'faircoin.title': 'Pay with FairCoin',
+    'faircoin.quote': '{{amount}} at {{rate}} {{currency}} per FAIR.',
+    'faircoin.holdsUntil': 'This price holds until {{time}}.',
+    'faircoin.peableHint': 'Open Peable to pay, or scan this code with Peable on your phone.',
+    'faircoin.peableOnly': 'Paid from the Peable app',
+    'faircoin.newPrice': 'Get a new price',
+    'faircoin.confirming': 'Your FairCoin payment is already confirming and cannot be replaced.',
+    'faircoin.noPeable': "Peable couldn't be opened here. Scan the code with Peable on your phone.",
+    'faircoin.otherMethod': 'Choose another method',
+    'billing.title': 'Billing country',
+    'billing.hint': 'Tax is worked out from the country you pay from.',
+    'card.hosted.title': 'Pay by card',
+    'card.hosted.description':
+      "Peable's secure page opens to take your card. Come back here once you've paid.",
+    'card.hosted.action': 'Open secure page',
+    'hosted.label': 'Continue on Peable',
+    'hosted.detail': "This order needs details that only Peable's secure page collects",
+    'hosted.description': "Peable's secure page opens to finish this order, by card or FairCoin.",
+    'error.connection': "Peable couldn't be reached. Check your connection and try again.",
+    'error.unavailable': "Peable couldn't take this payment right now. Try again in a minute.",
+    'error.declined': 'The card was declined. Try another card.',
+    'error.retry': 'Try again',
     title: '',
   },
   es: {
@@ -331,6 +363,43 @@ const messages = {
     orderTotal: 'Total del pedido',
     'installments.fees': 'Comisiones',
     'installments.choose': 'Elegir este plan',
+    // PeableSheetCheckout
+    'method.faircoin': 'FairCoin',
+    'faircoin.available': 'Paga desde tu monedero Peable',
+    'faircoin.unavailable.faircoin_wallet_missing':
+      'El monedero Peable de {{merchant}} aún no está configurado',
+    'faircoin.unavailable.faircoin_network_closed':
+      'Los pagos con FairCoin aún no están abiertos en esta red',
+    'faircoin.unavailable.price_unavailable':
+      'No hay un precio actual de FairCoin. Vuelve a intentarlo en un minuto',
+    'faircoin.unavailable.temporarily_unavailable':
+      'Ahora no se puede comprobar FairCoin. Vuelve a intentarlo en un minuto',
+    'faircoin.unavailable.not_offered': 'No disponible en este pago',
+    'faircoin.title': 'Pagar con FairCoin',
+    'faircoin.quote': '{{amount}} a {{rate}} {{currency}} por FAIR.',
+    'faircoin.holdsUntil': 'Este precio se mantiene hasta las {{time}}.',
+    'faircoin.peableHint': 'Abre Peable para pagar, o escanea este código con Peable en tu móvil.',
+    'faircoin.peableOnly': 'Se paga desde la app Peable',
+    'faircoin.newPrice': 'Obtener un precio nuevo',
+    'faircoin.confirming': 'Tu pago con FairCoin ya se está confirmando y no se puede sustituir.',
+    'faircoin.noPeable': 'No se pudo abrir Peable aquí. Escanea el código con Peable en tu móvil.',
+    'faircoin.otherMethod': 'Elegir otro método',
+    'billing.title': 'País de facturación',
+    'billing.hint': 'Los impuestos se calculan según el país desde el que pagas.',
+    'card.hosted.title': 'Pagar con tarjeta',
+    'card.hosted.description':
+      'La página segura de Peable se abre para recoger tu tarjeta. Vuelve aquí cuando hayas pagado.',
+    'card.hosted.action': 'Abrir página segura',
+    'hosted.label': 'Continuar en Peable',
+    'hosted.detail': 'Este pedido necesita datos que solo recoge la página segura de Peable',
+    'hosted.description':
+      'La página segura de Peable se abre para completar este pedido, con tarjeta o FairCoin.',
+    'error.connection':
+      'No se pudo conectar con Peable. Comprueba tu conexión y vuelve a intentarlo.',
+    'error.unavailable':
+      'Peable no puede aceptar este pago ahora. Vuelve a intentarlo en un minuto.',
+    'error.declined': 'La tarjeta fue rechazada. Prueba con otra tarjeta.',
+    'error.retry': 'Reintentar',
     title: '',
   },
 } as const;
