@@ -3037,7 +3037,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const epoch = lockEpoch;
     // The wallet is the session account's, and every read below answers for
     // the session's account: they must be the same account (R5-2).
-    if (oxyServices.session.userId !== subject.accountId) return 'superseded';
+    // A mismatch is not a superseded boot (that would leave the entry screen
+    // waiting): it is a check that could not be made now, retried from there.
+    if (oxyServices.session.userId !== subject.accountId) return 'unverified';
     const accountKeys = await readAccountKeys(subject);
     if (subject.kind === 'organization') {
       const published = accountKeys ? accountKeys.current : publishedPublicKey;
