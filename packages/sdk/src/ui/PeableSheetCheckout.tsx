@@ -723,6 +723,11 @@ function SheetCheckout({
 
   if (preparation && !order) {
     const preparing = preparationState.busy || !!preparationState.prepared;
+    const hasDetails = !!(
+      preparation.request.requiresShipping ||
+      preparation.request.requiresContact !== false ||
+      preparation.renderAdditionalDetails
+    );
     return (
       <PeableCheckoutSheet
         open={open}
@@ -751,7 +756,8 @@ function SheetCheckout({
         nextStep="method"
         methodTitle={t('preparation.title')}
         interactionBlocked={preparing}
-        continueDisabled={preparing}
+        continueDisabled={preparing || (!hasDetails && !preparationState.canContinue)}
+        notice={!hasDetails ? (preparationState.error ?? undefined) : undefined}
         brandState={preparing ? 'loading' : undefined}
         methodContent={
           <CheckoutPreparationFields
@@ -770,7 +776,10 @@ function SheetCheckout({
           />
         }
         onDraft={() => {}}
-        onStep={() => go('method')}
+        onStep={() => {
+          if (hasDetails) go('method');
+          else void preparationState.submit();
+        }}
         onBack={() => {
           if (!preparing) go('review', 'backward');
         }}

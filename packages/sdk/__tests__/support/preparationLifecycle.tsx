@@ -93,7 +93,7 @@ mock.module('../../src/browser/payerClient', () => ({
 }));
 const { PeableSheetCheckout, SHEET_POLL_MS } = await import('../../src/ui/PeableSheetCheckout');
 const nativeSetInterval = globalThis.setInterval;
-let poll = () => {
+let poll: () => void = () => {
   throw new Error('poll not installed');
 };
 globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
@@ -394,6 +394,84 @@ for (const scenario of ['unmount', 'account-switch']) {
   readBlock = undefined;
   await reset();
 }
+// Empty subscription prerequisites stay on review: Continue creates only the order.
+const emptyAttempt = deferred<SheetPreparedCheckout>();
+const emptyDetails: Readonly<SheetCheckoutDetails>[] = [];
+payerSession = { ...payerSession, contact_collection: 'merchant_account' };
+await render({
+  key: 'account:empty',
+  request,
+  createSession: async (details) => {
+    emptyDetails.push(details);
+    if (emptyDetails.length === 1) return emptyAttempt.promise;
+    return result;
+  },
+});
+assert.equal(emptyDetails.length, 0);
+await act(async () => {
+  getSheet().onStep('method');
+});
+assert.equal(emptyDetails.length, 1);
+assert.equal(getSheet().step, 'review');
+assert.equal(getSheet().brandState, 'loading');
+assert.equal(getSheet().continueDisabled, true);
+await act(async () => {
+  emptyAttempt.reject(new SheetPreparationError('Retry this order', 'unknown'));
+});
+assert.equal(getSheet().step, 'review');
+assert.equal(getSheet().notice, 'Retry this order');
+assert.equal(getSheet().continueDisabled, false);
+await act(async () => {
+  getSheet().onStep('method');
+});
+assert.equal(emptyDetails.length, 2);
+assert.equal(emptyDetails[0], emptyDetails[1]);
+assert.equal(getSheet().step, 'review');
+await reset();
+
+// Real prerequisites still get their details screen, including merchant-specific consent.
+for (const required of ['contact', 'shipping', 'additional']) {
+  let created = 0;
+  await render({
+    key: `account:required:${required}`,
+    request: {
+      ...request,
+      requiresContact: required === 'contact',
+      requiresShipping: required === 'shipping',
+    },
+    ...(required === 'additional'
+      ? { renderAdditionalDetails: () => createElement('span', null, 'Consent') }
+      : {}),
+    createSession: async () => {
+      created++;
+      return result;
+    },
+  });
+  await act(async () => {
+    getSheet().onStep('method');
+  });
+  assert.equal(getSheet().step, 'method');
+  assert.equal(created, 0);
+  await reset();
+}
+let blockedCreates = 0;
+await render({
+  key: 'account:blocked',
+  request,
+  canContinue: false,
+  createSession: async () => {
+    blockedCreates++;
+    return result;
+  },
+});
+assert.equal(getSheet().continueDisabled, true);
+await act(async () => {
+  getSheet().onStep('method');
+});
+assert.equal(blockedCreates, 0);
+await reset();
+payerSession = { ...payerSession, contact_collection: 'email' };
+
 // Overlapping polls share only the in-flight contact write; later reads retain fresh totals.
 const baselineUpdates = updates.length;
 const slowUpdate = deferred<void>();
