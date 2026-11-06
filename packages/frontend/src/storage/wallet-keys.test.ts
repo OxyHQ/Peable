@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { OXY_IDENTITY_WALLET_ID } from '../wallet/identity-wallet';
+import { LEGACY_IDENTITY_WALLET_ID } from '../wallet/identity-wallet';
 import {
   IDENTITY_WALLET_ID,
   isWalletKey,
@@ -48,7 +48,7 @@ describe('the wallet key catalog', () => {
   });
 
   test('its identity wallet id is the wallet store’s', () => {
-    expect(IDENTITY_WALLET_ID).toBe(OXY_IDENTITY_WALLET_ID);
+    expect(IDENTITY_WALLET_ID).toBe(LEGACY_IDENTITY_WALLET_ID);
     expect(keychainMoveKeys([])).toContain('fairwallet_pockets_oxy-identity');
   });
 

@@ -62,9 +62,11 @@ export const PREFERENCE_PREFIXES = [
 ] as const;
 
 /**
- * The person's identity wallet id (`wallet/identity-wallet.ts`'s
- * `OXY_IDENTITY_WALLET_ID`, asserted equal by the test): never in the wallet
- * index, yet it has Pockets and a notification subscription.
+ * The person's identity wallet id before round 5 (`wallet/identity-wallet.ts`'s
+ * `LEGACY_IDENTITY_WALLET_ID`, asserted equal by the test): never in the wallet
+ * index, yet it had Pockets and a notification subscription, which the
+ * one-shot keychain move carries out of the shared group before the namespace
+ * move (R5-2) carries them to the account's own `oxy-user-<id>`.
  */
 export const IDENTITY_WALLET_ID = 'oxy-identity';
 
@@ -76,6 +78,15 @@ export const IDENTITY_WALLET_ID = 'oxy-identity';
  * it, or the next launch would adopt from the shared group again.
  */
 export const KEYCHAIN_MOVE_MARKER = 'peable_keychain_split_v1';
+
+/**
+ * Where the one-time move of the pre-round-5 shared identity wallet
+ * (`oxy-identity`) to its proven account stands (R5-2,
+ * `wallet/identity-namespace.ts`). Not a wallet key: the keychain move never
+ * adopts it from the shared group (another app could write it there), and
+ * `clearAll` leaves it.
+ */
+export const LEGACY_IDENTITY_NAMESPACE_MARKER = 'peable_identity_namespace_v1';
 
 /** The characters `expo-secure-store` accepts in a key; anything else it never wrote. */
 const KEY_SAFE_ID = /^[A-Za-z0-9._-]+$/;

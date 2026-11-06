@@ -80,7 +80,7 @@ import {
 import type { WalletInfo } from '../storage/secure-store';
 import { Database, type PreviousKeyTreeRow, type SocialReceiveSetRow } from '../storage/database';
 import {
-  PERSONAL_SUBJECT,
+  LEGACY_IDENTITY_WALLET_ID,
   SEED_SECRET_PREFIX,
   buildSeedSecret,
   deriveIdentitySeed,
@@ -88,13 +88,24 @@ import {
   listPreviousKeyHints,
   identitySubjectOfWalletId,
   identityWalletIdOf,
+  personalSubject,
   type IdentitySubject,
 } from './identity-wallet';
+import { decideIdentityKey, type AccountKeys } from './identity-key';
+import {
+  keepsLegacyKey,
+  legacyNamespaceStep,
+  parseLegacyNamespaceMarker,
+  proveLegacyOwnership,
+  type CandidateTree,
+} from './identity-namespace';
+import { getItemAsync, setItemAsync, deleteItemAsync } from '../storage/kv-store';
+import { LEGACY_IDENTITY_NAMESPACE_MARKER, PREFERENCE_PREFIXES } from '../storage/wallet-keys';
 import { hasIdentityKeystore } from './keystore';
 import {
   accountKeyFromDidDocument,
   compressedPublicKeyHex,
-  getIdentityPublicKeyHex,
+  readDeviceKeyHint,
   deriveSocialReceiveWatchWindow,
   judgeSocialReceiveKey,
   signSocialReceiveInput,
@@ -108,6 +119,7 @@ import {
 import {
   planActiveSet,
   planSocialReceiveChecks,
+  splitKnownRows,
   verifyGatewayRows,
   watchableRows,
   type WatchSetCheck,
@@ -127,11 +139,13 @@ import {
   canonicalKeySet,
   planPreviousKeyMove,
   previousKeyCandidates,
+  samePreviousKeyMovePlan,
   previousKeyDefaultRow,
   probePreviousKeys,
   signWalletInput,
   type InputSigner,
   type PreviousKeyMovePlan,
+  type PreviousKeyMoveReady,
 } from './previous-keys';
 import {
   getSocialReceiveCursor,
@@ -169,7 +183,13 @@ export type FeeLevel = 'low' | 'medium' | 'high';
  * this init was deriving, so it opened nothing; whoever closed it opens the
  * next one.
  */
-export type IdentityInitResult = 'initialized' | 'no-identity' | 'no-keystore' | 'superseded';
+export type IdentityInitResult =
+  | 'initialized'
+  | 'no-identity'
+  | 'no-keystore'
+  | 'superseded'
+  /** No vouched key could be decided now (R5-1, R5-2): retry once online. */
+  | 'unverified';
 
 /**
  * Discrete P2P network states. Stored on the wallet store as a key (rather
@@ -231,6 +251,15 @@ export interface WalletState {
    * received under this phone's key stay watched and spendable here.
    */
   socialReceiveKeyMismatch: boolean;
+  /**
+   * Whether an IDENTITY wallet may show anything receivable — `@username`,
+   * an address, a QR (security review round 5, R5-1, R5-7): true only once
+   * the gateway, answering for this wallet's account since it opened, named
+   * the key the wallet opened with as the account's `#key-1`. Until then, and
+   * on any mismatch, the Receive sheet shows nothing to pay. Always false for
+   * a BIP39 or watch-only wallet, whose Receive sheet does not read it.
+   */
+  identityReceiveConfirmed: boolean;
   /**
    * Coins stored by this wallet, on this network, at addresses no key this
    * device reaches owns — received under a previous identity key (a rotation,
@@ -319,20 +348,20 @@ export interface WalletState {
   ) => Promise<void>;
   /**
    * Bring up the Oxy-identity-derived wallet of `subject` — the person's own
-   * (default) or, while they act as an organization, the ORGANIZATION's,
-   * derived from its key (oxy ADR 0061). Derives the seed from the on-device
-   * identity, builds the KeyManager, and runs the normal init. No mnemonic.
-   * Needs the on-device keystore; returns "no-keystore" without one and
-   * "no-identity" when this phone cannot reach the subject's key (a keyless
-   * account, or an organization key this phone does not hold).
+   * (named by their account id, R5-2) or, while they act as an organization,
+   * the ORGANIZATION's, derived from its key (oxy ADR 0061). Decides the key
+   * (`identity-key.ts`, R5-1), derives the seed of THAT key, builds the
+   * KeyManager, and runs the normal init. No mnemonic. Needs the on-device
+   * keystore; returns "no-keystore" without one, "no-identity" when this
+   * phone holds no key the account vouches for, and "unverified" when Oxy
+   * could not be asked and no key is stored from an earlier check.
    *
-   * `publishedPublicKey` is the organization's DID `#key-1` as Oxy answered it
-   * (`accounts.identityKey.get`); social receive compares it with the key this
-   * phone holds and stays off when they differ (ADR 0002).
+   * `publishedPublicKey` is the organization's DID `#key-1` as Oxy answered
+   * the entry screen, used only when Oxy cannot be asked again here.
    */
   initializeFromIdentity: (
-    onReady?: () => void,
-    subject?: IdentitySubject,
+    onReady: (() => void) | undefined,
+    subject: IdentitySubject,
     publishedPublicKey?: string | null,
   ) => Promise<IdentityInitResult>;
   /**
@@ -378,7 +407,13 @@ export interface WalletState {
    */
   planPreviousKeyMove: (feeRate: number) => PreviousKeyMovePlan | { readonly kind: 'blocked' };
   /** Broadcast {@link WalletState.planPreviousKeyMove}'s move; resolves its txid. */
-  movePreviousKeyFunds: (feeRate: number) => Promise<string>;
+  /**
+   * Move the coins of the plan the person CONFIRMED (R4-13): re-planned at
+   * the tap and refused (`PREVIOUS_KEY_MOVE_CHANGED`) when the coins, the
+   * amount or the fee are no longer the confirmed ones — never a different
+   * move in its place.
+   */
+  movePreviousKeyFunds: (confirmed: PreviousKeyMoveReady) => Promise<string>;
   hasWallet: () => Promise<boolean>;
   wipeWallet: () => Promise<void>;
   lockWallet: () => void;
@@ -437,7 +472,7 @@ export interface WalletState {
 // ---------------------------------------------------------------------------
 
 const walletSeedDeps: ResolveWalletSeedDeps = {
-  deriveIdentitySeed,
+  deriveIdentitySeed: deriveOpenIdentitySeed,
   getWalletMnemonic,
   getCachedWalletSeed,
   cacheWalletSeed,
@@ -478,7 +513,7 @@ let socialReceiveIdentityPublicKey: string | null = null;
  * it: the person, or the organization they act as. Set with the window in
  * `setUpSocialReceive`; reset with it.
  */
-let socialReceiveSubject: IdentitySubject = PERSONAL_SUBJECT;
+let socialReceiveSubject: IdentitySubject | null = null;
 /**
  * The key each organization publishes as its DID `#key-1` (compressed hex), as
  * Oxy last answered it to `initializeFromIdentity`. Public data, so it
@@ -487,6 +522,43 @@ let socialReceiveSubject: IdentitySubject = PERSONAL_SUBJECT;
  * compare this phone's key with the published one.
  */
 const organizationPublishedKeys = new Map<string, string>();
+/**
+ * wallet id -> the identity key (compressed hex) that identity wallet opened
+ * with, as `decideIdentityKey` chose it (R5-1). Every later derivation of the
+ * wallet's seed — a PIN unlock, a Pocket switch, a network switch — selects
+ * THIS key, never "whatever key the device holds". Public data, so it survives
+ * `resetWalletInternals`; the wallet's own database keeps it across launches.
+ */
+const openedIdentityKeys = new Map<string, string>();
+
+/**
+ * The seed of an identity wallet, from the key it opened with
+ * ({@link openedIdentityKeys}, else the key its database stored). `null` when
+ * no key is known or this device no longer holds it: the caller refuses.
+ */
+async function deriveOpenIdentitySeed(subject: IdentitySubject): Promise<Uint8Array | null> {
+  const walletId = identityWalletIdOf(subject);
+  const key = openedIdentityKeys.get(walletId) ?? (await readStoredIdentityKey(walletId));
+  if (!key) return null;
+  openedIdentityKeys.set(walletId, key);
+  return deriveIdentitySeed(subject, key);
+}
+
+/** The key an identity wallet's own database stored (`getIdentityWalletKey`), or `null`. */
+async function readStoredIdentityKey(walletId: string): Promise<string | null> {
+  const state = useWalletStore.getState();
+  const db =
+    database && state.activeWalletId === walletId && state.activeAccount === MAIN_POCKET_ACCOUNT
+      ? database
+      : null;
+  if (db) return canonicalKey(await db.getIdentityWalletKey());
+  const opened = await Database.open(walletId, MAIN_POCKET_ACCOUNT);
+  try {
+    return canonicalKey(await opened.getIdentityWalletKey());
+  } finally {
+    await opened.close();
+  }
+}
 /**
  * Set by `closeWallet` (the person switched account) and cleared by the next
  * `initialize`: while set, `reloadActiveWallet` has no wallet to bring back.
@@ -792,14 +864,17 @@ async function setUpSocialReceive(
   set: WalletSet,
   subject: IdentitySubject,
 ): Promise<void> {
-  const identityPublicKey = await getIdentityPublicKeyHex(subject);
-  if (!identityPublicKey) {
-    // Web, Commons absent on Android, or a race where identity was removed
-    // between initialize() and here — initializeFromIdentity() already
-    // returned "no-identity" in the normal case, so this is a defensive
-    // no-op, not the expected path.
-    return;
-  }
+  // The key the wallet OPENED with (`decideIdentityKey`, R5-1) — vouched for
+  // by the account and proven held here — never a fresh read of a store
+  // another app can write.
+  const identityPublicKey = openedIdentityKeys.get(identityWalletIdOf(subject)) ?? null;
+  // Nothing receivable until the gateway's fresh `#key-1` equals it.
+  set({
+    socialReceiveDefaultAddress: null,
+    socialReceiveKeyMismatch: false,
+    identityReceiveConfirmed: false,
+  });
+  if (!identityPublicKey) return;
   socialReceiveIdentityPublicKey = identityPublicKey;
   socialReceiveSubject = subject;
 
@@ -822,31 +897,12 @@ async function setUpSocialReceive(
   socialReceiveAddressIndex = new Map();
   addWatchedSocialRows(watchableRows(persisted.map(toWatchSetRow), identityPublicKey, network));
   await refreshSocialReceiveActive(db);
-  set({
-    socialReceiveDefaultAddress: defaultAddress.address,
-    socialReceiveKeyMismatch: false,
-  });
-
-  // An organization publishes its key as its DID `#key-1` (oxy ADR 0061), and
-  // Oxy told the entry screen which one that is. A phone holding a key the
-  // organization has since REPLACED keeps watching (and can spend) what that
-  // key received, but must not offer it as the organization's way to be paid:
-  // the gateway derives new payments from the published key. ADR 0002: stop,
-  // and say so.
-  const publishedKey =
-    subject.kind === 'organization' ? organizationPublishedKeys.get(subject.accountId) : undefined;
-  if (publishedKey !== undefined && publishedKey !== identityPublicKey) {
-    console.warn(
-      '[social-receive] this organization publishes a different key than this phone holds; social receive is off',
-    );
-    set({ socialReceiveDefaultAddress: null, socialReceiveKeyMismatch: true });
-    return;
-  }
 
   // The gateway hands out a fresh address on every FairCoin payment and every
   // `@username` request, and this device only learns of it by asking. Ask
-  // now, before `@username` is offered, and again while the wallet runs
-  // (`socialResync`): foreground, a bounded interval, a push, a payment.
+  // now — the same read confirms the account's `#key-1` is this wallet's key,
+  // the only thing that makes it receivable — and again while the wallet
+  // runs (`socialResync`): foreground, a bounded interval, a push, a payment.
   await syncSocialReceiveSet(db, network, networkType, set, socialReceiveGeneration);
   await refreshSocialReceiveActive(db);
 }
@@ -864,10 +920,9 @@ async function readPublishedAccountKey(
 ): Promise<string | null | undefined> {
   if (cursor.account_identity_public_key !== undefined) return cursor.account_identity_public_key;
   if (subject.kind === 'organization') return organizationPublishedKeys.get(subject.accountId);
-  const userId = oxyServices.session.userId;
-  if (!userId) return undefined;
+  if (oxyServices.session.userId !== subject.accountId) return undefined;
   try {
-    return accountKeyFromDidDocument(await oxyServices.identity.resolveDid(userId));
+    return accountKeyFromDidDocument(await oxyServices.identity.resolveDid(subject.accountId));
   } catch {
     return undefined;
   }
@@ -899,17 +954,18 @@ async function syncSocialReceiveSet(
 ): Promise<boolean> {
   const deviceKey = socialReceiveIdentityPublicKey;
   const subject = socialReceiveSubject;
-  if (!deviceKey) return false;
+  if (!deviceKey || !subject) return false;
   const current = (): boolean => generation === socialReceiveGeneration && database === db;
-  // `/v1/social/me/*` answers for whoever the session acts as. For an
-  // organization's wallet that must BE the organization: a session that has
-  // since switched account would hand back someone else's cursor and set.
-  const actsAsSubject = (): boolean =>
-    subject.kind !== 'organization' || oxyServices.session.userId === subject.accountId;
+  // `/v1/social/me/*` answers for whoever the session acts as, and that must
+  // BE the wallet's account — the person's own (R5-2) or the organization's: a
+  // session that has since switched account would hand back someone else's
+  // cursor and set.
+  const actsAsSubject = (): boolean => oxyServices.session.userId === subject.accountId;
 
   let verdict: SocialReceiveKeyVerdict | null = null;
   try {
-    if (!actsAsSubject()) throw new Error('the Oxy session no longer acts as this organization');
+    if (!actsAsSubject())
+      throw new Error("the Oxy session no longer acts as this wallet's account");
     const cursor = await getSocialReceiveCursor(networkType);
     if (!actsAsSubject())
       throw new Error('the Oxy session switched account during the cursor read');
@@ -928,19 +984,34 @@ async function syncSocialReceiveSet(
   }
   if (!current()) return false;
 
-  if (verdict === 'mismatch') {
-    console.warn(
-      '[social-receive] this account publishes a different identity key than this device holds; social receive is off',
-    );
-    set({ socialReceiveDefaultAddress: null, socialReceiveKeyMismatch: true });
-  } else if (verdict === 'match' && useWalletStore.getState().socialReceiveKeyMismatch) {
-    // The account publishes this device's key again (Commons caught up with a
-    // rotation, or an owner added the organization's current key here).
+  // Receivable only on a FRESH match (R5-1): the gateway, answering for this
+  // wallet's account now, names this wallet's key as `#key-1`. A mismatch, or
+  // no answer at all, shows nothing receivable — no `@username`, no address,
+  // no QR.
+  if (verdict === 'match') {
     set({
       socialReceiveDefaultAddress: socialReceiveDefaultFromIndex(),
       socialReceiveKeyMismatch: false,
+      identityReceiveConfirmed: true,
+    });
+    // The key the account vouched for now, kept in this wallet's own database:
+    // the only key it opens with while Oxy cannot be asked.
+    await db.setIdentityWalletKey(deviceKey);
+  } else if (verdict === 'mismatch' || !useWalletStore.getState().identityReceiveConfirmed) {
+    // A confirmation made since this wallet opened survives a resync that
+    // could not ask; a contradiction never does.
+    if (verdict === 'mismatch') {
+      console.warn(
+        '[social-receive] this account publishes a different identity key than this wallet opened with; nothing is receivable',
+      );
+    }
+    set({
+      socialReceiveDefaultAddress: null,
+      socialReceiveKeyMismatch: verdict === 'mismatch',
+      identityReceiveConfirmed: false,
     });
   }
+  if (!current()) return false;
   // Pulled whatever the verdict, once the cursor answered for the right
   // account: a mismatch still leaves this key's earlier addresses to watch,
   // and every row is stored with its key (another key's is kept, not watched).
@@ -954,7 +1025,7 @@ async function syncSocialReceiveSet(
       now: nowSeconds,
       list: async (after) => {
         if (!actsAsSubject())
-          throw new Error('the Oxy session no longer acts as this organization');
+          throw new Error("the Oxy session no longer acts as this wallet's account");
         const page = await listSocialReceiveAddresses(networkType, after);
         if (!actsAsSubject()) throw new Error('the Oxy session switched account during the read');
         return page;
@@ -975,17 +1046,26 @@ async function syncSocialReceiveSet(
             origin: 'gateway',
           });
         }
-        // Each row is derived again from its key at its index before it is
-        // stored (I-2): a gateway answer naming an address its key does not
-        // produce is neither watched nor signed for.
-        const { kept, dropped } = verifyGatewayRows(rows, network);
+        // Each NEW row is derived again from its key at its index before it
+        // is stored (I-2): a gateway answer naming an address its key does
+        // not produce is neither watched nor signed for. A row already stored
+        // with the same index and key was verified when it was stored, so the
+        // weekly full re-read derives nothing it has derived before (R5-8);
+        // a stored row is never changed by a later answer (`INSERT OR IGNORE`).
+        const { known, unknown } = splitKnownRows(
+          rows,
+          await db.getSocialReceiveSetRows(rows.map((row) => row.address)),
+        );
+        const { kept, dropped } = verifyGatewayRows(unknown, network);
         if (dropped.length > 0) {
           console.warn(
             `[social-receive] dropped ${String(dropped.length)} gateway row(s) whose address its key does not derive (first index ${String(dropped[0]?.index)})`,
           );
         }
         await db.insertSocialReceiveSet(kept);
-        for (const row of kept) if (!socialReceiveWatched.has(row.address)) fresh.push(row);
+        for (const row of [...known, ...kept]) {
+          if (!socialReceiveWatched.has(row.address)) fresh.push(row);
+        }
         // Yield between pages: a large set is many derivation-free inserts,
         // but the JS thread still has a UI to draw.
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1024,6 +1104,40 @@ async function syncSocialReceiveSet(
     }
   }
   return mine.length > 0 || previousGrew;
+}
+
+/**
+ * The receive gate for a Pocket other than the main one, which runs no social
+ * receive: the same cursor read `syncSocialReceiveSet` judges, with the key the
+ * wallet opened with. Sets `identityReceiveConfirmed` on a fresh match only.
+ */
+async function confirmPocketReceive(
+  subject: IdentitySubject,
+  networkType: NetworkType,
+  epoch: number,
+): Promise<void> {
+  const key = openedIdentityKeys.get(identityWalletIdOf(subject));
+  if (!key || oxyServices.session.userId !== subject.accountId) return;
+  let verdict: SocialReceiveKeyVerdict;
+  try {
+    const cursor = await getSocialReceiveCursor(networkType);
+    const accountKey = await readPublishedAccountKey(cursor, subject);
+    if (oxyServices.session.userId !== subject.accountId) return;
+    verdict = judgeSocialReceiveKey({
+      deviceKey: key,
+      accountKey,
+      lastReservedKey: cursor.identity_public_key,
+    });
+  } catch (error) {
+    console.warn('[social-receive] the key could not be confirmed; nothing is receivable:', error);
+    return;
+  }
+  const state = useWalletStore.getState();
+  if (epoch !== lockEpoch || state.activeWalletId !== identityWalletIdOf(subject)) return;
+  useWalletStore.setState({
+    identityReceiveConfirmed: verdict === 'match',
+    socialReceiveKeyMismatch: verdict === 'mismatch',
+  });
 }
 
 /**
@@ -1168,23 +1282,153 @@ function currentKeysOf(subject: IdentitySubject, deviceKey: string | null): Set<
 }
 
 /**
- * Every key the account has had, canonical, as Oxy answers it: the person's
- * root history (`identity.keyHistory()`), or the organization's key list.
- * `null` when it cannot be read now — the caller then opens no key the
- * history would have had to vouch for.
+ * The account's keys as Oxy answers them now: its current `#key-1` and every
+ * key it has had, canonical — the person's root history
+ * (`identity.keyHistory()`), or the organization's key list. `null` when they
+ * cannot be read now, or when the session does not act as the subject's
+ * account (both reads answer for the session's account): the caller then
+ * opens no key they would have had to vouch for.
  */
-async function readAccountKeyHistory(subject: IdentitySubject): Promise<Set<string> | null> {
+async function readAccountKeys(subject: IdentitySubject): Promise<AccountKeys | null> {
+  if (oxyServices.session.userId !== subject.accountId) return null;
   try {
+    let keys: AccountKeys;
     if (subject.kind === 'organization') {
       const state = await oxyServices.accounts.identityKey.get(subject.accountId);
-      return canonicalKeySet([state.publicKey, ...state.keys.map((entry) => entry.publicKey)]);
+      keys = {
+        current: state.publicKey,
+        history: canonicalKeySet([state.publicKey, ...state.keys.map((entry) => entry.publicKey)]),
+      };
+    } else {
+      const history = await oxyServices.identity.keyHistory();
+      keys = {
+        current: history.publicKey,
+        history: canonicalKeySet([
+          history.publicKey,
+          ...history.retired.map((entry) => entry.publicKey),
+        ]),
+      };
     }
-    const history = await oxyServices.identity.keyHistory();
-    return canonicalKeySet([history.publicKey, ...history.retired.map((entry) => entry.publicKey)]);
+    return oxyServices.session.userId === subject.accountId ? keys : null;
   } catch (error) {
-    console.warn('[previous-keys] the account key history could not be read:', error);
+    console.warn('[identity-key] the account key history could not be read:', error);
     return null;
   }
+}
+
+/**
+ * Move the pre-round-5 shared identity wallet (`oxy-identity`) to the account
+ * it is PROVEN to belong to, once (R5-2, `identity-namespace.ts`): its HD
+ * addresses must include one a key of `accountId` derives — a key Oxy names
+ * as the account's now and this device holds. Each Pocket's database is
+ * copied whole (`VACUUM INTO`) to `oxy-user-<accountId>`, stripped of every
+ * social-receive row and previous-key tree under a key this account never had,
+ * its gateway pull restarted, and the per-wallet preferences carried with it;
+ * the legacy files go only after the marker records the move. A namespace this
+ * account cannot prove stays closed for it. `unverified` when the proof needs
+ * Oxy's answer and it could not be had.
+ */
+async function moveLegacyIdentityNamespace(
+  accountId: string,
+  accountKeys: AccountKeys | null,
+): Promise<'done' | 'unverified'> {
+  const marker = parseLegacyNamespaceMarker(await getItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER));
+  if (legacyNamespaceStep(marker, accountId) === 'skip') return 'done';
+
+  const legacy = await Database.open(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT);
+  let legacyAddresses: Set<string> | null = null;
+  try {
+    if (await legacy.hasWalletData()) {
+      legacyAddresses = new Set((await legacy.getAddresses()).map((row) => row.address));
+    }
+  } finally {
+    await legacy.close();
+  }
+  if (legacyAddresses === null) {
+    await Database.deleteFile(LEGACY_IDENTITY_WALLET_ID, MAIN_POCKET_ACCOUNT).catch(() => {});
+    await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ empty: true }));
+    return 'done';
+  }
+  if (accountKeys === null) return 'unverified';
+
+  const subject = personalSubject(accountId);
+  const keys = canonicalKeySet([accountKeys.current, ...accountKeys.history]);
+  const candidates: CandidateTree[] = [];
+  for (const key of keys) {
+    let seed: Uint8Array | null = null;
+    try {
+      seed = await deriveIdentitySeed(subject, key);
+    } catch {
+      seed = null;
+    }
+    if (!seed) continue;
+    try {
+      // The legacy file had no network in its name: either network's tree.
+      for (const network of ['mainnet', 'testnet'] as const) {
+        const tree = KeyManager.fromSeed(seed, getNetwork(network), MAIN_POCKET_ACCOUNT);
+        candidates.push({
+          key,
+          addresses: [...tree.getExternalAddresses(), ...tree.getChangeAddresses()],
+        });
+        tree.wipe();
+      }
+    } finally {
+      seed.fill(0);
+    }
+  }
+  if (proveLegacyOwnership(legacyAddresses, candidates) === null) {
+    await setItemAsync(
+      LEGACY_IDENTITY_NAMESPACE_MARKER,
+      JSON.stringify({ ...marker, checked: [...(marker.checked ?? []), accountId] }),
+    );
+    console.warn("[identity-namespace] the shared wallet is not this account's; it stays closed");
+    return 'done';
+  }
+
+  const target = identityWalletIdOf(subject);
+  const accounts = [
+    ...new Set([
+      MAIN_POCKET_ACCOUNT,
+      ...(await getPockets(LEGACY_IDENTITY_WALLET_ID)).map((pocket) => pocket.account),
+    ]),
+  ];
+  const history = new Set(keys);
+  for (const account of accounts) {
+    // A partial copy from an interrupted move is replaced; nothing else ever
+    // opened this namespace before the move (the boot waits for it).
+    await Database.deleteFile(target, account).catch(() => {});
+    const source = await Database.open(LEGACY_IDENTITY_WALLET_ID, account);
+    try {
+      await source.copyTo(target, account);
+    } finally {
+      await source.close();
+    }
+    const moved = await Database.open(target, account);
+    try {
+      await moved.dropForeignIdentityData((key) => keepsLegacyKey(key, history));
+    } finally {
+      await moved.close();
+    }
+  }
+  for (const prefix of PREFERENCE_PREFIXES) {
+    const value = await getItemAsync(`${prefix}${LEGACY_IDENTITY_WALLET_ID}`);
+    if (value !== null) await setItemAsync(`${prefix}${target}`, value);
+  }
+  await setItemAsync(LEGACY_IDENTITY_NAMESPACE_MARKER, JSON.stringify({ boundTo: accountId }));
+  for (const account of accounts) {
+    await Database.deleteFile(LEGACY_IDENTITY_WALLET_ID, account).catch(() => {});
+  }
+  for (const prefix of PREFERENCE_PREFIXES) {
+    await deleteItemAsync(`${prefix}${LEGACY_IDENTITY_WALLET_ID}`).catch(() => {});
+  }
+  console.warn('[identity-namespace] moved the shared wallet to the account it belongs to');
+  return 'done';
+}
+
+/** {@link readAccountKeys}' history alone, for vouching for a previous key. */
+async function readAccountKeyHistory(subject: IdentitySubject): Promise<Set<string> | null> {
+  const keys = await readAccountKeys(subject);
+  return keys ? new Set(keys.history) : null;
 }
 
 /** A previous key's HD tree, for the open Pocket, from a seed the caller zeroes. */
@@ -1259,10 +1503,17 @@ async function loadPreviousKeys(
   account: number,
 ): Promise<void> {
   previousKeySubject = subject;
-  const deviceKey = socialReceiveIdentityPublicKey ?? (await getIdentityPublicKeyHex(subject));
+  const deviceKey =
+    socialReceiveIdentityPublicKey ?? openedIdentityKeys.get(identityWalletIdOf(subject)) ?? null;
   const excluded = currentKeysOf(subject, deviceKey);
+  // Only a tree THIS account vouched for when it was recorded (R5-2): a tree
+  // recorded before round 5, or for another account, waits for
+  // `refreshPreviousKeys` to vouch for it against the account's key history.
   const rows = (await db.getPreviousKeyTrees(networkType)).filter(
-    (row) => row.discovered_at !== null && !excluded.has(row.public_key),
+    (row) =>
+      row.discovered_at !== null &&
+      row.vouched_for === subject.accountId &&
+      !excluded.has(row.public_key),
   );
   // A key this device cannot reach leaves its coins stranded;
   // `refreshPreviousKeys` asks again on its interval.
@@ -1301,18 +1552,23 @@ async function refreshPreviousKeys(): Promise<void> {
   const get = useWalletStore.getState;
   const { network: networkType, activeAccount: account, activeWalletId } = get();
 
-  const deviceKey = socialReceiveIdentityPublicKey ?? (await getIdentityPublicKeyHex(subject));
+  const deviceKey =
+    socialReceiveIdentityPublicKey ?? openedIdentityKeys.get(identityWalletIdOf(subject)) ?? null;
   const excluded = currentKeysOf(subject, deviceKey);
+  // Only keys on rows the GATEWAY handed out to this account vouch on their
+  // own (R5-2): it recorded each under the key it derived from, which was this
+  // account's `#key-1` then — a rotation before oxy migration 0235 included
+  // (R4-5). Rows this device derived itself (index 0, an old window) do not.
   const recorded =
     account === MAIN_POCKET_ACCOUNT && socialReceiveIdentityPublicKey
-      ? await db.getSocialReceiveSetKeys()
+      ? await db.getSocialReceiveSetKeys(true)
       : [];
   const hints = await listPreviousKeyHints(subject);
   const trees = await db.getPreviousKeyTrees(networkType);
   if (!current()) return;
-  // Commons' list (and a tree stored from it) is checked against the
-  // account's own key history: a key that was never this account's is not
-  // opened (R4-14). The gateway's recorded keys need no check.
+  // Commons' list and every stored tree are checked against the account's
+  // own key history: a key that was never this account's is not opened
+  // (R4-14, R5-2). The gateway's recorded keys need no check.
   const recordedKeys = canonicalKeySet(recorded);
   const unvouched = [...hints, ...trees.map((row) => row.public_key)].some((key) => {
     const canonical = canonicalKey(key);
@@ -1388,6 +1644,7 @@ async function refreshPreviousKeys(): Promise<void> {
       external_next: tree.getNextExternalIndex(),
       change_next: tree.getNextChangeIndex(),
       discovered_at: nowSeconds(),
+      vouched_for: subject.accountId,
     });
     opened.push(key);
   }
@@ -1502,6 +1759,7 @@ async function signInputForAddress(
   // amended 2026-11-06) — `signWalletInput` is the one dispatch, tested with
   // a transaction mixing current-HD, previous-HD and previous-social inputs.
   const subject = socialReceiveSubject;
+  const currentKey = socialReceiveIdentityPublicKey;
   const trees = previousTrees;
   const socialKeys = socialReceiveAddressKey;
   const socialIndices = socialReceiveAddressIndex;
@@ -1522,8 +1780,15 @@ async function signInputForAddress(
   };
   return signWalletInput(tx, inputIndex, utxo, {
     signerFor: signer,
-    signSocial: (unsigned, index, scriptPubKey, childIndex, address, publicKey) =>
-      signSocialReceiveInput(
+    signSocial: (unsigned, index, scriptPubKey, childIndex, address, publicKey) => {
+      // Always NAMED (R5-1): the previous key that owns the address, else the
+      // key this wallet opened with — never the holder's default, which the
+      // iOS keychain group shared by every Oxy app could have replaced.
+      const selected = publicKey ?? currentKey;
+      if (subject === null || selected === null) {
+        return Promise.reject(new Error('No identity wallet is open to sign this coin'));
+      }
+      return signSocialReceiveInput(
         unsigned,
         index,
         scriptPubKey,
@@ -1531,8 +1796,9 @@ async function signInputForAddress(
         address,
         network,
         subject,
-        publicKey === null ? {} : { publicKey },
-      ),
+        { publicKey: selected },
+      );
+    },
   });
 }
 
@@ -1766,6 +2032,8 @@ async function processIncomingTransaction(
         external_next: previousTree.getNextExternalIndex(),
         change_next: previousTree.getNextChangeIndex(),
         discovered_at: null,
+        // Cursor only: who vouched for the tree stays as recorded.
+        vouched_for: null,
       });
     }
     const watched = socialReceiveWatched.get(address);
@@ -2093,6 +2361,9 @@ async function reconcileConfirmations(set: WalletSet, get: WalletGet): Promise<v
  * pass to {@link sendTransaction}, instead of duplicating the values
  * inline and risking drift between display and on-chain fee.
  */
+/** The move's coins, amount or fee changed after the person confirmed it (R4-13). */
+export const PREVIOUS_KEY_MOVE_CHANGED = 'previous-key-move-changed';
+
 export const FEE_RATES: Record<FeeLevel, number> = {
   low: 1,
   medium: 5,
@@ -2131,7 +2402,7 @@ function resetWalletInternals(): void {
   }
   keyManager = null;
   socialReceiveIdentityPublicKey = null;
-  socialReceiveSubject = PERSONAL_SUBJECT;
+  socialReceiveSubject = null;
   socialReceiveAddressIndex = new Map();
   socialReceiveWatched = new Map();
   socialReceiveActive = new Set();
@@ -2180,6 +2451,7 @@ const DEFAULT_WALLET_STATE = {
   hasBackedUp: false,
   socialReceiveDefaultAddress: null as string | null,
   socialReceiveKeyMismatch: false,
+  identityReceiveConfirmed: false,
   strandedBalance: 0n,
   previousKeyBalance: 0n,
   activeAccount: 0,
@@ -2258,6 +2530,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   hasBackedUp: false,
   socialReceiveDefaultAddress: null,
   socialReceiveKeyMismatch: false,
+  identityReceiveConfirmed: false,
   strandedBalance: 0n,
   previousKeyBalance: 0n,
   activeAccount: 0,
@@ -2455,8 +2728,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             // window loaded stays watched (its coins stay spendable); only
             // `@username` is withdrawn until the next unlock sets it up again.
             console.warn('[social-receive] could not be set up; @username is off:', socialError);
-            set({ socialReceiveDefaultAddress: null });
+            set({ socialReceiveDefaultAddress: null, identityReceiveConfirmed: false });
           }
+        } else if (identitySubject !== null) {
+          // Another Pocket of an identity wallet: its addresses derive from the
+          // same key, so they are receivable on the same condition — the
+          // gateway's fresh `#key-1` is the key the wallet opened with (R5-1).
+          set({ identityReceiveConfirmed: false, socialReceiveKeyMismatch: false });
+          void confirmPocketReceive(identitySubject, state.network, lockEpoch);
         }
 
         // Previous identity keys this wallet already tracks (ADR 0002, amended
@@ -2735,8 +3014,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   initializeFromIdentity: async (
-    onReady?: () => void,
-    subject: IdentitySubject = PERSONAL_SUBJECT,
+    onReady: (() => void) | undefined,
+    subject: IdentitySubject,
     publishedPublicKey?: string | null,
   ): Promise<IdentityInitResult> => {
     // The IDENTITY-derived wallet needs the on-device keystore the identity key
@@ -2756,27 +3035,50 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // Captured BEFORE the derivation, which can wait on Commons over IPC: a
     // close (account switch) or lock meanwhile must not open this wallet.
     const epoch = lockEpoch;
-    if (subject.kind === 'organization' && publishedPublicKey) {
-      organizationPublishedKeys.set(subject.accountId, compressedPublicKeyHex(publishedPublicKey));
+    // The wallet is the session account's, and every read below answers for
+    // the session's account: they must be the same account (R5-2).
+    if (oxyServices.session.userId !== subject.accountId) return 'superseded';
+    const accountKeys = await readAccountKeys(subject);
+    if (subject.kind === 'organization') {
+      const published = accountKeys ? accountKeys.current : publishedPublicKey;
+      if (published) {
+        organizationPublishedKeys.set(subject.accountId, compressedPublicKeyHex(published));
+      }
     }
-    // An organization's seed derives from ITS key; `null` when this phone
-    // cannot reach it, and never the person's key in its place (ADR 0061 D6).
-    const seed = await deriveIdentitySeed(subject);
-    if (!seed) {
-      return 'no-identity';
+    const walletId = identityWalletIdOf(subject);
+    // Once, the pre-round-5 shared wallet moves to the account it is proven
+    // to belong to, before this account's namespace is first opened (R5-2).
+    if (subject.kind === 'personal') {
+      const moved = await moveLegacyIdentityNamespace(subject.accountId, accountKeys);
+      if (moved === 'unverified') return 'unverified';
+    }
+    if (epoch !== lockEpoch) return 'superseded';
+    // WHICH key the wallet is (R5-1): one the account vouches for, proven held
+    // here by deriving its seed with the key named — never the device's
+    // unselected key, which the iOS keychain group every Oxy app shares could
+    // have replaced. An organization's seed derives from ITS key; `@oxy.so/core`
+    // never falls back to the person's (ADR 0061 D6), and neither does this.
+    const decision = await decideIdentityKey({
+      accountKeys,
+      storedKey: await readStoredIdentityKey(walletId),
+      deviceHint: () => readDeviceKeyHint(subject),
+      derive: (key) => deriveIdentitySeed(subject, key),
+    });
+    if (decision.kind === 'none') {
+      return decision.reason === 'unverified' ? 'unverified' : 'no-identity';
     }
     let secret: string;
     try {
-      secret = buildSeedSecret(seed);
+      secret = buildSeedSecret(decision.seed);
     } finally {
       // The bytes are needed only to build the secret; do not keep them.
-      seed.fill(0);
+      decision.seed.fill(0);
     }
     if (epoch !== lockEpoch) return 'superseded';
-    const walletId = identityWalletIdOf(subject);
+    openedIdentityKeys.set(walletId, decision.key);
     // `initialize()` itself brings up social receive (gated on the wallet id
     // naming an identity wallet, which it always does here) — no separate
-    // step needed.
+    // step needed. Nothing is receivable until the gateway confirms the key.
     await get().initialize(secret, walletId, onReady, undefined, epoch);
     const after = get();
     if (epoch !== lockEpoch || (after.initialized && after.activeWalletId !== walletId)) {
@@ -2798,7 +3100,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const activeId =
         get().activeWalletId ?? (activeWalletForgotten ? null : await getActiveWalletId());
-      if (!activeId) {
+      // The pre-round-5 shared identity wallet names no account and is never
+      // opened again (R5-2): the entry screen opens the account's own.
+      if (!activeId || activeId === LEGACY_IDENTITY_WALLET_ID) {
         onReady?.();
         return;
       }
@@ -3166,9 +3470,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   planPreviousKeyMove: (feeRate: number) => {
-    // A device whose key is not the account's current one would move the
-    // coins onto a replaced key: add the current key in Commons first.
-    if (get().socialReceiveKeyMismatch) return { kind: 'blocked' } as const;
+    // The coins move to the key this wallet opened with, so only once the
+    // gateway confirmed that key is the account's current one (R5-1): a
+    // wallet on a replaced key, or not yet confirmed, would move them onto a
+    // key that is not where the account receives.
+    if (get().socialReceiveKeyMismatch || !get().identityReceiveConfirmed) {
+      return { kind: 'blocked' } as const;
+    }
     const candidates =
       utxoSet && keyManager && !keyManager.isWatchOnly()
         ? previousKeyCoins(
@@ -3183,13 +3491,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
   },
 
-  movePreviousKeyFunds: async (feeRate: number): Promise<string> => {
+  movePreviousKeyFunds: async (confirmed: PreviousKeyMoveReady): Promise<string> => {
     // An explicit, prominent prompt, never automatic (ADR 0002, amended
     // 2026-11-06): a move spends a fee and the person should see it happen;
     // after a rotation forced by a compromise it must happen AT ONCE, because
     // whoever else holds the previous key can spend these coins too — the
     // move races them, and the prompt says so.
-    const plan = get().planPreviousKeyMove(feeRate);
+    const plan = get().planPreviousKeyMove(confirmed.feePerByte);
+    if (plan.kind === 'ready' && !samePreviousKeyMovePlan(confirmed, plan)) {
+      const message = PREVIOUS_KEY_MOVE_CHANGED;
+      set({ error: message });
+      throw new Error(message);
+    }
     if (plan.kind !== 'ready') {
       const message =
         plan.kind === 'blocked'
@@ -3245,9 +3558,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         })),
         recipients: [{ address: destination.address, value: plan.amount }],
         changeAddress: destination.address,
-        feePerByte: BigInt(feeRate),
+        feePerByte: BigInt(plan.feePerByte),
         network: localNetworkConfig,
       });
+      // Exactly the confirmed fee, or nothing is signed.
+      let spent = 0n;
+      for (const input of plan.inputs) spent += input.value;
+      let paid = 0n;
+      for (const output of tx.outputs) paid += output.value;
+      if (spent - paid !== plan.fee) {
+        throw new Error(PREVIOUS_KEY_MOVE_CHANGED);
+      }
       for (let i = 0; i < tx.inputs.length; i++) {
         const input = tx.inputs[i];
         const utxo = plan.inputs.find((u) => u.txid === input?.txid && u.vout === input?.vout);

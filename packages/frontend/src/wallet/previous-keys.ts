@@ -410,16 +410,20 @@ export async function signWalletInput(
 }
 
 /** The move of every previous-key coin to the current key, or why there is none. */
+export interface PreviousKeyMoveReady {
+  readonly kind: 'ready';
+  readonly inputs: UTXO[];
+  /** What reaches the current key: the inputs less the fee. */
+  readonly amount: bigint;
+  readonly fee: bigint;
+  /** The rate the fee was priced at (base units per byte). */
+  readonly feePerByte: number;
+  /** Confirmed coins left for the next move (past {@link PREVIOUS_KEY_MOVE_MAX_INPUTS}). */
+  readonly remaining: number;
+}
+
 export type PreviousKeyMovePlan =
-  | {
-      readonly kind: 'ready';
-      readonly inputs: UTXO[];
-      /** What reaches the current key: the inputs less the fee. */
-      readonly amount: bigint;
-      readonly fee: bigint;
-      /** Confirmed coins left for the next move (past {@link PREVIOUS_KEY_MOVE_MAX_INPUTS}). */
-      readonly remaining: number;
-    }
+  | PreviousKeyMoveReady
   /** No confirmed previous-key coin to move (coins still confirming move later). */
   | { readonly kind: 'nothing' }
   /** What is there would not cover the fee and leave more than dust. */
@@ -462,7 +466,26 @@ export function planPreviousKeyMove(input: {
   const fee = estimateFeeForInputs(inputs.length, input.feePerByte, 1);
   const amount = total - fee;
   if (amount <= input.dustThreshold) return { kind: 'dust', total, fee };
-  return { kind: 'ready', inputs, amount, fee, remaining };
+  return { kind: 'ready', inputs, amount, fee, feePerByte: input.feePerByte, remaining };
+}
+
+/**
+ * Whether the move planned now is the one the person confirmed (security
+ * review round 4, R4-13): the same coins, the same amount, the same fee. The
+ * move spends exactly the confirmed plan; a plan that changed between the
+ * confirmation and the tap (a coin spent or arrived, a rate changed) is
+ * confirmed again, never sent in its place.
+ */
+export function samePreviousKeyMovePlan(
+  confirmed: PreviousKeyMoveReady,
+  now: PreviousKeyMovePlan,
+): boolean {
+  if (now.kind !== 'ready') return false;
+  if (now.amount !== confirmed.amount || now.fee !== confirmed.fee) return false;
+  if (now.inputs.length !== confirmed.inputs.length) return false;
+  const outpoint = (coin: UTXO): string => `${coin.txid}:${String(coin.vout)}`;
+  const confirmedInputs = new Set(confirmed.inputs.map(outpoint));
+  return now.inputs.every((coin) => confirmedInputs.has(outpoint(coin)));
 }
 
 /**

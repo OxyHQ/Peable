@@ -35,7 +35,14 @@ export type WalletBlock =
       readonly accountId: string;
       readonly status: 'keyless' | 'not-on-device' | 'forbidden' | 'unavailable';
     }
-  | { readonly kind: 'unsupported' };
+  | { readonly kind: 'unsupported' }
+  /**
+   * No key this wallet may open with could be vouched for: Oxy could not be
+   * asked and this wallet has no key stored from an earlier check, or the
+   * one-time move of the pre-round-5 shared wallet needs Oxy's answer (R5-1,
+   * R5-2). Retry once online.
+   */
+  | { readonly kind: 'unverified' };
 
 export type EntryRoute =
   | { kind: 'loading' | 'signin' | 'create-identity' | 'needs-pin' | 'ready' | 'read-only' }

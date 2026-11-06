@@ -1159,6 +1159,18 @@ off (ADR 0002). `useWalletFollowsActingAccount` closes the wallet on every
 account switch so the previous account's wallet is never shown, or spent, under
 the new one. Project, bot, channel and community accounts open no wallet.
 
+**Each person's wallet is their account's, and its key is vouched for (ADR
+0002, round 5).** The person's wallet is `oxy-user-<accountId>` — never one
+shared id — and every per-wallet store follows it; the pre-round-5
+`oxy-identity` namespace moves once to the account that proves it
+(`wallet/identity-namespace.ts`) or stays closed. Which key a wallet opens with
+is `wallet/identity-key.ts`'s decision from what the ACCOUNT vouches for, and
+every seed derivation and social-receive signature names that key
+(`publicKey` selector); `KeyManager.getSharedPublicKey` (the iOS keychain group
+every Oxy app can write) is a hint only. Nothing receivable — address, QR,
+`@username` — is shown until the gateway's fresh `#key-1` equals the open key
+(`identityReceiveConfirmed`).
+
 ## `packages/frontend` is FAIRWallet, and upstream is alive
 
 This repo's git history IS FAIRWallet's — the first commit is

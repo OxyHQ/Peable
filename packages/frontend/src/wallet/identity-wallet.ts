@@ -26,50 +26,80 @@ import { bytesToHex } from '@fairco.in/core';
  */
 export const PEABLE_SEED_INFO = 'peable/faircoin/v1';
 
-/** Fixed wallet id for the person's own identity-derived wallet (SQLite namespace). */
-export const OXY_IDENTITY_WALLET_ID = 'oxy-identity';
+/**
+ * The ONE wallet id every person's identity wallet shared before security
+ * review round 5 (R5-2), whoever was signed in: a phone that two accounts
+ * used held both in one namespace, and the second could open the first's
+ * previous keys. Never opened again. `identity-namespace.ts` moves it, once,
+ * to the account it is PROVEN to belong to (`PERSONAL_WALLET_ID_PREFIX`), or
+ * leaves it closed.
+ */
+export const LEGACY_IDENTITY_WALLET_ID = 'oxy-identity';
+
+/**
+ * Prefix of a PERSON's identity wallet id: `oxy-user-<accountId>`, one SQLite
+ * namespace (and one set of per-wallet preferences) per Oxy account (R5-2),
+ * so nothing one account's wallet stored — its social-receive set, its
+ * previous-key trees, its HD tree — is ever read for another account signed in
+ * on the same phone. Only characters secure-store keys accept
+ * (`[A-Za-z0-9._-]`); an Oxy account id is 24-hex or a uuid.
+ */
+export const PERSONAL_WALLET_ID_PREFIX = 'oxy-user-';
 
 /**
  * Prefix of an ORGANIZATION's identity wallet id (oxy ADR 0061): the wallet a
  * person sees while acting as that organization, derived from the
  * organization's own key. Its own SQLite namespace, so the organization's
  * coins, addresses and social-receive window never mix with the person's.
- * Only characters secure-store keys accept (`[A-Za-z0-9._-]`); an Oxy account
- * id is 24-hex or a uuid.
  */
 export const ORGANIZATION_WALLET_ID_PREFIX = 'oxy-org-';
 
 /**
- * Whose key an identity wallet derives from. A person acting as an
- * organization (oxy ADR 0001) sees the ORGANIZATION's wallet, from the
- * organization's key; it is never derived from the person's own key, which
- * would hand the organization's payers addresses that leave with that person.
+ * Whose key an identity wallet derives from, and which Oxy account it belongs
+ * to. A person acting as an organization (oxy ADR 0001) sees the
+ * ORGANIZATION's wallet, from the organization's key; it is never derived from
+ * the person's own key, which would hand the organization's payers addresses
+ * that leave with that person. The person's own wallet is named by THEIR
+ * account id (R5-2): two people signing in on one phone open two wallets.
  */
 export type IdentitySubject =
-  | { readonly kind: 'personal' }
+  | { readonly kind: 'personal'; readonly accountId: string }
   | { readonly kind: 'organization'; readonly accountId: string };
 
-export const PERSONAL_SUBJECT: IdentitySubject = { kind: 'personal' };
+/** The person's own identity wallet subject, for the Oxy account `accountId`. */
+export function personalSubject(accountId: string): IdentitySubject {
+  return { kind: 'personal', accountId };
+}
 
 /** The wallet id (SQLite namespace) of a subject's identity wallet. */
 export function identityWalletIdOf(subject: IdentitySubject): string {
   return subject.kind === 'personal'
-    ? OXY_IDENTITY_WALLET_ID
+    ? `${PERSONAL_WALLET_ID_PREFIX}${subject.accountId}`
     : `${ORGANIZATION_WALLET_ID_PREFIX}${subject.accountId}`;
 }
 
 /**
  * The subject an identity wallet id names, or `null` for any other wallet (a
- * BIP39 or watch-only one). The inverse of {@link identityWalletIdOf}, so a PIN
- * unlock that only knows the active wallet id re-derives from the right key.
+ * BIP39 or watch-only one) — and for the legacy shared id, which names no
+ * account and is never opened. The inverse of {@link identityWalletIdOf}, so a
+ * PIN unlock that only knows the active wallet id re-derives from the right key.
  */
 export function identitySubjectOfWalletId(walletId: string): IdentitySubject | null {
-  if (walletId === OXY_IDENTITY_WALLET_ID) return PERSONAL_SUBJECT;
-  if (walletId.startsWith(ORGANIZATION_WALLET_ID_PREFIX)) {
-    const accountId = walletId.slice(ORGANIZATION_WALLET_ID_PREFIX.length);
-    return accountId.length > 0 ? { kind: 'organization', accountId } : null;
+  for (const [prefix, kind] of [
+    [PERSONAL_WALLET_ID_PREFIX, 'personal'],
+    [ORGANIZATION_WALLET_ID_PREFIX, 'organization'],
+  ] as const) {
+    if (walletId.startsWith(prefix)) {
+      const accountId = walletId.slice(prefix.length);
+      return accountId.length > 0 ? { kind, accountId } : null;
+    }
   }
   return null;
+}
+
+/** Whether `walletId` is an identity wallet's, the legacy shared one included. */
+export function isIdentityWalletId(walletId: string): boolean {
+  return walletId === LEGACY_IDENTITY_WALLET_ID || identitySubjectOfWalletId(walletId) !== null;
 }
 
 /** The `opts` `@oxy.so/core`'s key reads take for a subject: none for the person. */
@@ -85,37 +115,16 @@ export function identityKeyOptions(subject: IdentitySubject): { accountId: strin
 export const SEED_SECRET_PREFIX = 'seed:';
 
 /**
- * Derive the FairCoin wallet seed from the on-device Oxy identity, or `null`
- * on web / when the account is keyless (no identity key). Native-only.
- *
- * For an organization the seed comes from ITS key (`{ accountId }`), which
- * Commons holds for the organization's owners and admins (oxy ADR 0061 D6), and
- * is `null` when this phone cannot reach that key — `@oxy.so/core` never falls
- * back to the person's key, and neither does this.
+ * Derive the FairCoin wallet seed of ONE of the subject's keys, named by its
+ * public key (security review round 5, R5-1): the key the wallet decided to
+ * open with (`identity-key.ts`), never "whatever key this device holds". The
+ * unselected read takes the iOS keychain group every Oxy app can write, so a
+ * key planted there would become the wallet; a selector reaches only the key
+ * it names (current or retired, oxy ADR 0061 D7) and is `null` when this device
+ * cannot reach it — never another key's seed in its place. Native-only; the
+ * caller zeroes the bytes once its KeyManager is built.
  */
 export async function deriveIdentitySeed(
-  subject: IdentitySubject = PERSONAL_SUBJECT,
-): Promise<Uint8Array | null> {
-  const options = identityKeyOptions(subject);
-  return options
-    ? IdentityKeyManager.deriveScopedSeed(PEABLE_SEED_INFO, options)
-    : IdentityKeyManager.deriveScopedSeed(PEABLE_SEED_INFO);
-}
-
-/** Encode a 32-byte seed as the `seed:<hex>` secret the store consumes. */
-export function buildSeedSecret(seed: Uint8Array): string {
-  return `${SEED_SECRET_PREFIX}${bytesToHex(seed)}`;
-}
-
-/**
- * The wallet seed of ONE of the subject's keys, named by its public key (any
- * encoding): the current key when it matches, else a PREVIOUS key Commons
- * kept after a rotation or replacement (oxy ADR 0061 D7 as amended
- * 2026-11-06). `null` when this device cannot reach that key — never another
- * key's seed in its place. Peable ADR 0002, amended "previous keys stay
- * spendable". The caller zeroes the bytes once its KeyManager is built.
- */
-export async function derivePreviousKeySeed(
   subject: IdentitySubject,
   publicKey: string,
 ): Promise<Uint8Array | null> {
@@ -124,6 +133,18 @@ export async function derivePreviousKeySeed(
     publicKey,
   });
 }
+
+/** Encode a 32-byte seed as the `seed:<hex>` secret the store consumes. */
+export function buildSeedSecret(seed: Uint8Array): string {
+  return `${SEED_SECRET_PREFIX}${bytesToHex(seed)}`;
+}
+
+/**
+ * The wallet seed of a PREVIOUS key of the subject (ADR 0002, amended
+ * 2026-11-06 "previous keys stay spendable"): {@link deriveIdentitySeed} by
+ * another name, kept so the two uses read apart.
+ */
+export const derivePreviousKeySeed = deriveIdentitySeed;
 
 /**
  * The previous keys Commons says this device holds for the subject, as a HINT

@@ -18,22 +18,66 @@ mock.module('@oxy.so/core/crypto', () => ({
   KeyManager: { deriveScopedSeed },
 }));
 
-const { deriveIdentitySeed, buildSeedSecret, PEABLE_SEED_INFO, SEED_SECRET_PREFIX } = await import(
-  './identity-wallet'
-);
+const {
+  deriveIdentitySeed,
+  buildSeedSecret,
+  identitySubjectOfWalletId,
+  identityWalletIdOf,
+  isIdentityWalletId,
+  LEGACY_IDENTITY_WALLET_ID,
+  personalSubject,
+  PEABLE_SEED_INFO,
+  SEED_SECRET_PREFIX,
+} = await import('./identity-wallet');
+
+const ACCOUNT_A = '0123456789abcdef01234567';
+const ACCOUNT_B = '76543210fedcba9876543210';
+const KEY = `02${'11'.repeat(32)}`;
 
 describe('deriveIdentitySeed', () => {
-  test('passes the Peable FairCoin domain info and returns the seed', async () => {
+  test('passes the Peable FairCoin domain info and ALWAYS names the key (R5-1)', async () => {
     scopedResult = new Uint8Array(32).fill(7);
-    const seed = await deriveIdentitySeed();
-    expect(deriveScopedSeed).toHaveBeenCalledWith('peable/faircoin/v1');
+    const seed = await deriveIdentitySeed(personalSubject(ACCOUNT_A), KEY);
+    // Never the unselected read, which takes the keychain group every Oxy app
+    // can write: the key the wallet decided on, by its public key.
+    expect(deriveScopedSeed).toHaveBeenLastCalledWith('peable/faircoin/v1', { publicKey: KEY });
     expect(PEABLE_SEED_INFO).toBe('peable/faircoin/v1');
     expect(seed).toEqual(new Uint8Array(32).fill(7));
   });
 
-  test('returns null when core has no identity key (web / keyless)', async () => {
+  test("an organization's seed names its account and its key", async () => {
+    scopedResult = new Uint8Array(32).fill(7);
+    await deriveIdentitySeed({ kind: 'organization', accountId: ACCOUNT_B }, KEY);
+    expect(deriveScopedSeed).toHaveBeenLastCalledWith('peable/faircoin/v1', {
+      accountId: ACCOUNT_B,
+      publicKey: KEY,
+    });
+  });
+
+  test('returns null when this device does not hold the key named', async () => {
     scopedResult = null;
-    expect(await deriveIdentitySeed()).toBeNull();
+    expect(await deriveIdentitySeed(personalSubject(ACCOUNT_A), KEY)).toBeNull();
+  });
+});
+
+describe('identity wallet ids (R5-2)', () => {
+  test("each person's wallet is its own namespace, named by the account", () => {
+    const a = identityWalletIdOf(personalSubject(ACCOUNT_A));
+    const b = identityWalletIdOf(personalSubject(ACCOUNT_B));
+    expect(a).toBe(`oxy-user-${ACCOUNT_A}`);
+    expect(a).not.toBe(b);
+    expect(identitySubjectOfWalletId(a)).toEqual(personalSubject(ACCOUNT_A));
+    expect(identitySubjectOfWalletId(`oxy-org-${ACCOUNT_B}`)).toEqual({
+      kind: 'organization',
+      accountId: ACCOUNT_B,
+    });
+  });
+
+  test('the legacy shared id names no account and is never opened as anyone’s', () => {
+    expect(identitySubjectOfWalletId(LEGACY_IDENTITY_WALLET_ID)).toBeNull();
+    expect(isIdentityWalletId(LEGACY_IDENTITY_WALLET_ID)).toBe(true);
+    expect(identitySubjectOfWalletId('oxy-user-')).toBeNull();
+    expect(isIdentityWalletId('3f2c-bip39-wallet')).toBe(false);
   });
 });
 

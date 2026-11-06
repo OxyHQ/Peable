@@ -374,9 +374,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     // ---------- Receive ----------
     'receive.title': 'Receive FAIR',
     'receive.payMeAt': 'Pay me at',
-    'receive.keyMismatch.title': 'Paying by @username is off on this phone',
+    'receive.keyMismatch.title': 'Receiving is off on this phone',
     'receive.keyMismatch.personal':
-      'Your account publishes a different identity key than this phone holds, so payments by @username would go where this wallet cannot see them. What this phone already received stays here.',
+      'Your account publishes a different identity key than this phone holds, so payments to @username or to an address shown here would go where this wallet cannot see them. What this phone already received stays here.',
     'receive.keyMismatch.organization':
       'This phone holds a key the organization has since replaced. Add the current one in Commons (Settings → Organizations → Organization wallets). What the previous key received stays spendable here.',
     // Previous identity keys (ADR 0002, amended 2026-11-06 "previous keys stay spendable").
@@ -391,6 +391,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Everything under the previous key goes to a new address of your current key, in one transaction. Network fee: {fee} FAIR.',
     'wallet.previousKey.confirm': 'Move now',
     'wallet.previousKey.moved': 'Moving to your current key. It is final once confirmed.',
+    'wallet.previousKey.changed':
+      'The coins or the fee changed since you confirmed. Review the move and confirm again.',
     'wallet.previousKey.failed': 'The move did not go through: {message}',
     'wallet.previousKey.dust':
       'What is under the previous key would not cover the network fee, so there is nothing worth moving.',
@@ -406,6 +408,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'receive.share': 'Share',
     'receive.new_address': 'New Address',
     'receive.subtitle': 'Share this address to receive FairCoin',
+    'receive.unconfirmed.title': 'Checking your key',
+    'receive.unconfirmed.body':
+      'Peable shows an address to pay only once your Oxy account confirms this wallet holds its current key. Stay connected and this updates on its own.',
     'receive.yourAddress': 'Your address',
     'receive.addressCopied.description': 'Address copied to clipboard',
     'receive.hideList': 'Hide list',
@@ -554,6 +559,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'organizationWallet.unsupported.title': 'This account has no Peable wallet',
     'organizationWallet.unsupported.body':
       'Peable wallets belong to people and organizations. Switch to your own account or an organization to see a wallet.',
+    'organizationWallet.unverified.title': 'Your wallet could not be checked',
+    'organizationWallet.unverified.body':
+      'Peable opens your wallet only with a key your Oxy account vouches for, and Oxy could not be reached to ask. Check your connection and try again.',
     'organizationWallet.checkAgain': 'Check again',
     'organizationWallet.switchAccount': 'Switch account',
     'organizationWallet.commonsNotInstalled':
@@ -1292,7 +1300,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     // ---------- Receive ----------
     'receive.title': 'Recibir FAIR',
     'receive.payMeAt': 'P\u00e1game en',
-    'receive.keyMismatch.title': 'El pago por @usuario est\u00e1 desactivado en este tel\u00e9fono',
+    'receive.keyMismatch.title': 'Recibir est\u00e1 desactivado en este tel\u00e9fono',
     'receive.keyMismatch.personal':
       'Tu cuenta publica una clave de identidad distinta de la que tiene este tel\u00e9fono, as\u00ed que los pagos por @usuario ir\u00edan adonde este monedero no puede verlos. Lo que este tel\u00e9fono ya recibi\u00f3 sigue aqu\u00ed.',
     'receive.keyMismatch.organization':
@@ -1309,6 +1317,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.previousKey.confirm': 'Mover ahora',
     'wallet.previousKey.moved':
       'Moviendo a tu clave actual. Ser\u00e1 definitivo cuando se confirme.',
+    'wallet.previousKey.changed':
+      'Las monedas o la comisi\u00f3n cambiaron desde que lo confirmaste. Rev\u00edsalo y confirma de nuevo.',
     'wallet.previousKey.failed': 'No se pudo mover: {message}',
     'wallet.previousKey.dust':
       'Lo que hay bajo la clave anterior no cubrir\u00eda la comisi\u00f3n de red, as\u00ed que no merece la pena moverlo.',
@@ -1325,6 +1335,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'receive.share': 'Compartir',
     'receive.new_address': 'Nueva Direcci\u00f3n',
     'receive.subtitle': 'Comparte esta direcci\u00f3n para recibir FairCoin',
+    'receive.unconfirmed.title': 'Comprobando tu clave',
+    'receive.unconfirmed.body':
+      'Peable muestra una direcci\u00f3n para pagar solo cuando tu cuenta Oxy confirma que este monedero tiene su clave actual. Mantente conectado y esto se actualizar\u00e1 solo.',
     'receive.yourAddress': 'Tu direcci\u00f3n',
     'receive.addressCopied.description': 'Direcci\u00f3n copiada al portapapeles',
     'receive.hideList': 'Ocultar lista',
@@ -1482,6 +1495,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'organizationWallet.unsupported.title': 'Esta cuenta no tiene monedero Peable',
     'organizationWallet.unsupported.body':
       'Los monederos Peable son de personas y organizaciones. Cambia a tu propia cuenta o a una organizaci\u00f3n para ver un monedero.',
+    'organizationWallet.unverified.title': 'No se pudo comprobar tu monedero',
+    'organizationWallet.unverified.body':
+      'Peable abre tu monedero solo con una clave que tu cuenta Oxy avala, y no se pudo contactar con Oxy. Comprueba tu conexi\u00f3n e int\u00e9ntalo de nuevo.',
     'organizationWallet.checkAgain': 'Comprobar de nuevo',
     'organizationWallet.switchAccount': 'Cambiar de cuenta',
     'organizationWallet.commonsNotInstalled':

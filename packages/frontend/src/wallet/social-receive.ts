@@ -2,8 +2,9 @@
  * Peable's on-device half of the social-receive scheme (design spec §4.3).
  *
  * Peable never holds the identity private key. Every watched address derives from
- * the identity PUBLIC key (`KeyManager.getSharedPublicKey()`), exactly as a
- * payer or the backend derives the same addresses, and spending a
+ * the identity PUBLIC key the wallet opened with (`identity-key.ts` decides it
+ * from what the account vouches for, never from a store another app can
+ * write — R5-1), exactly as a payer or the backend derives the same addresses, and spending a
  * social-receive coin asks the key's holder to sign the input's sighash
  * (`KeyManager.signSocialReceive(index, sighash)`): Commons over
  * signature-protected IPC on Android, the keychain-group key on iOS. What comes
@@ -29,7 +30,7 @@ import {
 import type { NetworkConfig, Transaction } from '@fairco.in/core';
 import { Point } from '@noble/secp256k1';
 import { KeyManager as IdentityKeyManager, getOrganizationPublicKey } from '@oxy.so/core/crypto';
-import { PERSONAL_SUBJECT, identityKeyOptions, type IdentitySubject } from './identity-wallet';
+import { identityKeyOptions, type IdentitySubject } from './identity-wallet';
 
 /**
  * The compressed, lowercase hex form of a secp256k1 public key, whatever
@@ -43,27 +44,24 @@ export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
 }
 
 /**
- * The identity public key, compressed hex — the name under which this device's
- * social-receive addresses exist. `null` on web, for a keyless account, or on
- * Android when Commons is absent: only the key's holder can sign for these
- * addresses, so without it there is nothing to watch.
- *
- * Both sides of social receive derive from it: this device derives the addresses it
- * watches from it, and the backend derives what payers are sent to from the key
- * the account publishes. Comparing the two is the only way to notice they have
- * stopped being the same key.
+ * The key this device SAYS it holds for the subject, compressed hex — an
+ * UNTRUSTED hint, never the wallet's key on its own (R5-1): the person's comes
+ * from the iOS keychain group every Oxy app can write (or Commons' identity
+ * host on Android), the organization's likewise. `identity-key.ts` takes it
+ * only when the account's own key history names it, and opens it only once
+ * `deriveScopedSeed` selecting it proves this device holds it. `null` on web,
+ * for a keyless account, or when nothing answers.
  */
-export async function getIdentityPublicKeyHex(
-  subject: IdentitySubject = PERSONAL_SUBJECT,
-): Promise<string | null> {
-  // An organization's key as THIS phone can reach it (oxy ADR 0061 D6): the
-  // iOS keychain group, or Commons' identity host on Android. `null` when this
-  // phone has no copy — never the person's own key in its place.
-  const publicKey =
-    subject.kind === 'organization'
-      ? await getOrganizationPublicKey(subject.accountId)
-      : await IdentityKeyManager.getSharedPublicKey();
-  return publicKey ? compressedPublicKeyHex(publicKey) : null;
+export async function readDeviceKeyHint(subject: IdentitySubject): Promise<string | null> {
+  try {
+    const publicKey =
+      subject.kind === 'organization'
+        ? await getOrganizationPublicKey(subject.accountId)
+        : await IdentityKeyManager.getSharedPublicKey();
+    return publicKey ? compressedPublicKeyHex(publicKey) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -133,7 +131,7 @@ export async function signSocialReceiveInput(
   index: number,
   address: string,
   network: NetworkConfig,
-  subject: IdentitySubject = PERSONAL_SUBJECT,
+  subject: IdentitySubject,
   selector: SocialReceiveKeySelector = {},
 ): Promise<Uint8Array> {
   const sighash = bytesToHex(p2pkhSigHash(tx, inputIndex, scriptPubKey));
