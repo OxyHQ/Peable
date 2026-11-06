@@ -435,3 +435,13 @@ the sale was priced at. No fiat balance is created by it.
 - Multi-recipient FairCoin on a raw PaymentIntent or a payment link (D6 builds it
   for Checkout Sessions, the marketplace cart).
 - Which fiat reference applies beyond the ECB's set (no Orbit currency needs one today).
+
+## Owner's mainnet waiver (2026-11-06)
+
+D5's mainnet gate is ADR 0002's. On 2026-11-06 the owner (Nate I.) waived two of
+its prerequisites — the legal opinion and physical-device verification — and
+directed that mainnet open once the security review signs off and the testnet
+canary passes. The waiver, its limits and where the gate stands are recorded in
+ADR 0002 ("Owner's mainnet waiver") and `docs/audits/2026-11-06-mainnet-gate/`.
+Until then a live order's FairCoin option answers `faircoin_network_closed`.
+
