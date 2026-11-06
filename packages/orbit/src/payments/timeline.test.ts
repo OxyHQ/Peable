@@ -26,6 +26,7 @@ describe('paymentTimeline', () => {
         faircoin: {
           network: 'testnet',
           address: 'TAddress',
+          outputs: [{ address: 'TAddress', amount: '100', connected_account: null }],
           txid: 'abc',
           confirmations: 1,
           required_confirmations: 2,
@@ -118,6 +119,7 @@ describe('paymentTimeline', () => {
         faircoin: {
           network: 'testnet',
           address: 'TAddress',
+          outputs: [{ address: 'TAddress', amount: '100', connected_account: null }],
           txid: 'abc',
           confirmations: 1,
           required_confirmations: 2,

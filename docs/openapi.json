@@ -5301,6 +5301,12 @@
                             "enabled"
                           ],
                           "additionalProperties": false
+                        },
+                        "connected_account": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255,
+                          "description": "The seller (`ca_…`) this line is sold by (ADR 0021 D6). A FairCoin payment pays every seller of the order its share directly, in one transaction, split by each seller's lines' `amount_subtotal`; a line without one is the merchant's own sale. The card payment stays the merchant's charge. Exclusive with the session's `connected_account`."
                         }
                       },
                       "required": [
@@ -5657,7 +5663,26 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 255,
-                    "description": "Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only."
+                    "description": "Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only. Exclusive with `line_items[].connected_account`."
+                  },
+                  "payment_intent_data": {
+                    "type": "object",
+                    "properties": {
+                      "metadata": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 500
+                        },
+                        "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "expand": {
                     "type": "array",
@@ -56917,7 +56942,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 109 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 110 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -57282,6 +57307,24 @@
         "required": [
           "id",
           "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "FaircoinPaymentOutput": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+          }
+        },
+        "required": [
+          "address",
+          "amount"
         ],
         "additionalProperties": false
       },
@@ -59231,7 +59274,13 @@
                 "network": "testnet",
                 "amount": "150000000",
                 "currency": "FAIR",
-                "uri": "faircoin:fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG?amount=1.5"
+                "uri": "faircoin:fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG?amount=1.5",
+                "outputs": [
+                  {
+                    "address": "fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG",
+                    "amount": "150000000"
+                  }
+                ]
               }
             },
             "last_payment_error": null,
@@ -59244,6 +59293,13 @@
             "faircoin": {
               "network": "testnet",
               "address": "fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG",
+              "outputs": [
+                {
+                  "address": "fLx9bJ3Wv2kq8mT4sR6nZ1cY7pD5eH0aG",
+                  "amount": "150000000",
+                  "connected_account": null
+                }
+              ],
               "txid": null,
               "confirmations": 0,
               "required_confirmations": 6,
@@ -59302,8 +59358,42 @@
             ]
           },
           "address": {
-            "type": "string",
-            "description": "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5)."
+            "description": "Receive address in the Peable wallet of the account this payment pays (the merchant's owner, or the seller), derived per payment from that account's public identity key (ADR 0021 D5); `null` when the payment pays several accounts (read `outputs`).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputs": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$",
+                  "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+                },
+                "connected_account": {
+                  "description": "The seller (`ca_…`) this output pays; `null` for the merchant's owner.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "address",
+                "amount",
+                "connected_account"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Every output of the payment's ONE transaction, in order (ADR 0021 D6). Each pays one account's Peable wallet; the watcher verifies each."
           },
           "txid": {
             "type": [
@@ -59336,6 +59426,7 @@
         "required": [
           "network",
           "address",
+          "outputs",
           "txid",
           "confirmations",
           "required_confirmations",
@@ -59356,7 +59447,11 @@
                 "type": "object",
                 "properties": {
                   "address": {
-                    "type": "string"
+                    "description": "The one output's address; `null` when the payment has several outputs (read `outputs`).",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "network": {
                     "type": "string",
@@ -59368,15 +59463,26 @@
                   "amount": {
                     "type": "string",
                     "pattern": "^(0|[1-9][0-9]*)$",
-                    "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+                    "description": "The sum of every output, in base units."
                   },
                   "currency": {
                     "type": "string",
                     "const": "FAIR"
                   },
                   "uri": {
-                    "type": "string",
-                    "description": "The `faircoin:` URI a wallet scans."
+                    "description": "The `faircoin:` URI a wallet scans; `null` when the payment has several outputs (a `faircoin:` URI names one address, so only the Peable wallet can pay it).",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "outputs": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/FaircoinPaymentOutput"
+                    },
+                    "description": "Every output the ONE transaction must carry (ADR 0021 D6): each address receives at least its amount, or the whole payment is `canceled` `underpaid`."
                   }
                 },
                 "required": [
@@ -59384,7 +59490,8 @@
                   "network",
                   "amount",
                   "currency",
-                  "uri"
+                  "uri",
+                  "outputs"
                 ],
                 "additionalProperties": false
               }

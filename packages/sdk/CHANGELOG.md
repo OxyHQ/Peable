@@ -1,5 +1,30 @@
 # Changelog
 
+## 5.0.0 — a marketplace order pays every seller in ONE FairCoin transaction
+
+Requires `@peable.to/contracts` 5.0.0 and `@peable.to/shared-types` 5.0.0 (ADR 0021 D6, D8).
+
+Breaking (types):
+
+- `PaymentIntent.faircoin.address`, `next_action.faircoin_payment.address` and
+  `next_action.faircoin_payment.uri` are `string | null`: `null` when the payment
+  has several outputs. A `faircoin:` URI names one address, so such a payment is
+  paid only through the Peable wallet's request. Read the new `outputs` instead
+  (always at least one entry; a payment to one payee is the one-output case).
+
+Added:
+
+- `faircoin.outputs[]` (`address`, `amount`, `connected_account`) and
+  `next_action.faircoin_payment.outputs[]` (`address`, `amount`).
+- `checkout.sessions.create`: `line_items[].connected_account` — the seller a line
+  is sold by. FairCoin pays each seller its share (by subtotal, largest remainder)
+  in one payer-signed transaction; the card payment stays the merchant's own
+  charge. Exclusive with the session's `connected_account`.
+- `checkout.sessions.create`: `payment_intent_data.metadata`, copied to every
+  payment the session creates.
+- Error code `faircoin_amount_too_small`.
+- The `peable://pay` request carries `outputs=` for a payment with several
+  outputs (`payDeepLinkFor`).
 ## 4.3.0 — Apple Pay and Google Pay in the sheet; the sheet in fifteen languages
 
 Requires `@peable.to/contracts` 4.1.0 and `@peable.to/shared-types` 4.1.0.

@@ -44,6 +44,12 @@ export interface SelectInputsParams {
    * When omitted, the selector's own dust rule is used.
    */
   readonly dustThreshold?: bigint;
+  /**
+   * How many outputs the transaction pays besides change (default 1). A
+   * multi-recipient payment (one output per payee, ADR 0021 D6) is sized for
+   * every one of them, exactly as `buildTransaction` sizes `recipients.length + 1`.
+   */
+  readonly recipientCount?: number;
 }
 
 export interface SelectedInputs {
@@ -60,9 +66,9 @@ function outpointKey(txid: string, vout: number): string {
 }
 
 /**
- * Compute the fee and change for a fixed set of inputs paying a single
- * recipient, mirroring `buildTransaction`'s exact logic: the base fee assumes a
- * change output (recipient + change), and if the resulting change would be at
+ * Compute the fee and change for a fixed set of inputs paying
+ * `recipientCount` recipients, mirroring `buildTransaction`'s exact logic: the
+ * base fee assumes a change output (recipients + change), and if the resulting change would be at
  * or below `dustThreshold` the change output is dropped and the dust is
  * absorbed into the fee. This is what keeps "fee shown == fee built" exact.
  */
@@ -72,8 +78,9 @@ function computeFeeAndChange(
   inputCount: number,
   feePerByte: number,
   dustThreshold: bigint,
+  recipientCount: number,
 ): { fee: bigint; change: bigint } {
-  const feeWithChange = estimateFeeForInputs(inputCount, feePerByte);
+  const feeWithChange = estimateFeeForInputs(inputCount, feePerByte, recipientCount + 1);
   const change = totalIn - targetValue - feeWithChange;
   if (change > dustThreshold) {
     return { fee: feeWithChange, change };
@@ -91,6 +98,7 @@ function computeFeeAndChange(
  */
 export function selectInputsForSend(params: SelectInputsParams): SelectedInputs {
   const { candidates, targetValue, feePerByte, coinControl, dustThreshold } = params;
+  const recipientCount = recipientCountOf(params);
 
   if (targetValue <= 0n) {
     throw new Error('Target value must be positive');
@@ -120,11 +128,11 @@ export function selectInputsForSend(params: SelectInputsParams): SelectedInputs 
     }
   } else {
     // Automatic largest-first selection over confirmed coins.
-    selected = confirmed.selectCoins(targetValue, feePerByte).selected;
+    selected = confirmed.selectCoins(targetValue, feePerByte, recipientCount).selected;
   }
 
   const total = selected.reduce((sum, u) => sum + u.value, 0n);
-  const baseFee = estimateFeeForInputs(selected.length, feePerByte);
+  const baseFee = estimateFeeForInputs(selected.length, feePerByte, recipientCount + 1);
   if (total < targetValue + baseFee) {
     throw new Error(
       `Insufficient funds in selected coins: need ${(targetValue + baseFee).toString()} ${SMALLEST_UNIT_NAME}, ` +
@@ -139,6 +147,7 @@ export function selectInputsForSend(params: SelectInputsParams): SelectedInputs 
       selected.length,
       feePerByte,
       dustThreshold,
+      recipientCount,
     );
     return { selected, fee, change };
   }
@@ -147,17 +156,34 @@ export function selectInputsForSend(params: SelectInputsParams): SelectedInputs 
 }
 
 /**
- * Estimate the fee for a transaction spending `inputCount` inputs and paying a
- * recipient plus a change output. Mirrors {@link UTXOSet.selectCoins}'s sizing
- * (recipient + change = 2 outputs) so the displayed and built fees agree.
+ * The recipient count a selection is sized for: 1 unless the caller says more.
+ * A count below 1 or not an integer is a caller bug, refused rather than
+ * silently under-pricing the fee.
  */
-export function estimateFeeForInputs(inputCount: number, feePerByte: number): bigint {
+function recipientCountOf(params: SelectInputsParams): number {
+  const count = params.recipientCount ?? 1;
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`recipientCount must be a positive integer, not ${String(count)}`);
+  }
+  return count;
+}
+
+/**
+ * Estimate the fee for a transaction spending `inputCount` inputs and paying
+ * `outputCount` outputs — recipients plus change (default 2: one recipient and
+ * change). Mirrors {@link UTXOSet.selectCoins}'s sizing and `buildTransaction`'s
+ * so the displayed and built fees agree.
+ */
+export function estimateFeeForInputs(
+  inputCount: number,
+  feePerByte: number,
+  outputCount = 2,
+): bigint {
   // P2PKH sizing, identical to utxo-set.ts: overhead + inputs*148 + outputs*34.
   const TX_OVERHEAD_BYTES = 10;
   const BYTES_PER_INPUT = 148;
   const BYTES_PER_OUTPUT = 34;
-  const OUTPUT_COUNT = 2; // recipient + change
-  const size = TX_OVERHEAD_BYTES + inputCount * BYTES_PER_INPUT + OUTPUT_COUNT * BYTES_PER_OUTPUT;
+  const size = TX_OVERHEAD_BYTES + inputCount * BYTES_PER_INPUT + outputCount * BYTES_PER_OUTPUT;
   return BigInt(size) * BigInt(feePerByte);
 }
 
@@ -193,7 +219,9 @@ export function estimateSend(params: SelectInputsParams): SendEstimate {
       : confirmed;
 
   const poolTotal = pool.reduce((sum, u) => sum + u.value, 0n);
-  const feeForFullPool = pool.length > 0 ? estimateFeeForInputs(pool.length, feePerByte) : 0n;
+  const outputCount = recipientCountOf(params) + 1;
+  const feeForFullPool =
+    pool.length > 0 ? estimateFeeForInputs(pool.length, feePerByte, outputCount) : 0n;
   const maxSendable = poolTotal > feeForFullPool ? poolTotal - feeForFullPool : 0n;
 
   if (targetValue <= 0n) {

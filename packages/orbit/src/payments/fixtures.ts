@@ -34,6 +34,7 @@ export function intentFixture(overrides: Partial<PaymentIntent> = {}): PaymentIn
     faircoin: {
       network: 'testnet',
       address: 'TAddress',
+      outputs: [{ address: 'TAddress', amount: '100000000', connected_account: null }],
       txid: null,
       confirmations: 0,
       required_confirmations: 2,

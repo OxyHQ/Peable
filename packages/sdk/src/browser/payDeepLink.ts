@@ -9,18 +9,32 @@ import { PeableError } from '../core/errors';
  * in the wallet's `packages/frontend/src/pay/payment-request.ts`. */
 const PAYMENT_REQUEST_PREFIX = 'peable://pay';
 
-export interface PayDeepLinkParams {
+/** One output of a FairCoin payment's transaction (ADR 0021 D6). */
+export interface PayDeepLinkOutput {
+  readonly address: string;
+  /** Base-unit integer string (m⊜). */
+  readonly amount: string;
+}
+
+interface PayDeepLinkCommon {
   intentId: string;
   clientSecret: string;
-  /**
-   * The intent's receive address (in the payee's Peable wallet, ADR 0021 D5). FairCoin rail only — this link is
-   * a chain payment request and there is nothing to put here for a card.
-   */
-  address: string;
-  /** Base-unit integer string (m⊜) — `PaymentIntent['amount']`'s own shape. */
+  /** Base-unit integer string (m⊜) — `PaymentIntent['amount']`'s own shape: the sum of every output. */
   amount: string;
   network: NonNullable<PaymentIntent['faircoin']>['network'];
 }
+
+/**
+ * A payment to ONE address (the payee's Peable wallet, ADR 0021 D5), or the
+ * ordered `outputs` of a payment that pays several accounts in one
+ * transaction (ADR 0021 D6). FairCoin rail only — this link is a chain payment
+ * request and there is nothing to put here for a card.
+ */
+export type PayDeepLinkParams = PayDeepLinkCommon &
+  (
+    | { address: string; outputs?: undefined }
+    | { address?: undefined; outputs: readonly PayDeepLinkOutput[] }
+  );
 
 /**
  * Thrown when a deep link is asked for on an intent that has no chain payment
@@ -61,10 +75,19 @@ export function payDeepLinkFor(intent: PaymentIntent): string {
   return buildPayDeepLink({
     intentId: intent.id,
     clientSecret: intent.client_secret,
-    address: intent.faircoin.address,
+    outputs: intent.faircoin.outputs,
     amount: intent.amount,
     network: intent.faircoin.network,
   });
+}
+
+/**
+ * Whether a FairCoin payment can be paid from ANY wallet — a `faircoin:` URI
+ * names one address, so a payment of several outputs (ADR 0021 D6) is the
+ * Peable wallet's only.
+ */
+export function payableByExternalWallet(intent: PaymentIntent): boolean {
+  return intent.faircoin !== null && intent.faircoin.outputs.length === 1;
 }
 
 /**
@@ -78,10 +101,24 @@ export function payDeepLinkFor(intent: PaymentIntent): string {
  * expects on the other end.
  */
 export function buildPayDeepLink(params: PayDeepLinkParams): string {
+  const outputs: readonly PayDeepLinkOutput[] =
+    params.outputs ??
+    (params.address !== undefined ? [{ address: params.address, amount: params.amount }] : []);
+  if (outputs.length === 0) {
+    throw new PeableError('invalid_request_error', 'a FairCoin payment request needs an output');
+  }
+  // One output: exactly the long-standing form. Several: `outputs` and NO
+  // `address`, so a wallet that predates ADR 0021 D6 refuses the request
+  // rather than paying the whole amount to the first seller.
+  const [only] = outputs;
+  const destination: Array<[string, string]> =
+    outputs.length === 1 && only
+      ? [['address', only.address]]
+      : [['outputs', outputs.map((output) => `${output.address}:${output.amount}`).join(',')]];
   const pairs: Array<[string, string]> = [
     ['intent', params.intentId],
     ['secret', params.clientSecret],
-    ['address', params.address],
+    ...destination,
     ['amount', params.amount],
     ['network', params.network],
   ];

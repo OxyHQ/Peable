@@ -32,7 +32,7 @@ import { ToastOutlet } from '@oxy.so/bloom/toast';
 import type { ThemeMode } from '@oxy.so/bloom/theme';
 import { ImageResolverProvider } from '@oxy.so/bloom/image-resolver';
 import { parseFairCoinURI } from '@fairco.in/core';
-import { parsePaymentRequest } from '../src/pay/payment-request';
+import { parsePaymentRequest, paymentRequestRouteParams } from '../src/pay/payment-request';
 import { queryClient } from '../src/services/query-client';
 import { oxyServices } from '../src/services/oxy-services';
 import { OXY_CLIENT_ID, OXY_AUTH_REDIRECT_URI } from '../src/config';
@@ -119,13 +119,7 @@ function useDeepLinkHandler() {
       if (payment) {
         router.push({
           pathname: '/pay/[intent]',
-          params: {
-            intent: payment.intentId,
-            secret: payment.clientSecret,
-            address: payment.address,
-            amount: payment.amount.toString(),
-            network: payment.network,
-          },
+          params: paymentRequestRouteParams(payment),
         });
         return;
       }

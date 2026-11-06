@@ -1,6 +1,6 @@
 import type { PaymentIntent } from '@peable.to/shared-types';
 import { formatFair } from '@fairco.in/core';
-import { buildPayDeepLink } from '../lib/deepLink';
+import { payDeepLinkFor } from '../lib/deepLink';
 import { Qr } from './Qr';
 import { DisplayCurrency } from './DisplayCurrency';
 import { useI18n } from '../i18n';
@@ -37,13 +37,9 @@ export function isChainIntent(intent: PaymentIntent): intent is ChainPaymentInte
 export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
   const { t, locale } = useI18n();
   const quote = intent.faircoin.quote;
-  const deepLink = buildPayDeepLink({
-    intentId: intent.id,
-    clientSecret: intent.client_secret,
-    address: intent.faircoin.address,
-    amount: intent.amount,
-    network: intent.faircoin.network,
-  });
+  // Every output of the payment (ADR 0021 D6): one address, or each seller's
+  // share in ONE transaction — only the Peable wallet can sign the latter.
+  const deepLink = payDeepLinkFor(intent);
 
   return (
     <div className="pay-with-peable">

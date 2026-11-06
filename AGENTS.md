@@ -271,6 +271,7 @@ and no RPC node dependency anywhere in this repo. `@fairco.in/core` is the only
 
 `services/settlementWatcher.ts` polls the Explorer for in-flight intents.
 Only FairCoin `processing` intents carrying a payer-reported txid are watchable
+(it verifies EVERY output of `faircoinOutputsOf`, ADR 0021 D6)
 (`submit_tx` moves `requires_action → processing` with the txid in one write);
 `requires_action` and the terminal statuses are never polled. While a paid
 transaction confirms it writes the live `confirmations` count (same status, no
@@ -474,6 +475,20 @@ rules, each of which is easy to undo:
   authorized by the session's `client_secret` in `X-Peable-Client-Secret`,
   never an Oxy session, never a URL. A checkout event is merchant-scoped and carries no
   `payment_intent_id` (`events_intent_event_has_intent_check`).
+- **A multi-seller order pays every seller in ONE FairCoin transaction (ADR 0021
+  D6).** A line may name its seller (`line_items[].connected_account`, exclusive
+  with the session's). FairCoin's quoted total is split by each recipient's
+  lines' `amount_subtotal` in `services/faircoin/split.ts` (bigint, largest
+  remainder, ties to the earlier recipient) — never re-derive it; one address is
+  reserved per output on THAT recipient's cursor; the intent's outputs are
+  `payment_intent_outputs`, read through `faircoinOutputsOf` (an older intent is
+  its one output). The watcher pays only when EVERY output is paid; one short is
+  `canceled` `underpaid`. A seller not ready makes FairCoin unavailable
+  (`faircoin_wallet_missing`), never refuses the order; a share at or below dust
+  is 409 `faircoin_amount_too_small`. The card payment stays the merchant's
+  platform charge (it pays sellers with transfers). There is never a fee output.
+- **`payment_intent_data.metadata` is copied to every payment a session creates**
+  (each method, each quote; ADR 0021 D8) — a platform matches events by its own id.
 - **`mode: 'subscription'`** is validated and refused with 400 `param: mode`
   until the billing engine calls `registerSubscriptionCheckoutFulfiller`.
 - **Payment links are over prices**; their lines are fixed once shared and only

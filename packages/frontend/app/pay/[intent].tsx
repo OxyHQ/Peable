@@ -6,8 +6,9 @@
  * as route params). It shows the amount, payee address, and network, then:
  *
  *   Decline → navigate away (the Gateway has no payer-facing reject endpoint).
- *   Approve → pay `address` for `amount` through the wallet's normal
- *             build/sign/broadcast flow ({@link useWalletStore.sendTransaction},
+ *   Approve → pay every output (one, or one per payee of a multi-seller
+ *             order, Peable ADR 0021 D6) in ONE transaction through the wallet's normal
+ *             build/sign/broadcast flow ({@link useWalletStore.sendToRecipients},
  *             which returns the txid) → report the txid to the Gateway
  *             ({@link submitTx}) → subscribe to live status
  *             ({@link subscribeToIntent}) and render `processing` (sent, then
@@ -21,7 +22,7 @@
  * signed-out payer still pays and is shown a sign-in nudge.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -35,6 +36,7 @@ import { ScreenHeader, Button } from '../../src/ui/components';
 import { FairCoinSymbol } from '../../src/ui/components/FairCoinSymbol';
 import { useWalletStore, FEE_RATES } from '../../src/wallet/wallet-store';
 import { submitTx } from '../../src/services/gateway-client';
+import { paymentRequestFromParams } from '../../src/pay/payment-request';
 import { oxyServices } from '../../src/services/oxy-services';
 import { subscribeToIntent, type IntentSubscription } from '../../src/services/gateway-socket';
 import { getCachedPrice } from '../../src/services/price';
@@ -154,11 +156,12 @@ export default function ApprovePayScreen() {
     intent?: string;
     secret?: string;
     address?: string;
+    outputs?: string;
     amount?: string;
     network?: string;
   }>();
 
-  const sendTransaction = useWalletStore((s) => s.sendTransaction);
+  const sendToRecipients = useWalletStore((s) => s.sendToRecipients);
   const walletNetwork = useWalletStore((s) => s.network);
   const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
   const initialized = useWalletStore((s) => s.initialized);
@@ -184,22 +187,33 @@ export default function ApprovePayScreen() {
     };
   }, []);
 
-  // Re-derive + revalidate the request from the route params. The deep-link
-  // router only pushes a well-formed request, but a direct navigation could
-  // arrive incomplete — treat anything malformed as an invalid request.
-  const intentId = params.intent ?? '';
-  const clientSecret = params.secret ?? '';
-  const address = params.address ?? '';
-  const amount = params.amount && /^\d+$/.test(params.amount) ? BigInt(params.amount) : null;
-  const network: NetworkType | null =
-    params.network === 'mainnet' || params.network === 'testnet' ? params.network : null;
-  const requestValid =
-    intentId.length > 0 &&
-    clientSecret.startsWith(`${intentId}_secret_`) &&
-    address.length > 0 &&
-    amount !== null &&
-    amount > 0n &&
-    network !== null;
+  // Re-derive + revalidate the request from the route params, with the SAME
+  // validation the deep link went through. The router only pushes a well-formed
+  // request, but a direct navigation could arrive incomplete — treat anything
+  // malformed as an invalid request.
+  // Keyed by the fields: the params object itself is new on every render.
+  const { intent: pIntent, secret, address, outputs: pOutputs, amount: pAmount } = params;
+  const pNetwork = params.network;
+  const request = useMemo(
+    () =>
+      paymentRequestFromParams({
+        intent: pIntent,
+        secret,
+        address,
+        outputs: pOutputs,
+        amount: pAmount,
+        network: pNetwork,
+      }),
+    [pIntent, secret, address, pOutputs, pAmount, pNetwork],
+  );
+  const requestValid = request !== null;
+  const intentId = request?.intentId ?? '';
+  const clientSecret = request?.clientSecret ?? '';
+  const amount = request?.amount ?? null;
+  const network: NetworkType | null = request?.network ?? null;
+  // One output per payee: a marketplace order pays every seller its share in
+  // ONE transaction (Peable ADR 0021 D6).
+  const outputs = request?.outputs ?? [];
 
   // The wallet builds against its OWN active network — paying a request for a
   // different chain would sign against the wrong parameters, so block it.
@@ -249,7 +263,7 @@ export default function ApprovePayScreen() {
     //    means nothing was broadcast — the only genuinely failed-payment path.
     let broadcastTxid: string;
     try {
-      broadcastTxid = await sendTransaction(address, amount, FEE_RATES.medium);
+      broadcastTxid = await sendToRecipients(outputs, FEE_RATES.medium);
     } catch (err: unknown) {
       if (!ownsView()) return;
       hapticError();
@@ -315,7 +329,7 @@ export default function ApprovePayScreen() {
       setNotice(t('pay.notice.liveStatusUnavailable'));
       setPhase('sent_no_status');
     }
-  }, [amount, address, intentId, clientSecret, isAuthenticated, sendTransaction]);
+  }, [amount, outputs, intentId, clientSecret, isAuthenticated, sendToRecipients]);
 
   const visual = describePaymentStatus(
     intent,
@@ -367,18 +381,25 @@ export default function ApprovePayScreen() {
               </Text>
             </View>
 
-            {/* Payee address */}
+            {/* Payee address — one row per output of a multi-recipient payment */}
             <View>
               <Text className={SECTION_LABEL}>{t('pay.payTo')}</Text>
-              <View className="bg-surface rounded-2xl px-4 py-3.5 mt-2">
-                <Text
-                  selectable
-                  className="text-foreground text-sm"
-                  style={{ fontFamily: 'monospace' }}
-                >
-                  {address}
-                </Text>
-              </View>
+              {outputs.map((output) => (
+                <View key={output.address} className="bg-surface rounded-2xl px-4 py-3.5 mt-2">
+                  <Text
+                    selectable
+                    className="text-foreground text-sm"
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    {output.address}
+                  </Text>
+                  {outputs.length > 1 ? (
+                    <Text className="text-muted-foreground text-sm mt-1">
+                      {formatFair(output.amount)}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
             </View>
 
             {/* Network */}

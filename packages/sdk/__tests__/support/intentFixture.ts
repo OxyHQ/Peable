@@ -28,6 +28,7 @@ export function paymentIntentFixture(overrides: Partial<PaymentIntent> = {}): Pa
       type: 'faircoin_payment',
       faircoin_payment: {
         address: 'addr1',
+        outputs: [{ address: 'addr1', amount: '100000' }],
         network: 'testnet',
         amount: '100000',
         currency: 'FAIR',
@@ -44,6 +45,7 @@ export function paymentIntentFixture(overrides: Partial<PaymentIntent> = {}): Pa
     faircoin: {
       network: 'testnet',
       address: 'addr1',
+      outputs: [{ address: 'addr1', amount: '100000', connected_account: null }],
       txid: null,
       confirmations: 0,
       required_confirmations: 1,

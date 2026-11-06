@@ -16,7 +16,14 @@ import {
 import { uuidv7 } from '@oxy.so/db';
 // Type-only: this repository must not pull the Stripe SDK into a query path.
 import type { ProviderId } from '../../services/providers/provider';
-import { connectedAccounts, customers, merchants, paymentIntents, paymentMethods } from '../schema';
+import {
+  connectedAccounts,
+  customers,
+  merchants,
+  paymentIntentOutputs,
+  paymentIntents,
+  paymentMethods,
+} from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -108,6 +115,14 @@ export interface PaymentIntentRow {
   readonly paymentMethodConfigurationPublicId: string | null;
   readonly captureMethod: PaymentIntentCaptureMethod;
   readonly setupFutureUsage: PaymentIntentSetupFutureUsage | null;
+  /**
+   * The FairCoin outputs (`payment_intent_outputs`, ADR 0021 D6) in order, read
+   * in the same statement; `null` when the intent has no rows (a card payment,
+   * or a FairCoin one written before the table — {@link faircoinOutputsOf}
+   * reads that one as its single output). Optional so older fixtures still
+   * describe a row.
+   */
+  readonly faircoinOutputs?: readonly StoredFaircoinOutput[] | null;
   readonly description: string | null;
   readonly receiptEmail: string | null;
   readonly statementDescriptorSuffix: string | null;
@@ -210,6 +225,9 @@ const INTENT_COLUMNS = {
   cancellationReason: paymentIntents.cancellationReason,
   canceledAt: paymentIntents.canceledAt,
   amountReceived: paymentIntents.amountReceived,
+  faircoinOutputs: sql<StoredFaircoinOutput[] | null>`${sql.raw(
+    `(select jsonb_agg(jsonb_build_object('position', o.position, 'address', o.address, 'amount', o.amount, 'connectedAccountId', o.connected_account_id, 'connectedAccountPublicId', ca.public_id, 'recipientAccountId', o.recipient_account_id) order by o.position) from payment_intent_outputs o left join connected_accounts ca on ca.id = o.connected_account_id where o.payment_intent_id = "payment_intents"."id")`,
+  )}`,
   amountRefunded: sql<string>`${sql.raw(
     `(select coalesce(sum(r.amount::numeric), 0)::text from refunds r where r.payment_intent_id = "payment_intents"."id" and r.status = 'succeeded')`,
   )}`,
@@ -238,6 +256,75 @@ function toIntentRow(row: RawIntentRow): PaymentIntentRow {
     // so an `int4` read this way is coerced here once.
     requiredConfirmations: Number(row.requiredConfirmations),
   } as unknown as PaymentIntentRow;
+}
+
+/** One output of a FairCoin payment as stored (ADR 0021 D6). */
+export interface StoredFaircoinOutput {
+  readonly position: number;
+  readonly address: string;
+  /** Base units, a canonical integer string. */
+  readonly amount: string;
+  /** INTERNAL id of the seller it pays; `null` for the merchant's owner. */
+  readonly connectedAccountId: string | null;
+  /** The same seller's public `ca_…`, read with it. */
+  readonly connectedAccountPublicId: string | null;
+  /** The Oxy account whose Peable wallet the address belongs to. */
+  readonly recipientAccountId: string | null;
+}
+
+/**
+ * The outputs a FairCoin payment's transaction must carry — THE reader every
+ * consumer (wire, watcher, ledger) uses. A payment written before
+ * `payment_intent_outputs` has no rows and is its one output: its own address,
+ * amount and payee. `[]` for a card payment.
+ */
+export function faircoinOutputsOf(intent: PaymentIntentRow): readonly StoredFaircoinOutput[] {
+  if (intent.rail !== 'faircoin' || intent.address === null) return [];
+  if (intent.faircoinOutputs && intent.faircoinOutputs.length > 0) return intent.faircoinOutputs;
+  return [
+    {
+      position: 0,
+      address: intent.address,
+      amount: intent.amount,
+      connectedAccountId: intent.connectedAccountId ?? null,
+      connectedAccountPublicId: intent.connectedAccountPublicId ?? null,
+      recipientAccountId: intent.faircoinRecipientAccountId ?? null,
+    },
+  ];
+}
+
+export interface InsertFaircoinOutputParams {
+  readonly connectedAccountId: string | null;
+  readonly recipientAccountId: string;
+  readonly address: string;
+  readonly amount: string;
+}
+
+/**
+ * Write a FairCoin payment's outputs, in order, in the intent's transaction.
+ * The caller re-reads the intent afterwards: the row an INSERT … RETURNING gave
+ * it was read before these existed.
+ */
+export async function insertFaircoinOutputs(
+  tx: DatabaseOrTransaction,
+  intent: Pick<PaymentIntentRow, 'id' | 'merchantId' | 'network'>,
+  outputs: readonly InsertFaircoinOutputParams[],
+): Promise<void> {
+  if (outputs.length === 0) return;
+  if (intent.network === null) throw new Error('a FairCoin output needs the payment network');
+  const network = intent.network;
+  await tx.insert(paymentIntentOutputs).values(
+    outputs.map((output, position) => ({
+      paymentIntentId: intent.id,
+      merchantId: intent.merchantId,
+      position,
+      connectedAccountId: output.connectedAccountId,
+      network,
+      recipientAccountId: output.recipientAccountId,
+      address: output.address,
+      amount: output.amount,
+    })),
+  );
 }
 
 export interface InsertPaymentIntentParams {
@@ -717,7 +804,9 @@ export async function findIntentsByAddresses(
   const rows = await db
     .select(INTENT_COLUMNS)
     .from(paymentIntents)
-    .where(inArray(paymentIntents.address, [...addresses]));
+    .where(
+      sql`(${inArray(paymentIntents.address, [...addresses])} or ${paymentIntents.id} in (select ${paymentIntentOutputs.paymentIntentId} from ${paymentIntentOutputs} where ${inArray(paymentIntentOutputs.address, [...addresses])}))`,
+    );
   return rows.map(toIntentRow);
 }
 

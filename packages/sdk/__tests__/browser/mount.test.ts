@@ -14,6 +14,7 @@ import { createEmitter, deriveIntentId } from '../../src/browser/mount';
 import {
   buildPayDeepLink,
   payDeepLinkFor,
+  payableByExternalWallet,
   PeableRailUnsupportedError,
   isMobileUserAgent,
   type PayDeepLinkParams,
@@ -37,6 +38,7 @@ const INTENT: PaymentIntent = paymentIntentFixture({
   faircoin: {
     network: NET,
     address: ADDR,
+    outputs: [{ address: ADDR, amount: '150000000', connected_account: null }],
     txid: null,
     confirmations: 0,
     required_confirmations: 1,
@@ -246,6 +248,50 @@ describe('payDeepLinkFor', () => {
         network: NET,
       }),
     );
+  });
+
+  test('a payment of several outputs carries them all and NO address (ADR 0021 D6)', () => {
+    const split = {
+      ...INTENT,
+      amount: '1000',
+      faircoin: {
+        ...INTENT.faircoin,
+        address: null,
+        outputs: [
+          { address: 'TSellerA', amount: '800', connected_account: 'ca_a' },
+          { address: 'TSellerB', amount: '200', connected_account: 'ca_b' },
+        ],
+      },
+    } as unknown as PaymentIntent;
+    const link = payDeepLinkFor(split);
+    expect(link).toBe(
+      `peable://pay?intent=${INTENT.id}&secret=${INTENT.client_secret}&outputs=${encodeURIComponent('TSellerA:800,TSellerB:200')}&amount=1000&network=${NET}`,
+    );
+    // A wallet that predates multi-output payments finds no address and refuses.
+    expect(link.includes('address=')).toBe(false);
+    expect(payableByExternalWallet(split)).toBe(false);
+    expect(payableByExternalWallet(INTENT)).toBe(true);
+  });
+
+  test('one output in `outputs` is exactly the long-standing single-address link', () => {
+    expect(
+      buildPayDeepLink({
+        intentId: INTENT.id,
+        clientSecret: INTENT.client_secret,
+        outputs: [{ address: ADDR, amount: INTENT.amount }],
+        amount: INTENT.amount,
+        network: NET,
+      }),
+    ).toBe(payDeepLinkFor(INTENT));
+    expect(() =>
+      buildPayDeepLink({
+        intentId: INTENT.id,
+        clientSecret: INTENT.client_secret,
+        outputs: [],
+        amount: INTENT.amount,
+        network: NET,
+      }),
+    ).toThrow();
   });
 
   /** A faircoin intent whose chain side somehow went missing is refused too —

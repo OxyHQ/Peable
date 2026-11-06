@@ -11,11 +11,14 @@ export function intentFixture(
 ): PaymentIntent {
   const now = Math.floor(Date.now() / 1000);
   const rail = overrides.rail ?? 'faircoin';
+  const amount = overrides.amount ?? '150000000';
+  const address = 'TAddressExample1111111111111111111';
   const faircoin =
     rail === 'faircoin'
       ? {
           network: 'testnet' as const,
-          address: 'TAddressExample1111111111111111111',
+          address,
+          outputs: [{ address, amount, connected_account: null }],
           txid: null,
           confirmations: 0,
           required_confirmations: 6,
@@ -25,7 +28,6 @@ export function intentFixture(
       : null;
   const status =
     overrides.status ?? (rail === 'faircoin' ? 'requires_action' : 'requires_payment_method');
-  const amount = overrides.amount ?? '150000000';
   return {
     id: 'pi_live123',
     object: 'payment_intent',
@@ -53,7 +55,11 @@ export function intentFixture(
               network: faircoin.network,
               amount,
               currency: 'FAIR',
-              uri: `faircoin:${faircoin.address}`,
+              uri: faircoin.address ? `faircoin:${faircoin.address}` : null,
+              outputs: faircoin.outputs.map((output) => ({
+                address: output.address,
+                amount: output.amount,
+              })),
             },
           }
         : null,

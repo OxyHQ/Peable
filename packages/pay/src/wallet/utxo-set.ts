@@ -133,10 +133,11 @@ export class UTXOSet {
    *
    * @param targetValue - Amount to send in satoshis.
    * @param feePerByte - Fee rate in satoshis per byte.
+   * @param recipientCount - Outputs the transaction pays besides change (default 1).
    * @returns Selected UTXOs, total fee, and change amount.
    * @throws If insufficient funds.
    */
-  selectCoins(targetValue: bigint, feePerByte: number): CoinSelectionResult {
+  selectCoins(targetValue: bigint, feePerByte: number, recipientCount = 1): CoinSelectionResult {
     if (targetValue <= 0n) {
       throw new Error('Target value must be positive');
     }
@@ -159,8 +160,8 @@ export class UTXOSet {
       selectedTotal += utxo.value;
 
       // Estimate fee with current selection
-      // Assume 1 output for recipient + 1 for change
-      const estimatedSize = estimateTxSize(selected.length, 2);
+      // Every recipient output + 1 for change
+      const estimatedSize = estimateTxSize(selected.length, recipientCount + 1);
       const estimatedFee = BigInt(estimatedSize) * feeRate;
 
       if (selectedTotal >= targetValue + estimatedFee) {

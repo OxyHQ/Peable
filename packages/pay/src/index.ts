@@ -38,12 +38,13 @@ export type { AddressSource } from './explorer/discovery';
 export { broadcastTransaction, fetchFeePerByte } from './explorer/broadcast';
 export { fetchChainTip } from './explorer/chain-tip';
 
-export { sendPayment, quotePayment, readBalance } from './payment';
+export { sendPayment, quotePayment, readBalance, MAX_PAYMENT_RECIPIENTS } from './payment';
 export type {
   ChainAccess,
   WalletRef,
   QuoteRequest,
   PaymentRequest,
+  PaymentRecipient,
   PaymentResult,
   PaymentQuote,
   WalletBalance,

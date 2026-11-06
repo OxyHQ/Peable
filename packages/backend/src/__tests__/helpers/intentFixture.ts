@@ -34,6 +34,13 @@ export function intentDTO(overrides: Partial<PaymentIntent> = {}): PaymentIntent
     faircoin: {
       network: 'testnet',
       address: 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3',
+      outputs: [
+        {
+          address: 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3',
+          amount: '100000000',
+          connected_account: null,
+        },
+      ],
       txid: 'tx_1',
       confirmations: 2,
       required_confirmations: 1,

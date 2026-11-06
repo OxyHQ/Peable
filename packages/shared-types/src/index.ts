@@ -26,6 +26,7 @@ export {
   type PaymentIntentCancellationReason,
   type PaymentIntentClientAction,
   type PaymentIntentCaptureMethod,
+  type FaircoinPaymentOutput,
   type FaircoinQuote,
   type PaymentIntentFaircoin,
   type PaymentIntentLastPaymentError,

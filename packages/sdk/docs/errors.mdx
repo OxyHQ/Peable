@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-109 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+110 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -150,6 +150,10 @@ The dispute is in a status that no longer accepts evidence.
 ### `domain_taken`
 
 The domain is already registered by another merchant.
+
+### `faircoin_amount_too_small`
+
+One seller's share of this order is below the smallest amount the FairCoin network relays, so it cannot be paid in FairCoin. The other payment methods still work.
 
 ### `faircoin_cannot_debit`
 

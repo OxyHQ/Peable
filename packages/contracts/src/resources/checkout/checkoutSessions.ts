@@ -353,6 +353,11 @@ export const sessionLineItemParams = z
     price_data: priceDataParams.optional(),
     quantity: quantityParam,
     adjustable_quantity: adjustableQuantityParam.optional(),
+    connected_account: checkoutIdParam
+      .optional()
+      .describe(
+        "The seller (`ca_…`) this line is sold by (ADR 0021 D6). A FairCoin payment pays every seller of the order its share directly, in one transaction, split by each seller's lines' `amount_subtotal`; a line without one is the merchant's own sale. The card payment stays the merchant's charge. Exclusive with the session's `connected_account`.",
+      ),
   })
   .strict()
   .superRefine((line, ctx) => {
@@ -427,7 +432,19 @@ export const createCheckoutSessionParams = z
     submit_type: z.enum(CHECKOUT_SUBMIT_TYPES).optional(),
     connected_account: checkoutIdParam
       .optional()
-      .describe('Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only.'),
+      .describe(
+        'Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only. Exclusive with `line_items[].connected_account`.',
+      ),
+    payment_intent_data: z
+      .object({
+        metadata: metadataCreateParam
+          .optional()
+          .describe(
+            'Copied to EVERY payment this session creates (each method the payer confirms, each fresh quote), so its events carry your own identifiers (ADR 0021 D8).',
+          ),
+      })
+      .strict()
+      .optional(),
     expand: expandParam.optional(),
   })
   .strict()
@@ -463,6 +480,18 @@ export const createCheckoutSessionParams = z
     }
     if (body.submit_type !== undefined && mode !== 'payment') {
       issue('submit_type', 'submit_type is for payment mode');
+    }
+    if (body.line_items?.some((line) => line.connected_account !== undefined)) {
+      if (body.connected_account !== undefined) {
+        issue(
+          'connected_account',
+          'connected_account and line_items[].connected_account are mutually exclusive',
+        );
+      }
+      if (mode !== 'payment') issue('line_items', 'a line names its seller in payment mode only');
+    }
+    if (body.payment_intent_data !== undefined && mode === 'setup') {
+      issue('payment_intent_data', 'a setup session creates no payment');
     }
   });
 export type CreateCheckoutSessionParams = z.input<typeof createCheckoutSessionParams>;

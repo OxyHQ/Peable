@@ -124,6 +124,58 @@ and a card payment is your own charge, which you settle to the seller with a
 `peable.paymentIntents.list({ connected_account: seller.id })` lists one
 seller's payments.
 
+### A cart with several sellers
+
+A marketplace cart is ONE Checkout Session: name each line's seller with
+`line_items[].connected_account` (exclusive with the session's own
+`connected_account`; a line without one is your own sale), and put your own
+order id in `payment_intent_data.metadata`, which Peable copies to every
+payment the session creates.
+
+```ts
+const session = await peable.checkout.sessions.create({
+  ui_mode: 'embedded',
+  line_items: cart.lines.map((line) => ({
+    price_data: { currency: 'USD', unit_amount: line.unitAmount, product_data: { name: line.title } },
+    quantity: line.quantity,
+    connected_account: line.seller.peableAccountId, // ca_…
+  })),
+  payment_intent_data: { metadata: { order_id: order.id } },
+});
+```
+
+The payer is offered your card methods and FairCoin on the same order:
+
+- **Card** is your own platform charge for the whole cart. Pay each seller its
+  share with a [transfer](/connect#card-sellers) once the payment succeeds,
+  and take your commission there.
+- **FairCoin** pays every seller directly, in ONE transaction the payer signs:
+  one output per seller, each to an address in that seller's own Peable
+  wallet. The FAIR total is divided by each seller's subtotal (the sum of its
+  lines' `amount_subtotal`, before discount and tax), each share rounded down,
+  and the base units left over go one each to the sellers with the largest
+  remainders (ties to the seller of the earlier line). The coins never pass
+  through you: record no transfer and no fee for it.
+
+The payment lists its outputs — `faircoin.outputs` (`address`, `amount`,
+`connected_account`) and `next_action.faircoin_payment.outputs`. A payment of
+several outputs has `faircoin.address`, `next_action.faircoin_payment.address`
+and `uri` set to `null`: a `faircoin:` URI names one address, so only the
+Peable wallet can pay it (the sheet and the hosted checkout offer only the
+Peable wallet request). Peable confirms the payment only when **every** output
+is paid in the reported transaction; one seller short and the whole payment is
+`canceled` with `cancellation_reason: 'underpaid'`.
+
+If one seller is not ready for FairCoin (no FairCoin account, not confirmed,
+or no Peable wallet), FairCoin is shown unavailable on the order
+(`faircoin_wallet_missing`) and the card keeps working. A seller's share
+below the smallest amount the network relays makes a FairCoin confirm
+[`409 faircoin_amount_too_small`](/errors#faircoin_amount_too_small).
+
+Match webhooks by your metadata: every `payment_intent.*` event of the
+session's payments carries `payment_intent_data.metadata`, whichever method
+the payer chose and however many times they switched.
+
 ## 5. Webhooks
 
 Every event about an on-behalf payment comes to **your** endpoint, with the
@@ -161,8 +213,9 @@ the FairCoin rail, and your platform's policy decides what the seller pays
 back.
 
 Platform fees on FairCoin payments are not offered, on a `FAIR` order or a
-fiat one: the coins never pass through you, so a fee would need a second
-movement of money. The seller receives the whole amount, and
+fiat one, with one seller or several: the coins never pass through you, and
+Peable never adds your address as an output of a seller's sale. Each seller
+receives its whole share, and
 `application_fee_amount` on a FairCoin payment is a 400. Take your commission
 on card payments.
 

@@ -483,6 +483,99 @@ describe('quotePayment', () => {
   });
 });
 
+describe('a payment of several recipients (ADR 0021 D6)', () => {
+  const PAYEES = KeyManager.fromSeed(PAYEE_SEED, NETWORK_CONFIG).getExternalAddresses();
+  const payee = (i: number) => must(PAYEES[i]);
+
+  for (const count of [2, 3]) {
+    test(`ONE transaction with every one of ${count} outputs, at exactly the quoted fee`, async () => {
+      const coins = [coin(must(EXTERNAL[0]), 9_000_000n), coin(must(EXTERNAL[3]), 4_000_000n)];
+      const recipients = Array.from({ length: count }, (_, i) => ({
+        to: payee(i),
+        amountSat: BigInt(1_000_000 * (i + 1)),
+      }));
+      const total = recipients.reduce((sum, r) => sum + r.amountSat, 0n);
+
+      const quote = await quotePayment(
+        { seed: SEED, network: NETWORK, amountSat: total, feePerByte: 10, recipientCount: count },
+        chainHolding(coins),
+      );
+      const chain = chainHolding(coins);
+      const result = await sendPayment(
+        { seed: SEED, network: NETWORK, recipients, feePerByte: quote.feePerByte },
+        chain,
+      );
+      expect(result.feeSat).toBe(must(quote.feeSat));
+
+      const tx = deserializeTransaction(hexToBytes(must(chain.broadcasts[0])));
+      for (const recipient of recipients) {
+        const script = bytesToHex(p2pkhScript(recipient.to));
+        const paid = tx.outputs.filter((output) => bytesToHex(output.scriptPubKey) === script);
+        expect(paid.map((output) => output.value)).toEqual([recipient.amountSat]);
+      }
+      // Every recipient plus change, and nothing else.
+      expect(tx.outputs.length).toBe(count + 1);
+      const spent = new Set(tx.inputs.map((input) => `${input.txid}:${input.vout}`));
+      const totalIn = coins
+        .filter((utxo) => spent.has(outpoint(utxo)))
+        .reduce((sum, utxo) => sum + utxo.value, 0n);
+      const totalOut = tx.outputs.reduce((sum, output) => sum + output.value, 0n);
+      expect(totalIn - totalOut).toBe(result.feeSat);
+    });
+  }
+
+  test('a quote sized for more outputs costs more, by exactly their bytes', async () => {
+    const coins = [coin(must(EXTERNAL[0]), 9_000_000n)];
+    const base = { seed: SEED, network: NETWORK, amountSat: 3_000_000n, feePerByte: 10 };
+    const one = await quotePayment(base, chainHolding(coins));
+    const three = await quotePayment({ ...base, recipientCount: 3 }, chainHolding(coins));
+    expect(must(three.feeSat) - must(one.feeSat)).toBe(2n * 34n * 10n);
+  });
+
+  test('refuses what is not one payment', async () => {
+    const chain = chainHolding([coin(must(EXTERNAL[0]), 9_000_000n)]);
+    const wallet = { seed: SEED, network: NETWORK, feePerByte: 10 };
+    await expect(sendPayment({ ...wallet, recipients: [] }, chain)).rejects.toThrow();
+    await expect(
+      sendPayment(
+        {
+          ...wallet,
+          recipients: [
+            { to: payee(0), amountSat: 1_000_000n },
+            { to: payee(0), amountSat: 1_000_000n },
+          ],
+        },
+        chain,
+      ),
+    ).rejects.toThrow('named twice');
+    await expect(
+      sendPayment({ ...wallet, recipients: [{ to: payee(0), amountSat: 0n }] }, chain),
+    ).rejects.toThrow('positive');
+    await expect(
+      sendPayment(
+        {
+          ...wallet,
+          recipients: Array.from({ length: 51 }, (_, i) => ({ to: `x${i}`, amountSat: 1n })),
+        },
+        chain,
+      ),
+    ).rejects.toThrow('at most');
+    // Both forms at once (a JavaScript caller can send it).
+    await expect(
+      sendPayment(
+        {
+          ...wallet,
+          to: payee(0),
+          amountSat: 1n,
+          recipients: [{ to: payee(1), amountSat: 1n }],
+        } as unknown as Parameters<typeof sendPayment>[0],
+        chain,
+      ),
+    ).rejects.toThrow('exactly one');
+    expect(chain.broadcasts).toEqual([]);
+  });
+});
+
 describe('readBalance', () => {
   /**
    * One summed number would tell an owner a payment will go through, then fail

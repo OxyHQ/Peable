@@ -47,6 +47,7 @@ import {
 import { FairCoinSymbol } from '../components/FairCoinSymbol';
 import { QRScanner } from '../components/QRScanner';
 import type { ScannedCode } from '../../pay/scanned-code';
+import { paymentRequestRouteParams } from '../../pay/payment-request';
 import { ContactPicker } from '../components/ContactPicker';
 import { SocialRecipientPicker, type SocialRecipient } from '../components/SocialRecipientPicker';
 import { UserAvatar } from '../components/UserAvatar';
@@ -305,13 +306,7 @@ export function SendSheet({
         const { request } = code;
         router.push({
           pathname: '/pay/[intent]',
-          params: {
-            intent: request.intentId,
-            secret: request.clientSecret,
-            address: request.address,
-            amount: request.amount.toString(),
-            network: request.network,
-          },
+          params: paymentRequestRouteParams(request),
         });
         return;
       }
