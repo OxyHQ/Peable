@@ -17,3 +17,16 @@ export function billingCountries(payerLocale: string): { value: string; label: s
     .map((value) => ({ value, label: names?.of(value) ?? value }))
     .sort((a, b) => a.label.localeCompare(b.label, locale));
 }
+
+// Postal region codes, not tax coverage. The gateway still decides tax eligibility.
+// https://pe.usps.com/text/pub28/28apb.htm and https://pe.usps.com/text/pub28/28apa_005.htm
+const billingRegions: Readonly<Record<string, readonly string[]>> = {
+  US: 'AL AK AS AZ AR CA CO CT DE DC FM FL GA GU HI ID IL IN IA KS KY LA ME MH MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND MP OH OK OR PW PA PR RI SC SD TN TX UT VT VI VA WA WV WI WY AE AP AA'.split(
+    ' ',
+  ),
+  CA: 'AB BC MB NB NL NT NS NU ON PE QC SK YT'.split(' '),
+};
+export function validBillingRegion(country: string, state: string | undefined): boolean {
+  const codes = billingRegions[country.trim().toUpperCase()];
+  return !codes || codes.includes(state?.trim().toUpperCase() ?? '');
+}

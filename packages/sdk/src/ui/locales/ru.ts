@@ -189,6 +189,7 @@ export default {
   'faircoin.noPeable':
     'Здесь не удалось открыть Peable. Отсканируйте код приложением Peable на телефоне.',
   'faircoin.otherMethod': 'Выбрать другой способ',
+  'billing.state': 'Код штата / провинции (2 буквы)',
   'billing.title': 'Страна выставления счёта',
   'billing.hint': 'Налог рассчитывается по стране, из которой вы платите.',
   'card.hosted.title': 'Оплатить картой',

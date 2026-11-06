@@ -187,6 +187,7 @@ export default {
   'faircoin.confirming': 'আপনার FairCoin পেমেন্ট ইতিমধ্যে নিশ্চিত হচ্ছে, তাই এটি বদলানো যাবে না।',
   'faircoin.noPeable': 'এখানে Peable খোলা যায়নি। আপনার ফোনের Peable দিয়ে কোডটি স্ক্যান করুন।',
   'faircoin.otherMethod': 'অন্য পদ্ধতি বেছে নিন',
+  'billing.state': 'রাজ্য / প্রদেশ কোড (২ অক্ষর)',
   'billing.title': 'বিলিংয়ের দেশ',
   'billing.hint': 'আপনি যে দেশ থেকে পেমেন্ট করছেন তার ভিত্তিতে কর হিসাব করা হয়।',
   'card.hosted.title': 'কার্ডে পেমেন্ট',

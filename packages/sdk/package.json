@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/sdk",
-  "version": "6.2.0",
+  "version": "6.2.1",
   "description": "Peable server SDK — resource methods generated from the API contracts (`@peable.to/contracts`), with automatic idempotency keys, retries, timeouts and typed errors; `@peable.to/sdk/checkout` is the anonymous payer-side browser client, `/checkout/ui` its optional Bloom sheet, `/display` read-only display rates.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",

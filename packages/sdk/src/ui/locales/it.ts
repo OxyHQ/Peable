@@ -193,6 +193,7 @@ export default {
   'faircoin.noPeable':
     'Impossibile aprire Peable qui. Scansiona il codice con Peable sul telefono.',
   'faircoin.otherMethod': 'Scegli un altro metodo di pagamento',
+  'billing.state': 'Codice stato / provincia (2 lettere)',
   'billing.title': 'Paese di fatturazione',
   'billing.hint': 'Le imposte sono calcolate in base al paese da cui paghi.',
   'card.hosted.title': 'Paga con carta',

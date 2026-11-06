@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { CheckoutSessionPublic, PaymentIntent } from '@peable.to/shared-types';
 import {
   baseUnits,
+  billingAddressParams,
   faircoinRefusal,
   faircoinTransferState,
   hostedUrlFor,
@@ -374,5 +375,49 @@ describe('shipping details', () => {
         country: 'Spain',
       }),
     ).toBeNull();
+  });
+});
+
+test('US and Canadian tax billing retains the explicitly supplied region and requires it', () => {
+  for (const country of ['US', 'CA']) {
+    const taxed = session({ automatic_tax: { enabled: true, status: 'requires_location_inputs' } });
+    const address = {
+      line1: null,
+      line2: null,
+      city: null,
+      country,
+      state: null,
+      postal_code: '19802',
+    };
+    expect(
+      needsBillingLocation({ ...taxed, customer_details: { ...taxed.customer_details, address } }),
+    ).toBe(true);
+    expect(
+      needsBillingLocation({
+        ...taxed,
+        customer_details: {
+          ...taxed.customer_details,
+          address: { ...address, state: country === 'US' ? 'DE' : 'ON' },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      needsBillingLocation({
+        ...taxed,
+        customer_details: {
+          ...taxed.customer_details,
+          address: { ...address, state: country === 'US' ? 'DE' : 'ON', postal_code: '' },
+        },
+      }),
+    ).toBe(true);
+  }
+  expect(billingAddressParams({ country: ' us ', postcode: ' 19802 ', state: ' de ' })).toEqual({
+    country: 'US',
+    postal_code: '19802',
+    state: 'DE',
+  });
+  expect(billingAddressParams({ country: 'US', postcode: '19802' })).toEqual({
+    country: 'US',
+    postal_code: '19802',
   });
 });

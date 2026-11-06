@@ -41,7 +41,20 @@ mock.module('react-native', () => ({
   Linking: { openURL: async () => {} },
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
-mock.module('@oxy.so/bloom/button', () => ({ Button: () => null }));
+let regionField: { value: string; onChangeText(value: string): void } | undefined;
+let billingContinue: { disabled?: boolean; onPress?(): void } | undefined;
+mock.module('@oxy.so/bloom/text-field', () => ({
+  TextFieldInput: (props: typeof regionField) => {
+    regionField = props;
+    return null;
+  },
+}));
+mock.module('@oxy.so/bloom/button', () => ({
+  Button: (props: typeof billingContinue) => {
+    billingContinue = props;
+    return null;
+  },
+}));
 mock.module('@oxy.so/bloom/card-form', () => ({
   CardFormCountry: () => null,
   CardFormPostcode: () => null,
@@ -510,6 +523,137 @@ await act(async () => {
 });
 assert.equal(updates.length, baselineUpdates + 2);
 assert.equal(getSheet().request.dueTodayMinorUnits, 2500);
+await reset();
+// A reviewed, unchanged total advances to method selection, never authorization.
+for (const scenario of [
+  'unchanged',
+  'repriced',
+  'currency',
+  'contact',
+  'shipping',
+  'paid',
+  'unsupported',
+] as const) {
+  payerSession = {
+    ...publicSessionFixture,
+    id: result.source.id,
+    amount_total: scenario === 'repriced' ? '3200' : '3000',
+    contact_collection: scenario === 'contact' ? 'email' : 'merchant_account',
+    payment_status: scenario === 'paid' ? 'paid' : 'unpaid',
+    shipping_address_collection: scenario === 'shipping' ? { allowed_countries: ['US'] } : null,
+    phone_number_collection: { enabled: scenario === 'unsupported' },
+  };
+  const beforeUpdates: number = updates.length;
+  const beforeMounts: number = mounts;
+  let created = 0;
+  await render({
+    key: `advance:${scenario}`,
+    request: { ...request, currency: scenario === 'currency' ? 'USD' : 'EUR' },
+    createSession: async () => {
+      created++;
+      return result;
+    },
+  });
+  assert.equal(created, 0);
+  await act(async () => {
+    getSheet().onStep('method');
+  });
+  assert.equal(created, 1);
+  assert.equal(mounts, beforeMounts + 1);
+  assert.equal(updates.length, beforeUpdates);
+  if (scenario !== 'paid')
+    assert.equal(getSheet().step, scenario === 'unchanged' ? 'payment' : 'review', scenario);
+  assert.notEqual(getSheet().step, 'card');
+  assert.notEqual(getSheet().step, 'confirmation');
+  await reset();
+}
+// US/CA tax cannot continue with just country and postcode; record the payer's region.
+for (const country of ['US', 'CA']) {
+  payerSession = {
+    ...publicSessionFixture,
+    id: result.source.id,
+    contact_collection: 'merchant_account',
+    automatic_tax: { enabled: true, status: 'requires_location_inputs' },
+    customer_details: {
+      ...publicSessionFixture.customer_details,
+      address: { line1: null, line2: null, city: null, country, state: null, postal_code: '19802' },
+    },
+  };
+  await render({ key: `billing:${country}`, request, createSession: async () => result });
+  await act(async () => {
+    getSheet().onStep('method');
+  });
+  await act(async () => {
+    getSheet().onStep('card');
+  });
+  assert.ok(regionField);
+  assert.equal(regionField.value, '');
+  assert.equal(billingContinue?.disabled, true);
+  for (const invalid of ['ZZ', 'California']) {
+    await act(async () => {
+      regionField?.onChangeText(invalid);
+    });
+    assert.equal(billingContinue?.disabled, true);
+  }
+  await act(async () => {
+    regionField?.onChangeText(country === 'US' ? 'DE' : 'ON');
+  });
+  assert.equal(billingContinue?.disabled, false);
+  await act(async () => {
+    billingContinue?.onPress?.();
+  });
+  assert.deepEqual(updates.at(-1)?.body, {
+    customer_details: {
+      address: { country, postal_code: '19802', state: country === 'US' ? 'DE' : 'ON' },
+    },
+  });
+  await reset();
+}
+// Explicit shipping reuse preserves region and never asks the payer to retype it.
+payerSession = {
+  ...publicSessionFixture,
+  id: result.source.id,
+  contact_collection: 'merchant_account',
+  automatic_tax: { enabled: true, status: 'requires_location_inputs' },
+  customer_details: { ...publicSessionFixture.customer_details, address: null },
+};
+await render({
+  key: 'billing:shipping',
+  request: { ...request, requiresShipping: true },
+  initialDetails: {
+    shipping: {
+      name: 'Alex',
+      line1: '10 Example Street',
+      line2: '',
+      city: 'Wilmington',
+      state: 'DE',
+      postalCode: '19802',
+      country: 'US',
+      phone: '',
+    },
+  },
+  createSession: async () => result,
+});
+await act(async () => {
+  getSheet().onStep('method');
+});
+await act(async () => {
+  getFields().onChange({ ...getFields().details, useShippingForBilling: true });
+});
+await act(async () => {
+  getFields().onContinue();
+});
+await act(async () => {
+  getSheet().onStep('card');
+});
+assert.equal(regionField?.value, 'DE');
+assert.equal(billingContinue?.disabled, false);
+await act(async () => {
+  billingContinue?.onPress?.();
+});
+assert.deepEqual(updates.at(-1)?.body, {
+  customer_details: { address: { country: 'US', postal_code: '19802', state: 'DE' } },
+});
 await reset();
 globalThis.setInterval = nativeSetInterval;
 await act(async () => root.unmount());

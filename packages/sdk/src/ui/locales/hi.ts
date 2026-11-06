@@ -186,6 +186,7 @@ export default {
   'faircoin.confirming': 'आपके FairCoin भुगतान की पुष्टि पहले से हो रही है, इसलिए इसे बदला नहीं जा सकता।',
   'faircoin.noPeable': 'Peable यहाँ नहीं खुल सका। अपने फ़ोन पर Peable से कोड स्कैन करें।',
   'faircoin.otherMethod': 'दूसरा तरीका चुनें',
+  'billing.state': 'राज्य / प्रांत कोड (2 अक्षर)',
   'billing.title': 'बिलिंग देश',
   'billing.hint': 'टैक्स उस देश के आधार पर तय होता है जहाँ से आप भुगतान करते हैं।',
   'card.hosted.title': 'कार्ड से भुगतान करें',
