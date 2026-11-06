@@ -21,7 +21,12 @@ import type { PeableMethodDetails } from './PeableMethodContent';
 import { PeableProviderFields } from './PeableProviderFields';
 import { PeableWalletButtons } from './PeableWalletButtons';
 import type { PreparedCardAuthorization, ProviderCardPreparation } from './preparedCard';
-import { type CheckoutLocale, checkoutMessage, intlLocale } from './messages';
+import {
+  type CheckoutLocale,
+  checkoutMessage,
+  intlLocale,
+  resolveCheckoutLocale,
+} from './messages';
 import { formatCheckoutAmount, formatFairAmount } from './amount';
 import { billingCountries } from './countries';
 import {
@@ -424,11 +429,12 @@ export function PeableSheetCheckout({
   /** Confirm the session in a method: creates its payment, or replaces an unpaid one. */
   async function confirmSession(method: 'card' | 'faircoin'): Promise<CheckoutSessionPublic> {
     if (source.type !== 'checkout_session' || !session) throw new Error(t('error.connection'));
-    const next = await client.confirmCheckoutSession(
-      source.id,
-      source.clientSecret,
-      session.payment_method_types.length > 1 ? { payment_method_type: method } : {},
-    );
+    // The language the payer reads the sheet in: a customer checkout creates
+    // keeps it, and the order's emails are written in it.
+    const next = await client.confirmCheckoutSession(source.id, source.clientSecret, {
+      ...(session.payment_method_types.length > 1 ? { payment_method_type: method } : {}),
+      locale: resolveCheckoutLocale(locale),
+    });
     accept({ type: 'checkout_session', session: next });
     return next;
   }

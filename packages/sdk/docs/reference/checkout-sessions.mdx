@@ -758,6 +758,7 @@ Locks the order and creates its payment (or setup): the answer carries `payment_
 | Field | Type | Description |
 | --- | --- | --- |
 | `payment_method_type` | string | How the payer pays: one of the session's `payment_method_types`. Default: the rail of the order's currency (`card` on a fiat order). `faircoin` on a fiat order quotes its total in FAIR for 10 minutes; confirming again with the other method replaces a payment that has not started moving money. |
+| `locale` | string | The language the payer is completing checkout in. Recorded on the session (never on its `locale`) and given to a customer checkout creates as its `preferred_locales`; the session's emails are written in it when the customer has no preferred language. One of `ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`. |
 
 **Response `200`**
 

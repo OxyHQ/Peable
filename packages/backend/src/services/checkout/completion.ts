@@ -21,6 +21,7 @@
  * When the session becomes PAID, its Peable Tax calculation becomes a committed
  * tax transaction.
  */
+import type { CheckoutLocale } from '@peable.to/shared-types';
 import { redeemCoupon } from '../../db/catalog/couponRepository';
 import { redeemPromotionCode } from '../../db/catalog/promotionCodeRepository';
 import { insertCustomer } from '../../db/customers/customerRepository';
@@ -94,6 +95,18 @@ async function commitSessionTax(
   });
 }
 
+/**
+ * The `preferred_locales` of a customer checkout creates: the language the
+ * payer confirmed in, else the session's own, else none (a new customer has no
+ * language of its own to keep).
+ */
+export function checkoutCustomerLocales(
+  session: Pick<CheckoutSessionRow, 'payerLocale' | 'locale'>,
+): CheckoutLocale[] {
+  const locale = session.payerLocale ?? session.locale;
+  return locale ? [locale] : [];
+}
+
 /** Everything a completion carries, after `open → complete` was written. */
 async function finalizeCompletion(
   tx: DatabaseOrTransaction,
@@ -123,6 +136,7 @@ async function finalizeCompletion(
       name: row.customerDetails?.name ?? null,
       phone: row.customerDetails?.phone ?? null,
       address: row.customerDetails?.address ?? null,
+      preferredLocales: checkoutCustomerLocales(row),
     });
     await recordEvent(tx, {
       merchantId: row.merchantId,

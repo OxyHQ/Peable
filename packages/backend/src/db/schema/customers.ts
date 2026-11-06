@@ -11,10 +11,21 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
-import type { Address, BillingDetails, CardDetails, Shipping } from '@peable.to/shared-types';
+import type {
+  Address,
+  BillingDetails,
+  CardDetails,
+  CheckoutLocale,
+  Shipping,
+} from '@peable.to/shared-types';
 import { merchants } from './merchants';
 import { testClocks } from './testClocks';
-import { CURRENCY_CODES, PROVIDER_IDS, SIGNED_BASE_UNIT_STRING_PATTERN } from './valueSets';
+import {
+  CHECKOUT_LOCALES,
+  CURRENCY_CODES,
+  PROVIDER_IDS,
+  SIGNED_BASE_UNIT_STRING_PATTERN,
+} from './valueSets';
 
 const emptyMetadata = sql`'{}'::jsonb`;
 
@@ -52,6 +63,12 @@ export const customers = pgTable(
     description: text(),
     address: jsonb().$type<Address>(),
     shipping: jsonb().$type<Shipping>(),
+    /**
+     * Stripe's `preferred_locales`: most preferred first, each once, from the
+     * payer locale set (`CHECKOUT_LOCALES`). The customer emails are written in
+     * the first; Checkout fills it for a customer it creates.
+     */
+    preferredLocales: text().array().$type<CheckoutLocale[]>().notNull().default(sql`'{}'::text[]`),
     /** `invoice_settings.default_payment_method` — one of THIS customer's attached methods. */
     defaultPaymentMethodId: text(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
@@ -112,6 +129,17 @@ export const customers = pgTable(
     check(
       'customers_shipping_object_check',
       sql`${table.shipping} is null or jsonb_typeof(${table.shipping}) = 'object'`,
+    ),
+    /**
+     * At most every locale once, no NULL element, only the payer locale set.
+     * Uniqueness is the contract's (a CHECK cannot compare array elements
+     * without a subquery); the bound keeps a duplicate list finite.
+     */
+    check(
+      'customers_preferred_locales_check',
+      sql.raw(
+        `cardinality(preferred_locales) <= ${CHECKOUT_LOCALES.length} and array_position(preferred_locales, null) is null and preferred_locales <@ ARRAY[${inList(CHECKOUT_LOCALES)}]::text[]`,
+      ),
     ),
     check(
       'customers_email_length_check',

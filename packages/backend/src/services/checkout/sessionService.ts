@@ -21,6 +21,7 @@ import type {
   Address,
   AddressParams,
   CheckoutCustomerDetails,
+  CheckoutLocale,
   CheckoutShippingDetails,
   CurrencyCode,
   FaircoinUnavailableReason,
@@ -55,6 +56,7 @@ import {
   hasSucceededPayment,
   insertCheckoutSession,
   linkSessionObject,
+  recordSessionPayerLocale,
   listLineItems,
   lockSession,
   replaceSessionPayment,
@@ -110,7 +112,7 @@ import { applyEvent } from '../intentState';
 import type { TaxService } from '../tax/taxService';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { CheckoutError, invalid } from './errors';
-import { completeZeroAmountSession } from './completion';
+import { checkoutCustomerLocales, completeZeroAmountSession } from './completion';
 import {
   type ResolvedLine,
   resolveLinkLines,
@@ -1093,6 +1095,7 @@ async function customerFor(
       name: details?.name ?? null,
       phone: details?.phone ?? null,
       address: details?.address ?? null,
+      preferredLocales: checkoutCustomerLocales(session),
     });
     await recordCustomerObjectEvent(tx, merchant.id, 'customer.created', toCustomerDTO(row));
     return row;
@@ -1135,7 +1138,32 @@ function describeOrder(lines: readonly CheckoutLineItemRow[]): string | undefine
 }
 
 /** How the payer pays (ADR 0021 D3): one of the session's methods, default the currency's rail. */
-export type PayerChoice = { readonly paymentMethodType?: 'card' | 'faircoin' | undefined };
+export type PayerChoice = {
+  readonly paymentMethodType?: 'card' | 'faircoin' | undefined;
+  /** The language the payer is confirming in (`…/public/confirm`'s `locale`). */
+  readonly locale?: CheckoutLocale | undefined;
+};
+
+/**
+ * Record the payer's language on the session before anything the confirm
+ * creates reads it (a customer it makes, the emails it owes). A payer write
+ * like any other: it loses to a session that moved since the payer's read.
+ */
+async function recordPayerLocale(
+  session: CheckoutSessionRow,
+  locale: CheckoutLocale | undefined,
+): Promise<CheckoutSessionRow> {
+  if (!locale || session.payerLocale === locale) return session;
+  const recorded = await recordSessionPayerLocale(getDb(), session, locale);
+  if (!recorded) {
+    throw new CheckoutError(
+      409,
+      'checkout_session_changed',
+      'this checkout changed; reload and try again',
+    );
+  }
+  return recorded;
+}
 
 function chosenMethod(session: CheckoutSessionRow, choice: PayerChoice): 'card' | 'faircoin' {
   // A FairCoin-only fiat order defaults to FairCoin; otherwise the currency's rail.
@@ -1221,15 +1249,16 @@ export async function sessionForPayer(session: CheckoutSessionRow): Promise<Chec
  * it is; a different choice replaces a payment that has not moved money.
  */
 export async function confirmSessionAsPayer(
-  session: CheckoutSessionRow,
+  given: CheckoutSessionRow,
   merchant: MerchantRow,
   deps: CheckoutDeps = {},
   choice: PayerChoice = {},
 ): Promise<CheckoutSessionRow> {
   const now = deps.now?.() ?? new Date();
-  if (session.status !== 'open') return session;
-  if (session.setupIntentId !== null) return session;
-  const method = chosenMethod(session, choice);
+  if (given.status !== 'open') return given;
+  if (given.setupIntentId !== null) return given;
+  const method = chosenMethod(given, choice);
+  const session = await recordPayerLocale(given, choice.locale);
   if (session.paymentIntentId !== null)
     return replaceSessionPaymentAsPayer(session, merchant, method, now);
   if (session.expiresAt && session.expiresAt.getTime() <= now.getTime()) {

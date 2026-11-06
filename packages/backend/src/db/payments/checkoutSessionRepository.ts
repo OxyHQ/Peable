@@ -51,6 +51,8 @@ export interface CheckoutSessionRow {
   readonly paymentStatus: CheckoutSessionPaymentStatus;
   readonly uiMode: CheckoutUiMode;
   readonly locale: CheckoutLocale | null;
+  /** The language the payer confirmed in — internal, never on the wire, never over `locale`. */
+  readonly payerLocale: CheckoutLocale | null;
   readonly submitType: CheckoutSubmitType;
   readonly clientSecret: string | null;
   /** INTERNAL id of the payment, once confirmed. */
@@ -127,6 +129,7 @@ const SESSION_COLUMNS = {
   paymentStatus: checkoutSessions.paymentStatus,
   uiMode: checkoutSessions.uiMode,
   locale: checkoutSessions.locale,
+  payerLocale: checkoutSessions.payerLocale,
   submitType: checkoutSessions.submitType,
   clientSecret: checkoutSessions.clientSecret,
   paymentIntentId: checkoutSessions.paymentIntentId,
@@ -967,6 +970,32 @@ export async function findSessionByLinkOperation(
 }
 
 /** The customer a completion created (`customer_creation: always`), in its transaction. */
+/**
+ * Record the language the payer is confirming an OPEN session in. A
+ * compare-and-swap on `updated_at` like every payer write (the caller's read
+ * is the compare half), so a session that moved meanwhile is not touched:
+ * `null` means stale, and the caller answers 409 as it would for any payer
+ * write that lost.
+ */
+export async function recordSessionPayerLocale(
+  db: DatabaseOrTransaction,
+  session: Pick<CheckoutSessionRow, 'id' | 'updatedAt'>,
+  locale: CheckoutLocale,
+): Promise<CheckoutSessionRow | null> {
+  const [row] = await db
+    .update(checkoutSessions)
+    .set({ payerLocale: locale, updatedAt: now })
+    .where(
+      and(
+        eq(checkoutSessions.id, session.id),
+        eq(checkoutSessions.status, 'open'),
+        eq(checkoutSessions.updatedAt, session.updatedAt),
+      ),
+    )
+    .returning(SESSION_COLUMNS);
+  return row ? toSessionRow(row) : null;
+}
+
 export async function setSessionCustomer(
   tx: DatabaseOrTransaction,
   sessionId: string,

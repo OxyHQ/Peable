@@ -995,3 +995,28 @@ otherwise undo:
 - Migrations: `0073` (pre) creates the tables and re-adds the widened
   `events`, `files` and `webhook_endpoints` CHECKs `NOT VALID`; `0074` (post)
   validates them.
+
+## Customer languages
+
+`customers.preferred_locales` (Stripe's `preferred_locales`) and
+`checkout_sessions.payer_locale`. Decisions a reader would otherwise undo:
+
+- **`text[]`, `NOT NULL`, default `'{}'`** — the wire's empty list, never a
+  NULL that means the same thing; a constant default keeps `ADD COLUMN`
+  catalog-only. The CHECK (`customers_preferred_locales_check`) is rendered from
+  `CHECKOUT_LOCALES` like the other locale CHECKs: no NULL element, every element
+  in the set, at most one per locale. Uniqueness itself is the contract's
+  (comparing elements needs a subquery a CHECK cannot hold).
+- **The payer's language is its own column, never written over
+  `checkout_sessions.locale`.** `locale` is the merchant's setting (`null`
+  follows the browser) and is on the wire; rewriting it at confirm would make a
+  merchant read back a value it never set and pin the page's language on a
+  revisit. `payer_locale` is internal and written once per confirm by a CAS on
+  `updated_at` (`recordSessionPayerLocale`), so a session that moved is not
+  touched.
+- **Checkout fills `preferred_locales` only on a customer it creates**
+  (`checkoutCustomerLocales`: the payer's, else the session's). A customer the
+  merchant named keeps its own, empty or not.
+- **Migrations `0107`–`0109`.** `0107` the customers column and its CHECK `NOT
+  VALID`; `0108` `checkout_sessions`' hot-table DDL alone (nullable column, CHECK
+  `NOT VALID`); `0109` (post) both `VALIDATE`s.

@@ -20,6 +20,7 @@ import {
 } from '../../common/params';
 import { currency, livemode, metadata, signedAmount, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
+import { CHECKOUT_LOCALES } from '../../vocabulary/checkout';
 
 /**
  * Customers (`cus_…`) — Orbit's own object (ADR 0016). A provider customer is an
@@ -40,6 +41,11 @@ export const customerSchema = defineObject(
       description: z.string().nullable(),
       address: addressSchema.nullable(),
       shipping: shippingSchema.nullable(),
+      preferred_locales: z
+        .array(z.enum(CHECKOUT_LOCALES))
+        .describe(
+          "The customer's preferred languages, most preferred first (Stripe's `preferred_locales`), from the payer locale set. Receipts, invoices and dunning emails are written in the first; empty when none is known. A customer Checkout creates gets the language the payer completed it in.",
+        ),
       invoice_settings: z
         .object({
           default_payment_method: expandable(
@@ -76,6 +82,7 @@ export const customerSchema = defineObject(
         description: null,
         address: null,
         shipping: null,
+        preferred_locales: ['fr', 'en'],
         invoice_settings: { default_payment_method: null },
         metadata: { order_id: '6735' },
         balance: '0',
@@ -101,6 +108,13 @@ declare module '../../common/objects' {
 const name = z.string().max(500);
 const phone = z.string().max(40);
 const description = z.string().max(1000);
+const preferredLocales = z
+  .array(z.enum(CHECKOUT_LOCALES))
+  .max(CHECKOUT_LOCALES.length)
+  .refine((locales) => new Set(locales).size === locales.length, 'a language is listed once')
+  .describe(
+    'Most preferred first, each once, from the payer locale set (`ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`).',
+  );
 
 export const createCustomerParams = z
   .object({
@@ -110,6 +124,7 @@ export const createCustomerParams = z
     description: description.optional(),
     address: addressParams.optional(),
     shipping: shippingParams.optional(),
+    preferred_locales: preferredLocales.optional(),
     invoice_settings: z.object({ default_payment_method: idParam.optional() }).strict().optional(),
     metadata: metadataCreateParam.optional(),
     test_clock: idParam
@@ -129,6 +144,9 @@ export const updateCustomerParams = z
     description: clearable(description).optional(),
     address: clearable(addressParams).optional(),
     shipping: clearable(shippingParams).optional(),
+    preferred_locales: clearable(preferredLocales)
+      .optional()
+      .describe('Replaces the list; `[]` or `""` clears it.'),
     invoice_settings: z
       .object({ default_payment_method: clearable(idParam).optional() })
       .strict()

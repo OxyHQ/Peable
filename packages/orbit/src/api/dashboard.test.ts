@@ -664,6 +664,17 @@ describe('the billing engine (ADR 0018)', () => {
     ]);
   });
 
+  it("sets a customer's preferred languages through the contract's update", async () => {
+    answer = () => ({ id: 'cus_1' });
+    await api.customers.update(scope, 'cus_1', { preferred_locales: ['fr'] });
+    await api.customers.update(scope, 'cus_1', { preferred_locales: [] });
+    const path = '/v1/dashboard/applications/app%201/customers/cus_1?environment=development';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['POST', path, { preferred_locales: ['fr'] }],
+      ['POST', path, { preferred_locales: [] }],
+    ]);
+  });
+
   it('reads a subscription with its latest invoice expanded, and acts on it', async () => {
     answer = () => ({ id: 'sub_1' });
     await api.subscriptions.retrieve(scope, 'sub_1');

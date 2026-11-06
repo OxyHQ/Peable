@@ -111,6 +111,18 @@ retry_schedule_days: [1, 3, 5, 7], final_action: 'cancel' } })` (the defaults,
 shown) decides how a failed renewal is retried and what happens after the
 last retry.
 
+**The customer's language.** Invoice and payment-failed emails (and receipts)
+are written in the customer's first `preferred_locales` entry — Stripe's field,
+from the fifteen payer languages — and the invoice link opens the hosted page in
+it. A customer Checkout creates gets the language the payer checked out in.
+
+```ts
+await peable.customers.update('cus_…', { preferred_locales: ['fr', 'en'] }); // [] clears it
+```
+
+With none set, an email falls back to the language of the checkout that made
+the payment, else English.
+
 ## Usage-based billing
 
 ```ts

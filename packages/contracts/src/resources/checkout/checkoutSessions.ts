@@ -605,6 +605,12 @@ export const confirmCheckoutSessionPublicParams = z
       .describe(
         "How the payer pays: one of the session's `payment_method_types`. Default: the rail of the order's currency (`card` on a fiat order). `faircoin` on a fiat order quotes its total in FAIR for 10 minutes; confirming again with the other method replaces a payment that has not started moving money.",
       ),
+    locale: z
+      .enum(CHECKOUT_LOCALES)
+      .optional()
+      .describe(
+        "The language the payer is completing checkout in. Recorded on the session (never on its `locale`) and given to a customer checkout creates as its `preferred_locales`; the session's emails are written in it when the customer has no preferred language.",
+      ),
   })
   .strict();
 export type ConfirmCheckoutSessionPublicParams = z.input<typeof confirmCheckoutSessionPublicParams>;

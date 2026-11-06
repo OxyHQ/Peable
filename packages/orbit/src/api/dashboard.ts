@@ -21,6 +21,7 @@ import type {
   Subscription,
   SubscriptionStatus,
   UpdateBillingSettingsParams,
+  UpdateCustomerParams,
   UpdateEntitlementFeatureParams,
   UpdateSubscriptionParams,
   CreatePriceParams,
@@ -503,12 +504,17 @@ export function createDashboardApi(transport: OrbitTransport) {
         }),
     },
 
-    /** Customers (`cus_…`): the dashboard's read-only mirror of `/v1/customers`. */
+    /** Customers (`cus_…`): the dashboard's mirror of `/v1/customers` (reads and the update). */
     customers: {
       list: (scope: DashboardScope, params: CustomerListParams = {}) =>
         list<Customer>(dashboardPath(scope, '/customers', { ...params })),
       retrieve: (scope: DashboardScope, customerId: string) =>
         get<Customer>(dashboardPath(scope, `/customers/${id(customerId)}`)),
+      /** `POST /customers/:id` — the contract's update (`billing:manage`). */
+      update: (scope: DashboardScope, customerId: string, body: UpdateCustomerParams) =>
+        transport.request<Customer>('POST', dashboardPath(scope, `/customers/${id(customerId)}`), {
+          body,
+        }),
       balanceTransactions: (scope: DashboardScope, customerId: string, params: PageParams = {}) =>
         list<CustomerBalanceTransaction>(
           dashboardPath(scope, `/customers/${id(customerId)}/balance_transactions`, { ...params }),

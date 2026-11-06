@@ -222,11 +222,12 @@ export function CheckoutPage({
         setSession(await updateCheckoutSession(session.id, clientSecret, params));
       }
       setSession(
-        await confirmCheckoutSession(
-          session.id,
-          clientSecret,
-          methods.length > 1 ? { payment_method_type: method } : {},
-        ),
+        // The language the payer reads this page in: a customer checkout
+        // creates keeps it, and the order's emails are written in it.
+        await confirmCheckoutSession(session.id, clientSecret, {
+          ...(methods.length > 1 ? { payment_method_type: method } : {}),
+          locale,
+        }),
       );
     } catch (error) {
       const refused = fieldErrorOf(error, t('confirmFailed'));
@@ -245,7 +246,10 @@ export function CheckoutPage({
     setFieldError(null);
     try {
       setSession(
-        await confirmCheckoutSession(session.id, clientSecret, { payment_method_type: next }),
+        await confirmCheckoutSession(session.id, clientSecret, {
+          payment_method_type: next,
+          locale,
+        }),
       );
       setMethod(next);
     } catch (error) {

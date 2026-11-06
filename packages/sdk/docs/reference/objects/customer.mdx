@@ -22,6 +22,7 @@ Object type: `customer`.
 | `description` | string \| null |  |
 | `address` | [Address](/reference/objects/address) \| null |  |
 | `shipping` | [Shipping](/reference/objects/shipping) \| null |  |
+| `preferred_locales` | array of string | The customer's preferred languages, most preferred first (Stripe's `preferred_locales`), from the payer locale set. Receipts, invoices and dunning emails are written in the first; empty when none is known. A customer Checkout creates gets the language the payer completed it in. |
 | `invoice_settings` | object |  |
 | `invoice_settings.default_payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | `pm_…`, or the PaymentMethod with `expand[]=invoice_settings.default_payment_method`. Expandable. |
 | `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
@@ -49,6 +50,10 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
   "description": null,
   "address": null,
   "shipping": null,
+  "preferred_locales": [
+    "fr",
+    "en"
+  ],
   "invoice_settings": {
     "default_payment_method": null
   },

@@ -58,6 +58,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `shipping[address][country]` | string | Matches `^[A-Z]{2}$`. |
 | `shipping[carrier]` | string | At most 200 characters. |
 | `shipping[tracking_number]` | string | At most 200 characters. |
+| `preferred_locales` | array of string | Most preferred first, each once, from the payer locale set (`ar`, `bn`, `ca`, `de`, `en`, `es`, `fr`, `hi`, `id`, `it`, `ja`, `pt`, `ru`, `tr`, `zh`). At most 15 items. |
 | `invoice_settings` | object |  |
 | `invoice_settings[default_payment_method]` | string | 1–255 characters. |
 | `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
@@ -79,6 +80,10 @@ Returns [Customer](/reference/objects/customer).
   "description": null,
   "address": null,
   "shipping": null,
+  "preferred_locales": [
+    "fr",
+    "en"
+  ],
   "invoice_settings": {
     "default_payment_method": null
   },
@@ -149,6 +154,10 @@ A list (`object: "list"`) whose `data` holds [Customer](/reference/objects/custo
       "description": null,
       "address": null,
       "shipping": null,
+      "preferred_locales": [
+        "fr",
+        "en"
+      ],
       "invoice_settings": {
         "default_payment_method": null
       },
@@ -205,6 +214,10 @@ Returns [Customer](/reference/objects/customer) or [DeletedCustomer](/reference/
   "description": null,
   "address": null,
   "shipping": null,
+  "preferred_locales": [
+    "fr",
+    "en"
+  ],
   "invoice_settings": {
     "default_payment_method": null
   },
@@ -269,6 +282,7 @@ A field sent as `""` is cleared; `metadata` is a patch.
 | `shipping[address][country]` | string | Matches `^[A-Z]{2}$`. |
 | `shipping[carrier]` | string | At most 200 characters. |
 | `shipping[tracking_number]` | string | At most 200 characters. |
+| `preferred_locales` | array of string \| `""` | Replaces the list; `[]` or `""` clears it. At most 15 items. |
 | `invoice_settings` | object |  |
 | `invoice_settings[default_payment_method]` | string \| `""` | 1–255 characters. |
 | `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
@@ -289,6 +303,10 @@ Returns [Customer](/reference/objects/customer).
   "description": null,
   "address": null,
   "shipping": null,
+  "preferred_locales": [
+    "fr",
+    "en"
+  ],
   "invoice_settings": {
     "default_payment_method": null
   },
@@ -378,6 +396,10 @@ A search result (`object: "search_result"`) whose `data` holds [Customer](/refer
       "description": null,
       "address": null,
       "shipping": null,
+      "preferred_locales": [
+        "fr",
+        "en"
+      ],
       "invoice_settings": {
         "default_payment_method": null
       },

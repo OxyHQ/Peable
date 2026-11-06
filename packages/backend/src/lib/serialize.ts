@@ -505,6 +505,7 @@ export function toCustomerDTO(row: CustomerRow): Customer {
     description: row.description,
     address: row.address,
     shipping: row.shipping,
+    preferred_locales: [...row.preferredLocales],
     invoice_settings: { default_payment_method: row.defaultPaymentMethodPublicId },
     metadata: row.metadata,
     balance: row.balance,

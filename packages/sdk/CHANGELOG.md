@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.5.0 — a customer's language
+
+Requires `@peable.to/contracts` 5.5.0 and `@peable.to/shared-types` 5.5.0.
+
+Added:
+
+- `Customer.preferred_locales` (Stripe's): the customer's languages, most
+  preferred first, from the payer locale set (`CHECKOUT_LOCALES`). `customers.create`
+  and `customers.update` take it — the update replaces the list, `[]` or `""`
+  clears it; an unknown or repeated language is a 400 naming `preferred_locales`.
+  Receipts, refund notices, checkout confirmations, invoices and dunning emails
+  are written in the customer's first supported language, else the language the
+  payer confirmed checkout in, else the session's `locale`, else English; an
+  invoice email's hosted invoice link opens in the same language (`?locale=`).
+- The payer's confirm (`POST /v1/checkout_sessions/{id}/public/confirm`) takes an
+  optional `locale`: the language the payer completes checkout in. It is recorded
+  beside the session (its `locale` is never rewritten) and a customer Checkout
+  creates gets it as `preferred_locales`; a customer that already exists keeps its
+  own. `PeableSheetCheckout` sends the sheet's language, the hosted and embedded
+  checkout the page's.
+
 ## 5.4.0 — a recipient's FairCoin addresses are bounded
 
 Requires `@peable.to/contracts` 5.4.0 and `@peable.to/shared-types` 5.4.0 (ADR 0021 D9, D10).

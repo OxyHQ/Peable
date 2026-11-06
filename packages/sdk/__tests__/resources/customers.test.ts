@@ -23,6 +23,7 @@ const CUSTOMER: Customer = {
   description: null,
   address: null,
   shipping: null,
+  preferred_locales: [],
   invoice_settings: { default_payment_method: null },
   metadata: {},
   balance: '0',

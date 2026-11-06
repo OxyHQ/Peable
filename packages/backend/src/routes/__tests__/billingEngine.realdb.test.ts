@@ -454,6 +454,7 @@ describe('subscriptions on a test clock', () => {
     });
     const tc = await clock();
     const payer = await customer(tc.id);
+    await ok('POST', `/v1/customers/${payer.id}`, { preferred_locales: ['tr'] });
     const plan = await price('2000');
     const sub = await ok('POST', '/v1/subscriptions', {
       customer: payer.id,
@@ -468,6 +469,13 @@ describe('subscriptions on a test clock', () => {
     expect(renewal.next_payment_attempt).toBe(sub.current_period_end + 2 * 3600 + DAY);
     expect((await ok('GET', `/v1/subscriptions/${sub.id}`)).status).toBe('past_due');
     expect(await sentKinds()).toContain('invoice_payment_failed');
+    // The dunning notice speaks the customer's language.
+    const dunned = must(
+      mailer.sent.findLast(
+        (email) => email.headers['X-Peable-Email-Kind'] === 'invoice_payment_failed',
+      ),
+    );
+    expect(dunned.html).toContain('<html lang="tr" dir="ltr">');
 
     await advance(tc.id, sub.current_period_end + 2 * 3600 + DAY + 60);
     renewal = must((await invoices(sub.id)).at(-1));
@@ -630,6 +638,8 @@ describe('subscriptions on a test clock', () => {
   test('send_invoice: finalized with a due date, emailed, past due once it passes', async () => {
     const tc = await clock();
     const payer = await customer(tc.id, { card: false });
+    // The invoice email is written in the customer's first preferred language.
+    await ok('POST', `/v1/customers/${payer.id}`, { preferred_locales: ['es', 'en'] });
     const plan = await price('5000');
     const sub = await ok('POST', '/v1/subscriptions', {
       customer: payer.id,
@@ -648,6 +658,10 @@ describe('subscriptions on a test clock', () => {
     expect(await sentKinds()).toEqual(['invoice']);
     expect(mailer.sent[0]?.to).toBe('payer@example.test');
     expect(mailer.sent[0]?.text).toContain('/invoice/inv_tok_');
+    expect(mailer.sent[0]?.html).toContain('<html lang="es" dir="ltr">');
+    expect(mailer.sent[0]?.subject).toStartWith('Factura ');
+    // The hosted invoice page opens in the same language.
+    expect(mailer.sent[0]?.text).toMatch(/\/invoice\/inv_tok_[^\s]*\?locale=es/);
     expect(await eventTypes()).toContain('invoice.sent');
     await advance(tc.id, T0 + 10 * DAY + 60);
     expect((await ok('GET', `/v1/subscriptions/${sub.id}`)).status).toBe('past_due');

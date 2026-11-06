@@ -750,6 +750,27 @@
       "when": 1793942262116,
       "tag": "0106_mainnet_required_confirmations",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793944869191,
+      "tag": "0107_customer_preferred_locales",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1793944870350,
+      "tag": "0108_checkout_payer_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1793944871437,
+      "tag": "0109_customer_locales_validate",
+      "breakpoints": true
     }
   ]
 }

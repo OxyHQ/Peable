@@ -410,6 +410,7 @@ export function createCheckoutSessionsRouter(deps: {
       try {
         const row = await confirmSessionAsPayer(found.session, found.merchant, checkoutDeps, {
           paymentMethodType: parsed.data.payment_method_type,
+          locale: parsed.data.locale,
         });
         answerPayer(res, await publicSessionDTO(row, found.merchant));
       } catch (error) {
