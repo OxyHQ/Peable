@@ -19,6 +19,9 @@ export function useCheckoutPreparation(
   // the payer edits or submits; later account data must never overwrite either.
   const [editedDetails, setDetails] = useState<SheetCheckoutDetails | null>(null);
   const details = editedDetails ?? initialCheckoutDetails(preparation?.initialDetails);
+  const [reviewedPrice, setReviewedPrice] = useState<{ amount: number; currency: string } | null>(
+    null,
+  );
   const [prepared, setPrepared] = useState<SheetPreparedCheckout | null>(null);
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -50,6 +53,11 @@ export function useCheckoutPreparation(
     if (!preparation || pending.current || prepared || !canContinue || !active.current) return;
     // Freeze before the callback: rapid repeated presses cannot create two orders, and a
     // lost response cannot cause a retry with a different destination or contact.
+    if (!frozen.current)
+      setReviewedPrice({
+        amount: preparation.request.dueTodayMinorUnits,
+        currency: preparation.request.currency,
+      });
     const submitted = frozen.current ?? freezeCheckoutDetails(details);
     frozen.current = submitted;
     setDetails(submitted);
@@ -70,6 +78,7 @@ export function useCheckoutPreparation(
       if (failure instanceof SheetPreparationError) {
         if (failure.outcome === 'not_created') {
           frozen.current = null;
+          setReviewedPrice(null);
           setLocked(false);
         }
         setError(failure.message);
@@ -83,5 +92,5 @@ export function useCheckoutPreparation(
     }
   }
 
-  return { details, prepared, busy, locked, error, canContinue, change, submit };
+  return { details, prepared, reviewedPrice, busy, locked, error, canContinue, change, submit };
 }

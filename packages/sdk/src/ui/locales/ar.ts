@@ -186,6 +186,7 @@ export default {
   'faircoin.confirming': 'يجري بالفعل تأكيد دفعة FairCoin ولا يمكن استبدالها.',
   'faircoin.noPeable': 'تعذّر فتح Peable هنا. امسح الرمز باستخدام Peable على هاتفك.',
   'faircoin.otherMethod': 'اختر طريقة دفع أخرى',
+  'billing.state': 'الولاية / المقاطعة',
   'billing.title': 'بلد الفوترة',
   'billing.hint': 'تُحسب الضريبة حسب البلد الذي تدفع منه.',
   'card.hosted.title': 'الدفع بالبطاقة',

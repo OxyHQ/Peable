@@ -188,6 +188,7 @@ export default {
   'faircoin.confirming': 'Tu pago con FairCoin ya se está confirmando y no se puede sustituir.',
   'faircoin.noPeable': 'No se pudo abrir Peable aquí. Escanea el código con Peable en tu móvil.',
   'faircoin.otherMethod': 'Elegir otro método',
+  'billing.state': 'Estado / provincia',
   'billing.title': 'País de facturación',
   'billing.hint': 'Los impuestos se calculan según el país desde el que pagas.',
   'card.hosted.title': 'Pagar con tarjeta',

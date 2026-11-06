@@ -305,7 +305,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "6.2.0",
+      "version": "6.2.1",
       "dependencies": {
         "@peable.to/contracts": "workspace:6.0.0",
         "@peable.to/shared-types": "workspace:6.0.0",

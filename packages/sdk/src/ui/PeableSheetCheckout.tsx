@@ -2,6 +2,7 @@ import { preparedContactEmail } from './checkoutPreparation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
 import { Button } from '@oxy.so/bloom/button';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { CardFormCountry, CardFormPostcode } from '@oxy.so/bloom/card-form';
 import { Loading } from '@oxy.so/bloom/loading';
 import {
@@ -244,6 +245,7 @@ function SheetCheckout({
       setBilling({
         country: preparationState.details.shipping.country,
         postcode: preparationState.details.shipping.postalCode,
+        state: preparationState.details.shipping.state,
       });
     }
   }, [preparationState.prepared, preparationState.details, preparation?.request.requiresShipping]);
@@ -270,8 +272,9 @@ function SheetCheckout({
   const authorizationRef = useRef<PreparedCardAuthorization | null>(null);
   const callbacks = useRef({ onSettled, onUnavailable, onClose });
   callbacks.current = { onSettled, onUnavailable, onClose };
-  const latest = useRef({ expected: resolvedExpected, locale, messages });
-  latest.current = { expected: resolvedExpected, locale, messages };
+  const reviewedPrice = preparationState.prepared ? preparationState.reviewedPrice : null;
+  const latest = useRef({ expected: resolvedExpected, locale, messages, reviewedPrice });
+  latest.current = { expected: resolvedExpected, locale, messages, reviewedPrice };
   const cardFields = canMountCardFields();
 
   const go = useCallback((next: CheckoutStep, way: 'forward' | 'backward' = 'forward') => {
@@ -319,7 +322,25 @@ function SheetCheckout({
     if (!hasReadOrder.current) {
       hasReadOrder.current = true;
       setDirection('forward');
-      setStep('review');
+      const reviewed = latest.current.reviewedPrice;
+      const session = next.type === 'checkout_session' ? next.session : null;
+      const collection = session ? sessionCollection(session) : null;
+      // The payer already reviewed this exact total before preparation. Continue only
+      // to method selection; collection, repricing and authorization keep their own steps.
+      const canSelectMethod = !!(
+        reviewed &&
+        session &&
+        collection &&
+        session.status === 'open' &&
+        session.payment_status === 'unpaid' &&
+        !session.payment_intent &&
+        !collection.contact &&
+        !collection.unsupported &&
+        (!collection.shipping || session.shipping_details) &&
+        session.currency === reviewed.currency &&
+        baseUnits(session.amount_total) === reviewed.amount
+      );
+      setStep(canSelectMethod ? 'payment' : 'review');
     }
     setNow(nowSeconds());
     const current = next.type === 'checkout_session' ? next.session.payment_intent : next.intent;
@@ -536,7 +557,8 @@ function SheetCheckout({
     const known = session.customer_details.address;
     if (
       known?.country === address.country &&
-      (known.postal_code ?? undefined) === address.postal_code
+      (known.postal_code ?? undefined) === address.postal_code &&
+      (known.state ?? undefined) === address.state
     )
       return;
     const next = await client.updateCheckoutSession(source.id, source.clientSecret, {
@@ -577,7 +599,11 @@ function SheetCheckout({
   function recordedBilling(): BillingLocation | null {
     const address = session?.customer_details.address;
     return address?.country
-      ? { country: address.country, postcode: address.postal_code ?? '' }
+      ? {
+          country: address.country,
+          postcode: address.postal_code ?? '',
+          state: address.state ?? '',
+        }
       : null;
   }
 
@@ -589,7 +615,7 @@ function SheetCheckout({
     }
     if (sessionCollection(session).billingAddress && !session.payment_intent) {
       const known = recordedBilling();
-      if (known) setBilling(known);
+      if (known && !preparationState.details.useShippingForBilling) setBilling(known);
       setBillingNext('card');
       setMethodView('billing');
       go('method');
@@ -679,6 +705,8 @@ function SheetCheckout({
       return;
     }
     if (needsBillingLocation(order.session)) {
+      const known = recordedBilling();
+      if (known && !preparationState.details.useShippingForBilling) setBilling(known);
       setBillingNext('faircoin');
       setMethodView('billing');
       return;
@@ -909,6 +937,8 @@ function SheetCheckout({
     </Button>
   );
 
+  const billingRegionRequired =
+    !!session?.automatic_tax.enabled && (billing.country === 'US' || billing.country === 'CA');
   const methodContent = (() => {
     if (step !== 'method' || methodDetails) return undefined;
     if (methodView === 'billing')
@@ -918,11 +948,20 @@ function SheetCheckout({
           <CardFormCountry
             label={t('provider.card.country')}
             value={billing.country}
-            onValueChange={(country) => setBilling((value) => ({ ...value, country }))}
+            onValueChange={(country) => setBilling((value) => ({ ...value, country, state: '' }))}
             countries={billingCountries(locale)}
             disabled={busy}
             required
           />
+          {(billing.country === 'US' || billing.country === 'CA') && (
+            <TextFieldInput
+              label={t('billing.state')}
+              value={billing.state ?? ''}
+              onChangeText={(state) => setBilling((value) => ({ ...value, state }))}
+              disabled={busy}
+              autoCapitalize="characters"
+            />
+          )}
           <CardFormPostcode
             label={t('provider.card.postcode')}
             value={billing.postcode}
@@ -933,7 +972,10 @@ function SheetCheckout({
           <Button
             size="lg"
             disabled={
-              busy || !billing.country || (billingNext === 'card' && !billing.postcode.trim())
+              busy ||
+              !billing.country ||
+              ((billingNext === 'card' || billingRegionRequired) && !billing.postcode.trim()) ||
+              (billingRegionRequired && !billing.state?.trim())
             }
             onPress={() => {
               void (billingNext === 'card' ? continueToCard() : quoteWithBilling());

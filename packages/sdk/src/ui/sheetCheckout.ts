@@ -277,7 +277,14 @@ export function sessionCollection(session: CheckoutSessionPublic): SessionCollec
 
 /** Whether the session still needs the payer's billing location before it can be confirmed. */
 export function needsBillingLocation(session: CheckoutSessionPublic): boolean {
-  return sessionCollection(session).billingAddress && !session.customer_details.address?.country;
+  if (!sessionCollection(session).billingAddress) return false;
+  const address = session.customer_details.address;
+  return (
+    !address?.country ||
+    (session.automatic_tax.enabled &&
+      (address.country === 'US' || address.country === 'CA') &&
+      (!address.state?.trim() || !address.postal_code?.trim()))
+  );
 }
 
 /** Host presentation the gateway does not carry. */
@@ -400,17 +407,21 @@ export type SheetOutcome = 'succeeded' | 'failed' | null;
 export interface BillingLocation {
   readonly country: string;
   readonly postcode: string;
+  readonly state?: string;
 }
 
 /** The gateway's `customer_details.address` for a billing location (country upper-cased). */
 export function billingAddressParams(location: BillingLocation): {
   country: string;
   postal_code?: string;
+  state?: string;
 } {
+  const state = location.state?.trim();
   const postcode = location.postcode.trim();
   return {
     country: location.country.trim().toUpperCase(),
     ...(postcode ? { postal_code: postcode } : {}),
+    ...(state ? { state } : {}),
   };
 }
 

@@ -188,6 +188,7 @@ const en = {
   'faircoin.confirming': 'Your FairCoin payment is already confirming and cannot be replaced.',
   'faircoin.noPeable': "Peable couldn't be opened here. Scan the code with Peable on your phone.",
   'faircoin.otherMethod': 'Choose another method',
+  'billing.state': 'State / province',
   'billing.title': 'Billing country',
   'billing.hint': 'Tax is worked out from the country you pay from.',
   'card.hosted.title': 'Pay by card',

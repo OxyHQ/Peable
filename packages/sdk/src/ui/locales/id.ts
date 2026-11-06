@@ -191,6 +191,7 @@ export default {
   'faircoin.confirming': 'Pembayaran FairCoin kamu sedang dikonfirmasi dan tidak bisa diganti.',
   'faircoin.noPeable': 'Peable tidak bisa dibuka di sini. Pindai kode dengan Peable di ponselmu.',
   'faircoin.otherMethod': 'Pilih metode lain',
+  'billing.state': 'Negara bagian / provinsi',
   'billing.title': 'Negara penagihan',
   'billing.hint': 'Pajak dihitung berdasarkan negara tempat kamu membayar.',
   'card.hosted.title': 'Bayar dengan kartu',
