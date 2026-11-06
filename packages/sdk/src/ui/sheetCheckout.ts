@@ -102,7 +102,16 @@ export function baseUnits(value: string): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-/** What the host reviewed before opening the sheet; an order that differs is not paid here. */
+/**
+ * What the host reviewed before opening the sheet; an order that differs is not
+ * paid here.
+ *
+ * For a session `amount` is its SUBTOTAL — the price before discount and tax —
+ * because tax is priced only once the payer says where they pay from and a
+ * promotion code may lower the total; neither changes what was reviewed. For a
+ * single payment it is the payment's amount (a quoted FairCoin payment's fiat
+ * amount).
+ */
 export interface SheetExpectation {
   /** Base units of `currency`, as the gateway spells them. */
   readonly amount: string;
@@ -279,6 +288,7 @@ export function sessionRequest(
   const collection = sessionCollection(session);
   const total = baseUnits(session.amount_total) ?? 0;
   const subtotal = baseUnits(session.amount_subtotal) ?? total;
+  const discount = baseUnits(session.total_details.amount_discount) ?? 0;
   const tax = baseUnits(session.total_details.amount_tax) ?? 0;
   const items: CheckoutItem[] = session.line_items.map((line) => ({
     id: line.id,
@@ -301,7 +311,8 @@ export function sessionRequest(
             subtotalMinorUnits: subtotal,
             taxMinorUnits: tax,
             totalMinorUnits: total,
-            inclusive: tax > 0 && subtotal + tax !== total,
+            // Exclusive tax is added to the total; inclusive tax is already in it.
+            inclusive: tax > 0 && subtotal - discount + tax !== total,
           },
         }
       : {}),

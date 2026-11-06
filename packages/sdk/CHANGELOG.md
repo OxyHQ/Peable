@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.2.1 — the sheet compares a session's price before tax
+
+Fixed (`PeableSheetCheckout`): `expected.amount` is compared with a session's
+`amount_subtotal` — the price before discount and tax — not its total. Peable
+Tax prices an order only once the payer says where they pay from, so a taxed
+order (Mention Plus) was refused as "not the reviewed order" the moment its
+tax was added. A single payment still compares its amount. A discounted order
+with exclusive tax is no longer shown as tax-inclusive.
+
 ## 4.2.0 — Pay with Peable: one payment sheet for every Oxy app
 
 Requires `@peable.to/contracts` 4.1.0 and `@peable.to/shared-types` 4.1.0. Additive.

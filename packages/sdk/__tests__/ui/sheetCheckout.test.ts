@@ -195,6 +195,19 @@ describe('what a session asks for', () => {
     ).toBe('terms');
   });
 
+  test('a discounted order with exclusive tax is not read as tax-inclusive', () => {
+    const request = sessionRequest(
+      session({
+        automatic_tax: { enabled: true, status: 'complete' },
+        amount_subtotal: '3000',
+        amount_total: '2970',
+        total_details: { amount_discount: '300', amount_tax: '270', amount_shipping: '0' },
+      }),
+      ['card'],
+    );
+    expect(request.tax?.inclusive).toBe(false);
+  });
+
   test('the request carries the gateway’s amounts and tax as priced', () => {
     const taxed = session({
       automatic_tax: { enabled: true, status: 'complete' },
