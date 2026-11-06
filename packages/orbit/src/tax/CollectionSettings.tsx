@@ -9,6 +9,7 @@ import {
   type TaxRegistrationScheme,
   type TaxReport,
   type TaxSettings,
+  type TaxBehavior,
 } from '@peable.to/shared-types/tax';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Badge } from '@oxy.so/bloom/badge';
@@ -25,6 +26,7 @@ import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { Section } from '@/ui/OrbitScreen';
 import { PageSkeleton } from '../ui/states';
+import { buildCollectionSettingsBody } from './collectionForm';
 
 const upper = (value: string) => value.trim().toUpperCase();
 const firstOfMonth = () => {
@@ -52,6 +54,10 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [defaultTaxCode, setDefaultTaxCode] = useState('');
+  const [line1, setLine1] = useState('');
+  const [line2, setLine2] = useState('');
+  const [city, setCity] = useState('');
+  const [taxBehavior, setTaxBehavior] = useState<TaxBehavior>('exclusive');
   const [regCountry, setRegCountry] = useState('');
   const [regState, setRegState] = useState('');
   const [regScheme, setRegScheme] = useState<TaxRegistrationScheme>('standard');
@@ -88,6 +94,10 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
       setState(loaded.head_office?.state ?? '');
       setPostalCode(loaded.head_office?.postal_code ?? '');
       setDefaultTaxCode(loaded.default_tax_code);
+      setLine1(loaded.head_office?.line1 ?? '');
+      setLine2(loaded.head_office?.line2 ?? '');
+      setCity(loaded.head_office?.city ?? '');
+      setTaxBehavior(loaded.default_tax_behavior);
     } catch (e) {
       if (current === generation.current) setError(describeError(e, t('tax.error')));
     } finally {
@@ -189,6 +199,21 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                 />
               </View>
             </View>
+            <FormField label={t('tax.line1')} value={line1} onChange={setLine1} disabled={locked} />
+            <FormField label={t('tax.line2')} value={line2} onChange={setLine2} disabled={locked} />
+            <FormField label={t('tax.city')} value={city} onChange={setCity} disabled={locked} />
+            <Choice
+              label={t('tax.behavior')}
+              value={taxBehavior}
+              options={[
+                { value: 'inclusive', label: t('tax.behaviorInclusive') },
+                { value: 'exclusive', label: t('tax.behaviorExclusive') },
+              ]}
+              onChange={(value) => {
+                if (value === 'inclusive' || value === 'exclusive') setTaxBehavior(value);
+              }}
+              disabled={locked}
+            />
             <Choice
               label={t('tax.defaultCode')}
               value={defaultTaxCode || null}
@@ -205,17 +230,20 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                 onPress={() =>
                   void run(async () => {
                     setSettings(
-                      await dashboardApi.tax.updateSettings(scope, {
-                        legal_name: legalName.trim() || null,
-                        head_office: upper(country)
-                          ? {
-                              country: upper(country),
-                              state: upper(state) || null,
-                              postal_code: postalCode.trim() || null,
-                            }
-                          : null,
-                        default_tax_code: defaultTaxCode,
-                      }),
+                      await dashboardApi.tax.updateSettings(
+                        scope,
+                        buildCollectionSettingsBody({
+                          legalName,
+                          country,
+                          state,
+                          postalCode,
+                          city,
+                          line1,
+                          line2,
+                          defaultTaxCode,
+                          taxBehavior,
+                        }),
+                      ),
                     );
                   })
                 }
