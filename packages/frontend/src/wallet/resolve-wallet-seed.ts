@@ -2,8 +2,10 @@
  * Resolve the spending seed for a wallet, identity-wallet-aware.
  *
  * A wallet's spendable seed comes from one of three places depending on kind:
- *  - identity wallet (`OXY_IDENTITY_WALLET_ID`): re-derived from the Oxy
- *    identity on every call — it is NEVER persisted (see identity-wallet.ts).
+ *  - identity wallet (`OXY_IDENTITY_WALLET_ID`, or an organization's
+ *    `oxy-org-<id>`): re-derived from the Oxy identity on every call — the
+ *    person's key or the organization's — and NEVER persisted (see
+ *    identity-wallet.ts).
  *  - BIP39 wallet: the cached seed if present, else derived from the stored
  *    mnemonic (PBKDF2, expensive) and cached for next time.
  *  - watch-only wallet (`xpub:` marker mnemonic): has no spending seed.
@@ -21,7 +23,7 @@
  * through once.
  */
 
-import { OXY_IDENTITY_WALLET_ID } from './identity-wallet';
+import { identitySubjectOfWalletId, type IdentitySubject } from './identity-wallet';
 
 /**
  * Prefix stored in place of a mnemonic for watch-only wallets:
@@ -31,7 +33,7 @@ import { OXY_IDENTITY_WALLET_ID } from './identity-wallet';
 export const XPUB_MARKER_PREFIX = 'xpub:';
 
 export interface ResolveWalletSeedDeps {
-  deriveIdentitySeed: () => Promise<Uint8Array | null>;
+  deriveIdentitySeed: (subject: IdentitySubject) => Promise<Uint8Array | null>;
   getWalletMnemonic: (walletId: string) => Promise<string | null>;
   getCachedWalletSeed: (walletId: string) => Promise<Uint8Array | null>;
   cacheWalletSeed: (walletId: string, seed: Uint8Array) => Promise<void>;
@@ -60,8 +62,9 @@ export async function resolveWalletSeed(
   walletId: string,
   deps: ResolveWalletSeedDeps,
 ): Promise<Uint8Array> {
-  if (walletId === OXY_IDENTITY_WALLET_ID) {
-    const seed = await deps.deriveIdentitySeed();
+  const subject = identitySubjectOfWalletId(walletId);
+  if (subject) {
+    const seed = await deps.deriveIdentitySeed(subject);
     if (!seed) {
       throw new Error('Oxy identity unavailable — cannot resolve wallet seed');
     }

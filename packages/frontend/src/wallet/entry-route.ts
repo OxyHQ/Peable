@@ -22,23 +22,41 @@
 
 import type { IdentityInitResult } from './wallet-store';
 
-export type EntryRoute = {
-  kind: 'loading' | 'signin' | 'create-identity' | 'needs-pin' | 'ready' | 'read-only';
-};
+/**
+ * Why the account the person acts as has no wallet to open on this host
+ * (oxy ADRs 0001 and 0061): an organization whose wallet is not set up, not on
+ * this phone, or not theirs to hold — or an account kind with no Peable
+ * wallet at all. Rendered in place, like `create-identity`; the person's own
+ * key is never used instead.
+ */
+export type WalletBlock =
+  | {
+      readonly kind: 'organization';
+      readonly accountId: string;
+      readonly status: 'keyless' | 'not-on-device' | 'forbidden' | 'unavailable';
+    }
+  | { readonly kind: 'unsupported' };
+
+export type EntryRoute =
+  | { kind: 'loading' | 'signin' | 'create-identity' | 'needs-pin' | 'ready' | 'read-only' }
+  | { kind: 'blocked'; block: WalletBlock };
 
 export function decideEntryRoute(input: {
   isAuthResolved: boolean;
   isAuthenticated: boolean;
   identityInit: IdentityInitResult | null;
   hasPinConfigured: boolean | null;
+  block?: WalletBlock | null;
 }): EntryRoute {
-  const { isAuthResolved, isAuthenticated, identityInit, hasPinConfigured } = input;
+  const { isAuthResolved, isAuthenticated, identityInit, hasPinConfigured, block } = input;
 
   if (!isAuthResolved) return { kind: 'loading' };
   if (!isAuthenticated) return { kind: 'signin' };
+  // Before the identity probe: a blocked account has no wallet to wait for.
+  if (block) return { kind: 'blocked', block };
 
   // Signed in: the identity/wallet probe runs asynchronously; wait for it.
-  if (identityInit === null) return { kind: 'loading' };
+  if (identityInit === null || identityInit === 'superseded') return { kind: 'loading' };
   if (identityInit === 'no-keystore') return { kind: 'read-only' };
   if (identityInit === 'no-identity') return { kind: 'create-identity' };
 

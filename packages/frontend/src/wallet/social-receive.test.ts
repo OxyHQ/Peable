@@ -1,6 +1,8 @@
 import { describe, test, expect, mock } from 'bun:test';
+import { getPublicKey } from '@noble/secp256k1';
 import {
   buildTransaction,
+  bytesToHex,
   createP2PKHScript,
   decodeAddress,
   deriveSocialReceiveSpendingKey,
@@ -28,12 +30,28 @@ const IDENTITY_PUB_A_COMPRESSED =
 
 let sharedPublicKeyResult: string | null = IDENTITY_PUB_A;
 let holderKey: string | null = IDENTITY_KEY_A;
+// An organization's key (oxy ADR 0061), held apart from the person's: the fake
+// holder answers `{ accountId }` requests only from this one.
+const ORG_ID = '0123456789abcdef01234567';
+const ORG_KEY = 'cc'.repeat(32);
+const ORG_PUB = bytesToHex(getPublicKey(hexToBytes(ORG_KEY), false));
+let orgHolderKey: string | null = ORG_KEY;
+let orgPublicKeyResult: string | null = null;
 const getSharedPublicKey = mock(async () => sharedPublicKeyResult);
-const signSocialReceive = mock(async (index: number, digest: string) =>
-  holderKey ? realOxyCrypto.signSocialReceiveDigest(holderKey, index, digest) : null,
+const getOrganizationPublicKey = mock(async (_accountId: string) => orgPublicKeyResult);
+const signSocialReceive = mock(
+  async (index: number, digest: string, opts?: { accountId?: string }) => {
+    if (opts?.accountId !== undefined) {
+      return opts.accountId === ORG_ID && orgHolderKey
+        ? realOxyCrypto.signSocialReceiveDigest(orgHolderKey, index, digest)
+        : null;
+    }
+    return holderKey ? realOxyCrypto.signSocialReceiveDigest(holderKey, index, digest) : null;
+  },
 );
 mock.module('@oxy.so/core/crypto', () => ({
   ...realOxyCrypto,
+  getOrganizationPublicKey,
   KeyManager: { getSharedPublicKey, signSocialReceive },
 }));
 
@@ -64,6 +82,20 @@ describe('getIdentityPublicKeyHex', () => {
     sharedPublicKeyResult = null;
     expect(await getIdentityPublicKeyHex()).toBeNull();
     sharedPublicKeyResult = IDENTITY_PUB_A;
+  });
+
+  test("for an organization, is the ORGANIZATION's key this phone reaches", async () => {
+    orgPublicKeyResult = ORG_PUB;
+    const subject = { kind: 'organization', accountId: ORG_ID } as const;
+    expect(await getIdentityPublicKeyHex(subject)).toBe(compressedPublicKeyHex(ORG_PUB));
+    expect(getOrganizationPublicKey).toHaveBeenLastCalledWith(ORG_ID);
+  });
+
+  test("for an organization this phone cannot reach, is null — never the person's key", async () => {
+    orgPublicKeyResult = null;
+    sharedPublicKeyResult = IDENTITY_PUB_A;
+    const subject = { kind: 'organization', accountId: ORG_ID } as const;
+    expect(await getIdentityPublicKeyHex(subject)).toBeNull();
   });
 });
 
@@ -141,6 +173,42 @@ describe('signSocialReceiveInput', () => {
       signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET),
     ).rejects.toThrow(/without the Oxy identity/);
     holderKey = IDENTITY_KEY_A;
+  });
+
+  test("an organization's address is signed by the organization's key, asked by accountId", async () => {
+    const subject = { kind: 'organization', accountId: ORG_ID } as const;
+    const [orgSlot] = deriveSocialReceiveWatchWindow(ORG_PUB, 1, 1, TESTNET);
+    if (!orgSlot) throw new Error('expected one derived organization address');
+    const orgScript = createP2PKHScript(decodeAddress(orgSlot.address).hash);
+    const orgTx = buildTransaction({
+      utxos: [{ txid: '22'.repeat(32), vout: 0, value: 1_000_000n, scriptPubKey: orgScript }],
+      recipients: [{ address: SOCIAL_ADDR_1, value: 400_000n }],
+      changeAddress: orgSlot.address,
+      feePerByte: 10n,
+      network: TESTNET,
+    });
+    const remote = await signSocialReceiveInput(
+      orgTx,
+      0,
+      orgScript,
+      1,
+      orgSlot.address,
+      TESTNET,
+      subject,
+    );
+    const childKey = deriveSocialReceiveSpendingKey(hexToBytes(ORG_KEY), 1);
+    expect(remote).toEqual(signInput(orgTx, 0, orgScript, childKey));
+    expect(signSocialReceive).toHaveBeenLastCalledWith(1, expect.stringMatching(/^[0-9a-f]{64}$/), {
+      accountId: ORG_ID,
+    });
+
+    // A phone without the organization key cannot sign, even though the
+    // person's own key is right there.
+    orgHolderKey = null;
+    await expect(
+      signSocialReceiveInput(orgTx, 0, orgScript, 1, orgSlot.address, TESTNET, subject),
+    ).rejects.toThrow(/without the Oxy identity/);
+    orgHolderKey = ORG_KEY;
   });
 
   test('refuses a signature from a key that does not own the address', async () => {

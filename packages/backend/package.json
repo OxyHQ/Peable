@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@fairco.in/core": "0.5.0",
-    "@oxy.so/core": "7.23.1",
+    "@oxy.so/core": "7.25.0",
     "@oxy.so/db": "1.4.0",
     "@peable.to/shared-types": "*",
     "@scure/bip32": "^1.7.0",
@@ -35,7 +35,7 @@
   "devDependencies": {
     "@noble/hashes": "1.8.0",
     "@noble/secp256k1": "2.3.0",
-    "@oxy.so/contracts": "6.9.0",
+    "@oxy.so/contracts": "6.11.0",
     "@peable.to/sdk": "*",
     "@types/bun": "latest",
     "@types/express": "^4.17.21",
