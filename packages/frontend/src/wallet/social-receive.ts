@@ -103,6 +103,23 @@ export function p2pkhSigHash(
   return computeMultisigSigHash(tx, inputIndex, scriptPubKey, SIGHASH_ALL);
 }
 
+/** `KeyManager.signSocialReceive`'s shape, injectable so signing is tested without a holder. */
+export type SocialReceiveSign = (
+  index: number,
+  digest: string,
+  opts?: { accountId?: string; publicKey?: string },
+) => Promise<{ signature: string; publicKey: string } | null>;
+
+/**
+ * Which of the subject's keys signs (Peable ADR 0002, amended 2026-11-06
+ * "previous keys stay spendable"): `publicKey` names a PREVIOUS key the
+ * holder kept after a rotation or replacement; absent, the current key.
+ */
+export interface SocialReceiveKeySelector {
+  readonly publicKey?: string;
+  readonly sign?: SocialReceiveSign;
+}
+
 /**
  * The scriptSig spending social-receive child `index` at `address`, signed by
  * the identity key's holder. Throws when no holder answers (Commons absent,
@@ -117,14 +134,26 @@ export async function signSocialReceiveInput(
   address: string,
   network: NetworkConfig,
   subject: IdentitySubject = PERSONAL_SUBJECT,
+  selector: SocialReceiveKeySelector = {},
 ): Promise<Uint8Array> {
   const sighash = bytesToHex(p2pkhSigHash(tx, inputIndex, scriptPubKey));
   // The holder of the SUBJECT's key signs: an organization's coins are signed
-  // by the organization's key (`{ accountId }`), never by the person's.
-  const options = identityKeyOptions(subject);
-  const signed = options
-    ? await IdentityKeyManager.signSocialReceive(index, sighash, options)
-    : await IdentityKeyManager.signSocialReceive(index, sighash);
+  // by the organization's key (`{ accountId }`), never by the person's. A
+  // previous key is named by its public key, and never falls back to another.
+  const sign: SocialReceiveSign =
+    selector.sign ??
+    ((i, digest, opts) =>
+      opts
+        ? IdentityKeyManager.signSocialReceive(i, digest, opts)
+        : IdentityKeyManager.signSocialReceive(i, digest));
+  const options = {
+    ...identityKeyOptions(subject),
+    ...(selector.publicKey !== undefined ? { publicKey: selector.publicKey } : {}),
+  };
+  const signed =
+    Object.keys(options).length > 0
+      ? await sign(index, sighash, options)
+      : await sign(index, sighash);
   if (!signed) {
     throw new Error('Cannot sign for a social-receive address without the Oxy identity');
   }

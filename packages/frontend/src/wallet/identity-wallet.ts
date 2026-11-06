@@ -11,7 +11,7 @@
  * derive a different, wrong seed — spec §4.1).
  */
 
-import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
+import { KeyManager as IdentityKeyManager, listRetiredIdentityKeys } from '@oxy.so/core/crypto';
 import { bytesToHex } from '@fairco.in/core';
 
 /**
@@ -105,4 +105,40 @@ export async function deriveIdentitySeed(
 /** Encode a 32-byte seed as the `seed:<hex>` secret the store consumes. */
 export function buildSeedSecret(seed: Uint8Array): string {
   return `${SEED_SECRET_PREFIX}${bytesToHex(seed)}`;
+}
+
+/**
+ * The wallet seed of ONE of the subject's keys, named by its public key (any
+ * encoding): the current key when it matches, else a PREVIOUS key Commons
+ * kept after a rotation or replacement (oxy ADR 0061 D7 as amended
+ * 2026-11-06). `null` when this device cannot reach that key — never another
+ * key's seed in its place. Peable ADR 0002, amended "previous keys stay
+ * spendable". The caller zeroes the bytes once its KeyManager is built.
+ */
+export async function derivePreviousKeySeed(
+  subject: IdentitySubject,
+  publicKey: string,
+): Promise<Uint8Array | null> {
+  return IdentityKeyManager.deriveScopedSeed(PEABLE_SEED_INFO, {
+    ...identityKeyOptions(subject),
+    publicKey,
+  });
+}
+
+/**
+ * The previous keys Commons says this device holds for the subject, as a HINT
+ * only: the keys that matter are those the gateway recorded on the account's
+ * addresses (`identity_public_key`, ADR 0021 D9), and this list adds the ones
+ * that only ever received to the HD tree. Empty on any failure (web, an SDK
+ * without the ring, Commons absent): a missing hint hides nothing the
+ * recorded keys name.
+ */
+export async function listPreviousKeyHints(subject: IdentitySubject): Promise<string[]> {
+  try {
+    const options = identityKeyOptions(subject);
+    const keys = options ? await listRetiredIdentityKeys(options) : await listRetiredIdentityKeys();
+    return keys.map((entry) => entry.publicKey);
+  } catch {
+    return [];
+  }
 }

@@ -91,6 +91,17 @@ export interface SocialReceiveSetRow {
   origin: 'gateway' | 'default' | 'legacy';
 }
 
+/** A row of `previous_key_trees` (ADR 0002, amended 2026-11-06). */
+export interface PreviousKeyTreeRow {
+  /** Compressed lowercase hex. */
+  public_key: string;
+  network: string;
+  external_next: number;
+  change_next: number;
+  /** When its first discovery ran (Unix seconds); `null`: not yet. */
+  discovered_at: number | null;
+}
+
 /** One address to add to the set. */
 export interface SocialReceiveSetInsert {
   readonly address: string;
@@ -266,6 +277,19 @@ const SCHEMA_SQL = `
     origin TEXT NOT NULL
   );
 
+  -- A PREVIOUS identity key's HD tree (ADR 0002, amended 2026-11-06 "previous
+  -- keys stay spendable"): where its cursors stand on each network, and when
+  -- its first discovery ran. Public data only: the key's public half, never a
+  -- seed or a private key — the tree is re-derived from Commons on every open.
+  CREATE TABLE IF NOT EXISTS previous_key_trees (
+    public_key TEXT NOT NULL,
+    network TEXT NOT NULL,
+    external_next INTEGER NOT NULL DEFAULT 0,
+    change_next INTEGER NOT NULL DEFAULT 0,
+    discovered_at INTEGER,
+    PRIMARY KEY (public_key, network)
+  );
+
   CREATE TABLE IF NOT EXISTS watch_addresses (
     address TEXT PRIMARY KEY,
     redeem_script TEXT NOT NULL,
@@ -347,6 +371,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_addresses_change_used ON addresses(is_change, used);
   CREATE INDEX IF NOT EXISTS idx_social_receive_used ON social_receive_addresses(used);
   CREATE INDEX IF NOT EXISTS idx_social_receive_set_next_check ON social_receive_set(next_check_at);
+  CREATE INDEX IF NOT EXISTS idx_social_receive_set_key ON social_receive_set(identity_public_key);
   CREATE INDEX IF NOT EXISTS idx_contacts_address ON contacts(address);
   CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
   CREATE INDEX IF NOT EXISTS idx_buy_orders_created ON buy_orders(created_at);
@@ -1103,6 +1128,68 @@ export class Database {
       for (const row of found) rows.push(row);
     }
     return rows;
+  }
+
+  /** Every key the set records (as stored: the gateway's encoding), for finding previous keys. */
+  async getSocialReceiveSetKeys(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ identity_public_key: string }>(
+      'SELECT DISTINCT identity_public_key FROM social_receive_set WHERE identity_public_key IS NOT NULL',
+    );
+    return rows.map((row) => row.identity_public_key);
+  }
+
+  /**
+   * The rows recorded under these keys (exactly as stored), and — when
+   * `withKeyless` — every row recorded without a key, in index order.
+   */
+  async getSocialReceiveSetRowsForKeys(
+    storedKeys: readonly string[],
+    withKeyless: boolean,
+  ): Promise<SocialReceiveSetRow[]> {
+    const rows: SocialReceiveSetRow[] = [];
+    for (let start = 0; start < storedKeys.length; start += 500) {
+      const chunk = storedKeys.slice(start, start + 500);
+      const found = await this.db.getAllAsync<SocialReceiveSetRow>(
+        `SELECT * FROM social_receive_set WHERE identity_public_key IN (${chunk.map(() => '?').join(',')})`,
+        ...chunk,
+      );
+      for (const row of found) rows.push(row);
+    }
+    if (withKeyless) {
+      const keyless = await this.db.getAllAsync<SocialReceiveSetRow>(
+        'SELECT * FROM social_receive_set WHERE identity_public_key IS NULL',
+      );
+      for (const row of keyless) rows.push(row);
+    }
+    return rows.sort((a, b) => a.index_num - b.index_num || (a.address < b.address ? -1 : 1));
+  }
+
+  /** The previous-key trees recorded for `network`. */
+  async getPreviousKeyTrees(network: string): Promise<PreviousKeyTreeRow[]> {
+    return this.db.getAllAsync<PreviousKeyTreeRow>(
+      'SELECT * FROM previous_key_trees WHERE network = ? ORDER BY public_key',
+      network,
+    );
+  }
+
+  /**
+   * Record where a previous key's tree stands. Cursors only move forward, and
+   * a discovery once recorded stays recorded.
+   */
+  async savePreviousKeyTree(row: PreviousKeyTreeRow): Promise<void> {
+    await this.db.runAsync(
+      `INSERT INTO previous_key_trees (public_key, network, external_next, change_next, discovered_at)
+         VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (public_key, network) DO UPDATE SET
+         external_next = MAX(external_next, excluded.external_next),
+         change_next = MAX(change_next, excluded.change_next),
+         discovered_at = COALESCE(discovered_at, excluded.discovered_at)`,
+      row.public_key,
+      row.network,
+      row.external_next,
+      row.change_next,
+      row.discovered_at,
+    );
   }
 
   async markSocialReceiveAddressUsed(address: string): Promise<void> {

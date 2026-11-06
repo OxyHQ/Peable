@@ -379,8 +379,29 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Your account publishes a different identity key than this phone holds, so payments by @username would go where this wallet cannot see them. What this phone already received stays here.',
     'receive.keyMismatch.organization':
       'This phone holds a key the organization has since replaced. Add the current one in Commons (Settings → Organizations → Organization wallets). What the previous key received stays spendable here.',
-    'wallet.strandedBalance':
-      "{amount} FAIR was received under a previous identity key. It is not in your balance and can be spent only with that key's recovery phrase.",
+    // Previous identity keys (ADR 0002, amended 2026-11-06 "previous keys stay spendable").
+    'wallet.previousKey.title': '{amount} FAIR is under a previous key',
+    'wallet.previousKey.body.personal':
+      'These coins arrived under the identity key you had before a rotation. They are in your balance and you can spend them, but anyone else who holds that previous key can spend them too. Move them to your current key now, especially if you rotated because your key or recovery phrase may have been exposed.',
+    'wallet.previousKey.body.organization':
+      "These coins arrived under the organization's key before it was replaced. They are in the balance and you can spend them, but anyone who still holds the previous key, such as a former admin, can spend them too. Move them to the current key now.",
+    'wallet.previousKey.move': 'Move to my current key',
+    'wallet.previousKey.confirmTitle': 'Move {amount} FAIR to your current key?',
+    'wallet.previousKey.confirmBody':
+      'Everything under the previous key goes to a new address of your current key, in one transaction. Network fee: {fee} FAIR.',
+    'wallet.previousKey.confirm': 'Move now',
+    'wallet.previousKey.moved': 'Moving to your current key. It is final once confirmed.',
+    'wallet.previousKey.failed': 'The move did not go through: {message}',
+    'wallet.previousKey.dust':
+      'What is under the previous key would not cover the network fee, so there is nothing worth moving.',
+    'wallet.previousKey.nothing': 'These coins can be moved once they are confirmed.',
+    'wallet.previousKey.blocked':
+      'This phone does not hold the current key, so a move from here would land on a replaced key. Add the current key in Commons first.',
+    'wallet.previousKey.stranded.personal':
+      '{amount} FAIR was received under a previous identity key this phone cannot reach, so it is not in your balance. Add your previous recovery phrase in Commons (Backup & recovery → Previous keys) to spend it here.',
+    'wallet.previousKey.stranded.organization':
+      "{amount} FAIR was received under a previous key of this organization that this phone cannot reach, so it is not in the balance. Add the organization's previous phrase in Commons (Settings → Organizations → Organization wallets → Add the key you were given) to spend it here.",
+    'wallet.previousKey.openCommons': 'Open Commons',
     'receive.copy': 'Copy Address',
     'receive.share': 'Share',
     'receive.new_address': 'New Address',
@@ -1276,8 +1297,30 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Tu cuenta publica una clave de identidad distinta de la que tiene este tel\u00e9fono, as\u00ed que los pagos por @usuario ir\u00edan adonde este monedero no puede verlos. Lo que este tel\u00e9fono ya recibi\u00f3 sigue aqu\u00ed.',
     'receive.keyMismatch.organization':
       'Este tel\u00e9fono tiene una clave que la organizaci\u00f3n ya reemplaz\u00f3. A\u00f1ade la actual en Commons (Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones). Lo recibido con la clave anterior se puede seguir gastando aqu\u00ed.',
-    'wallet.strandedBalance':
-      '{amount} FAIR se recibieron con una clave de identidad anterior. No est\u00e1n en tu saldo y solo se pueden gastar con la frase de recuperaci\u00f3n de esa clave.',
+    'wallet.previousKey.title': '{amount} FAIR est\u00e1n bajo una clave anterior',
+    'wallet.previousKey.body.personal':
+      'Estas monedas llegaron con la clave de identidad que ten\u00edas antes de rotarla. Est\u00e1n en tu saldo y puedes gastarlas, pero cualquiera que tenga esa clave anterior tambi\u00e9n puede gastarlas. M\u00e9velas ahora a tu clave actual, sobre todo si la rotaste porque tu clave o tu frase de recuperaci\u00f3n pudieron quedar expuestas.',
+    'wallet.previousKey.body.organization':
+      'Estas monedas llegaron con la clave de la organizaci\u00f3n antes de que se reemplazara. Est\u00e1n en el saldo y puedes gastarlas, pero cualquiera que a\u00fan tenga la clave anterior, como un antiguo administrador, tambi\u00e9n puede gastarlas. M\u00e9velas ahora a la clave actual.',
+    'wallet.previousKey.move': 'Mover a mi clave actual',
+    'wallet.previousKey.confirmTitle': '\u00bfMover {amount} FAIR a tu clave actual?',
+    'wallet.previousKey.confirmBody':
+      'Todo lo que hay bajo la clave anterior va a una direcci\u00f3n nueva de tu clave actual, en una sola transacci\u00f3n. Comisi\u00f3n de red: {fee} FAIR.',
+    'wallet.previousKey.confirm': 'Mover ahora',
+    'wallet.previousKey.moved':
+      'Moviendo a tu clave actual. Ser\u00e1 definitivo cuando se confirme.',
+    'wallet.previousKey.failed': 'No se pudo mover: {message}',
+    'wallet.previousKey.dust':
+      'Lo que hay bajo la clave anterior no cubrir\u00eda la comisi\u00f3n de red, as\u00ed que no merece la pena moverlo.',
+    'wallet.previousKey.nothing':
+      'Estas monedas se podr\u00e1n mover cuando est\u00e9n confirmadas.',
+    'wallet.previousKey.blocked':
+      'Este tel\u00e9fono no tiene la clave actual, as\u00ed que mover desde aqu\u00ed acabar\u00eda en una clave reemplazada. A\u00f1ade primero la clave actual en Commons.',
+    'wallet.previousKey.stranded.personal':
+      '{amount} FAIR se recibieron con una clave de identidad anterior que este tel\u00e9fono no alcanza, as\u00ed que no est\u00e1n en tu saldo. A\u00f1ade tu frase de recuperaci\u00f3n anterior en Commons (Copia de seguridad y recuperaci\u00f3n \u2192 Claves anteriores) para gastarlos aqu\u00ed.',
+    'wallet.previousKey.stranded.organization':
+      '{amount} FAIR se recibieron con una clave anterior de esta organizaci\u00f3n que este tel\u00e9fono no alcanza, as\u00ed que no est\u00e1n en el saldo. A\u00f1ade la frase anterior de la organizaci\u00f3n en Commons (Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones \u2192 A\u00f1adir la clave que te dieron) para gastarlos aqu\u00ed.',
+    'wallet.previousKey.openCommons': 'Abrir Commons',
     'receive.copy': 'Copiar Direcci\u00f3n',
     'receive.share': 'Compartir',
     'receive.new_address': 'Nueva Direcci\u00f3n',
