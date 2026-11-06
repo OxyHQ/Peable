@@ -26,7 +26,8 @@ import {
 } from '@fairco.in/core';
 import type { NetworkConfig, Transaction } from '@fairco.in/core';
 import { Point } from '@noble/secp256k1';
-import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
+import { KeyManager as IdentityKeyManager, getOrganizationPublicKey } from '@oxy.so/core/crypto';
+import { PERSONAL_SUBJECT, identityKeyOptions, type IdentitySubject } from './identity-wallet';
 
 /**
  * How many unused social-receive addresses stay watched beyond the highest
@@ -57,8 +58,16 @@ export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
  * the account publishes. Comparing the two is the only way to notice they have
  * stopped being the same key.
  */
-export async function getIdentityPublicKeyHex(): Promise<string | null> {
-  const publicKey = await IdentityKeyManager.getSharedPublicKey();
+export async function getIdentityPublicKeyHex(
+  subject: IdentitySubject = PERSONAL_SUBJECT,
+): Promise<string | null> {
+  // An organization's key as THIS phone can reach it (oxy ADR 0061 D6): the
+  // iOS keychain group, or Commons' identity host on Android. `null` when this
+  // phone has no copy — never the person's own key in its place.
+  const publicKey =
+    subject.kind === 'organization'
+      ? await getOrganizationPublicKey(subject.accountId)
+      : await IdentityKeyManager.getSharedPublicKey();
   return publicKey ? compressedPublicKeyHex(publicKey) : null;
 }
 
@@ -112,9 +121,15 @@ export async function signSocialReceiveInput(
   index: number,
   address: string,
   network: NetworkConfig,
+  subject: IdentitySubject = PERSONAL_SUBJECT,
 ): Promise<Uint8Array> {
   const sighash = bytesToHex(p2pkhSigHash(tx, inputIndex, scriptPubKey));
-  const signed = await IdentityKeyManager.signSocialReceive(index, sighash);
+  // The holder of the SUBJECT's key signs: an organization's coins are signed
+  // by the organization's key (`{ accountId }`), never by the person's.
+  const options = identityKeyOptions(subject);
+  const signed = options
+    ? await IdentityKeyManager.signSocialReceive(index, sighash, options)
+    : await IdentityKeyManager.signSocialReceive(index, sighash);
   if (!signed) {
     throw new Error('Cannot sign for a social-receive address without the Oxy identity');
   }

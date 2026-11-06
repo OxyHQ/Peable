@@ -111,4 +111,33 @@ describe('decideEntryRoute', () => {
       }).kind,
     ).toBe('ready');
   });
+
+  test('an organization wallet that cannot open here renders its block in place', () => {
+    const block = {
+      kind: 'organization',
+      accountId: '0123456789abcdef01234567',
+      status: 'keyless',
+    } as const;
+    expect(
+      decideEntryRoute({
+        isAuthResolved: true,
+        isAuthenticated: true,
+        identityInit: null,
+        hasPinConfigured: null,
+        block,
+      }),
+    ).toEqual({ kind: 'blocked', block });
+  });
+
+  test('a block never outranks signing in', () => {
+    expect(
+      decideEntryRoute({
+        isAuthResolved: true,
+        isAuthenticated: false,
+        identityInit: null,
+        hasPinConfigured: null,
+        block: { kind: 'unsupported' },
+      }).kind,
+    ).toBe('signin');
+  });
 });

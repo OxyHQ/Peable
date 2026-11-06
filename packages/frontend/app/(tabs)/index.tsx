@@ -14,7 +14,9 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { useWalletStore } from '../../src/wallet/wallet-store';
+import { identitySubjectOfWalletId } from '../../src/wallet/identity-wallet';
 import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
 import { ReadOnlyWalletView } from '../../src/ui/components/ReadOnlyWalletView';
 import { useTabScreenBottomInset } from '../../src/ui/navigation/tabs';
@@ -118,6 +120,14 @@ function WalletHome() {
   const transactions = useWalletStore((s) => s.transactions);
   const network = useWalletStore((s) => s.network);
   const activeWalletName = useWalletStore((s) => s.activeWalletName);
+  const activeWalletId = useWalletStore((s) => s.activeWalletId);
+  const { user } = useAuth();
+  // An organization's wallet (oxy ADR 0061) is titled with the organization,
+  // so a person acting as it can tell it from their own at a glance.
+  const organizationName =
+    activeWalletId && identitySubjectOfWalletId(activeWalletId)?.kind === 'organization'
+      ? (user?.name?.displayName ?? user?.username ?? undefined)
+      : undefined;
   const refreshBalance = useWalletStore((s) => s.refreshBalance);
   const hasBackedUp = useWalletStore((s) => s.hasBackedUp);
   const loadPockets = useWalletStore((s) => s.loadPockets);
@@ -238,7 +248,7 @@ function WalletHome() {
               <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.background} />
             </View>
             <Text className="text-foreground text-xl font-semibold">
-              {activeWalletName || t('wallet.defaultName')}
+              {activeWalletName || organizationName || t('wallet.defaultName')}
             </Text>
           </View>
 

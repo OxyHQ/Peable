@@ -122,8 +122,11 @@ export function ReadOnlyWalletView() {
   // history that looked exactly like never having been paid.
   const network = SOCIAL_PAY_NETWORK;
 
+  // Keyed by the ACTING account: the session answers for whoever it acts as
+  // (the person, or an organization — oxy ADR 0001), and a switch must never
+  // show the previous account's history under the new one.
   const payments = useQuery({
-    queryKey: ['read-only-payments', network],
+    queryKey: ['read-only-payments', user?.id ?? null, network],
     queryFn: () => getMyPayments(network),
   });
 
@@ -133,7 +136,7 @@ export function ReadOnlyWalletView() {
   // party, and a history that already loaded must not disappear because the
   // chain read failed. This one is allowed to be absent.
   const balances = useQuery({
-    queryKey: ['read-only-balances', network, addresses],
+    queryKey: ['read-only-balances', user?.id ?? null, network, addresses],
     queryFn: () => fetchBalancesSat(addresses, network),
     enabled: addresses.length > 0,
   });
@@ -149,7 +152,11 @@ export function ReadOnlyWalletView() {
             <View className="w-9 h-9 rounded-xl bg-primary items-center justify-center mr-2.5">
               <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.background} />
             </View>
-            <Text className="text-foreground text-xl font-semibold">{t('wallet.defaultName')}</Text>
+            <Text className="text-foreground text-xl font-semibold">
+              {user.kind === 'organization'
+                ? (user.name?.displayName ?? user.username)
+                : t('wallet.defaultName')}
+            </Text>
           </View>
           <View className="flex-row items-center gap-3">
             <Badge text={t('readOnly.badge')} variant="neutral" size="sm" />

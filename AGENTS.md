@@ -1069,6 +1069,24 @@ catch-all) is a bar-less route INSIDE that navigator, so a signed-in visitor
 keeps the rail there. The gate lets it through for a signed-out payer and
 renders no bar for them; moving it back to `app/` root drops the shell.
 
+## Acting as an organization opens the ORGANIZATION's wallet
+
+The wallet belongs to the account the session acts as (oxy ADR 0001):
+`useAuth().user`, which is the organization when a person acts as one, and
+whose bearer the gateway answers for (`/v1/social/me/*` is then the
+organization's — no route of its own). `src/wallet/organization-wallet.ts`
+decides it: an organization's wallet is `oxy-org-<id>`, its seed is
+`deriveScopedSeed(PEABLE_SEED_INFO, { accountId })` and its social-receive coins
+are signed with `signSocialReceive(…, { accountId })` (oxy ADR 0061 D6) — never
+the person's key, which would hand the organization's payers addresses that
+leave with that person. `oxy.accounts.identityKey.get` says who may hold it
+(403 → only owners and admins) and which key it publishes (`null` → "Set up the
+organization's Peable wallet" in Commons); a phone without the key is sent to
+Commons to add it; a phone holding a REPLACED key opens it with social receive
+off (ADR 0002). `useWalletFollowsActingAccount` closes the wallet on every
+account switch so the previous account's wallet is never shown, or spent, under
+the new one. Project, bot, channel and community accounts open no wallet.
+
 ## `packages/frontend` is FAIRWallet, and upstream is alive
 
 This repo's git history IS FAIRWallet's — the first commit is

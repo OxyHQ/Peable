@@ -80,10 +80,13 @@ import {
 import type { WalletInfo } from '../storage/secure-store';
 import { Database } from '../storage/database';
 import {
-  OXY_IDENTITY_WALLET_ID,
+  PERSONAL_SUBJECT,
   SEED_SECRET_PREFIX,
   buildSeedSecret,
   deriveIdentitySeed,
+  identitySubjectOfWalletId,
+  identityWalletIdOf,
+  type IdentitySubject,
 } from './identity-wallet';
 import { hasIdentityKeystore } from './keystore';
 import {
@@ -95,6 +98,7 @@ import {
   computeWindowExtension,
 } from './social-receive';
 import { getSocialReceiveCursor } from '../services/gateway-client';
+import { oxyServices } from '../services/oxy-services';
 import {
   getPockets,
   savePockets,
@@ -172,6 +176,14 @@ export interface WalletState {
    * or before `initializeFromIdentity` completes).
    */
   socialReceiveDefaultAddress: string | null;
+  /**
+   * True when this phone's identity key is NOT the key the account publishes
+   * as its DID `#key-1` (ADR 0002) — for an organization, a key that has since
+   * been replaced (oxy ADR 0061 D7). Social receive is off: payers would be
+   * sent to addresses this wallet can neither see nor spend. Coins already
+   * received under this phone's key stay watched and spendable here.
+   */
+  socialReceiveKeyMismatch: boolean;
   /** Active Pocket (BIP44 account index) within the current wallet. */
   activeAccount: number;
   /** Pockets (BIP44 sub-accounts) of the current wallet. */
@@ -232,13 +244,31 @@ export interface WalletState {
     account?: number,
   ) => Promise<void>;
   /**
-   * Bring up the SINGLE Oxy-identity-derived wallet. Derives the seed from the
-   * on-device identity, builds the KeyManager, and runs the normal init. No
-   * mnemonic. Needs the on-device keystore; returns "no-keystore" without one
-   * and "no-identity"
-   * for a keyless account (routes onboarding to create an Oxy ID).
+   * Bring up the Oxy-identity-derived wallet of `subject` — the person's own
+   * (default) or, while they act as an organization, the ORGANIZATION's,
+   * derived from its key (oxy ADR 0061). Derives the seed from the on-device
+   * identity, builds the KeyManager, and runs the normal init. No mnemonic.
+   * Needs the on-device keystore; returns "no-keystore" without one and
+   * "no-identity" when this phone cannot reach the subject's key (a keyless
+   * account, or an organization key this phone does not hold).
+   *
+   * `publishedPublicKey` is the organization's DID `#key-1` as Oxy answered it
+   * (`accounts.identityKey.get`); social receive compares it with the key this
+   * phone holds and stays off when they differ (ADR 0002).
    */
-  initializeFromIdentity: (onReady?: () => void) => Promise<IdentityInitResult>;
+  initializeFromIdentity: (
+    onReady?: () => void,
+    subject?: IdentitySubject,
+    publishedPublicKey?: string | null,
+  ) => Promise<IdentityInitResult>;
+  /**
+   * Close the wallet because the person now acts as a DIFFERENT account
+   * (oxy ADR 0001): their own, or an organization's. Tears it down exactly as
+   * `lockWallet` does and forgets which wallet was active, so neither a PIN
+   * unlock nor the entry screen can bring the previous account's wallet back
+   * under the new account. The entry screen then derives the new one.
+   */
+  closeWallet: () => void;
   /**
    * Reload the ACTIVE wallet (by `activeWalletId`, falling back to the
    * persisted active id) from its stored secret, wallet-type-aware exactly
@@ -354,6 +384,27 @@ let spvClient: SPVClient | null = null;
  * sets up social receive.
  */
 let socialReceiveIdentityPublicKey: string | null = null;
+/**
+ * Whose key the active social-receive window derives from and who signs for
+ * it: the person, or the organization they act as. Set with the window in
+ * `setUpSocialReceive`; reset with it.
+ */
+let socialReceiveSubject: IdentitySubject = PERSONAL_SUBJECT;
+/**
+ * The key each organization publishes as its DID `#key-1` (compressed hex), as
+ * Oxy last answered it to `initializeFromIdentity`. Public data, so it
+ * deliberately survives `resetWalletInternals`: a PIN unlock re-initializes
+ * through `reloadActiveWallet`, which does not ask Oxy again, and must still
+ * compare this phone's key with the published one.
+ */
+const organizationPublishedKeys = new Map<string, string>();
+/**
+ * Set by `closeWallet` (the person switched account) and cleared by the next
+ * `initialize`: while set, `reloadActiveWallet` has no wallet to bring back.
+ * Without it a PIN unlock would fall back to the persisted active wallet id
+ * and could reopen the previous account's wallet under the new account.
+ */
+let activeWalletForgotten = false;
 /** address -> derivation index, for every currently-watched social-receive address (used + unused window). */
 let socialReceiveAddressIndex: Map<string, number> = new Map();
 // Handle of the recurring poll that mirrors peer / sync state from the SPV
@@ -501,7 +552,8 @@ function buildCombinedBloomFilterHashes(km: KeyManager): Uint8Array[] {
  * resync the window against the backend's reservation cursor.
  *
  * Called from INSIDE `initialize()` itself (gated on `activeId ===
- * OXY_IDENTITY_WALLET_ID` AND the active Pocket being the main one,
+ * an identity wallet` — the person's or an organization's — AND the active
+ * Pocket being the main one,
  * mirroring the `hasBackedUp` gate right above its call site) — not just
  * once from `initializeFromIdentity` — so every caller that re-runs
  * `initialize()` after `resetWalletInternals()` cleared this module's state
@@ -517,8 +569,9 @@ async function setUpSocialReceive(
   network: NetworkConfig,
   networkType: NetworkType,
   set: WalletSet,
+  subject: IdentitySubject,
 ): Promise<void> {
-  const identityPublicKey = await getIdentityPublicKeyHex();
+  const identityPublicKey = await getIdentityPublicKeyHex(subject);
   if (!identityPublicKey) {
     // Web, Commons absent on Android, or a race where identity was removed
     // between initialize() and here — initializeFromIdentity() already
@@ -527,6 +580,7 @@ async function setUpSocialReceive(
     return;
   }
   socialReceiveIdentityPublicKey = identityPublicKey;
+  socialReceiveSubject = subject;
 
   // Which key this window belongs to. Every address in it is a function of the
   // identity key, so a window derived from a different one watches addresses
@@ -555,7 +609,26 @@ async function setUpSocialReceive(
 
   socialReceiveAddressIndex = new Map(persisted.map((row) => [row.address, row.index_num]));
   const defaultRow = persisted.find((row) => row.index_num === 0);
-  set({ socialReceiveDefaultAddress: defaultRow?.address ?? null });
+  set({
+    socialReceiveDefaultAddress: defaultRow?.address ?? null,
+    socialReceiveKeyMismatch: false,
+  });
+
+  // An organization publishes its key as its DID `#key-1` (oxy ADR 0061), and
+  // Oxy told the entry screen which one that is. A phone holding a key the
+  // organization has since REPLACED keeps watching (and can spend) what that
+  // key received, but must not offer it as the organization's way to be paid:
+  // the gateway derives new payments from the published key. ADR 0002: stop,
+  // and say so.
+  const publishedKey =
+    subject.kind === 'organization' ? organizationPublishedKeys.get(subject.accountId) : undefined;
+  if (publishedKey !== undefined && publishedKey !== identityPublicKey) {
+    console.warn(
+      '[social-receive] this organization publishes a different key than this phone holds; social receive is off',
+    );
+    set({ socialReceiveDefaultAddress: null, socialReceiveKeyMismatch: true });
+    return;
+  }
 
   // Cursor-sync (finding: HIGH). `reserveNextSocialAddress` on the backend
   // advances this user's cursor on EVERY sender's `next_address` call,
@@ -570,7 +643,16 @@ async function setUpSocialReceive(
   const highestUsed = await db.getHighestUsedSocialReceiveIndex();
   let reservedThrough = 0;
   try {
+    // `/v1/social/me/cursor` answers for whoever the session acts as. For an
+    // organization's wallet that must BE the organization: a session that has
+    // since switched account would hand back someone else's cursor and key.
+    if (subject.kind === 'organization' && oxyServices.session.userId !== subject.accountId) {
+      throw new Error('the Oxy session no longer acts as this organization');
+    }
     const cursor = await getSocialReceiveCursor(networkType);
+    if (subject.kind === 'organization' && oxyServices.session.userId !== subject.accountId) {
+      throw new Error('the Oxy session switched account during the cursor read');
+    }
     // The backend derives the addresses payers are sent to from the key the
     // account PUBLISHES. If that is not the key this device holds, every index
     // it hands out belongs to a tree this wallet cannot see or spend from, and
@@ -584,7 +666,7 @@ async function setUpSocialReceive(
       console.warn(
         '[social-receive] this account publishes a different identity key than this device holds; social receive is off',
       );
-      set({ socialReceiveDefaultAddress: null });
+      set({ socialReceiveDefaultAddress: null, socialReceiveKeyMismatch: true });
       return;
     }
     reservedThrough = cursor.reserved_through;
@@ -682,6 +764,7 @@ async function signInputForAddress(
       socialIndex,
       utxo.address,
       network,
+      socialReceiveSubject,
     );
   }
   throw new Error(`Address not found in key manager: ${utxo.address}`);
@@ -1159,6 +1242,7 @@ function resetWalletInternals(): void {
   }
   keyManager = null;
   socialReceiveIdentityPublicKey = null;
+  socialReceiveSubject = PERSONAL_SUBJECT;
   socialReceiveAddressIndex = new Map();
   utxoSet = null;
   database = null;
@@ -1195,6 +1279,7 @@ const DEFAULT_WALLET_STATE = {
   isWatchOnly: false,
   hasBackedUp: false,
   socialReceiveDefaultAddress: null as string | null,
+  socialReceiveKeyMismatch: false,
   activeAccount: 0,
   pockets: [] as PocketInfo[],
   pocketBalances: {} as Record<number, bigint>,
@@ -1270,6 +1355,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   isWatchOnly: false,
   hasBackedUp: false,
   socialReceiveDefaultAddress: null,
+  socialReceiveKeyMismatch: false,
   activeAccount: 0,
   pockets: [],
   pocketBalances: {},
@@ -1337,6 +1423,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // Pocket; explicit callers (switchPocket) pass it. Account 0 keeps the
         // legacy DB file, so pre-Pockets wallets open exactly where they always did.
         const activeId = walletId ?? (await getActiveWalletId());
+        activeWalletForgotten = false;
         const resolvedAccount = account ?? (activeId ? await getActivePocket(activeId) : 0);
 
         database = await Database.open(activeId ?? undefined, resolvedAccount);
@@ -1430,8 +1517,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // Has the user backed up this wallet's recovery phrase? Drives the home
         // "back up your wallet" reminder. Watch-only wallets have no phrase to
         // back up, so they never prompt.
+        const identitySubject = activeId ? identitySubjectOfWalletId(activeId) : null;
         const backedUp =
-          activeId === OXY_IDENTITY_WALLET_ID
+          identitySubject !== null
             ? true
             : activeId && !watchOnly
               ? await isWalletBackedUp(activeId)
@@ -1451,8 +1539,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // wallets and non-main Pockets skip it; `resetWalletInternals` already
         // cleared `socialReceiveIdentityPublicKey` / `socialReceiveAddressIndex`
         // to their empty defaults for them.
-        if (activeId === OXY_IDENTITY_WALLET_ID && resolvedAccount === MAIN_POCKET_ACCOUNT) {
-          await setUpSocialReceive(database, networkConfig, state.network, set);
+        if (identitySubject !== null && resolvedAccount === MAIN_POCKET_ACCOUNT) {
+          await setUpSocialReceive(database, networkConfig, state.network, set, identitySubject);
         }
 
         // Reconstruct the persisted transaction history into the display list.
@@ -1686,7 +1774,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
   },
 
-  initializeFromIdentity: async (onReady?: () => void): Promise<IdentityInitResult> => {
+  initializeFromIdentity: async (
+    onReady?: () => void,
+    subject: IdentitySubject = PERSONAL_SUBJECT,
+    publishedPublicKey?: string | null,
+  ): Promise<IdentityInitResult> => {
     // The IDENTITY-derived wallet needs the on-device keystore the identity key
     // lives in (`@oxy.so/core` keyManager -> expo-secure-store), and a browser
     // has none. `hasIdentityKeystore` answers that for the shell's capability
@@ -1701,20 +1793,39 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     if (!hasIdentityKeystore()) {
       return 'no-keystore';
     }
-    const seed = await deriveIdentitySeed();
+    if (subject.kind === 'organization' && publishedPublicKey) {
+      organizationPublishedKeys.set(subject.accountId, compressedPublicKeyHex(publishedPublicKey));
+    }
+    // An organization's seed derives from ITS key; `null` when this phone
+    // cannot reach it, and never the person's key in its place (ADR 0061 D6).
+    const seed = await deriveIdentitySeed(subject);
     if (!seed) {
       return 'no-identity';
     }
-    // `initialize()` itself brings up social receive (gated on
-    // `activeId === OXY_IDENTITY_WALLET_ID`, which is always true here) —
-    // no separate step needed.
-    await get().initialize(buildSeedSecret(seed), OXY_IDENTITY_WALLET_ID, onReady);
+    let secret: string;
+    try {
+      secret = buildSeedSecret(seed);
+    } finally {
+      // The bytes are needed only to build the secret; do not keep them.
+      seed.fill(0);
+    }
+    // `initialize()` itself brings up social receive (gated on the wallet id
+    // naming an identity wallet, which it always does here) — no separate
+    // step needed.
+    await get().initialize(secret, identityWalletIdOf(subject), onReady);
     return 'initialized';
+  },
+
+  closeWallet: (): void => {
+    activeWalletForgotten = true;
+    set({ activeWalletId: null, activeWalletName: '' });
+    get().lockWallet();
   },
 
   reloadActiveWallet: async (onReady?: () => void): Promise<void> => {
     try {
-      const activeId = get().activeWalletId ?? (await getActiveWalletId());
+      const activeId =
+        get().activeWalletId ?? (activeWalletForgotten ? null : await getActiveWalletId());
       if (!activeId) {
         onReady?.();
         return;
@@ -2152,8 +2263,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       set({
         ...DEFAULT_WALLET_STATE,
         network: state.network,
-        activeWalletId: state.activeWalletId,
-        activeWalletName: state.activeWalletName,
+        // Read at APPLY time: a teardown deferred behind a send must not
+        // resurrect a wallet `closeWallet` forgot in the meantime.
+        activeWalletId: get().activeWalletId,
+        activeWalletName: get().activeWalletName,
         wallets: state.wallets,
         isWatchOnly: state.isWatchOnly,
       });

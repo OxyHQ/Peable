@@ -14,7 +14,7 @@
  */
 
 import { describe, test, expect, mock } from 'bun:test';
-import { OXY_IDENTITY_WALLET_ID } from './identity-wallet';
+import { OXY_IDENTITY_WALLET_ID, identityWalletIdOf } from './identity-wallet';
 import {
   resolveWalletSeed,
   getOrDeriveBip39Seed,
@@ -44,6 +44,7 @@ describe('resolveWalletSeed — identity wallet', () => {
     const seed = await resolveWalletSeed(OXY_IDENTITY_WALLET_ID, deps);
     expect(seed).toEqual(IDENTITY_SEED);
     expect(deps.deriveIdentitySeed).toHaveBeenCalledTimes(1);
+    expect(deps.deriveIdentitySeed).toHaveBeenCalledWith({ kind: 'personal' });
     expect(deps.getWalletMnemonic).not.toHaveBeenCalled();
     expect(deps.getCachedWalletSeed).not.toHaveBeenCalled();
   });
@@ -51,6 +52,32 @@ describe('resolveWalletSeed — identity wallet', () => {
   test('throws a clear error when the identity is unavailable (web / keyless)', async () => {
     const deps = makeDeps({ deriveIdentitySeed: mock(async () => null) });
     await expect(resolveWalletSeed(OXY_IDENTITY_WALLET_ID, deps)).rejects.toThrow(/identity/i);
+  });
+});
+
+describe('resolveWalletSeed — an organization identity wallet (oxy ADR 0061)', () => {
+  const ORG_ID = '0123456789abcdef01234567';
+
+  test("derives from the ORGANIZATION's key, never the person's, and never from secure-store", async () => {
+    const deps = makeDeps();
+    const seed = await resolveWalletSeed(
+      identityWalletIdOf({ kind: 'organization', accountId: ORG_ID }),
+      deps,
+    );
+    expect(seed).toEqual(IDENTITY_SEED);
+    expect(deps.deriveIdentitySeed).toHaveBeenCalledWith({
+      kind: 'organization',
+      accountId: ORG_ID,
+    });
+    expect(deps.getWalletMnemonic).not.toHaveBeenCalled();
+    expect(deps.getCachedWalletSeed).not.toHaveBeenCalled();
+  });
+
+  test('throws when this phone cannot reach the organization key', async () => {
+    const deps = makeDeps({ deriveIdentitySeed: mock(async () => null) });
+    await expect(
+      resolveWalletSeed(identityWalletIdOf({ kind: 'organization', accountId: ORG_ID }), deps),
+    ).rejects.toThrow(/identity/i);
   });
 });
 

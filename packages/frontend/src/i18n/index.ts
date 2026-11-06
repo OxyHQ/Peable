@@ -374,6 +374,11 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     // ---------- Receive ----------
     'receive.title': 'Receive FAIR',
     'receive.payMeAt': 'Pay me at',
+    'receive.keyMismatch.title': 'Paying by @username is off on this phone',
+    'receive.keyMismatch.personal':
+      'Your account publishes a different identity key than this phone holds, so payments by @username would go where this wallet cannot see them. What this phone already received stays here.',
+    'receive.keyMismatch.organization':
+      'This phone holds a key the organization has since replaced. Add the current one in Commons (Settings → Organizations → Organization wallets). What the previous key received stays spendable here.',
     'receive.copy': 'Copy Address',
     'receive.share': 'Share',
     'receive.new_address': 'New Address',
@@ -506,6 +511,30 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'onboarding.commonsNotInstalled':
       "Commons by Oxy isn't installed on this device. Install it to set up your Oxy ID.",
     'onboarding.createIdentityError': "Couldn't reach Oxy. Check your connection and try again.",
+
+    // ---------- Organization wallet (oxy ADR 0061) ----------
+    'organizationWallet.thisOrganization': 'This organization',
+    'organizationWallet.keyless.title': "Set up the organization's Peable wallet",
+    'organizationWallet.keyless.body':
+      "{name} has no Peable wallet yet, so it can't receive FairCoin. An owner or admin creates it in Commons: Settings → Organizations → Organization wallets.",
+    'organizationWallet.keyless.cta': 'Set up in Commons',
+    'organizationWallet.notOnDevice.title': "Add the organization's wallet to this phone",
+    'organizationWallet.notOnDevice.body':
+      "{name}'s Peable wallet is held on another device. Add it to this phone in Commons with the recovery phrase of the organization's wallet: Settings → Organizations → Organization wallets.",
+    'organizationWallet.notOnDevice.cta': 'Add in Commons',
+    'organizationWallet.forbidden.title': 'Only owners and admins can use this wallet',
+    'organizationWallet.forbidden.body':
+      "{name}'s Peable wallet is set up and held by its owners and admins. Ask one of them, or switch to your own account.",
+    'organizationWallet.unavailable.title': "Couldn't check the organization's wallet",
+    'organizationWallet.unavailable.body':
+      "Oxy couldn't be reached to check {name}'s Peable wallet. Check your connection and try again.",
+    'organizationWallet.unsupported.title': 'This account has no Peable wallet',
+    'organizationWallet.unsupported.body':
+      'Peable wallets belong to people and organizations. Switch to your own account or an organization to see a wallet.',
+    'organizationWallet.checkAgain': 'Check again',
+    'organizationWallet.switchAccount': 'Switch account',
+    'organizationWallet.commonsNotInstalled':
+      "Commons by Oxy isn't installed on this device. Install it to set up the organization's wallet.",
     'onboarding.webFallbackTitle': 'Open Peable on your phone',
     'onboarding.webFallbackSubtitle':
       'Spending needs the keys on your device. Sign in again, or open the app.',
@@ -1240,6 +1269,11 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     // ---------- Receive ----------
     'receive.title': 'Recibir FAIR',
     'receive.payMeAt': 'P\u00e1game en',
+    'receive.keyMismatch.title': 'El pago por @usuario est\u00e1 desactivado en este tel\u00e9fono',
+    'receive.keyMismatch.personal':
+      'Tu cuenta publica una clave de identidad distinta de la que tiene este tel\u00e9fono, as\u00ed que los pagos por @usuario ir\u00edan adonde este monedero no puede verlos. Lo que este tel\u00e9fono ya recibi\u00f3 sigue aqu\u00ed.',
+    'receive.keyMismatch.organization':
+      'Este tel\u00e9fono tiene una clave que la organizaci\u00f3n ya reemplaz\u00f3. A\u00f1ade la actual en Commons (Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones). Lo recibido con la clave anterior se puede seguir gastando aqu\u00ed.',
     'receive.copy': 'Copiar Direcci\u00f3n',
     'receive.share': 'Compartir',
     'receive.new_address': 'Nueva Direcci\u00f3n',
@@ -1378,6 +1412,33 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Commons by Oxy no est\u00e1 instalada en este dispositivo. Inst\u00e1lala para configurar tu Oxy ID.',
     'onboarding.createIdentityError':
       'No se pudo conectar con Oxy. Comprueba tu conexi\u00f3n e int\u00e9ntalo de nuevo.',
+
+    // ---------- Monedero de la organización (oxy ADR 0061) ----------
+    'organizationWallet.thisOrganization': 'Esta organizaci\u00f3n',
+    'organizationWallet.keyless.title': 'Configura el monedero Peable de la organizaci\u00f3n',
+    'organizationWallet.keyless.body':
+      '{name} a\u00fan no tiene monedero Peable, as\u00ed que no puede recibir FairCoin. Un propietario o administrador lo crea en Commons: Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones.',
+    'organizationWallet.keyless.cta': 'Configurar en Commons',
+    'organizationWallet.notOnDevice.title':
+      'A\u00f1ade el monedero de la organizaci\u00f3n a este tel\u00e9fono',
+    'organizationWallet.notOnDevice.body':
+      'El monedero Peable de {name} est\u00e1 en otro dispositivo. A\u00f1\u00e1delo a este tel\u00e9fono en Commons con la frase de recuperaci\u00f3n del monedero de la organizaci\u00f3n: Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones.',
+    'organizationWallet.notOnDevice.cta': 'A\u00f1adir en Commons',
+    'organizationWallet.forbidden.title':
+      'Solo los propietarios y administradores pueden usar este monedero',
+    'organizationWallet.forbidden.body':
+      'El monedero Peable de {name} lo configuran y guardan sus propietarios y administradores. P\u00eddeselo a uno de ellos o cambia a tu propia cuenta.',
+    'organizationWallet.unavailable.title':
+      'No se pudo comprobar el monedero de la organizaci\u00f3n',
+    'organizationWallet.unavailable.body':
+      'No se pudo conectar con Oxy para comprobar el monedero Peable de {name}. Comprueba tu conexi\u00f3n e int\u00e9ntalo de nuevo.',
+    'organizationWallet.unsupported.title': 'Esta cuenta no tiene monedero Peable',
+    'organizationWallet.unsupported.body':
+      'Los monederos Peable son de personas y organizaciones. Cambia a tu propia cuenta o a una organizaci\u00f3n para ver un monedero.',
+    'organizationWallet.checkAgain': 'Comprobar de nuevo',
+    'organizationWallet.switchAccount': 'Cambiar de cuenta',
+    'organizationWallet.commonsNotInstalled':
+      'Commons by Oxy no est\u00e1 instalada en este dispositivo. Inst\u00e1lala para configurar el monedero de la organizaci\u00f3n.',
     'onboarding.webFallbackTitle': 'Abre Peable en tu tel\u00e9fono',
     'onboarding.webFallbackSubtitle':
       'Gastar necesita las claves de tu dispositivo. Vuelve a iniciar sesi\u00f3n o abre la app.',

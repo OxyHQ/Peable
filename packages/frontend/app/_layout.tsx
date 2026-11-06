@@ -38,6 +38,7 @@ import { oxyServices } from '../src/services/oxy-services';
 import { OXY_CLIENT_ID, OXY_AUTH_REDIRECT_URI } from '../src/config';
 import { useExplorerRealtime } from '../src/hooks/useExplorerRealtime';
 import { useWalletStore } from '../src/wallet/wallet-store';
+import { useWalletFollowsActingAccount } from '../src/wallet/use-wallet-follows-account';
 import { useLockStore } from '../src/wallet/lock-store';
 import { LockGate } from '../src/ui/components/LockGate';
 import { ErrorBoundary } from '../src/ui/components/ErrorBoundary';
@@ -369,6 +370,10 @@ function AppContent({ ready }: { ready: boolean }) {
   // Keep the Explorer realtime socket alive (foreground-gated) so the home
   // Overview's network stats tick live off the WebSocket.
   useExplorerRealtime();
+
+  // The open wallet is the acting account's: switching to an organization (or
+  // back) closes it and lets the entry screen derive the right one.
+  useWalletFollowsActingAccount();
 
   // Hide the splash once fonts and theme are loaded. `ready` only ever flips
   // false → true, so this runs exactly once.

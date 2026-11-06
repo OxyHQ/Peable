@@ -47,6 +47,7 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
   const addresses = useWalletStore((s) => s.addresses);
   const getNewAddress = useWalletStore((s) => s.getNewAddress);
   const socialReceiveDefaultAddress = useWalletStore((s) => s.socialReceiveDefaultAddress);
+  const socialReceiveKeyMismatch = useWalletStore((s) => s.socialReceiveKeyMismatch);
   const { user } = useOxy();
   const theme = useTheme();
 
@@ -168,6 +169,23 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
           <View className="items-center">
             <Text className="text-muted-foreground text-sm">{t('receive.payMeAt')}</Text>
             <Text className="text-foreground text-lg font-bold mt-0.5">@{user.username}</Text>
+          </View>
+        ) : null}
+
+        {/* ADR 0002: say WHY `@username` is gone. This phone's key is not the
+            one the account publishes (for an organization, a key that was
+            replaced in Commons), so payments by handle would go where this
+            wallet cannot see them. What this key already received stays here. */}
+        {socialReceiveKeyMismatch ? (
+          <View className="bg-surface rounded-2xl px-4 py-3">
+            <Text className="text-foreground text-sm font-semibold">
+              {t('receive.keyMismatch.title')}
+            </Text>
+            <Text className="text-muted-foreground text-xs mt-1 leading-4">
+              {user?.kind === 'organization'
+                ? t('receive.keyMismatch.organization')
+                : t('receive.keyMismatch.personal')}
+            </Text>
           </View>
         ) : null}
 
