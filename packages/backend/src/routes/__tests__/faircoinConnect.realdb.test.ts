@@ -836,26 +836,42 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       'X-Peable-Client-Secret': decodeURIComponent(String(session.url).split('#cs=')[1] ?? ''),
     });
     const platformAddress = (index: number) =>
-      deriveSocialReceiveAddress(testIdentityPublicKey('acct_platform'), index, getNetwork('testnet'));
+      deriveSocialReceiveAddress(
+        testIdentityPublicKey('acct_platform'),
+        index,
+        getNetwork('testnet'),
+      );
 
     async function multiSellerOrder(a: number, b: number) {
       const sellerA = await onboardSeller(`store_split_a_${String(a)}`, a);
       const sellerB = await onboardSeller(`store_split_b_${String(b)}`, b);
       const res = await call('POST', '/v1/checkout_sessions', {
         // Seller A sells 30.00 + 10.00, seller B 10.00: weights 4:1.
-        line_items: [usd('3000', 'Lamp', sellerA.id), usd('1000', 'Mug', sellerB.id), usd('1000', 'Shade', sellerA.id)],
+        line_items: [
+          usd('3000', 'Lamp', sellerA.id),
+          usd('1000', 'Mug', sellerB.id),
+          usd('1000', 'Shade', sellerA.id),
+        ],
         payment_intent_data: { metadata: { mercaria_payment_id: `pay_${String(a)}` } },
         customer_email: 'b@example.com',
         success_url: 'https://platform.example/ok',
       });
       expect(res.status).toBe(201);
-      expect(res.json).toMatchObject({ connected_account: null, payment_method_types: ['card', 'faircoin'] });
+      expect(res.json).toMatchObject({
+        connected_account: null,
+        payment_method_types: ['card', 'faircoin'],
+      });
       return { sellerA, sellerB, session: res.json };
     }
 
     test('ONE FairCoin payment pays every seller its share, from its own wallet tree', async () => {
       const { sellerA, sellerB, session } = await multiSellerOrder(80, 81);
-      const view = await call('GET', `/v1/checkout_sessions/${String(session.id)}/public`, undefined, secretOf(session));
+      const view = await call(
+        'GET',
+        `/v1/checkout_sessions/${String(session.id)}/public`,
+        undefined,
+        secretOf(session),
+      );
       expect(view.json.faircoin).toMatchObject({ available: true, unavailable_reason: null });
 
       const confirmed = await call(
@@ -932,8 +948,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
           .map((entry) => [entry.connectedAccountId, entry.amount, entry.fee])
           .sort((x, y) => String(x[1]).localeCompare(String(y[1]))),
       ).toEqual([
-        [must(await findAccountByPublicId(gatewayDb(), platform.id, String(sellerB.id))).id, '2000000000', '0'],
-        [must(await findAccountByPublicId(gatewayDb(), platform.id, String(sellerA.id))).id, '8000000000', '0'],
+        [
+          must(await findAccountByPublicId(gatewayDb(), platform.id, String(sellerB.id))).id,
+          '2000000000',
+          '0',
+        ],
+        [
+          must(await findAccountByPublicId(gatewayDb(), platform.id, String(sellerA.id))).id,
+          '8000000000',
+          '0',
+        ],
       ]);
     });
 
@@ -1011,7 +1035,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
         success_url: 'https://platform.example/ok',
       });
       expect(res.status).toBe(201);
-      const view = await call('GET', `/v1/checkout_sessions/${String(res.json.id)}/public`, undefined, secretOf(res.json));
+      const view = await call(
+        'GET',
+        `/v1/checkout_sessions/${String(res.json.id)}/public`,
+        undefined,
+        secretOf(res.json),
+      );
       expect(view.json.faircoin).toMatchObject({
         available: false,
         unavailable_reason: 'faircoin_wallet_missing',
