@@ -17,6 +17,7 @@
  * payers racing for a code's last redemption cannot both get it.
  */
 import { randomUUID } from 'node:crypto';
+import { updateCustomerFields } from '../customers/customerService';
 import type {
   Address,
   AddressParams,
@@ -1086,7 +1087,37 @@ async function customerFor(
 ): Promise<CustomerRow> {
   if (session.customerId) {
     const existing = await findCustomerById(getDb(), session.customerId);
-    if (existing) return existing;
+    if (existing) {
+      if (existing.merchantId !== merchant.id || existing.deletedAt !== null) {
+        throw invalid(
+          'resource_missing',
+          'the checkout customer is no longer available',
+          'customer',
+        );
+      }
+      // Subscription invoices and renewals read the customer's billing location.
+      // Keep the address the payer just reviewed, without changing identity or email.
+      const address = session.customerDetails?.address;
+      if (
+        session.mode === 'subscription' &&
+        session.automaticTax &&
+        address &&
+        (['country', 'state', 'postal_code', 'city', 'line1', 'line2'] as const).some(
+          (field) => (existing.address?.[field] ?? null) !== (address[field] ?? null),
+        )
+      ) {
+        const updated = await updateCustomerFields(merchant, existing, { address });
+        if (typeof updated === 'string') {
+          throw invalid(
+            'resource_missing',
+            'the checkout customer is no longer available',
+            'customer',
+          );
+        }
+        return updated;
+      }
+      return existing;
+    }
   }
   const details = session.customerDetails;
   const created = await getDb().transaction(async (tx) => {
