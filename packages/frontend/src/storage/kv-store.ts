@@ -18,6 +18,8 @@
  */
 
 import { Platform } from 'react-native';
+import { resolveKeychainAccess } from '@oxy.so/core/crypto';
+import { createGroupedKeychainAdapter } from './keychain-groups';
 
 // ---------------------------------------------------------------------------
 // Storage interface
@@ -36,11 +38,9 @@ interface StorageAdapter {
 function createNativeAdapter(): StorageAdapter {
   // Dynamic import to avoid web bundling issues
   const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store');
-  return {
-    getItem: (key) => SecureStore.getItemAsync(key),
-    setItem: (key, value) => SecureStore.setItemAsync(key, value),
-    deleteItem: (key) => SecureStore.deleteItemAsync(key),
-  };
+  // iOS: the wallet keychain group, not the group every Oxy app reads
+  // (`./keychain-groups`, oxy ADR 0062). Android: the same calls as before.
+  return createGroupedKeychainAdapter(SecureStore, resolveKeychainAccess);
 }
 
 // ---------------------------------------------------------------------------

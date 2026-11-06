@@ -494,3 +494,44 @@ export async function clearAll(): Promise<void> {
   await deleteItemAsync(WALLETS_INDEX_KEY);
   await deleteItemAsync(ACTIVE_WALLET_KEY);
 }
+
+// ---------------------------------------------------------------------------
+// iOS keychain access-group split (oxy ADR 0062)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read every item this app keeps once, so `kv-store` moves each one out of the
+ * keychain group every Oxy app can read into the wallet group (a read IS the
+ * move, verify-before-delete; see `./keychain-groups`). Covers the items that
+ * might otherwise wait a long time for a read: the phrases and cached seeds of
+ * wallets that are not active. A no-op off iOS. Never throws.
+ */
+export async function moveWalletItemsToOwnKeychainGroup(): Promise<void> {
+  let ids: string[] = [];
+  try {
+    ids = (await getWalletIndex()).map((w) => w.id);
+  } catch {
+    // The index stays where it is; the next launch tries again.
+  }
+  const keys = [
+    MNEMONIC_KEY,
+    WALLET_PIN_KEY,
+    WALLET_CREATED_KEY,
+    ACTIVE_WALLET_KEY,
+    BIOMETRICS_ENABLED_KEY,
+    AUTO_LOCK_KEY,
+    CURRENCY_KEY,
+    ...ids.flatMap((id) => [
+      `fairwallet_mnemonic_${id}`,
+      walletSeedKey(id),
+      `${BACKED_UP_PREFIX}${id}`,
+    ]),
+  ];
+  for (const key of keys) {
+    try {
+      await getItemAsync(key);
+    } catch {
+      // Locked: retried on the next read of this key or the next launch.
+    }
+  }
+}

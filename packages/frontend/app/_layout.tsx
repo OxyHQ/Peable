@@ -15,7 +15,7 @@ import '../src/crypto-polyfill';
 import '../global.css';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus, View } from 'react-native';
+import { AppState, type AppStateStatus, Platform, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -44,7 +44,7 @@ import { useLockStore } from '../src/wallet/lock-store';
 import { LockGate } from '../src/ui/components/LockGate';
 import { ErrorBoundary } from '../src/ui/components/ErrorBoundary';
 import { installCrashHandler } from '../src/services/crash-log';
-import { getAutoLockTimeout } from '../src/storage/secure-store';
+import { getAutoLockTimeout, moveWalletItemsToOwnKeychainGroup } from '../src/storage/secure-store';
 import { SUPPORTED_LANGUAGES } from '../src/i18n';
 import { useLanguageStore } from '../src/i18n/store';
 import { getItemAsync, setItemAsync } from '../src/storage/kv-store';
@@ -68,6 +68,14 @@ const DEFAULT_LANGUAGE = 'en';
 // Capture uncaught JS errors before anything else runs, so a crash during the
 // module-scope startup below is still recorded.
 installCrashHandler();
+
+// iOS: move this app's keychain items (imported wallets' phrases, cached seeds,
+// the PIN record) out of the group every Oxy app can read into the wallet group
+// (oxy ADR 0062). Fire-and-forget; whatever cannot move now stays readable and
+// moves on its next read.
+if (Platform.OS === 'ios') {
+  void moveWalletItemsToOwnKeychainGroup();
+}
 
 // Start watching wallet transactions for incoming-payment alerts. Must run
 // before any wallet state is hydrated so the subscriber sees every new tx
