@@ -342,6 +342,65 @@ describe("a native build with the app's own group (core 7.31+, ADR 0062 D6)", ()
     expect(await kv.getItem('fairwallet_pin')).toBe('dev pin');
     expect(k.items.get(`${DEV_APP}|fairwallet_pin`)).toBe('dev pin');
     expect(k.calls.some((c) => c.options?.accessGroup === WALLET)).toBe(false);
+    expect(k.calls.some((c) => c.options?.accessGroup === SHARED)).toBe(false);
+  });
+});
+
+describe('a development build never touches the shared group (R5-5)', () => {
+  const DEV_WALLET = 'ABCDE12345.so.oxy.wallet.dev';
+  const DEV_APP = 'ABCDE12345.to.peable.app.dev';
+  const dev: KeychainAccess = {
+    mode: 'grouped',
+    prefix: 'ABCDE12345.',
+    defaultGroup: DEV_WALLET,
+    role: 'wallet',
+    appGroup: DEV_APP,
+    variant: '.dev',
+  };
+  /** A phone carrying the production wallet's pre-split items in the shared group. */
+  function devPhone() {
+    const k = keychain([DEV_WALLET, SHARED, DEV_APP]);
+    k.items.set(`${SHARED}|fairwallet_wallets_index`, INDEX);
+    k.items.set(`${SHARED}|fairwallet_mnemonic_w1`, 'production words');
+    k.items.set(`${SHARED}|fairwallet_pin`, 'production pin');
+    return k;
+  }
+  const sharedCalls = (k: ReturnType<typeof keychain>) =>
+    k.calls.filter((c) => c.options?.accessGroup === SHARED || c.options === undefined);
+
+  test('the move neither adopts nor deletes what the shared group holds', async () => {
+    const k = devPhone();
+    const kv = createGroupedKeychainAdapter(k.store, async () => dev);
+    expect(await kv.getItem('fairwallet_wallets_index')).toBeNull();
+    expect(await kv.getItem('fairwallet_pin')).toBeNull();
+    expect(k.items.get(`${SHARED}|fairwallet_mnemonic_w1`)).toBe('production words');
+    expect(k.items.get(`${SHARED}|fairwallet_pin`)).toBe('production pin');
+    expect(k.items.has(`${DEV_APP}|fairwallet_pin`)).toBe(false);
+    expect(k.items.get(`${DEV_APP}|${KEYCHAIN_MOVE_MARKER}`)).toBe('1');
+    expect(sharedCalls(k)).toEqual([]);
+  });
+
+  test('a failed move falls back to the dev wallet group only', async () => {
+    const k = devPhone();
+    k.items.set(`${DEV_WALLET}|fairwallet_wallets_index`, INDEX);
+    k.setFailWrites(true);
+    const kv = createGroupedKeychainAdapter(k.store, async () => dev);
+    expect(await kv.getItem('fairwallet_wallets_index')).toBe(INDEX);
+    expect(await kv.getItem('fairwallet_mnemonic_w1')).toBeNull();
+    expect(sharedCalls(k)).toEqual([]);
+  });
+
+  test('writes and deletes leave the shared copy alone and make no unscoped call', async () => {
+    const k = devPhone();
+    const kv = createGroupedKeychainAdapter(k.store, async () => dev);
+    await kv.setItem('fairwallet_pin', 'dev pin');
+    expect(k.items.get(`${DEV_APP}|fairwallet_pin`)).toBe('dev pin');
+    await kv.deleteItem('fairwallet_pin');
+    expect(k.items.has(`${DEV_APP}|fairwallet_pin`)).toBe(false);
+    const deletes = k.calls.filter((c) => c.op === 'delete').map((c) => c.options?.accessGroup);
+    expect(deletes).toEqual([DEV_WALLET, DEV_APP, DEV_WALLET]);
+    expect(k.items.get(`${SHARED}|fairwallet_pin`)).toBe('production pin');
+    expect(sharedCalls(k)).toEqual([]);
   });
 });
 

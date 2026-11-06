@@ -33,7 +33,10 @@ module.exports = ({ config }) => {
   // phone never reads production keys. The app's own items live in its own
   // group (`<TEAM>.<bundle id>`), which needs no entry. @oxy.so/app-preset
   // refuses any other layout for these bundle ids, and either restricted group
-  // for any other app (oxy ADR 0062). On Android Peable has its own UID and asks Commons
+  // for any other app (oxy ADR 0062); since 6.4.0 the list must be EXACTLY
+  // this one, in order, and oxy's shared release workflow (android-release.yml,
+  // which this repo's release calls) prebuilds iOS on every native release and
+  // runs `oxy-check-keychain-entitlements <bundle id> ios` over it. On Android Peable has its own UID and asks Commons
   // over signature-protected IPC (`so.oxy.permission.IDENTITY`, declared by
   // `@oxy.so/services/plugins/withOxySharedPermissions`); Commons allow-lists
   // `to.peable.app` / `to.peable.app.dev` by package name, so renaming either
