@@ -56,8 +56,10 @@ import {
   downloadReportNow,
   reportKeys,
   useReportRuns,
+  useReportSchedules,
   useReportTypes,
 } from '@/reports/useReports';
+import { ScheduledReports } from '@/reports/ScheduledReports';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
@@ -446,9 +448,54 @@ function RunsTable({
   );
 }
 
+/** The schedules section, or what went wrong reading them — the rest of the screen still works. */
+function Schedules({
+  scope,
+  types,
+  showingRunsOf,
+  onShowRuns,
+}: {
+  scope: DashboardScope;
+  types: readonly ReportType[];
+  showingRunsOf: string | null;
+  onShowRuns: (scheduleId: string | null) => void;
+}) {
+  const schedules = useReportSchedules(scope);
+  if (schedules.isPending) {
+    return <PageSkeleton variant="table" accessibilityLabel={t('reports.schedules.title')} />;
+  }
+  if (schedules.error) {
+    return (
+      <Section title={t('reports.schedules.title')}>
+        <Admonition type="error">
+          <AdmonitionText>
+            {describeError(schedules.error, t('reports.schedules.loadFailed'))}
+          </AdmonitionText>
+        </Admonition>
+        <View className="flex-row justify-end">
+          <Button appearance="outline" tone="accent" onPress={() => void schedules.refetch()}>
+            {t('action.retry')}
+          </Button>
+        </View>
+      </Section>
+    );
+  }
+  return (
+    <ScheduledReports
+      scope={scope}
+      types={types}
+      schedules={schedules.data?.data ?? []}
+      showingRunsOf={showingRunsOf}
+      onShowRuns={onShowRuns}
+    />
+  );
+}
+
 function Reports({ scope }: { scope: DashboardScope }) {
   const types = useReportTypes(scope);
-  const runs = useReportRuns(scope);
+  /** The schedule whose runs the list shows (`frs_…`); `null` for every run. */
+  const [runsOf, setRunsOf] = useState<string | null>(null);
+  const runs = useReportRuns(scope, runsOf);
   const [form, setForm] = useState<ReportRunForm>(() => ({
     reportType: '',
     ...presetDays('thisMonth', nowSeconds()),
@@ -480,7 +527,19 @@ function Reports({ scope }: { scope: DashboardScope }) {
         setForm={(update) => setForm(() => update(current))}
       />
       <ReportColumns type={reportTypes.find((type) => type.id === current.reportType)} />
-      <Section title={t('reports.list')}>
+      <Schedules scope={scope} types={reportTypes} showingRunsOf={runsOf} onShowRuns={setRunsOf} />
+      <Section
+        title={
+          runsOf === null ? t('reports.list') : t('reports.schedules.runsOf', { schedule: runsOf })
+        }
+      >
+        {runsOf === null ? null : (
+          <View className="flex-row justify-end">
+            <LinkButton size="sm" onPress={() => setRunsOf(null)}>
+              {t('reports.schedules.action.allRuns')}
+            </LinkButton>
+          </View>
+        )}
         <RunsTable scope={scope} runs={runs.data?.data ?? []} types={reportTypes} />
       </Section>
     </View>

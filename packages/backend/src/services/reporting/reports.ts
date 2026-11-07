@@ -304,6 +304,25 @@ export interface ReportRequest {
   readonly currency: CurrencyCode | null;
 }
 
+/**
+ * Why `columns` cannot be asked of `reportType` — a column the layout lacks,
+ * or one named twice — or `null`. The one rule for a run, a download and a
+ * schedule's template.
+ */
+export function reportColumnsProblem(
+  reportType: ReportTypeId,
+  columns: readonly string[] | undefined,
+): string | null {
+  if (columns === undefined) return null;
+  const layout = REPORT_TYPE_LAYOUTS[reportType];
+  const unknown = columns.find((column) => !layout.columns.includes(column));
+  if (unknown !== undefined) {
+    return `${reportType} has no column '${unknown}'; it has ${layout.columns.join(', ')}`;
+  }
+  if (new Set(columns).size !== columns.length) return 'a column is named twice';
+  return null;
+}
+
 /** The columns a report writes, in the layout's order. */
 export function columnsOf(
   request: Pick<ReportRequest, 'reportType' | 'columns'>,

@@ -15,7 +15,8 @@
  * - **Produced** — the CSV is stored as a `finance_report_run` File, then ONE
  *   transaction names it on the run and records
  *   `reporting.report_run.succeeded` (ADR 0014 D4: the event is written with
- *   the change).
+ *   the change) — and, for a scheduled run, owes its recipients their email
+ *   (`enqueueReportRunEmails`), as a failure does its notice.
  * - **Refused** (`ReportRunRefusedError`: too large, no ledger) — failed at
  *   once, with `reporting.report_run.failed`; retrying cannot help.
  * - **Anything else** (the database, Oxy Files) — the claim is deferred with a
@@ -36,6 +37,7 @@ import {
 } from '../../db/reporting/reportRunRepository';
 import { outsideRequestContext } from '../../lib/requestContext';
 import { toReportRunDTO } from '../../lib/serializeReporting';
+import { enqueueReportRunEmails } from '../email/outbox';
 import { recordEvent } from '../events';
 import { createGeneratedFile } from '../files';
 import { type OxyFilesClient, oxyFilesClient } from '../oxyFiles/client';
@@ -67,6 +69,7 @@ async function fail(run: ClaimedReportRun, message: string): Promise<ReportRunOu
       type: 'reporting.report_run.failed',
       object: toReportRunDTO(failed, null),
     });
+    await enqueueReportRunEmails(tx, failed);
     return 'failed';
   });
 }
@@ -115,6 +118,7 @@ export async function runReportRunPass(deps: ReportRunWorkerDeps = {}): Promise<
       type: 'reporting.report_run.succeeded',
       object: toReportRunDTO(completed, stored ?? file),
     });
+    await enqueueReportRunEmails(tx, completed);
     return 'succeeded';
   });
 }

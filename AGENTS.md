@@ -429,6 +429,24 @@ stores it as a `finance_report_run` File, and completes the run AND records
 Oxy, readable only through `GET /v1/files/:id/contents`. The ledger reports read
 the same ledger `GET /v1/balance` does (`services/money/ledgerScope.ts`).
 
+**A report schedule fires ordinary runs, once per occurrence.**
+`services/reporting/reportScheduler.ts` (started in `server.ts`, `.unref()`-ed)
+claims a due `report_schedules` row in one statement (`for update skip
+locked`, its own `lease_token`), takes the LATEST occurrence at or before the
+database's now (`scheduleCalendar.ts`: local midnight in the schedule's IANA
+zone, monthly anchors clamped; never a backlog), and in ONE transaction queues
+the run through `enqueueReportRun` (`services/reporting/reportRuns.ts`, the path
+`POST /v1/reporting/report_runs` takes) and advances `next_run_at`, gated on the
+token and on `status = 'active'`. `report_runs (report_schedule_id,
+scheduled_for)` is unique, so no race fires an occurrence twice. Never produce
+a scheduled report anywhere but the run worker, and never give a schedule its
+own CSV, column list or file. The recipients' emails are owed in the run's
+completion transaction (`enqueueReportRunEmails`, deduplicated per run and
+recipient) and LINK Orbit's Reports screen: a report file is private, so it is
+never attached and never given a public URL. Writing a schedule is `configure`
+in Orbit and `payments:write` on the API — it mails people in the merchant's
+name.
+
 **A run and a download are ONE report.** `GET /v1/reporting/report_types/:id/csv`
 takes a run's `parameters` as a query and streams the same CSV: both pass
 `admitReportRequest` (`routes/reporting.ts`) and both start from `openReport`
@@ -746,7 +764,7 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 (`paymentMethodConfigurationRepository`: configurations, their provider
 bindings, wallet domains), `money/` (`ledgerRepository`, `payoutRepository`,
 `applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`),
-`reporting/` (`reportRunRepository`, `reportData`), `search/` (`searchFields`).
+`reporting/` (`reportRunRepository`, `reportScheduleRepository`, `reportData`), `search/` (`searchFields`).
 
 **Payment method breadth is a card-rail intersection, decided once per
 payment.** `services/paymentMethods/configuration.ts`: a merchant's
@@ -1101,7 +1119,7 @@ gateway, and on a permission string spelled out in the gateway.
 | Action | Oxy permission | What |
 |---|---|---|
 | `read` | `app:read` | every GET, search, a report run (membership itself) |
-| `configure` | `app:update` | branding and customer emails, catalog, checkout sessions, payment links, contribution links, payment methods and wallet domains, a `business_logo` upload |
+| `configure` | `app:update` | branding and customer emails, catalog, checkout sessions, payment links, contribution links, payment methods and wallet domains, report schedules, a `business_logo` upload |
 | `webhooks` | `webhooks:update` | webhook endpoints, secrets, test events, redelivery |
 | `money` | `billing:manage` | the merchant (its confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, evidence/identity/tax uploads |
 | `taxRead` | `billing:read` | Peable Tax reads and previews (`billing:manage` contains it) |

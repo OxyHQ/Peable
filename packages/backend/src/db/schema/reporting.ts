@@ -1,9 +1,141 @@
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, index, integer, pgTable, text, unique } from 'drizzle-orm/pg-core';
+import {
+  check,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
-import { CURRENCY_CODES, REPORT_RUN_STATUSES, REPORT_TYPE_IDS } from '@peable.to/shared-types';
+import {
+  CURRENCY_CODES,
+  REPORT_RUN_STATUSES,
+  REPORT_SCHEDULE_INTERVALS,
+  REPORT_SCHEDULE_LOCALES,
+  REPORT_SCHEDULE_MAX_RECIPIENTS,
+  REPORT_SCHEDULE_STATUSES,
+  REPORT_SCHEDULE_WEEKDAYS,
+  REPORT_TYPE_IDS,
+} from '@peable.to/shared-types';
 import { files } from './files';
 import { merchants } from './merchants';
+
+/**
+ * A report schedule (`frs_…`): a merchant's report run on a cadence
+ * (`services/reporting/reportScheduler.ts`).
+ *
+ * ## Firing is a leased claim, and an occurrence fires once
+ *
+ * The scheduler CLAIMS a due schedule (`status = 'active' and next_run_at <=
+ * now()`) in one statement, `for update skip locked`, stamping its own
+ * `lease_token`; then ONE transaction inserts the occurrence's ordinary
+ * `report_runs` row and moves `next_run_at` to the following occurrence,
+ * gated on that token. `report_runs (report_schedule_id, scheduled_for)` is
+ * unique, so even two claimers that both believed they held the lease cannot
+ * fire one occurrence twice. A scheduler that was down fires the LATEST due
+ * occurrence once and moves on: missed occurrences are not backfilled.
+ *
+ * `next_run_at` is set exactly while `active`: a paused or canceled schedule
+ * has none, and resuming computes the first occurrence after now. A canceled
+ * schedule is terminal (`canceled_at`). The last run is not stored: it is the
+ * newest run naming the schedule.
+ *
+ * `recipients` are validated addresses (the API's rule; a CHECK bounds the
+ * count): what they receive is a link to the run in Orbit, never the file.
+ */
+export const reportSchedules = pgTable(
+  'report_schedules',
+  {
+    id: generatedId(),
+    publicId: text().notNull(),
+    merchantId: text().notNull(),
+    reportType: text().notNull(),
+    /** The run template: `parameters.columns` (NULL: the defaults) and `.currency`. */
+    columns: text().array(),
+    currency: text(),
+    interval: text().notNull(),
+    weeklyAnchor: text(),
+    monthlyAnchor: integer(),
+    /** IANA; validated by the API (the database has no zone list to check it against). */
+    timezone: text().notNull(),
+    recipients: text().array().notNull().default(sql`'{}'::text[]`),
+    locale: text().notNull().default('en'),
+    status: text().notNull().default('active'),
+    nextRunAt: timestamptz(),
+    canceledAt: timestamptz(),
+    /** The current firing claim — the compare half of the advancing write. */
+    leaseToken: text(),
+    leaseExpiresAt: timestamptz(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique('report_schedules_public_id_key').on(table.publicId),
+    /** The target of `report_runs`' same-merchant foreign key. */
+    unique('report_schedules_id_merchant_id_key').on(table.id, table.merchantId),
+    index('report_schedules_merchant_id_id_idx').on(table.merchantId, table.id),
+    /** The scheduler's queue: active schedules by their next occurrence. */
+    index('report_schedules_due_idx').on(table.nextRunAt).where(sql`${table.status} = 'active'`),
+    foreignKey({
+      name: 'report_schedules_merchant_id_fkey',
+      columns: [table.merchantId],
+      foreignColumns: [merchants.id],
+    }).onDelete('restrict'),
+    check(
+      'report_schedules_report_type_check',
+      sql.raw(`report_type in (${inList(REPORT_TYPE_IDS)})`),
+    ),
+    check(
+      'report_schedules_currency_check',
+      sql.raw(`currency is null or currency in (${inList(CURRENCY_CODES)})`),
+    ),
+    check(
+      'report_schedules_columns_check',
+      sql`${table.columns} is null or cardinality(${table.columns}) >= 1`,
+    ),
+    check(
+      'report_schedules_interval_check',
+      sql.raw(`interval in (${inList(REPORT_SCHEDULE_INTERVALS)})`),
+    ),
+    // The anchor the interval needs, and no other.
+    check(
+      'report_schedules_anchor_check',
+      sql.raw(
+        `(interval = 'weekly') = (weekly_anchor is not null) and (interval = 'monthly') = (monthly_anchor is not null) and (weekly_anchor is null or weekly_anchor in (${inList(REPORT_SCHEDULE_WEEKDAYS)})) and (monthly_anchor is null or monthly_anchor between 1 and 31)`,
+      ),
+    ),
+    check('report_schedules_timezone_check', sql`length(${table.timezone}) between 1 and 64`),
+    check(
+      'report_schedules_recipients_check',
+      sql.raw(`cardinality(recipients) <= ${String(REPORT_SCHEDULE_MAX_RECIPIENTS)}`),
+    ),
+    check(
+      'report_schedules_locale_check',
+      sql.raw(`locale in (${inList(REPORT_SCHEDULE_LOCALES)})`),
+    ),
+    check(
+      'report_schedules_status_check',
+      sql.raw(`status in (${inList(REPORT_SCHEDULE_STATUSES)})`),
+    ),
+    // Active ⇔ a next occurrence; canceled ⇔ its instant; only an active
+    // schedule is claimed.
+    check(
+      'report_schedules_next_run_agrees_check',
+      sql`(${table.status} = 'active') = (${table.nextRunAt} is not null)`,
+    ),
+    check(
+      'report_schedules_canceled_agrees_check',
+      sql`(${table.status} = 'canceled') = (${table.canceledAt} is not null)`,
+    ),
+    check(
+      'report_schedules_lease_agrees_check',
+      sql`(${table.leaseToken} is null) = (${table.leaseExpiresAt} is null) and (${table.status} = 'active' or ${table.leaseToken} is null)`,
+    ),
+  ],
+);
 
 /**
  * A report run (`frr_…`, Stripe's `reporting.report_run`): a merchant asked for
@@ -58,11 +190,28 @@ export const reportRuns = pgTable(
     /** The current claim — the compare half of the completing write. */
     leaseToken: text(),
     leaseExpiresAt: timestamptz(),
+    /** The schedule that fired it (`report_schedules`), with the occurrence it fired for. */
+    reportScheduleId: text(),
+    scheduledFor: timestamptz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     unique('report_runs_public_id_key').on(table.publicId),
+    /** One run per occurrence of a schedule: the single-fire guarantee. */
+    uniqueIndex('report_runs_schedule_occurrence_key').on(
+      table.reportScheduleId,
+      table.scheduledFor,
+    ),
+    foreignKey({
+      name: 'report_runs_report_schedule_fkey',
+      columns: [table.reportScheduleId, table.merchantId],
+      foreignColumns: [reportSchedules.id, reportSchedules.merchantId],
+    }).onDelete('restrict'),
+    check(
+      'report_runs_schedule_agrees_check',
+      sql`(${table.reportScheduleId} is null) = (${table.scheduledFor} is null)`,
+    ),
     /** `GET /v1/reporting/report_runs` walks this, newest first. */
     index('report_runs_merchant_id_id_idx').on(table.merchantId, table.id),
     /** The worker's queue: pending runs, oldest first. */

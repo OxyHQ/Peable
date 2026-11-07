@@ -100,4 +100,4 @@ export {
   oxyFileReconciliationRuns,
   oxyFileReferenceSyncs,
 } from './oxyFiles';
-export { reportRuns } from './reporting';
+export { reportRuns, reportSchedules } from './reporting';

@@ -18,6 +18,7 @@ import { merchants } from './merchants';
 import { invoices } from './billingEngine';
 import { checkoutSessions, paymentIntents, paymentLinks } from './payments';
 import { refunds } from './refunds';
+import { reportRuns } from './reporting';
 import type { StoredPriceTier } from './catalog';
 import {
   BASE_UNIT_STRING_PATTERN,
@@ -289,6 +290,8 @@ export const customerEmails = pgTable(
     invoiceId: text(),
     /** A receipt's number — the merchant's sequence, claimed at enqueue. */
     receiptNumber: text(),
+    /** The scheduled report run a `report_run_*` email is about. */
+    reportRunId: text(),
     status: text().notNull().default('pending'),
     attempts: integer().notNull().default(0),
     nextAttemptAt: timestamptz().notNull().default(sql`date_trunc('milliseconds', now())`),
@@ -310,6 +313,11 @@ export const customerEmails = pgTable(
       columns: [table.invoiceId],
       foreignColumns: [invoices.id],
     }).onDelete('restrict'),
+    foreignKey({
+      name: 'customer_emails_report_run_fkey',
+      columns: [table.reportRunId],
+      foreignColumns: [reportRuns.id],
+    }).onDelete('restrict'),
     check('customer_emails_kind_check', sql.raw(`kind in (${inList(CUSTOMER_EMAIL_KINDS)})`)),
     check(
       'customer_emails_status_check',
@@ -321,7 +329,8 @@ export const customerEmails = pgTable(
       sql`(${table.kind} = 'payment_receipt' and ${table.paymentIntentId} is not null and ${table.receiptNumber} is not null)
         or (${table.kind} = 'refund_notice' and ${table.refundId} is not null)
         or (${table.kind} = 'checkout_confirmation' and ${table.checkoutSessionId} is not null)
-        or (${table.kind} in ('invoice', 'invoice_payment_failed') and ${table.invoiceId} is not null)`,
+        or (${table.kind} in ('invoice', 'invoice_payment_failed') and ${table.invoiceId} is not null)
+        or (${table.kind} in ('report_run_succeeded', 'report_run_failed') and ${table.reportRunId} is not null)`,
     ),
     check(
       'customer_emails_sent_check',

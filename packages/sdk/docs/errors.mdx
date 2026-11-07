@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-114 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+115 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -410,6 +410,10 @@ The refund has already left a cancelable state.
 ### `registration_immutable`
 
 An approved or ended tax registration cannot be deleted or changed this way; end it instead.
+
+### `report_schedule_unexpected_state`
+
+The report schedule is in a status that does not allow this operation (a canceled schedule never changes).
 
 ### `resource_already_exists`
 

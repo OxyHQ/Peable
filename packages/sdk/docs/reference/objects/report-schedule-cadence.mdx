@@ -1,0 +1,20 @@
+---
+title: "ReportScheduleCadence"
+description: "The ReportScheduleCadence shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ReportScheduleCadence
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `interval` | string | One of `daily`, `weekly`, `monthly`. |
+| `weekly_anchor` | string \| null | The day a `weekly` schedule fires; `null` otherwise. One of `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`. |
+| `monthly_anchor` | integer \| null | The day of the month a `monthly` schedule fires (1–31; a shorter month fires on its last day); `null` otherwise. At least -9007199254740991. |
+
+## Used in
+
+[ReportSchedule](/reference/objects/report-schedule)

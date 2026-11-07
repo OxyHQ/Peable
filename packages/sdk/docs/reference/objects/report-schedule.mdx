@@ -1,0 +1,78 @@
+---
+title: "ReportSchedule"
+description: "The reporting.report_schedule object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ReportSchedule
+
+Object type: `reporting.report_schedule`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"reporting.report_schedule"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `created` | integer | Unix seconds. |
+| `report_type` | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `parameters` | object | Every run's `parameters` but the interval, which each occurrence sets: the time since the previous occurrence. |
+| `parameters.columns` | array of string |  |
+| `parameters.currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `schedule` | [ReportScheduleCadence](/reference/objects/report-schedule-cadence) |  |
+| `timezone` | string | The IANA time zone whose midnight each occurrence is (`Europe/Madrid`). |
+| `recipients` | array of string | Who is emailed when a run of this schedule succeeds or fails. |
+| `locale` | string | The language of those emails. One of `en`, `es`. |
+| `status` | string | One of `active`, `paused`, `canceled`. |
+| `next_run_at` | integer \| null | The next occurrence while `active`; `null` while paused or canceled. |
+| `last_run` | string \| [ReportRun](/reference/objects/report-run) \| null | The newest run this schedule fired. Expandable. |
+| `canceled_at` | integer \| null | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `last_run` → [ReportRun](/reference/objects/report-run)
+
+## Example
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
+}
+```
+
+## Returned by
+
+- [`POST /v1/reporting/report_schedules`](/reference/reporting#create-a-report-schedule) — Create a report schedule
+- [`GET /v1/reporting/report_schedules`](/reference/reporting#list-report-schedules) — List report schedules
+- [`GET /v1/reporting/report_schedules/{id}`](/reference/reporting#retrieve-a-report-schedule) — Retrieve a report schedule
+- [`POST /v1/reporting/report_schedules/{id}`](/reference/reporting#update-a-report-schedule) — Update a report schedule
+- [`POST /v1/reporting/report_schedules/{id}/cancel`](/reference/reporting#cancel-a-report-schedule) — Cancel a report schedule
+- [`POST /v1/reporting/report_schedules/{id}/pause`](/reference/reporting#pause-a-report-schedule) — Pause a report schedule
+- [`POST /v1/reporting/report_schedules/{id}/resume`](/reference/reporting#resume-a-paused-report-schedule) — Resume a paused report schedule
+
+## Used in
+
+[ReportRun](/reference/objects/report-run)

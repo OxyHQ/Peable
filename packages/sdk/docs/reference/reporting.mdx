@@ -12,6 +12,13 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | [`POST /v1/reporting/report_runs`](#create-a-report-run) | Create a report run |
 | [`GET /v1/reporting/report_runs`](#list-report-runs) | List report runs |
 | [`GET /v1/reporting/report_runs/{id}`](#retrieve-a-report-run) | Retrieve a report run |
+| [`POST /v1/reporting/report_schedules`](#create-a-report-schedule) | Create a report schedule |
+| [`GET /v1/reporting/report_schedules`](#list-report-schedules) | List report schedules |
+| [`GET /v1/reporting/report_schedules/{id}`](#retrieve-a-report-schedule) | Retrieve a report schedule |
+| [`POST /v1/reporting/report_schedules/{id}`](#update-a-report-schedule) | Update a report schedule |
+| [`POST /v1/reporting/report_schedules/{id}/cancel`](#cancel-a-report-schedule) | Cancel a report schedule |
+| [`POST /v1/reporting/report_schedules/{id}/pause`](#pause-a-report-schedule) | Pause a report schedule |
+| [`POST /v1/reporting/report_schedules/{id}/resume`](#resume-a-paused-report-schedule) | Resume a paused report schedule |
 | [`GET /v1/reporting/report_types`](#list-report-types) | List report types |
 | [`GET /v1/reporting/report_types/{id}`](#retrieve-a-report-type) | Retrieve a report type |
 | [`GET /v1/reporting/report_types/{id}/csv`](#download-a-report) | Download a report |
@@ -62,7 +69,8 @@ Returns [ReportRun](/reference/objects/report-run).
   "status": "pending",
   "error": null,
   "result": null,
-  "succeeded_at": null
+  "succeeded_at": null,
+  "report_schedule": null
 }
 ```
 
@@ -90,6 +98,7 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 | `created[lte]` | query | integer |  |
 | `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
 | `report_type` | query | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `report_schedule` | query | string | Only the runs this schedule (`frs_…`) fired. 1–64 characters. |
 | `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
 
 **Response `200`**
@@ -120,13 +129,18 @@ A list (`object: "list"`) whose `data` holds [ReportRun](/reference/objects/repo
       "status": "pending",
       "error": null,
       "result": null,
-      "succeeded_at": null
+      "succeeded_at": null,
+      "report_schedule": null
     }
   ],
   "has_more": false,
   "url": "/v1/reporting/report_runs"
 }
 ```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.report_schedule` → [ReportSchedule](/reference/objects/report-schedule)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
@@ -164,7 +178,426 @@ Returns [ReportRun](/reference/objects/report-run).
   "status": "pending",
   "error": null,
   "result": null,
-  "succeeded_at": null
+  "succeeded_at": null,
+  "report_schedule": null
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `report_schedule` → [ReportSchedule](/reference/objects/report-schedule)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a report schedule
+
+`POST /v1/reporting/report_schedules`
+
+A report run at local midnight in `timezone` every day, week or month, each over the time since the previous occurrence. `next_run_at` is the first occurrence after now; nothing is backfilled.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reporting.reportSchedules.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `report_type` **required** | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `parameters` | object |  |
+| `parameters[columns]` | array of string | Columns of the report type's layout, each once. At most 64 items. At least 1 item. |
+| `parameters[currency]` | string | One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `schedule` **required** | object |  |
+| `schedule[interval]` **required** | string | One of `daily`, `weekly`, `monthly`. |
+| `schedule[weekly_anchor]` | string | Required for `weekly`, refused otherwise. One of `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`. |
+| `schedule[monthly_anchor]` | integer | Required for `monthly`, refused otherwise; a shorter month fires on its last day. Between 1 and 31. |
+| `timezone` | string | An IANA time zone (`Europe/Madrid`); `UTC` when absent. 1–64 characters. |
+| `recipients` | array of string (email) | At most 10 addresses, each once. They receive a link to the run in Orbit, never the file. At most 10 items. |
+| `locale` | string | `en` when absent. One of `en`, `es`. |
+
+**Response `200`**
+
+Returns [ReportSchedule](/reference/objects/report-schedule).
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List report schedules
+
+`GET /v1/reporting/report_schedules`
+
+Newest first; a canceled schedule is listed too.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportSchedules.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `status` | query | string | One of `active`, `paused`, `canceled`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ReportSchedule](/reference/objects/report-schedule) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ReportSchedule](/reference/objects/report-schedule) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "frs_0193b8f34d1e4a6b8c27",
+      "object": "reporting.report_schedule",
+      "livemode": false,
+      "created": 1793750400,
+      "report_type": "balance.summary.1",
+      "parameters": {},
+      "schedule": {
+        "interval": "monthly",
+        "weekly_anchor": null,
+        "monthly_anchor": 1
+      },
+      "timezone": "Europe/Madrid",
+      "recipients": [
+        "finance@example.com"
+      ],
+      "locale": "en",
+      "status": "active",
+      "next_run_at": 1796079600,
+      "last_run": null,
+      "canceled_at": null
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/reporting/report_schedules"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.last_run` → [ReportRun](/reference/objects/report-run)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a report schedule
+
+`GET /v1/reporting/report_schedules/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportSchedules.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report schedule (`frs_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ReportSchedule](/reference/objects/report-schedule).
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `last_run` → [ReportRun](/reference/objects/report-run)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a report schedule
+
+`POST /v1/reporting/report_schedules/{id}`
+
+A new `schedule` or `timezone` moves an active schedule to its first occurrence after now. A canceled schedule cannot change (409 `report_schedule_unexpected_state`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reporting.reportSchedules.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report schedule (`frs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `report_type` | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `parameters` | object |  |
+| `parameters[columns]` | array of string | Columns of the report type's layout, each once. At most 64 items. At least 1 item. |
+| `parameters[currency]` | string | One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `schedule` | object |  |
+| `schedule[interval]` **required** | string | One of `daily`, `weekly`, `monthly`. |
+| `schedule[weekly_anchor]` | string | Required for `weekly`, refused otherwise. One of `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`. |
+| `schedule[monthly_anchor]` | integer | Required for `monthly`, refused otherwise; a shorter month fires on its last day. Between 1 and 31. |
+| `timezone` | string | An IANA time zone (`Europe/Madrid`); `UTC` when absent. 1–64 characters. |
+| `recipients` | array of string (email) | At most 10 addresses, each once. They receive a link to the run in Orbit, never the file. At most 10 items. |
+| `locale` | string | One of `en`, `es`. |
+
+**Response `200`**
+
+Returns [ReportSchedule](/reference/objects/report-schedule).
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a report schedule
+
+`POST /v1/reporting/report_schedules/{id}/cancel`
+
+For good: it never fires again, and a run it fires no longer emails anyone. Its runs and their files stay.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reporting.reportSchedules.cancel()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report schedule (`frs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [ReportSchedule](/reference/objects/report-schedule).
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Pause a report schedule
+
+`POST /v1/reporting/report_schedules/{id}/pause`
+
+Nothing fires until it is resumed. Pausing a paused schedule answers it as it is.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reporting.reportSchedules.pause()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report schedule (`frs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [ReportSchedule](/reference/objects/report-schedule).
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Resume a paused report schedule
+
+`POST /v1/reporting/report_schedules/{id}/resume`
+
+It fires again from its first occurrence after now; the occurrences it missed while paused are not run.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reporting.reportSchedules.resume()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report schedule (`frs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [ReportSchedule](/reference/objects/report-schedule).
+
+```json
+{
+  "id": "frs_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_schedule",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {},
+  "schedule": {
+    "interval": "monthly",
+    "weekly_anchor": null,
+    "monthly_anchor": 1
+  },
+  "timezone": "Europe/Madrid",
+  "recipients": [
+    "finance@example.com"
+  ],
+  "locale": "en",
+  "status": "active",
+  "next_run_at": 1796079600,
+  "last_run": null,
+  "canceled_at": null
 }
 ```
 

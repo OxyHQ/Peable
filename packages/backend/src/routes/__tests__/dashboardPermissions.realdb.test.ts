@@ -53,6 +53,8 @@ const WRITE_RULES: readonly (readonly [RegExp, DashboardAction])[] = [
   [/^\/files$/, 'money'],
   // A report run keeps the rows a download streams.
   [/^\/reporting\/report_runs$/, 'read'],
+  // A schedule is standing configuration that mails people in the merchant's name.
+  [/^\/reporting\/report_schedules(\/|$)/, 'configure'],
   // A contribution link is a payment link.
   [/^\/contributions(\/|$)/, 'configure'],
 ];

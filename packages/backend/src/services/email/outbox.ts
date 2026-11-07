@@ -15,7 +15,8 @@ import { claimReceiptNumber, findEmailSettings } from '../../db/merchants/brandi
 import type { CheckoutSessionRow } from '../../db/payments/checkoutSessionRepository';
 import type { PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
 import type { DatabaseOrTransaction } from '../../db/postgres';
-import { customerEmails, refunds } from '../../db/schema';
+import type { ReportRunRow } from '../../db/reporting/reportRunRepository';
+import { customerEmails, refunds, reportSchedules } from '../../db/schema';
 import type { CustomerEmailKind } from '../../db/schema/valueSets';
 
 /** How long an unsent email is still worth sending. */
@@ -43,6 +44,7 @@ async function insertOwed(
     checkoutSessionId?: string;
     invoiceId?: string;
     receiptNumber?: string;
+    reportRunId?: string;
   },
 ): Promise<void> {
   await db
@@ -159,6 +161,44 @@ export async function enqueueInvoiceEmail(
   return true;
 }
 
+/**
+ * A scheduled report run finished: each of its schedule's recipients is owed
+ * a `report_run_succeeded` (or `report_run_failed`) email, in the transaction
+ * that completed the run. Deduplicated per run and recipient. A run asked for
+ * directly emails nobody, and neither does one whose schedule was canceled.
+ *
+ * The email links to the run in Orbit and never carries the file: a report
+ * is private (`finance_report_run`, readable only through an authorized
+ * `GET /v1/files/:id/contents`), so a recipient signs in as a member.
+ */
+export async function enqueueReportRunEmails(
+  tx: DatabaseOrTransaction,
+  run: Pick<ReportRunRow, 'id' | 'merchantId' | 'status' | 'reportScheduleId'>,
+): Promise<number> {
+  if (run.reportScheduleId === null || run.status === 'pending') return 0;
+  const [schedule] = await tx
+    .select({ recipients: reportSchedules.recipients, status: reportSchedules.status })
+    .from(reportSchedules)
+    .where(eq(reportSchedules.id, run.reportScheduleId));
+  if (!schedule || schedule.status === 'canceled') return 0;
+  const kind = run.status === 'succeeded' ? 'report_run_succeeded' : 'report_run_failed';
+  let owed = 0;
+  for (const recipient of schedule.recipients) {
+    if (!EMAIL.test(recipient) || recipient.length > 254) continue;
+    const dedupeKey = `${kind}:${run.id}:${recipient.toLowerCase()}`;
+    if (await alreadyOwed(tx, dedupeKey)) continue;
+    await insertOwed(tx, {
+      merchantId: run.merchantId,
+      kind,
+      dedupeKey,
+      recipient,
+      reportRunId: run.id,
+    });
+    owed += 1;
+  }
+  return owed;
+}
+
 // ---- The dispatcher's reads and writes ----------------------------------------------
 
 export interface OwedEmailRow {
@@ -171,6 +211,7 @@ export interface OwedEmailRow {
   readonly checkoutSessionId: string | null;
   readonly invoiceId: string | null;
   readonly receiptNumber: string | null;
+  readonly reportRunId: string | null;
   readonly attempts: number;
   readonly expiresAt: Date;
 }
@@ -210,6 +251,7 @@ export async function claimOwedEmails(
       checkoutSessionId: customerEmails.checkoutSessionId,
       invoiceId: customerEmails.invoiceId,
       receiptNumber: customerEmails.receiptNumber,
+      reportRunId: customerEmails.reportRunId,
       attempts: customerEmails.attempts,
       expiresAt: customerEmails.expiresAt,
     });

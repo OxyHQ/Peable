@@ -146,6 +146,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
     "The invoice's payment needs the customer to act (a card challenge).",
   subscription_unexpected_state:
     'The subscription is in a status that does not allow this operation.',
+  report_schedule_unexpected_state:
+    'The report schedule is in a status that does not allow this operation (a canceled schedule never changes).',
   customer_currency_mismatch: "The currency differs from the customer's billing currency.",
   customer_test_clock_mismatch: 'The objects live on different test clocks.',
   coupon_invalid: 'The coupon does not exist or is no longer valid.',

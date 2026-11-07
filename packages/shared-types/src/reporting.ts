@@ -26,16 +26,29 @@ import type { ReportTypeId } from '@peable.to/contracts/vocabulary';
 
 export type {
   CreateReportRunParams,
+  CreateReportScheduleParams,
   DownloadReportParams,
   ListReportRunsParams,
+  ListReportSchedulesParams,
   ReportRun,
   ReportRunParameters,
+  ReportSchedule,
   ReportType,
+  UpdateReportScheduleParams,
 } from '@peable.to/contracts';
 export {
   REPORT_RUN_STATUSES,
+  REPORT_SCHEDULE_INTERVALS,
+  REPORT_SCHEDULE_LOCALES,
+  REPORT_SCHEDULE_MAX_RECIPIENTS,
+  REPORT_SCHEDULE_STATUSES,
+  REPORT_SCHEDULE_WEEKDAYS,
   REPORT_TYPE_IDS,
   type ReportRunStatus,
+  type ReportScheduleInterval,
+  type ReportScheduleLocale,
+  type ReportScheduleStatus,
+  type ReportScheduleWeekday,
   type ReportTypeId,
 } from '@peable.to/contracts/vocabulary';
 

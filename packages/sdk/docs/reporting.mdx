@@ -1,6 +1,6 @@
 ---
 title: "Reporting"
-description: "Report runs: itemized payments, balance summaries and payouts as CSV files."
+description: "Report runs and schedules: itemized payments, balance summaries and payouts as CSV files, once or on a cadence."
 order: 13
 ---
 
@@ -50,6 +50,61 @@ a `pending` `reporting.report_run` (`frr_…`) at once. The run then becomes
 - A ledger report for a merchant without a provider account is
   `404 account_missing` at creation.
 
+## Schedules
+
+A report schedule (`reporting.report_schedule`, `frs_…`) runs a report on a
+cadence and emails your team when each run is ready. Stripe has no public
+schedule API, so the shape mirrors report runs.
+
+```ts
+const schedule = await peable.reporting.reportSchedules.create({
+  report_type: 'payouts.itemized.1',
+  parameters: { currency: 'EUR' },
+  schedule: { interval: 'monthly', monthly_anchor: 1 },
+  timezone: 'Europe/Madrid',
+  recipients: ['finance@example.com'],
+  locale: 'es',
+});
+
+// The runs it fired are ordinary report runs:
+const runs = await peable.reporting.reportRuns.list({ report_schedule: schedule.id });
+```
+
+- **When.** `schedule.interval` is `daily`, `weekly` (with `weekly_anchor`,
+  `monday` … `sunday`) or `monthly` (with `monthly_anchor`, 1–31; a shorter
+  month fires on its last day). Each occurrence is local midnight in
+  `timezone` (an IANA zone, `UTC` by default); `next_run_at` is the next one.
+- **What each run covers.** The time since the previous occurrence, up to
+  this one: a monthly schedule on the 1st reports the previous calendar month,
+  a daily one the previous day — 23 or 25 hours on the day the clocks change.
+  Consecutive runs never overlap and never leave a gap. `parameters` holds the
+  run's `columns` and `currency`; the interval is the occurrence's.
+- **Each run is a report run.** It carries `report_schedule`, is produced by
+  the same worker and announced by the same `reporting.report_run.succeeded`
+  / `.failed` events. One occurrence fires at most one run, whatever happens
+  to the servers.
+- **Missed occurrences.** If Peable could not fire for a while, the schedule
+  fires once, for the latest occurrence, and moves on — it never replays a
+  backlog. Run any period you need with `reportRuns.create`.
+- **Emails.** When a run succeeds (or fails), each of the up to 10
+  `recipients` gets an email in `locale` (`en` or `es`) naming the report, the
+  period and the account, with a link to **Reports** in Orbit. The CSV is
+  never attached and never public: report files are private, so a recipient
+  signs in to Orbit as a member of your organization to download it (or your
+  integration reads `result` with `files.contents`).
+- **Lifecycle.** `POST /v1/reporting/report_schedules/{id}` replaces the fields
+  you send (a new `schedule` or `timezone` moves `next_run_at` to the first
+  occurrence after now); `…/pause` stops it, `…/resume` restarts it from the
+  next occurrence after now (what it missed while paused is not run), and
+  `…/cancel` ends it for good — a canceled schedule answers 409
+  `report_schedule_unexpected_state` to any change. Writing a schedule needs
+  the `payments:write` scope; reading one, `payments:read`.
+
+In Orbit, **Reports → Scheduled reports** creates, edits, pauses, resumes and
+cancels schedules and shows each one's runs; it needs the `app:update`
+permission, because a schedule is standing configuration that mails people in
+your name.
+
 ## The CSV
 
 Amounts are base-unit strings, as on the API; times are ISO 8601 UTC. A
@@ -57,7 +112,7 @@ balance figure built on a transaction whose fee the provider has not reported
 yet is an empty cell — never `0`. A text cell a spreadsheet would run as a
 formula (starting with `=`, `+`, `-` or `@`) is written with a leading `'`.
 
-In Orbit, **Reports** runs them and downloads the CSV. The payout
+In Orbit, **Reports** runs them, downloads the CSV and keeps their schedules. The payout
 reconciliation of one payout is also a direct read:
 `peable.reports.payoutReconciliation({ payout: 'po_…' })`
 ([Connect and money](/connect#balance-and-payouts)).

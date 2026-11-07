@@ -556,6 +556,7 @@ const payloads = {
       created: EVENT.created,
     },
     succeeded_at: EVENT.created,
+    report_schedule: null,
   },
   'reporting.report_run.failed': {
     id: 'frr_failed',
@@ -568,6 +569,7 @@ const payloads = {
     error: 'this merchant has no fiat account, so there is no ledger to report on',
     result: null,
     succeeded_at: null,
+    report_schedule: null,
   },
   'tax.assessment.created': {
     object: 'tax.assessment',

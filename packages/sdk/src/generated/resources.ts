@@ -2468,11 +2468,98 @@ export interface ReportingReportRunsResource {
 }
 
 /**
+ * Reporting: `peable.reporting.reportSchedules`.
+ */
+export interface ReportingReportSchedulesResource {
+  /**
+   * Create a report schedule.
+   *
+   * A report run at local midnight in `timezone` every day, week or month, each over the time since the previous occurrence. `next_run_at` is the first occurrence after now; nothing is backfilled.
+   *
+   * `POST /v1/reporting/report_schedules`
+   */
+  create(
+    params: BodyOf<Op<'createReportSchedule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createReportSchedule'>>>;
+  /**
+   * List report schedules.
+   *
+   * Newest first; a canceled schedule is listed too.
+   *
+   * `GET /v1/reporting/report_schedules`
+   */
+  list(
+    params?: QueryOf<Op<'listReportSchedules'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listReportSchedules'>>;
+  /**
+   * Retrieve a report schedule.
+   *
+   * `GET /v1/reporting/report_schedules/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveReportSchedule'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveReportSchedule'>>>;
+  /**
+   * Update a report schedule.
+   *
+   * A new `schedule` or `timezone` moves an active schedule to its first occurrence after now. A canceled schedule cannot change (409 `report_schedule_unexpected_state`).
+   *
+   * `POST /v1/reporting/report_schedules/{id}`
+   */
+  update(
+    id: string,
+    params?: BodyOf<Op<'updateReportSchedule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'updateReportSchedule'>>>;
+  /**
+   * Pause a report schedule.
+   *
+   * Nothing fires until it is resumed. Pausing a paused schedule answers it as it is.
+   *
+   * `POST /v1/reporting/report_schedules/{id}/pause`
+   */
+  pause(
+    id: string,
+    params?: BodyOf<Op<'pauseReportSchedule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'pauseReportSchedule'>>>;
+  /**
+   * Resume a paused report schedule.
+   *
+   * It fires again from its first occurrence after now; the occurrences it missed while paused are not run.
+   *
+   * `POST /v1/reporting/report_schedules/{id}/resume`
+   */
+  resume(
+    id: string,
+    params?: BodyOf<Op<'resumeReportSchedule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'resumeReportSchedule'>>>;
+  /**
+   * Cancel a report schedule.
+   *
+   * For good: it never fires again, and a run it fires no longer emails anyone. Its runs and their files stay.
+   *
+   * `POST /v1/reporting/report_schedules/{id}/cancel`
+   */
+  cancel(
+    id: string,
+    params?: BodyOf<Op<'cancelReportSchedule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'cancelReportSchedule'>>>;
+}
+
+/**
  * `peable.reporting`.
  */
 export interface ReportingResource {
   readonly reportTypes: ReportingReportTypesResource;
   readonly reportRuns: ReportingReportRunsResource;
+  readonly reportSchedules: ReportingReportSchedulesResource;
 }
 
 /**
@@ -5307,6 +5394,83 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     path: '/v1/reporting/report_runs/{id}',
     pathParams: ['id'],
     input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.create',
+    operationId: 'createReportSchedule',
+    method: 'POST',
+    path: '/v1/reporting/report_schedules',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.list',
+    operationId: 'listReportSchedules',
+    method: 'GET',
+    path: '/v1/reporting/report_schedules',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.retrieve',
+    operationId: 'retrieveReportSchedule',
+    method: 'GET',
+    path: '/v1/reporting/report_schedules/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.update',
+    operationId: 'updateReportSchedule',
+    method: 'POST',
+    path: '/v1/reporting/report_schedules/{id}',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.pause',
+    operationId: 'pauseReportSchedule',
+    method: 'POST',
+    path: '/v1/reporting/report_schedules/{id}/pause',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.resume',
+    operationId: 'resumeReportSchedule',
+    method: 'POST',
+    path: '/v1/reporting/report_schedules/{id}/resume',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reporting.reportSchedules.cancel',
+    operationId: 'cancelReportSchedule',
+    method: 'POST',
+    path: '/v1/reporting/report_schedules/{id}/cancel',
+    pathParams: ['id'],
+    input: 'body',
     encoding: 'json',
     kind: 'json',
     account: false,

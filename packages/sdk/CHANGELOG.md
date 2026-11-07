@@ -1,5 +1,29 @@
 # Changelog
 
+## 6.4.0 — recurring report schedules
+
+Requires `@peable.to/contracts` 6.3.0 and `@peable.to/shared-types` 6.3.0.
+
+Added:
+
+- `reporting.reportSchedules.create | list | retrieve | update | pause | resume | cancel`
+  (`/v1/reporting/report_schedules`): a report run on a cadence — `daily`,
+  `weekly` on `weekly_anchor`, `monthly` on `monthly_anchor` (1–31, clamped to a
+  shorter month) — at local midnight in an IANA `timezone`, each run covering
+  the time since the previous occurrence. `recipients` (at most 10) are emailed
+  in `locale` (`en` / `es`) a link to the run in Orbit when it succeeds or
+  fails; the file is never attached. A scheduler that was down fires the latest
+  missed occurrence once, never a backlog. Writes need `payments:write`.
+- `ReportRun.report_schedule` (`frs_…` or `null`, expandable) and
+  `reportRuns.list({ report_schedule })`; `ReportSchedule.last_run` (expandable).
+- Error code `report_schedule_unexpected_state` (409: a canceled schedule never
+  changes).
+- Types `ReportSchedule`, `CreateReportScheduleParams`,
+  `UpdateReportScheduleParams`, `ListReportSchedulesParams` and the vocabulary
+  `REPORT_SCHEDULE_STATUSES`, `REPORT_SCHEDULE_INTERVALS`,
+  `REPORT_SCHEDULE_WEEKDAYS`, `REPORT_SCHEDULE_LOCALES`,
+  `REPORT_SCHEDULE_MAX_RECIPIENTS` in contracts and shared-types.
+
 ## 6.3.0 — quotes
 
 Requires `@peable.to/contracts` 6.2.0 and `@peable.to/shared-types` 6.2.0 (ADR 0018 §5).

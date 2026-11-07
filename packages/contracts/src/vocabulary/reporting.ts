@@ -31,3 +31,39 @@ export type RequestLogStatusClass = (typeof REQUEST_LOG_STATUS_CLASSES)[number];
 
 /** How long a request log is kept (and served). */
 export const REQUEST_LOG_RETENTION_DAYS = 30;
+
+/**
+ * A report schedule's lifecycle: `active` fires at each occurrence, `paused`
+ * fires nothing until resumed (resuming never backfills), `canceled` is
+ * terminal.
+ */
+export const REPORT_SCHEDULE_STATUSES = ['active', 'paused', 'canceled'] as const;
+export type ReportScheduleStatus = (typeof REPORT_SCHEDULE_STATUSES)[number];
+
+/**
+ * How often a schedule fires — Stripe's payout-schedule spelling: every day,
+ * once a week on `weekly_anchor`, once a month on `monthly_anchor`. Each
+ * occurrence is local midnight in the schedule's timezone, and its run covers
+ * the time since the previous occurrence.
+ */
+export const REPORT_SCHEDULE_INTERVALS = ['daily', 'weekly', 'monthly'] as const;
+export type ReportScheduleInterval = (typeof REPORT_SCHEDULE_INTERVALS)[number];
+
+/** A weekly schedule's day, Monday first (ISO 8601). */
+export const REPORT_SCHEDULE_WEEKDAYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+export type ReportScheduleWeekday = (typeof REPORT_SCHEDULE_WEEKDAYS)[number];
+
+/** The languages a schedule's emails are written in — Orbit's own. */
+export const REPORT_SCHEDULE_LOCALES = ['en', 'es'] as const;
+export type ReportScheduleLocale = (typeof REPORT_SCHEDULE_LOCALES)[number];
+
+/** How many addresses one schedule may email. */
+export const REPORT_SCHEDULE_MAX_RECIPIENTS = 10;

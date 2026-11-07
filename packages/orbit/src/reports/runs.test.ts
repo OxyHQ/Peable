@@ -35,6 +35,7 @@ function run(overrides: Partial<ReportRun> = {}): ReportRun {
     error: null,
     result: null,
     succeeded_at: null,
+    report_schedule: null,
     ...overrides,
   };
 }

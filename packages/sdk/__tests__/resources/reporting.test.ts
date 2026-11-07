@@ -22,6 +22,7 @@ const RUN: ReportRun = {
   error: null,
   result: null,
   succeeded_at: null,
+  report_schedule: null,
 };
 
 const TYPE: ReportType = {

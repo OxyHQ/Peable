@@ -23,6 +23,13 @@ Object type: `reporting.report_run`.
 | `error` | string \| null | Why a `failed` run failed; `null` otherwise. |
 | `result` | [File](/reference/objects/file) \| null | The CSV once `succeeded` — a File of purpose `finance_report_run` (`GET /v1/files/{id}/contents` reads it). |
 | `succeeded_at` | integer \| null | Unix seconds. |
+| `report_schedule` | string \| [ReportSchedule](/reference/objects/report-schedule) \| null | The schedule that fired this run (`frs_…`); `null` for a run asked for directly. Expandable. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `report_schedule` → [ReportSchedule](/reference/objects/report-schedule)
 
 ## Example
 
@@ -40,7 +47,8 @@ Object type: `reporting.report_run`.
   "status": "pending",
   "error": null,
   "result": null,
-  "succeeded_at": null
+  "succeeded_at": null,
+  "report_schedule": null
 }
 ```
 
@@ -57,4 +65,4 @@ Object type: `reporting.report_run`.
 
 ## Used in
 
-[Event](/reference/objects/event)
+[Event](/reference/objects/event) · [ReportSchedule](/reference/objects/report-schedule)
