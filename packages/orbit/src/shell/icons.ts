@@ -16,6 +16,7 @@ import { RiCalendarEventLine } from '@oxy.so/bloom/icons/RiCalendarEventLine';
 import { RiCalendarScheduleLine } from '@oxy.so/bloom/icons/RiCalendarScheduleLine';
 import { RiCoinsLine } from '@oxy.so/bloom/icons/RiCoinsLine';
 import { RiDashboardLine } from '@oxy.so/bloom/icons/RiDashboardLine';
+import { RiDraftLine } from '@oxy.so/bloom/icons/RiDraftLine';
 import { RiFolder3Line } from '@oxy.so/bloom/icons/RiFolder3Line';
 import { RiHistoryLine } from '@oxy.so/bloom/icons/RiHistoryLine';
 import { RiQuestionLine } from '@oxy.so/bloom/icons/RiQuestionLine';
@@ -50,6 +51,7 @@ export const ORBIT_ICONS: Record<OrbitDestinationKey | OrbitNavGroupKey, OrbitGl
   links: RiLinksLine,
   subscriptions: RiRepeatLine,
   invoices: RiFileList3Line,
+  quotes: RiDraftLine,
   'billing-settings': RiEqualizerLine,
   connect: RiCommunityLine,
   reports: RiBarChartBoxLine,

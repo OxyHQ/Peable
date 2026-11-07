@@ -536,6 +536,18 @@ export {
   type PublicInvoicePayment,
 } from './invoice';
 export {
+  QUOTE_LIMITS,
+  QUOTE_STATUSES,
+  type QuoteStatus,
+  type Quote,
+  type CreateQuoteParams,
+  type UpdateQuoteParams,
+  type FinalizeQuoteParams,
+  type QuoteActionParams,
+  type QuoteListParams,
+  type QuoteLineItemListParams,
+} from './quote';
+export {
   TEST_CLOCK_STATUSES,
   DUNNING_FINAL_ACTIONS,
   DUNNING_INVOICE_ACTIONS,

@@ -161,6 +161,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the sparse watch set's `0113`–`0114` merged.
   '0112_payment_intents_network_closed_reason_validate':
     'released with #262; its post phase applied by the 0bcb4f5b deploy (run 42180376607)',
+  // The sparse watch set's contract half shipped with #265, whose deploy of
+  // d4d869d2 (Deploy to AWS run 42209537139, 2026-11-06) ran its post phase
+  // successfully before the quotes' `0115`–`0116` merged.
+  '0114_faircoin_never_recycled':
+    'released with #265; its post phase applied by the d4d869d2 deploy (run 42209537139)',
 };
 
 interface Migration {

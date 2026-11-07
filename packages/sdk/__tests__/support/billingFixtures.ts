@@ -9,6 +9,7 @@ import type {
   Invoice,
   InvoiceItem,
   Price,
+  Quote,
   Subscription,
   TestClock,
 } from '@peable.to/shared-types';
@@ -272,6 +273,34 @@ export const PORTAL_SESSION: BillingPortalSession = {
 };
 
 /** One payload per billing event type — the parity test's half for ADR 0018. */
+export const QUOTE: Quote = {
+  id: 'qt_test',
+  object: 'quote',
+  livemode: false,
+  number: 'QT-ACME-0001',
+  status: 'open',
+  customer: 'cus_billing',
+  currency: 'EUR',
+  collection_method: 'charge_automatically',
+  invoice_settings: { days_until_due: null },
+  subscription_data: { description: null, trial_period_days: null, metadata: {} },
+  discount: null,
+  automatic_tax: { enabled: false, status: null, tax_calculation: null },
+  amount_subtotal: '1000',
+  amount_total: '1000',
+  total_details: { amount_discount: '0', amount_shipping: '0', amount_tax: '0' },
+  expires_at: CREATED + 30 * 86_400,
+  header: null,
+  description: null,
+  footer: null,
+  invoice: null,
+  subscription: null,
+  status_transitions: { finalized_at: CREATED, accepted_at: null, canceled_at: null },
+  test_clock: null,
+  metadata: {},
+  created: CREATED,
+};
+
 export const BILLING_EVENT_PAYLOADS = {
   'customer.subscription.created': SUBSCRIPTION,
   'customer.subscription.updated': SUBSCRIPTION,
@@ -312,4 +341,17 @@ export const BILLING_EVENT_PAYLOADS = {
   'billing_portal.configuration.created': PORTAL_CONFIGURATION,
   'billing_portal.configuration.updated': PORTAL_CONFIGURATION,
   'billing_portal.session.created': PORTAL_SESSION,
+  'quote.created': { ...QUOTE, status: 'draft' as const, number: null },
+  'quote.finalized': QUOTE,
+  'quote.accepted': {
+    ...QUOTE,
+    status: 'accepted' as const,
+    invoice: 'in_billing',
+    status_transitions: { ...QUOTE.status_transitions, accepted_at: CREATED },
+  },
+  'quote.canceled': {
+    ...QUOTE,
+    status: 'canceled' as const,
+    status_transitions: { ...QUOTE.status_transitions, canceled_at: CREATED },
+  },
 };

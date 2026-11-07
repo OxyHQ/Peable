@@ -5,12 +5,14 @@
  * list, never one per row.
  */
 import type {
+  CheckoutLineItem,
   CustomerBalanceTransaction,
   Discount,
   Invoice,
   InvoiceItem,
   InvoiceLineItem,
   Price,
+  Quote,
   Subscription,
   SubscriptionItem,
   TestClock,
@@ -29,6 +31,7 @@ import {
   type SubscriptionItemRow,
   type SubscriptionRow,
 } from '../db/billingEngine/subscriptionRepository';
+import type { QuoteLineRow, QuoteRow } from '../db/billingEngine/quoteRepository';
 import type { TestClockRow } from '../db/billingEngine/testClockRepository';
 import type { DatabaseOrTransaction } from '../db/postgres';
 import { toPriceDTO } from './serializeCatalog';
@@ -365,5 +368,83 @@ export function toBalanceTransactionDTO(row: BalanceTransactionRow): CustomerBal
     credit_note: row.creditNotePublicId,
     metadata: row.metadata,
     created: toUnix(row.createdAt),
+  };
+}
+
+// ---- Quotes ---------------------------------------------------------------------
+
+/** A quote (`qt_…`, ADR 0018 §5). Its lines are read by `GET /v1/quotes/:id/line_items`. */
+export function toQuoteDTO(row: QuoteRow): Quote {
+  return {
+    id: row.publicId,
+    object: 'quote',
+    livemode: row.livemode,
+    number: row.number,
+    status: row.status,
+    customer: row.customerPublicId,
+    currency: row.currency,
+    collection_method: row.collectionMethod,
+    invoice_settings: { days_until_due: row.daysUntilDue },
+    subscription_data: {
+      description: row.subscriptionDescription,
+      trial_period_days: row.trialPeriodDays,
+      metadata: row.subscriptionMetadata,
+    },
+    discount:
+      row.discountCouponPublicId === null
+        ? null
+        : {
+            object: 'discount',
+            coupon: row.discountCouponPublicId,
+            promotion_code: row.discountPromotionCodePublicId,
+            start: toUnix(row.createdAt),
+            end: null,
+          },
+    automatic_tax: {
+      enabled: row.automaticTax,
+      status: row.automaticTaxStatus,
+      tax_calculation: row.taxCalculationId,
+    },
+    amount_subtotal: row.amountSubtotal,
+    amount_total: row.amountTotal,
+    total_details: {
+      amount_discount: row.amountDiscount,
+      amount_shipping: '0',
+      amount_tax: row.amountTax,
+    },
+    expires_at: toUnix(row.expiresAt),
+    header: row.header,
+    description: row.description,
+    footer: row.footer,
+    invoice: row.invoicePublicId,
+    subscription: row.subscriptionPublicId,
+    status_transitions: {
+      finalized_at: toUnixOrNull(row.finalizedAt),
+      accepted_at: toUnixOrNull(row.acceptedAt),
+      canceled_at: toUnixOrNull(row.canceledAt),
+    },
+    test_clock: row.testClockPublicId,
+    metadata: row.metadata,
+    created: toUnix(row.createdAt),
+  };
+}
+
+/** One quote line, as Stripe's `item` (the object a Checkout Session's lines are). */
+export function toQuoteLineItemDTO(row: QuoteLineRow): CheckoutLineItem {
+  return {
+    id: row.publicId,
+    object: 'item',
+    description: row.description,
+    price: row.pricePublicId,
+    product: row.productPublicId,
+    images: [...row.productImages],
+    quantity: row.quantity,
+    adjustable_quantity: null,
+    currency: row.currency,
+    unit_amount: row.unitAmount,
+    amount_subtotal: row.amountSubtotal,
+    amount_discount: row.amountDiscount,
+    amount_tax: row.amountTax,
+    amount_total: row.amountTotal,
   };
 }

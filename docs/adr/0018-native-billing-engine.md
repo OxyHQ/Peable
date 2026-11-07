@@ -203,9 +203,25 @@ Every route is one list mounted on the merchant API and on Orbit's dashboard
     removed with the proxy: nothing was ever adopted, and the engine bills
     every subscription it has from its first period.
 
+18. **Quotes** (`qt_…`, Orbit Phase 8): `POST/GET /v1/quotes`, `GET/POST
+    /v1/quotes/:id`, `POST …/finalize|accept|cancel`, `GET …/line_items`, `GET
+    …/pdf`; events `quote.created|finalized|accepted|canceled`. A quote prices
+    catalog Prices (one currency, one recurring interval) with the engine's
+    drafting and discount math; `finalize` numbers it (`QT-<prefix>-0001`, one
+    upsert) and freezes Peable Tax through `prepareInvoice` — failing closed,
+    the quote stays a draft. `accept` locks the quote and, in ONE transaction,
+    writes a one-time invoice (`billing_reason: 'quote_accept'`) or a
+    subscription through `createSubscription` (its internal `inTransaction`
+    hook; one-time lines on the first invoice as invoice items), links it and
+    moves the quote to `accepted`; the invoice is then collected like a new
+    subscription's first. The discount is redeemed only then. Open quotes past
+    `expires_at` are cancelled by the scheduler on the customer's clock. The
+    PDF is the invoice renderer titled QUOTE. Not built: `computed`, templates
+    and revisions, `effective_date`, a hosted quote page, `quote.will_expire`.
+
 ### Not built yet
 
-Subscription schedules and quotes (as §5 says); `invoice.finalization_failed`;
+Subscription schedules (as §5 says); `invoice.finalization_failed`;
 stacked discounts; FX-quoted (fiat-priced) FairCoin invoices on the engine;
 deleting a test clock's customers with it (its subscriptions are cancelled); a
 production mail relay adapter (the outbox's `Mailer`); trials in checkout's

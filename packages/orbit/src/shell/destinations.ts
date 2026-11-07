@@ -38,6 +38,7 @@ export type OrbitDestinationKey =
   | 'links'
   | 'subscriptions'
   | 'invoices'
+  | 'quotes'
   | 'billing-settings'
   | 'connect'
   | 'reports'
@@ -158,6 +159,14 @@ export const ORBIT_DESTINATIONS: readonly OrbitDestination[] = [
     section: 'products',
     parent: 'billing',
     keywords: ['bills', 'credit notes', 'pdf'],
+  },
+  {
+    key: 'quotes',
+    labelKey: 'nav.quotes',
+    href: '/quotes',
+    section: 'products',
+    parent: 'billing',
+    keywords: ['estimates', 'proposals', 'offers', 'quotations'],
   },
   {
     key: 'billing-settings',

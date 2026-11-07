@@ -41,7 +41,7 @@ const WRITE_RULES: readonly (readonly [RegExp, DashboardAction])[] = [
   // The billing engine, including the features a product grants.
   [/^\/products\/[^/]+\/features/, 'money'],
   [
-    /^\/(subscriptions|subscription_items|invoices|invoiceitems|credit_notes|customers|test_helpers|billing_settings|billing|entitlements|billing_portal)(\/|$)/,
+    /^\/(subscriptions|subscription_items|invoices|invoiceitems|credit_notes|quotes|customers|test_helpers|billing_settings|billing|entitlements|billing_portal)(\/|$)/,
     'money',
   ],
   [/^\/(webhook_endpoints|webhook_deliveries)(\/|$)/, 'webhooks'],

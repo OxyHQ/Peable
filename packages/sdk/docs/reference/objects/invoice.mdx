@@ -22,7 +22,7 @@ Object type: `invoice`.
 | `customer_name` | string \| null |  |
 | `subscription` | string \| [Subscription](/reference/objects/subscription) \| null | `sub_…`, or the Subscription with `expand[]=subscription`. Expandable. |
 | `status` | string | One of `draft`, `open`, `paid`, `void`, `uncollectible`. |
-| `billing_reason` | string | One of `manual`, `subscription_create`, `subscription_cycle`, `subscription_update`, `subscription_cancel`, `upcoming`. |
+| `billing_reason` | string | One of `manual`, `subscription_create`, `subscription_cycle`, `subscription_update`, `subscription_cancel`, `upcoming`, `quote_accept`. |
 | `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
 | `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
 | `description` | string \| null |  |
@@ -187,4 +187,4 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
 
 ## Used in
 
-[CreditNote](/reference/objects/credit-note) · [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction) · [Error](/reference/objects/error) · [Event](/reference/objects/event) · [InvoiceItem](/reference/objects/invoice-item) · [Subscription](/reference/objects/subscription)
+[CreditNote](/reference/objects/credit-note) · [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction) · [Error](/reference/objects/error) · [Event](/reference/objects/event) · [InvoiceItem](/reference/objects/invoice-item) · [Quote](/reference/objects/quote) · [Subscription](/reference/objects/subscription)

@@ -139,6 +139,9 @@ export const ERROR_CODE_DESCRIPTIONS = {
   invoice_not_editable: 'The invoice is finalized and can no longer be edited.',
   invoice_unexpected_state: 'The invoice is in a status that does not allow this operation.',
   invoice_no_customer_line_items: 'The invoice has no line items to finalize.',
+  quote_not_editable: 'Only a draft quote can be edited.',
+  quote_unexpected_state: "The quote's status does not allow this.",
+  quote_expired: 'The quote expired.',
   invoice_payment_intent_requires_action:
     "The invoice's payment needs the customer to act (a card challenge).",
   subscription_unexpected_state:

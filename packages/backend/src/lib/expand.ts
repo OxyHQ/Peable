@@ -101,6 +101,7 @@ export type ExpandableType =
   | 'invoice'
   | 'invoiceitem'
   | 'credit_note'
+  | 'quote'
   | 'customer_balance_transaction'
   | 'test_helpers.test_clock'
   | 'billing.meter'
@@ -200,6 +201,7 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   },
   invoiceitem: { customer: 'customer', invoice: 'invoice', subscription: 'subscription' },
   credit_note: { invoice: 'invoice', customer: 'customer' },
+  quote: { customer: 'customer', invoice: 'invoice', subscription: 'subscription' },
   customer_balance_transaction: { customer: 'customer', invoice: 'invoice' },
   'test_helpers.test_clock': {},
   'billing.meter': {},

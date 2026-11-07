@@ -1,0 +1,132 @@
+---
+title: "Quote"
+description: "The quote object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Quote
+
+Object type: `quote`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"quote"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `number` | string \| null | `null` while a draft; `QT-PREFIX-0001` once finalized — per merchant. |
+| `status` | string | One of `draft`, `open`, `accepted`, `canceled`. |
+| `customer` | string \| [Customer](/reference/objects/customer) | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `invoice_settings` | object |  |
+| `invoice_settings.days_until_due` | integer \| null | `send_invoice` only; the billing settings' default when `null`. At least -9007199254740991. |
+| `subscription_data` | object | What the subscription an accepted quote with recurring lines starts with. |
+| `subscription_data.description` | string \| null |  |
+| `subscription_data.trial_period_days` | integer \| null | At least -9007199254740991. |
+| `subscription_data.metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `discount` | [Discount](/reference/objects/discount) \| null |  |
+| `automatic_tax` | object |  |
+| `automatic_tax.enabled` | boolean |  |
+| `automatic_tax.status` | string \| null | One of `requires_location_inputs`, `failed`, `complete`. |
+| `automatic_tax.tax_calculation` | string \| null | The Peable Tax calculation (`taxcalc_…`) the quote finalized with. |
+| `amount_subtotal` | string | Every line before discount and tax (one period of a recurring line). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_total` | string | `amount_subtotal - amount_discount + exclusive tax`. Matches `^(0\|[1-9][0-9]*)$`. |
+| `total_details` | object |  |
+| `total_details.amount_discount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `total_details.amount_shipping` | string | Always `0`: a quote ships nothing. Matches `^(0\|[1-9][0-9]*)$`. |
+| `total_details.amount_tax` | string \| null | Every tax, inclusive and exclusive; `null` on a draft whose tax is not known yet. Matches `^(0\|[1-9][0-9]*)$`. |
+| `expires_at` | integer | An open quote is cancelled at this instant. |
+| `header` | string \| null |  |
+| `description` | string \| null |  |
+| `footer` | string \| null |  |
+| `invoice` | string \| [Invoice](/reference/objects/invoice) \| null | The invoice accepting made (`in_…`, expandable): the one-time invoice, or the subscription's first. Expandable. |
+| `subscription` | string \| [Subscription](/reference/objects/subscription) \| null | The subscription accepting made (`sub_…`, expandable); `null` without recurring lines. Expandable. |
+| `status_transitions` | object |  |
+| `status_transitions.finalized_at` | integer \| null | Unix seconds. |
+| `status_transitions.accepted_at` | integer \| null | Unix seconds. |
+| `status_transitions.canceled_at` | integer \| null | Unix seconds. |
+| `test_clock` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+## Example
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/quotes`](/reference/quotes#create-a-quote) — Create a quote
+- [`GET /v1/quotes`](/reference/quotes#list-quotes) — List quotes
+- [`GET /v1/quotes/{id}`](/reference/quotes#retrieve-a-quote) — Retrieve a quote
+- [`POST /v1/quotes/{id}`](/reference/quotes#update-a-quote) — Update a quote
+- [`POST /v1/quotes/{id}/accept`](/reference/quotes#accept-an-open-quote) — Accept an open quote
+- [`POST /v1/quotes/{id}/cancel`](/reference/quotes#cancel-a-quote) — Cancel a quote
+- [`POST /v1/quotes/{id}/finalize`](/reference/quotes#finalize-a-draft-quote) — Finalize a draft quote
+
+## Events
+
+- [`quote.accepted`](/reference/webhook-events#quoteaccepted)
+- [`quote.canceled`](/reference/webhook-events#quotecanceled)
+- [`quote.created`](/reference/webhook-events#quotecreated)
+- [`quote.finalized`](/reference/webhook-events#quotefinalized)
+
+## Used in
+
+[Event](/reference/objects/event)

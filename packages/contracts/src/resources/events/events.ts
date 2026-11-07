@@ -388,6 +388,11 @@ export const WEBHOOK_EVENT_DESCRIPTIONS: Readonly<Record<WebhookEventType, strin
   'billing_portal.configuration.created': 'A customer portal configuration was created.',
   'billing_portal.configuration.updated': 'A customer portal configuration was updated.',
   'billing_portal.session.created': 'A customer portal session was created.',
+  'quote.created': 'A draft Quote was created.',
+  'quote.finalized': 'A Quote was finalized: numbered, priced and taxed, waiting for its customer.',
+  'quote.accepted':
+    'A Quote was accepted: its `invoice` (and, for recurring lines, its `subscription`) exists.',
+  'quote.canceled': 'A Quote was cancelled, or expired while open.',
   'tax.assessment.created':
     'A tax compliance assessment was run. Nothing was registered, filed or collected.',
   'tax.review_item.created': 'A tax assessment finding opened a review item.',

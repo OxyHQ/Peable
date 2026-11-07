@@ -64,8 +64,9 @@ describe('closed value sets', () => {
     // 27 of ADR 0019 (the proxy's `billing.observation.updated` is gone) + the catalog's ten (ADR 0018) + the dispute funds pair
     // + Orbit money's nine (ADR 0015) + checkout's four and payment links'
     // two (Orbit Phase 3) + reporting's report run pair (Phase 8) + the billing
-    // engine's 34 (ADR 0018) + business compliance's three (ADR 0020).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(93);
+    // engine's 34 (ADR 0018) + business compliance's three (ADR 0020) + the
+    // quotes' four (ADR 0018 §5).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(97);
     for (const retired of [
       'billing.observation.updated',
       'payment_intent.settled',
@@ -201,6 +202,7 @@ describe('the base-unit amount pattern', () => {
     // and `tax_amount`; a meter event's `value`. (Its SIGNED amounts carry
     // `SIGNED_BASE_UNIT_STRING_PATTERN` instead.)
     // ADR 0021 D6: a FairCoin output's `amount` (`payment_intent_outputs`).
-    expect(occurrences).toBe(46);
+    // Quotes (ADR 0018 §5): a quote's four totals and its lines' four amounts.
+    expect(occurrences).toBe(54);
   });
 });

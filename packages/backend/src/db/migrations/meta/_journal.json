@@ -806,6 +806,20 @@
       "when": 1793960357983,
       "tag": "0114_faircoin_never_recycled",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1794028541695,
+      "tag": "0115_quotes",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1794028556610,
+      "tag": "0116_quotes_validate",
+      "breakpoints": true
     }
   ]
 }

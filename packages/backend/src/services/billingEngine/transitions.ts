@@ -14,6 +14,7 @@
  */
 import type {
   InvoiceStatus,
+  QuoteStatus,
   SubscriptionStatus,
   WebhookEventPayload,
   WebhookEventType,
@@ -30,12 +31,18 @@ import {
   type SubscriptionPatch,
   type SubscriptionRow,
 } from '../../db/billingEngine/subscriptionRepository';
+import {
+  setQuoteStatus,
+  updateQuote,
+  type QuotePatch,
+  type QuoteRow,
+} from '../../db/billingEngine/quoteRepository';
 import type { DatabaseOrTransaction, Transaction } from '../../db/postgres';
-import { renderInvoice, renderSubscription } from '../../lib/serializeBilling';
+import { renderInvoice, renderSubscription, toQuoteDTO } from '../../lib/serializeBilling';
 import { previousAttributes } from '../catalog/catalogService';
 import { recordEvent } from '../events';
 import { refreshEntitlementSummary } from './entitlements';
-import { invoiceMayMove, subscriptionMayMove } from './stateMachines';
+import { invoiceMayMove, quoteMayMove, subscriptionMayMove } from './stateMachines';
 
 /** Another writer moved the row between the caller's read and its write. */
 export class StaleTransitionError extends Error {
@@ -51,6 +58,7 @@ export type BillingEventType = Extract<
   | `invoice.${string}`
   | `invoiceitem.${string}`
   | `credit_note.${string}`
+  | `quote.${string}`
   | `test_helpers.${string}`
   | `billing.meter.${string}`
   | `billing_portal.${string}`
@@ -190,5 +198,49 @@ export async function patchInvoice(
       await recordBillingEvent(tx, row.merchantId, 'invoice.updated', after, previous);
     }
   }
+  return written;
+}
+
+// ---- Quotes --------------------------------------------------------------------
+
+const QUOTE_EVENT: Partial<Record<QuoteStatus, BillingEventType>> = {
+  open: 'quote.finalized',
+  accepted: 'quote.accepted',
+  canceled: 'quote.canceled',
+};
+
+/**
+ * Move a quote to `to`, recording `quote.finalized` / `.accepted` /
+ * `.canceled` for the status it reached. The CAS is on the status the caller
+ * READ: a second accept racing the first gets {@link StaleTransitionError}.
+ */
+export async function transitionQuote(
+  tx: Transaction,
+  row: QuoteRow,
+  to: QuoteStatus,
+  patch: QuotePatch = {},
+): Promise<QuoteRow> {
+  if (!quoteMayMove(row.status, to)) {
+    throw new Error(`a quote cannot move from ${row.status} to ${to}`);
+  }
+  const written = await setQuoteStatus(tx, row.id, row.status, to, patch);
+  if (written === 'stale') throw new StaleTransitionError('the quote');
+  const type = to !== row.status ? QUOTE_EVENT[to] : undefined;
+  if (type) {
+    const before = toQuoteDTO(row);
+    const after = toQuoteDTO(written);
+    await recordBillingEvent(tx, row.merchantId, type, after, previousAttributes(before, after));
+  }
+  return written;
+}
+
+/** A non-status change of a quote (Stripe records no `quote.updated`). */
+export async function patchQuote(
+  tx: Transaction,
+  row: QuoteRow,
+  patch: QuotePatch,
+): Promise<QuoteRow> {
+  const written = await updateQuote(tx, row.id, patch);
+  if (written === 'limit_exceeded') throw new MetadataLimitError();
   return written;
 }

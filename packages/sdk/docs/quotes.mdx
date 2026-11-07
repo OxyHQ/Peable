@@ -1,0 +1,117 @@
+---
+title: "Quotes"
+description: "Price your catalog for one customer, send the PDF, and turn a yes into an invoice or a subscription."
+order: 9.5
+---
+
+# Quotes
+
+A quote (`qt_…`) is an offer to one customer: catalog prices and quantities,
+at most one discount, and [Peable Tax](/tax). It follows Stripe's lifecycle —
+`draft` → `open` → `accepted` or `canceled` — and runs on the same native
+billing engine as [subscriptions and invoices](/billing), so a quote's amounts
+are the catalog's own pricing and accepting one creates ordinary billing
+objects.
+
+| Status | What it means | What can happen |
+|---|---|---|
+| `draft` | Being written; the only status a quote can be edited in | `finalize`, `cancel`, `update` |
+| `open` | Numbered, priced and taxed; waiting for the customer until `expires_at` | `accept`, `cancel`; expires on its own |
+| `accepted` | The customer said yes; `invoice` (and `subscription`) exist | — |
+| `canceled` | Cancelled by you, or expired while open | — |
+
+## Create a draft
+
+```ts
+const quote = await peable.quotes.create({
+  customer: 'cus_…',
+  line_items: [
+    { price: 'price_setup' },                 // one-time
+    { price: 'price_seat_monthly', quantity: 12 }, // recurring
+  ],
+  discounts: [{ coupon: 'launch' }],          // or { promotion_code: 'promo_…' }
+  automatic_tax: { enabled: true },
+  header: 'Platform rollout',
+  expires_at: Math.floor(Date.now() / 1000) + 14 * 86_400, // default: 30 days
+});
+```
+
+A quote's lines are active, licensed prices — each once, in one currency, and
+every recurring one on the same interval (they become one subscription). A
+metered price is billed by its meter and cannot be quoted. A `FAIR` quote is
+always `send_invoice`: FairCoin is paid by the payer from their own wallet,
+never debited.
+
+`amount_subtotal`, `total_details.amount_discount` and `amount_total` are
+computed the way an invoice computes them — one period of each recurring line.
+While a draft has automatic tax, `total_details.amount_tax` is `null`: tax is
+computed when it finalizes. The discount is validated now and redeemed only
+when the quote is accepted.
+
+Edit a draft with `update` — `line_items` replaces every line; `metadata` can
+change on any quote. `GET /v1/quotes/:id/line_items` (`listLineItems`) answers
+the lines as Stripe's `item`, the same object a Checkout Session's lines are.
+
+## Finalize and send
+
+```ts
+const open = await peable.quotes.finalizeQuote(quote.id);
+open.number; // 'QT-1A2B3C4D-0001' — per merchant, gapless
+const pdf = await peable.quotes.pdf(quote.id); // the PDF to send your customer
+```
+
+Finalizing numbers the quote and freezes each line's discount and tax.
+**Tax fails closed**: when Peable Tax cannot compute it — the customer has no
+billing address or card country (`customer_location_insufficient`), or the
+provider cannot answer (`tax_calculation_unavailable`, 503) — the quote stays a
+draft with `automatic_tax.status` saying why. It is never opened at zero tax.
+
+## Accept
+
+```ts
+const accepted = await peable.quotes.accept(quote.id, { expand: ['invoice', 'subscription'] });
+```
+
+- **One-time lines only**: an invoice (`billing_reason: 'quote_accept'`),
+  finalized with tax computed again at that moment.
+- **Recurring lines**: a subscription (with `subscription_data`'s
+  `description`, `trial_period_days` and `metadata`) whose first invoice also
+  carries the one-time lines, billed once.
+
+The quote moves to `accepted`, and its `invoice` / `subscription` are linked,
+in the same transaction that creates them; a second `accept` answers
+`quote_unexpected_state` and creates nothing. The invoice is then collected
+like any other: charged off-session when the quote is `charge_automatically`
+and the customer has a saved card, otherwise paid on its hosted invoice page —
+which, for a fiat invoice, offers your fiat methods **and**
+[FairCoin](/faircoin).
+
+## Cancel and expiry
+
+`cancel` ends a draft or an open quote. An open quote whose `expires_at` passes
+is cancelled by the engine — on the customer's [test clock](/testing) when it
+has one. An expired draft can still be finalized with a new `expires_at`
+(`finalizeQuote(id, { expires_at })`).
+
+## Events
+
+| Event | When |
+|---|---|
+| `quote.created` | A draft was created |
+| `quote.finalized` | It was numbered, priced and taxed |
+| `quote.accepted` | Its invoice (and subscription) exist |
+| `quote.canceled` | Cancelled, or expired while open |
+
+Every event carries the Quote. See [Webhooks and events](/webhooks).
+
+## In Orbit
+
+Orbit's **Quotes** screen lists, creates and edits drafts, finalizes, accepts,
+cancels and downloads the PDF. Changing a quote needs the `billing:manage`
+permission on the application.
+
+## What is not built yet
+
+Stripe's `computed.upfront` / `computed.recurring` breakdown, quote
+templates and revisions (`from_quote`), `subscription_data.effective_date`,
+a hosted quote page for the customer, and `quote.will_expire`.

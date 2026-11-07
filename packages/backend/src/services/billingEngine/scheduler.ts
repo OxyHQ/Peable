@@ -1,6 +1,7 @@
 /**
  * The billing engine's scheduler (ADR 0018 §5): renewals, trial ends, draft
- * auto-advance, dunning retries — one leased, idempotent worker per process.
+ * auto-advance, dunning retries, quote expiry — one leased, idempotent worker
+ * per process.
  *
  * ## No job table
  *
@@ -53,6 +54,7 @@ import { finalizeStoredInvoice, markUncollectibleInTx } from './invoiceEngine';
 import { InvoiceTaxError } from './invoiceTax';
 import { addDays } from './periods';
 import { engineNow } from './runtime';
+import { expireDueQuotes } from './quotes';
 import { runSubscriptionStep } from './subscriptions';
 import { patchInvoice, StaleTransitionError, transitionSubscription } from './transitions';
 
@@ -167,6 +169,8 @@ async function clearNextAction(invoiceId: string): Promise<void> {
 export interface PassResult {
   readonly subscriptions: number;
   readonly invoices: number;
+  /** Open quotes cancelled because they expired. */
+  readonly quotes: number;
 }
 
 /**
@@ -207,7 +211,17 @@ export async function runBillingEnginePass(
       await releaseInvoiceLease(db, id);
     }
   }
-  return { subscriptions: subscriptionIds.length, invoices: invoiceIds.length };
+  // Open quotes past `expires_at` are cancelled (ADR 0018 §5): each by its CAS.
+  let quotes = 0;
+  try {
+    quotes = await expireDueQuotes({
+      limit: claim.limit,
+      ...(options.testClockId ? { testClockId: options.testClockId } : {}),
+    });
+  } catch (error) {
+    console.error(`[billing engine] quote expiry: ${(error as Error).message}`);
+  }
+  return { subscriptions: subscriptionIds.length, invoices: invoiceIds.length, quotes };
 }
 
 /**
@@ -219,7 +233,7 @@ export async function drainTestClock(testClockId: string): Promise<boolean> {
   const db = getDb();
   for (let pass = 0; pass < 500; pass += 1) {
     const result = await runBillingEnginePass({ testClockId, limit: BATCH });
-    if (result.subscriptions === 0 && result.invoices === 0) {
+    if (result.subscriptions === 0 && result.invoices === 0 && result.quotes === 0) {
       const busy =
         (await clockHasDueSubscriptions(db, testClockId)) ||
         (await clockHasDueInvoices(db, testClockId));

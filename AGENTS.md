@@ -397,9 +397,9 @@ Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
 `refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `taxCompliance`, `transfers`,
 `webhookDeliveries`, `webhookEndpoints`, and the billing engine's
-`billingEngine/*` (subscriptions, invoices, credit notes, test clocks, settings,
-meters, entitlements, portal, and its anonymous `public` invoice and portal
-pages).
+`billingEngine/*` (subscriptions, invoices, credit notes, quotes, test clocks,
+settings, meters, entitlements, portal, and its anonymous `public` invoice and
+portal pages).
 
 ### Search and report runs (Orbit Phase 8)
 
@@ -585,6 +585,17 @@ rebuild a provider-billed subscription beside it. Invariants:
   from `periods.ts`. Mail only through Orbit's email outbox (`services/email`,
   owed in the change's transaction; `invoice.sent` only once the relay took it).
   Checkout's `mode: 'subscription'` is the engine's (`checkoutFulfiller.ts`).
+- **Quotes (`qt_…`) are the engine's too** (`services/billingEngine/quotes.ts`):
+  `transitionQuote` is their one status writer (CAS + `quote.*` event); only a
+  draft is edited; a line is `itemPeriodAmount`, the discount `discountsFor`,
+  and finalize taxes them with `prepareInvoice` — failing closed, the quote
+  stays a draft. Accepting LOCKS the quote first and moves it to `accepted` in
+  the transaction that creates its invoice (one-time lines, `quote_accept`) or
+  its subscription (`createSubscription`'s internal `inTransaction` hook; the
+  one-time lines ride the first invoice as `addInvoiceItems`), so a second
+  accept writes nothing. The discount is validated on the draft and redeemed
+  only at acceptance; open quotes expire in the scheduler's pass on the
+  customer's clock; numbers are one upsert (`claimQuoteNumber`).
 
 ### The PaymentIntent is Stripe's (ADR 0019)
 

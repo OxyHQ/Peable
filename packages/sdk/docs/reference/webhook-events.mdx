@@ -1,7 +1,7 @@
 ---
 title: "Webhook events"
 description: "Every webhook event type and its payload."
-order: 950
+order: 951
 generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 ---
 
@@ -86,6 +86,10 @@ Every event Peable sends to a [webhook endpoint](/webhooks), and records as an e
 | [`product.updated`](#productupdated) | A Product was updated; `previous_attributes` names what moved. |
 | [`promotion_code.created`](#promotion_codecreated) | A PromotionCode was created. |
 | [`promotion_code.updated`](#promotion_codeupdated) | A PromotionCode was updated (archiving one is `active: false`). |
+| [`quote.accepted`](#quoteaccepted) | A Quote was accepted: its `invoice` (and, for recurring lines, its `subscription`) exists. |
+| [`quote.canceled`](#quotecanceled) | A Quote was cancelled, or expired while open. |
+| [`quote.created`](#quotecreated) | A draft Quote was created. |
+| [`quote.finalized`](#quotefinalized) | A Quote was finalized: numbered, priced and taxed, waiting for its customer. |
 | [`refund.created`](#refundcreated) | A Refund was created. |
 | [`refund.failed`](#refundfailed) | A Refund failed: the bank rejected it. |
 | [`refund.updated`](#refundupdated) | A Refund changed state. |
@@ -2052,6 +2056,110 @@ A PromotionCode was updated (archiving one is `active: false`).
 | `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
 | `data` | object |  |
 | `data.object` | [PromotionCode](/reference/objects/promotion-code) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `quote.accepted`
+
+A Quote was accepted: its `invoice` (and, for recurring lines, its `subscription`) exists.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"quote.accepted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Quote](/reference/objects/quote) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `quote.canceled`
+
+A Quote was cancelled, or expired while open.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"quote.canceled"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Quote](/reference/objects/quote) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `quote.created`
+
+A draft Quote was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"quote.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Quote](/reference/objects/quote) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `quote.finalized`
+
+A Quote was finalized: numbered, priced and taxed, waiting for its customer.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"quote.finalized"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [Quote](/reference/objects/quote) |  |
 | `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
 | `request` | [EventRequest](/reference/objects/event-request) |  |
 

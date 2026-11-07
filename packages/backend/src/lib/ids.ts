@@ -35,6 +35,7 @@ export function newId(
     | 'il'
     | 'ii'
     | 'cn'
+    | 'qt'
     | 'cnli'
     | 'cbtxn'
     | 'clock'

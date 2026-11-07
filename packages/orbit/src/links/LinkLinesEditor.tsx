@@ -33,16 +33,24 @@ export function priceChoiceOf(price: Price, product: Pick<Product, 'name'>): Lin
   };
 }
 
-function PricePicker({
+/**
+ * A product, then one of its active prices — the catalog picker every
+ * price-lined builder (payment links, quotes) adds a line with. `refuse` says,
+ * in words, why the chosen price cannot be added, or `null`.
+ */
+export function PricePicker({
   scope,
-  lines,
+  refuse,
   onAdd,
   disabled,
+  addLabel,
 }: {
   scope: DashboardScope;
-  lines: readonly LinkLineForm[];
-  onAdd: (price: LinkPriceChoice) => void;
+  /** The choice, and the catalog Price it was made from. */
+  refuse: (price: LinkPriceChoice, source: Price) => string | null;
+  onAdd: (price: LinkPriceChoice, source: Price) => void;
   disabled: boolean;
+  addLabel?: string;
 }) {
   const products = useProductPages(scope, true);
   const [productId, setProductId] = useState<string | null>(null);
@@ -67,7 +75,7 @@ function PricePicker({
       : [];
   const chosen = priceList.find((price) => price.id === priceId) ?? null;
   const choice = chosen && product ? priceChoiceOf(chosen, product) : null;
-  const refusal = choice ? priceRefusal(lines, choice) : null;
+  const refusal = choice && chosen ? refuse(choice, chosen) : null;
   return (
     <View className="gap-3 rounded-xl border border-border p-3">
       <View className="flex-row flex-wrap gap-4">
@@ -109,7 +117,7 @@ function PricePicker({
       ) : null}
       {refusal ? (
         <Text variant="caption-1-regular" className="text-destructive" accessibilityRole="alert">
-          {t(`links.refusal.${refusal}`)}
+          {refusal}
         </Text>
       ) : null}
       <View className="flex-row justify-end">
@@ -118,12 +126,12 @@ function PricePicker({
           size="sm"
           disabled={disabled || !choice || refusal !== null}
           onPress={() => {
-            if (!choice) return;
-            onAdd(choice);
+            if (!choice || !chosen) return;
+            onAdd(choice, chosen);
             setPriceId(null);
           }}
         >
-          {t('links.addLine')}
+          {addLabel ?? t('links.addLine')}
         </Button>
       </View>
     </View>
@@ -262,7 +270,10 @@ export function LinkLinesEditor({
       ) : null}
       <PricePicker
         scope={scope}
-        lines={lines}
+        refuse={(price) => {
+          const refusal = priceRefusal(lines, price);
+          return refusal ? t(`links.refusal.${refusal}`) : null;
+        }}
         disabled={disabled}
         onAdd={(price) => onChange([...lines, lineFor(price)])}
       />
