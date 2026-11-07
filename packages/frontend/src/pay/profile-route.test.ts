@@ -36,7 +36,7 @@ const READY = {
   isAuthenticated: true,
   isSelf: false,
   walletInitialized: true,
-  network: 'testnet',
+  network: 'mainnet',
 } as const;
 
 test('offers the send action only when every precondition holds', () => {
@@ -63,8 +63,8 @@ test('never offers to pay yourself — the gateway rejects it with a 400', () =>
   expect(decideProfilePayAction({ ...READY, isSelf: true, isWeb: true })).toEqual({
     kind: 'self',
   });
-  // …and on mainnet, where the send action is blocked for a different reason.
-  expect(decideProfilePayAction({ ...READY, isSelf: true, network: 'mainnet' })).toEqual({
+  // …and on testnet, where the send action is blocked for a different reason.
+  expect(decideProfilePayAction({ ...READY, isSelf: true, network: 'testnet' })).toEqual({
     kind: 'self',
   });
 });
@@ -93,12 +93,11 @@ test('reports a signed-in payer with no derived wallet', () => {
   });
 });
 
-test('blocks the send action on mainnet (finding F-1)', () => {
-  // Pay-by-@username has not cleared mainnet: an Oxy identity key rotation
-  // desyncs the shared key slot and the payer sends to addresses the recipient
-  // can neither see nor spend. The page must not offer it there.
-  expect(decideProfilePayAction({ ...READY, network: 'mainnet' })).toEqual({
-    kind: 'mainnet-blocked',
+test('blocks the send action on a network social payments do not run on', () => {
+  // Social payments run on mainnet since 2026-11-07 (ADR 0002, "Opening"); a
+  // testnet wallet would pay an address the gateway never handed out there.
+  expect(decideProfilePayAction({ ...READY, network: 'testnet' })).toEqual({
+    kind: 'wrong-network',
   });
 });
 
@@ -121,8 +120,8 @@ test('permits sending on exactly the network the read-only history asks about', 
   });
 });
 
-test('a signed-out mainnet wallet still reads as sign-in, not a network warning', () => {
-  expect(decideProfilePayAction({ ...READY, network: 'mainnet', isAuthenticated: false })).toEqual({
+test('a signed-out wallet on the other network still reads as sign-in, not a network warning', () => {
+  expect(decideProfilePayAction({ ...READY, network: 'testnet', isAuthenticated: false })).toEqual({
     kind: 'signin',
   });
 });

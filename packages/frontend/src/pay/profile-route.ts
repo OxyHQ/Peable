@@ -45,11 +45,9 @@ export function parseProfileHandle(segment: string | string[] | undefined): stri
  *   records the sender's attribution.
  * - `wallet-not-ready` — native, signed in, but no derived wallet yet
  *   (keyless account, or the identity wallet hasn't been brought up).
- * - `mainnet-blocked` — pay-by-@username has not cleared mainnet. Finding F-1
- *   (`docs/adr/0002-social-receive-is-bound-to-one-identity-key.md`):
- *   rotating the Oxy identity key desyncs the shared key slot, so a payer can
- *   send to addresses the recipient can neither see nor spend — silent,
- *   permanent loss. Testnet only until that is fixed upstream.
+ * - `wrong-network` — the wallet is on another network than the one social
+ *   payments run on (`SOCIAL_PAY_NETWORK`, mainnet since 2026-11-07, ADR 0002
+ *   "Opening"): the payer switches network in Settings.
  * - `send` — everything holds; route into the send flow.
  *
  * `isSelf` is only meaningful once the profile has loaded, which is also the
@@ -62,7 +60,7 @@ export type ProfilePayAction =
   | { kind: 'web' }
   | { kind: 'signin' }
   | { kind: 'wallet-not-ready' }
-  | { kind: 'mainnet-blocked' }
+  | { kind: 'wrong-network' }
   | { kind: 'send' };
 
 export function decideProfilePayAction(input: {
@@ -88,13 +86,13 @@ export function decideProfilePayAction(input: {
   if (!isAuthenticated) return { kind: 'signin' };
   if (!walletInitialized) return { kind: 'wallet-not-ready' };
 
-  // Last, so a testnet wallet that is merely signed out still reads "sign in"
+  // Last, so a wallet on the other network that is merely signed out still reads "sign in"
   // rather than a network warning it cannot act on.
   //
   // The constant, not the literal: `ReadOnlyWalletView` asks the gateway for
   // payments on the same network this gate lets people send on, and when the
   // two were written separately they disagreed.
-  if (network !== SOCIAL_PAY_NETWORK) return { kind: 'mainnet-blocked' };
+  if (network !== SOCIAL_PAY_NETWORK) return { kind: 'wrong-network' };
 
   return { kind: 'send' };
 }

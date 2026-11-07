@@ -102,9 +102,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'profile.reserving': 'Preparing address...',
     'profile.signIn.description': 'Sign in with Oxy to send @{username} money.',
     'profile.walletNotReady': 'Finish setting up your Peable wallet, then come back to pay.',
-    'profile.mainnetBlocked':
-      "Paying by handle isn't ready for mainnet yet, so @{username} can't be paid from this wallet. Switch to testnet in Settings to try it.",
-    'profile.testnetOnly': 'Paying by handle runs on testnet only for now.',
+    'profile.wrongNetwork':
+      'Paying by handle runs on mainnet. Switch this wallet to mainnet in Settings to pay @{username}.',
     'profile.web.title': 'Peable lives on your phone',
     'profile.web.description':
       'Your keys are derived on your device and never leave it, so sending {name} money happens in the Peable app.',
@@ -1034,9 +1033,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'profile.reserving': 'Preparando dirección...',
     'profile.signIn.description': 'Inicia sesión con Oxy para enviarle dinero a @{username}.',
     'profile.walletNotReady': 'Termina de configurar tu billetera Peable y vuelve para pagar.',
-    'profile.mainnetBlocked':
-      'Pagar por usuario aún no está listo para mainnet, así que no puedes pagarle a @{username} desde esta billetera. Cambia a testnet en Ajustes para probarlo.',
-    'profile.testnetOnly': 'Pagar por usuario funciona solo en testnet por ahora.',
+    'profile.wrongNetwork':
+      'Pagar por usuario funciona en mainnet. Cambia esta billetera a mainnet en Ajustes para pagarle a @{username}.',
     'profile.web.title': 'Peable vive en tu teléfono',
     'profile.web.description':
       'Tus claves se derivan en tu dispositivo y nunca salen de él, así que enviarle dinero a {name} se hace desde la app de Peable.',
