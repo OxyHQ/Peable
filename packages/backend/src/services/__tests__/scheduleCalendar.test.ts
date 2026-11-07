@@ -7,7 +7,7 @@ import {
   occurrenceAfter,
   occurrenceAtOrBefore,
   type ScheduleCadence,
-} from './scheduleCalendar';
+} from '../reporting/scheduleCalendar';
 
 const DAILY: ScheduleCadence = { interval: 'daily', weeklyAnchor: null, monthlyAnchor: null };
 const MONDAYS: ScheduleCadence = {
