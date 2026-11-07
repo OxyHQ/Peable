@@ -12,6 +12,7 @@ import type {
   Quote,
   Subscription,
   TestClock,
+  WebhookEventPayload,
 } from '@peable.to/shared-types';
 
 const CREATED = 1789776000;
@@ -301,7 +302,48 @@ export const QUOTE: Quote = {
   created: CREATED,
 };
 
-export const BILLING_EVENT_PAYLOADS = {
+/** The billing engine's event types, named so the payload map below has an explicit type. */
+type BillingEventType =
+  | 'customer.subscription.created'
+  | 'customer.subscription.updated'
+  | 'customer.subscription.deleted'
+  | 'customer.subscription.trial_will_end'
+  | 'customer.subscription.paused'
+  | 'customer.subscription.resumed'
+  | 'invoice.created'
+  | 'invoice.updated'
+  | 'invoice.deleted'
+  | 'invoice.finalized'
+  | 'invoice.paid'
+  | 'invoice.payment_failed'
+  | 'invoice.payment_action_required'
+  | 'invoice.voided'
+  | 'invoice.marked_uncollectible'
+  | 'invoice.upcoming'
+  | 'invoice.sent'
+  | 'invoiceitem.created'
+  | 'invoiceitem.deleted'
+  | 'credit_note.created'
+  | 'credit_note.updated'
+  | 'credit_note.voided'
+  | 'test_helpers.test_clock.created'
+  | 'test_helpers.test_clock.advancing'
+  | 'test_helpers.test_clock.ready'
+  | 'test_helpers.test_clock.deleted'
+  | 'billing.meter.created'
+  | 'billing.meter.updated'
+  | 'billing.meter.deactivated'
+  | 'billing.meter.reactivated'
+  | 'entitlements.active_entitlement_summary.updated'
+  | 'billing_portal.configuration.created'
+  | 'billing_portal.configuration.updated'
+  | 'billing_portal.session.created'
+  | 'quote.created'
+  | 'quote.finalized'
+  | 'quote.accepted'
+  | 'quote.canceled';
+
+export const BILLING_EVENT_PAYLOADS: Pick<WebhookEventPayload, BillingEventType> = {
   'customer.subscription.created': SUBSCRIPTION,
   'customer.subscription.updated': SUBSCRIPTION,
   'customer.subscription.deleted': { ...SUBSCRIPTION, status: 'canceled' as const },

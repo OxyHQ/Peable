@@ -320,6 +320,7 @@ const charge: Charge = {
   captured: true,
   refunded: false,
   disputed: false,
+  review: null,
   outcome: null,
   billing_details: null,
   payment_method_details: null,
@@ -477,6 +478,22 @@ const promotionCode: PromotionCode = {
   created: EVENT.created,
 };
 
+/** A review a risk rule opened (ADR 0022). */
+const REVIEW = {
+  id: 'prv_1',
+  object: 'review' as const,
+  livemode: false,
+  open: true,
+  reason: 'rule' as const,
+  opened_reason: 'rule' as const,
+  closed_reason: null,
+  payment_intent: 'pi_1',
+  charge: 'ch_1',
+  rule: { id: 'rule_1', action: 'review' as const, predicate: ':amount: > 1000', version: 1 },
+  created: EVENT.created,
+  closed_at: null,
+};
+
 const payloads = {
   'payment_intent.created': EVENT.data.object,
   'payment_intent.requires_action': EVENT.data.object,
@@ -623,6 +640,14 @@ const payloads = {
     ...VERIFICATION_SESSION,
     status: 'canceled',
     redaction: { status: 'redacted' },
+  },
+  'review.opened': REVIEW,
+  'review.closed': {
+    ...REVIEW,
+    open: false,
+    reason: 'approved' as const,
+    closed_reason: 'approved' as const,
+    closed_at: EVENT.created,
   },
   'webhook_endpoint.test': {
     id: 'we_fixture',

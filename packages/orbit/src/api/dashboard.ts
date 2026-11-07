@@ -27,6 +27,14 @@ import type {
   VerificationReport,
   VerificationSession,
   VerificationSessionStatus,
+  CreateRadarRuleParams,
+  DeletedRadarRule,
+  RadarEvaluation,
+  RadarRule,
+  RadarRuleAction,
+  RefuseReviewParams,
+  Review,
+  UpdateRadarRuleParams,
   Subscription,
   SubscriptionStatus,
   UpdateBillingSettingsParams,
@@ -235,6 +243,47 @@ export type VerificationSessionAction = 'cancel' | 'redact';
 
 /** What a quote's actions are: each a `POST …/quotes/:id/<action>`. */
 export type QuoteAction = 'finalize' | 'accept' | 'cancel';
+
+export interface RiskRuleListParams extends PageParams {
+  action?: RadarRuleAction;
+  /** `true` enabled only, `false` disabled only, absent for both. */
+  enabled?: boolean;
+}
+
+export interface RiskEvaluationListParams extends PageParams {
+  /** Only this payment's evaluations (`pi_…`). */
+  payment_intent?: string;
+}
+
+export interface ReviewQueueParams extends PageParams {
+  /** `true` open only, `false` closed only, absent for both. */
+  open?: boolean;
+}
+
+/**
+ * `POST …/radar/rules/validate` (Orbit's editor, not a contract): always 200 —
+ * an invalid predicate is the answer, with the gateway's reason and the 0-based
+ * position it stopped at.
+ */
+export type RiskPredicateCheck =
+  | { valid: true; facts: string[]; post_authorization_only: boolean; saved_card_only: boolean }
+  | { valid: false; message: string; position: number };
+
+/** One recent card payment an unsaved predicate matched. */
+export interface RiskPreviewMatch {
+  payment_intent: string;
+  amount: string;
+  currency: string;
+  created: number;
+  /** The facts the predicate names, as base-10 strings; `null` is unknown. */
+  facts: Record<string, string | null>;
+}
+
+/** `POST …/radar/rules/preview`: how many recent card payments were judged, and which matched. */
+export interface RiskPreview {
+  evaluated: number;
+  matched: RiskPreviewMatch[];
+}
 
 export interface FeatureListParams extends PageParams {
   /** `true` archived only, `false` active only, absent for both. */
@@ -765,6 +814,78 @@ export function createDashboardApi(transport: OrbitTransport) {
           'POST',
           dashboardPath(scope, `/disputes/${id(disputeId)}/close`),
         ),
+    },
+
+    /**
+     * Risk rules (`rule_…`, ADR 0022): allow / block / review over a closed set
+     * of facts, judged on card payments. Writes are `money`; `validate` and
+     * `preview` write nothing and are `read`.
+     */
+    radar: {
+      rules: {
+        list: (scope: DashboardScope, params: RiskRuleListParams = {}) =>
+          list<RadarRule>(dashboardPath(scope, '/radar/rules', { ...params })),
+        retrieve: (scope: DashboardScope, ruleId: string) =>
+          get<RadarRule>(dashboardPath(scope, `/radar/rules/${id(ruleId)}`)),
+        create: (scope: DashboardScope, body: CreateRadarRuleParams) =>
+          transport.request<RadarRule>('POST', dashboardPath(scope, '/radar/rules'), { body }),
+        /** A new `action` or `predicate` is a new `version`; `description: ''` clears it. */
+        update: (scope: DashboardScope, ruleId: string, body: UpdateRadarRuleParams) =>
+          transport.request<RadarRule>('POST', dashboardPath(scope, `/radar/rules/${id(ruleId)}`), {
+            body,
+          }),
+        delete: (scope: DashboardScope, ruleId: string) =>
+          transport.request<DeletedRadarRule>(
+            'DELETE',
+            dashboardPath(scope, `/radar/rules/${id(ruleId)}`),
+          ),
+        /** Whether a predicate parses, as it is typed. */
+        validate: (scope: DashboardScope, predicate: string) =>
+          transport.request<RiskPredicateCheck>(
+            'POST',
+            dashboardPath(scope, '/radar/rules/validate'),
+            { body: { predicate } },
+          ),
+        /** The predicate, unsaved, judged against recent card payments. Read-only. */
+        preview: (scope: DashboardScope, predicate: string) =>
+          transport.request<RiskPreview>('POST', dashboardPath(scope, '/radar/rules/preview'), {
+            body: { predicate },
+          }),
+      },
+      /** Every evaluation in which a rule matched: the explanation of a decline or a review. */
+      evaluations: {
+        list: (scope: DashboardScope, params: RiskEvaluationListParams = {}) =>
+          list<RadarEvaluation>(dashboardPath(scope, '/radar/evaluations', { ...params })),
+      },
+    },
+
+    /**
+     * Reviews (`prv_…`): payments a rule queued for a person. Approving and
+     * refusing are `money` — a refusal releases an uncaptured authorization or
+     * refunds a captured payment in full, so screens confirm it first.
+     */
+    reviews: {
+      list: (scope: DashboardScope, params: ReviewQueueParams = {}) =>
+        list<Review>(
+          dashboardPath(scope, '/reviews', { ...params, expand: ['data.payment_intent'] }),
+        ),
+      retrieve: (scope: DashboardScope, reviewId: string) =>
+        get<Review>(
+          dashboardPath(scope, `/reviews/${id(reviewId)}`, { expand: ['payment_intent'] }),
+        ),
+      approve: (scope: DashboardScope, reviewId: string) =>
+        transport.request<Review>(
+          'POST',
+          dashboardPath(scope, `/reviews/${id(reviewId)}/approve`),
+          {
+            body: {},
+          },
+        ),
+      /** `reason: 'fraudulent'` closes a captured payment's review `refunded_as_fraud`. */
+      refuse: (scope: DashboardScope, reviewId: string, body: RefuseReviewParams = {}) =>
+        transport.request<Review>('POST', dashboardPath(scope, `/reviews/${id(reviewId)}/refuse`), {
+          body,
+        }),
     },
 
     /** Files (`file_…`), uploaded as `multipart/form-data`; stored in Oxy Files by the gateway. */

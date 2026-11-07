@@ -33,7 +33,7 @@ import { getDb } from '../db/postgres';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { answerList, dashboardQuery, parseQuery, resolveListReference } from '../lib/list';
-import { toPaymentIntentDTO } from '../lib/serialize';
+import { toPayerPaymentIntentDTO } from '../lib/serialize';
 import {
   toCheckoutBranding,
   toCheckoutLineItemDTO,
@@ -334,7 +334,7 @@ export async function publicSessionDTO(
     lines,
     merchant: display,
     branding: toCheckoutBranding(merchant, brandingRow),
-    paymentIntent: intent ? toPaymentIntentDTO(intent) : null,
+    paymentIntent: intent ? toPayerPaymentIntentDTO(intent) : null,
     setupIntent: setup,
     discount,
     termsOfServiceUrl: brandingRow.termsOfServiceUrl,

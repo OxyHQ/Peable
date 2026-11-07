@@ -1,0 +1,305 @@
+---
+title: "Risk rules"
+description: "The Risk rules endpoints of the Peable API."
+order: 942
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Risk rules
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/radar/evaluations`](#list-rule-evaluations) | List rule evaluations |
+| [`POST /v1/radar/rules`](#create-a-risk-rule) | Create a risk rule |
+| [`GET /v1/radar/rules`](#list-risk-rules) | List risk rules |
+| [`GET /v1/radar/rules/{id}`](#retrieve-a-risk-rule) | Retrieve a risk rule |
+| [`POST /v1/radar/rules/{id}`](#update-a-risk-rule) | Update a risk rule |
+| [`DELETE /v1/radar/rules/{id}`](#delete-a-risk-rule) | Delete a risk rule |
+
+## List rule evaluations
+
+`GET /v1/radar/evaluations`
+
+Every evaluation in which a rule matched: which rule, its version and the facts it named.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.radar.evaluations.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Only this payment's evaluations (`pi_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [RadarEvaluation](/reference/objects/radar-evaluation) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [RadarEvaluation](/reference/objects/radar-evaluation) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "reval_0193b8f2c1a87d3e9f4a",
+      "object": "radar.evaluation",
+      "livemode": false,
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "phase": "pre_authorization",
+      "decision": "block",
+      "rule": {
+        "id": "rule_0193b8f2c1a87d3e9f4a",
+        "action": "block",
+        "predicate": ":amount: > 100000",
+        "version": 1
+      },
+      "facts": {
+        "amount": "250000"
+      },
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/radar/evaluations"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a risk rule
+
+`POST /v1/radar/rules`
+
+Parsed and checked against the fact registry: a predicate that does not parse is a 400 with `param: predicate` and the position.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.radar.rules.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` **required** | string | One of `allow`, `block`, `review`. |
+| `predicate` **required** | string | Radar's language over the fact registry; see the risk rules guide. 1–1000 characters. |
+| `description` | string | 1–500 characters. |
+| `enabled` | boolean | Default `true`. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [RadarRule](/reference/objects/radar-rule).
+
+```json
+{
+  "id": "rule_0193b8f2c1a87d3e9f4a",
+  "object": "radar.rule",
+  "livemode": false,
+  "action": "block",
+  "predicate": ":currency: = 'EUR' and :amount: > 100000 and :card_country: not in ('ES', 'FR')",
+  "description": "Large euro payments from cards issued outside our markets",
+  "enabled": true,
+  "version": 1,
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List risk rules
+
+`GET /v1/radar/rules`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.radar.rules.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `action` | query | string | One of `allow`, `block`, `review`. |
+| `enabled` | query | boolean |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [RadarRule](/reference/objects/radar-rule) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [RadarRule](/reference/objects/radar-rule) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "rule_0193b8f2c1a87d3e9f4a",
+      "object": "radar.rule",
+      "livemode": false,
+      "action": "block",
+      "predicate": ":currency: = 'EUR' and :amount: > 100000 and :card_country: not in ('ES', 'FR')",
+      "description": "Large euro payments from cards issued outside our markets",
+      "enabled": true,
+      "version": 1,
+      "created": 1793750400,
+      "updated": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/radar/rules"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a risk rule
+
+`GET /v1/radar/rules/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.radar.rules.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The rule (`rule_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [RadarRule](/reference/objects/radar-rule).
+
+```json
+{
+  "id": "rule_0193b8f2c1a87d3e9f4a",
+  "object": "radar.rule",
+  "livemode": false,
+  "action": "block",
+  "predicate": ":currency: = 'EUR' and :amount: > 100000 and :card_country: not in ('ES', 'FR')",
+  "description": "Large euro payments from cards issued outside our markets",
+  "enabled": true,
+  "version": 1,
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a risk rule
+
+`POST /v1/radar/rules/{id}`
+
+A new `action` or `predicate` is a new `version`; `enabled` and `description` are not.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.radar.rules.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The rule (`rule_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` | string | One of `allow`, `block`, `review`. |
+| `predicate` | string | Radar's language over the fact registry; see the risk rules guide. 1–1000 characters. |
+| `description` | string | `""` clears it. At most 500 characters. |
+| `enabled` | boolean |  |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [RadarRule](/reference/objects/radar-rule).
+
+```json
+{
+  "id": "rule_0193b8f2c1a87d3e9f4a",
+  "object": "radar.rule",
+  "livemode": false,
+  "action": "block",
+  "predicate": ":currency: = 'EUR' and :amount: > 100000 and :card_country: not in ('ES', 'FR')",
+  "description": "Large euro payments from cards issued outside our markets",
+  "enabled": true,
+  "version": 1,
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a risk rule
+
+`DELETE /v1/radar/rules/{id}`
+
+Evaluations and reviews keep the rule as it was when it decided.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.radar.rules.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The rule (`rule_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedRadarRule](/reference/objects/deleted-radar-rule).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

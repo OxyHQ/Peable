@@ -13,6 +13,7 @@ import { t } from '@/i18n';
 import { cancellationReasonLabel } from '@/payments/status';
 import { paymentTimeline, type TimelineStep } from '@/payments/timeline';
 import { paymentKeys, usePayment } from '@/payments/usePayments';
+import { PaymentRisk } from '@/radar/RadarParts';
 import { Timestamp } from '@/ui/data';
 import {
   DetailHeader,
@@ -234,6 +235,9 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
             {payment.latest_charge ? (
               <Field label={t('payment.field.charge')} value={idOf(payment.latest_charge)} mono />
             ) : null}
+            {payment.review ? (
+              <Field label={t('payment.field.review')} value={idOf(payment.review)} mono />
+            ) : null}
             {payment.description ? (
               <Field label={t('payment.field.description')} value={payment.description} />
             ) : null}
@@ -267,6 +271,8 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
         <Section title={t('payment.timeline')} description={t('payment.timelineNote')}>
           <Timeline steps={paymentTimeline(payment)} />
         </Section>
+        {/* Risk rules judge the card rail only (ADR 0022 D6): a FairCoin payment has none. */}
+        {payment.rail === 'card' ? <PaymentRisk scope={scope} payment={payment} /> : null}
         <PaymentEvents scope={scope} payment={payment} />
         <Section title={t('payment.metadata')}>
           {metadata.length ? (

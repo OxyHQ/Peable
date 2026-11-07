@@ -45,6 +45,19 @@ export interface ChargeRow {
   readonly applicationFeeAmount: string | null;
   readonly applicationFeePublicId: string | null;
   readonly balanceTransactionPublicId: string | null;
+  /** The payment's review (`prv_…`), when a risk rule opened one (ADR 0022). */
+  readonly reviewPublicId: string | null;
+  /** The risk rule that decided after authorization, as it was (ADR 0022 D4). */
+  readonly radarRule: {
+    readonly id: string;
+    readonly action: 'allow' | 'block' | 'review';
+    readonly predicate: string;
+    readonly version: number;
+  } | null;
+  /** When the post-authorization rules claimed this charge; `null` before. */
+  readonly radarEvaluatedAt: Date | null;
+  /** When the provider snapshot was last read; `null`: never. */
+  readonly syncedAt: Date | null;
   readonly createdAt: Date;
 }
 
@@ -91,6 +104,14 @@ const CHARGE_COLUMNS = {
   balanceTransactionPublicId: sql<string | null>`${sql.raw(
     `(select b.public_id from balance_transactions b where b.source_type = 'charge' and b.source_id = "charges"."public_id" order by b.occurred_at limit 1)`,
   )}`,
+  reviewPublicId: sql<string | null>`${sql.raw(
+    `(select rv.public_id from reviews rv where rv.payment_intent_id = ${INTENT_OF})`,
+  )}`,
+  radarRule: sql<ChargeRow['radarRule']>`${sql.raw(
+    `(select jsonb_build_object('id', e.rule_id, 'action', e.decision, 'predicate', e.rule_predicate, 'version', e.rule_version) from radar_evaluations e where e.payment_intent_id = ${INTENT_OF} and e.phase = 'post_authorization' order by e.id desc limit 1)`,
+  )}`,
+  radarEvaluatedAt: charges.radarEvaluatedAt,
+  syncedAt: charges.syncedAt,
   createdAt: charges.createdAt,
 } as const;
 
@@ -229,4 +250,53 @@ export async function countChargesForMerchant(
 ): Promise<number> {
   const [row] = await db.select({ n: count() }).from(charges).where(chargeListWhere(params));
   return row?.n ?? 0;
+}
+
+/**
+ * The post-authorization risk evaluation's CLAIM (ADR 0022 D3): once per
+ * charge, and only once the provider snapshot it judges has been read. `true`
+ * for the one caller that set it, in the caller's transaction.
+ */
+export async function claimChargeRadarEvaluation(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(charges)
+    .set({ radarEvaluatedAt: sql`date_trunc('milliseconds', now())` })
+    .where(
+      and(
+        eq(charges.paymentIntentId, paymentIntentId),
+        sql`${charges.radarEvaluatedAt} is null`,
+        sql`${charges.syncedAt} is not null`,
+      ),
+    )
+    .returning({ id: charges.id });
+  return rows.length === 1;
+}
+
+/**
+ * Charges the post-authorization rules have not judged yet (ADR 0022 D3): a
+ * judgment that threw, or a snapshot that was never read. Older than a minute
+ * (the ordinary path judges at once) and younger than a day, oldest first.
+ */
+export async function findUnjudgedCharges(
+  db: DatabaseOrTransaction,
+  limit: number,
+): Promise<{ paymentIntentId: string }[]> {
+  return db
+    .select({ paymentIntentId: charges.paymentIntentId })
+    .from(charges)
+    .where(
+      and(
+        sql`${charges.radarEvaluatedAt} is null`,
+        // Only a payment the judgment still applies to: a released
+        // authorization has nothing left to judge.
+        sql`exists (select 1 from payment_intents p where p.id = ${charges.paymentIntentId} and p.status in ('requires_capture', 'succeeded'))`,
+        sql`${charges.createdAt} < now() - interval '1 minute'`,
+        sql`${charges.createdAt} > now() - interval '1 day'`,
+      ),
+    )
+    .orderBy(charges.createdAt)
+    .limit(limit);
 }

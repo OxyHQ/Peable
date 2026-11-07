@@ -1,5 +1,35 @@
 # Changelog
 
+## 6.6.0 — risk rules and reviews
+
+Requires `@peable.to/contracts` 6.5.0 and `@peable.to/shared-types` 6.5.0 (ADR 0022).
+
+Added:
+
+- `peable.radar.rules` — a merchant's Stripe-Radar-like rules on CARD payments:
+  `create`, `retrieve`, `update`, `list`, `del` over `/v1/radar/rules`. A rule
+  (`rule_…`) is `allow` | `block` | `review` and a predicate in Radar's language
+  over a closed fact registry (amount and currency, card country / brand /
+  funding, customer, email, per-customer and per-email velocity, the provider's
+  `risk_level` / `risk_score`); a predicate that does not parse is 400
+  `parameter_invalid` with `param: 'predicate'` and the position. `allow` beats
+  `block` beats `review`. A `block` before authorization declines the attempt
+  like a declined card (`decline_code: 'blocked_by_rule'`, still payable; a
+  blocked create with `confirm: true` answers 402). Payer surfaces show a plain
+  `card_declined` with no `decline_code` and no `review`.
+- `peable.radar.evaluations.list` — every decision a rule made: phase, the rule's
+  id, version and predicate as they were, and the facts it named.
+- `peable.reviews` — `list`, `retrieve`, `approve` (Stripe's) and `refuse`
+  (releases an uncaptured authorization or refunds a captured payment in full).
+- `PaymentIntent.review` and `Charge.review`; `Charge.outcome.risk_score`,
+  `outcome.reason` and `outcome.rule`.
+- Webhook events `review.opened` and `review.closed`, each carrying the Review.
+- Types `RadarRule`, `RadarEvaluation`, `RadarRuleReference`, `Review` and their
+  params; `RADAR_RULE_ACTIONS`, `RADAR_FACTS` (each fact's `type`,
+  `preAuthorization` and `withoutCard`), `RADAR_FACT_NAMES`, `RADAR_LIMITS`,
+  `REVIEW_*` and `RADAR_BLOCK_DECLINE_CODE` in contracts and shared-types.
+- Error codes `review_not_open` and `rule_limit_reached`.
+
 ## 6.5.0 — identity verification
 
 Requires `@peable.to/contracts` 6.4.0 and `@peable.to/shared-types` 6.4.0 (ADR 0023).

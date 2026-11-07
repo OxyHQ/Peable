@@ -393,6 +393,10 @@ export const WEBHOOK_EVENT_DESCRIPTIONS: Readonly<Record<WebhookEventType, strin
   'quote.accepted':
     'A Quote was accepted: its `invoice` (and, for recurring lines, its `subscription`) exists.',
   'quote.canceled': 'A Quote was cancelled, or expired while open.',
+  'review.opened':
+    'A risk rule queued a card payment for review (ADR 0022); a held capture waits for it.',
+  'review.closed':
+    'A review closed: approved, refused (canceled or refunded), or closed by a refund, cancellation or dispute.',
   'tax.assessment.created':
     'A tax compliance assessment was run. Nothing was registered, filed or collected.',
   'tax.review_item.created': 'A tax assessment finding opened a review item.',

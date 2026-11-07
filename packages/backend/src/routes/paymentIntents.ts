@@ -29,7 +29,7 @@ import {
   toShipping,
   updatePaymentIntentParams,
 } from '@peable.to/contracts';
-import type { PaymentIntentStatus } from '@peable.to/shared-types';
+import { RADAR_BLOCK_DECLINE_CODE, type PaymentIntentStatus } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import {
   findMerchantByAppEnvironment,
@@ -70,8 +70,13 @@ import { resolveClientAction } from '../services/clientAction';
 import { applyEvent } from '../services/intentState';
 import { reportFaircoinBroadcast } from '../services/faircoinBroadcast';
 import { confirmCardIntent } from '../services/confirmIntent';
+import {
+  gateBeforeAuthorization,
+  gatesBeforeAuthorization,
+  holdBeforeCapture,
+} from '../services/radar/gates';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
-import { toPaymentIntentDTO } from '../lib/serialize';
+import { toPayerPaymentIntentDTO, toPaymentIntentDTO } from '../lib/serialize';
 import {
   sendError,
   sendProviderError,
@@ -130,6 +135,30 @@ function sendStaleOrMissing(
     'invalid_request_error',
     `the payment intent moved to '${result.current}' while this request was in flight`,
   );
+}
+
+/**
+ * A declined attempt, Stripe's shape: 402 `card_error` carrying the intent as
+ * it now is. `audience: 'payer'` answers as the payer sees it — a rule's
+ * decline is a plain card decline (`toPayerPaymentIntentDTO`).
+ */
+function sendCardDecline(
+  res: Response,
+  intent: PaymentIntentRow,
+  audience: 'merchant' | 'payer',
+): void {
+  const dto = audience === 'payer' ? toPayerPaymentIntentDTO(intent) : toPaymentIntentDTO(intent);
+  const error = dto.last_payment_error;
+  res.status(402).json({
+    error: {
+      type: 'card_error',
+      ...(error?.code ? { code: error.code } : {}),
+      ...(error?.decline_code ? { decline_code: error.decline_code } : {}),
+      message: error?.message ?? 'The payment attempt failed.',
+      payment_intent: dto,
+      request_id: requestIdOf(res) ?? null,
+    },
+  });
 }
 
 /** Stripe's answer for an operation the intent's status does not allow. */
@@ -407,14 +436,46 @@ export function createPaymentIntentsRouter(deps: {
             : {}),
           ...(params.on_behalf_of !== undefined ? { onBehalfOf: params.on_behalf_of } : {}),
         });
+        // The create hands the payer's credential to the merchant, so the
+        // merchant's risk rules judge it here as at `POST …/client_action`
+        // (ADR 0022 D3). A fresh create with `confirm` was judged (and
+        // recorded) in `createIntent`, and a replay never records a second
+        // attempt — but every credential that leaves here is judged.
+        let answered = intent;
+        let credential = clientAction;
+        if (credential && gatesBeforeAuthorization(intent, 'credential')) {
+          const verdict = await gateBeforeAuthorization(
+            intent,
+            {},
+            {
+              record: !reused && params.confirm !== true,
+              point: 'credential',
+            },
+          );
+          if (verdict.kind !== 'proceed') {
+            credential = undefined;
+            if (verdict.kind === 'blocked') answered = verdict.intent;
+            else if (verdict.current) answered = verdict.current;
+          }
+        }
+        // A create with `confirm` that a risk rule declined answers as a
+        // declined confirm does: 402 `card_error` carrying the payment.
+        if (
+          params.confirm === true &&
+          answered.status === 'requires_payment_method' &&
+          answered.lastPaymentError?.decline_code === RADAR_BLOCK_DECLINE_CODE
+        ) {
+          sendCardDecline(res, answered, 'merchant');
+          return;
+        }
         res.status(reused ? 200 : 201).json({
-          ...toPaymentIntentDTO(intent),
-          client_secret: intent.clientSecret,
+          ...toPaymentIntentDTO(answered),
+          client_secret: answered.clientSecret,
           // The card rail's next step for the PAYER's client, present only on
           // that rail and only in this response. Never on the DTO: re-reading an
           // intent tomorrow must not hand out a confirmation credential, and a
           // merchant listing their intents must not receive one per row.
-          ...(clientAction ? { client_action: clientAction } : {}),
+          ...(credential ? { client_action: credential } : {}),
         });
       } catch (err) {
         // Data-integrity firewall (F2.0 task 1a): the address is derived on
@@ -551,8 +612,15 @@ export function createPaymentIntentsRouter(deps: {
          * paid, and `Cache-Control: no-store` so nothing in front of this route
          * keeps a copy.
          */
+        // A read never records an attempt: a payment the merchant's risk rules
+        // would block is answered without the credential, and nothing is
+        // written (ADR 0022 D3).
+        const blockedByRule =
+          gatesBeforeAuthorization(intent, 'credential') &&
+          (await gateBeforeAuthorization(intent, {}, { record: false, point: 'credential' }))
+            .kind === 'blocked';
         const action =
-          intent.rail === 'card'
+          intent.rail === 'card' && !blockedByRule
             ? await resolveClientAction(intent)
             : { kind: 'not_applicable' as const };
         if (action.kind === 'ok') res.setHeader('Cache-Control', 'no-store');
@@ -614,7 +682,7 @@ export function createPaymentIntentsRouter(deps: {
       }
       // A FairCoin payment under a replaced recipient key is never shown to a
       // payer as payable again: it is retired first (ADR 0002, amended 2026-11-06).
-      res.status(200).json(toPaymentIntentDTO(await retireIfNoLongerOffered(intent)));
+      res.status(200).json(toPayerPaymentIntentDTO(await retireIfNoLongerOffered(intent)));
     }),
   );
 
@@ -764,6 +832,35 @@ export function createPaymentIntentsRouter(deps: {
       // Never cached, never revalidated, and never stored by anything in
       // between. The body carries a credential.
       res.setHeader('Cache-Control', 'no-store');
+
+      // Handing out the credential is the last moment before the provider can
+      // authorize, so the merchant's risk rules judge the attempt here (ADR
+      // 0022 D3): the payer has entered no card yet, so only rules over the
+      // amount, the customer and velocity can match. A block is a declined
+      // attempt, answered as one, with no credential.
+      if (gatesBeforeAuthorization(intent, 'credential')) {
+        const verdict = await gateBeforeAuthorization(
+          intent,
+          {},
+          {
+            record: true,
+            point: 'credential',
+          },
+        );
+        if (verdict.kind === 'blocked') {
+          sendCardDecline(res, verdict.intent, 'payer');
+          return;
+        }
+        if (verdict.kind === 'stale') {
+          sendStaleOrMissing(
+            res,
+            verdict.current
+              ? { kind: 'stale', current: verdict.current.status }
+              : { kind: 'missing' },
+          );
+          return;
+        }
+      }
 
       const outcome = await resolveClientAction(intent);
       if (outcome.kind === 'ok') {
@@ -1004,6 +1101,34 @@ export function createPaymentIntentsRouter(deps: {
         : undefined;
       if (!provider || !intent.providerObjectId) {
         sendError(res, 503, 'api_error', 'the card rail cannot reach this payment right now');
+        return;
+      }
+      // The merchant's risk rules judge an authorization before it can be
+      // captured, and an open review holds it (ADR 0022 D3).
+      const hold = await holdBeforeCapture(intent);
+      if (hold.kind === 'unjudged') {
+        sendError(
+          res,
+          503,
+          'api_error',
+          'your risk rules could not judge this payment yet; retry the capture',
+        );
+        return;
+      }
+      if (hold.kind === 'moved') {
+        sendUnexpectedState(res, hold.current, 'captured');
+        return;
+      }
+      if (hold.kind === 'review' || hold.kind === 'blocked') {
+        sendError(
+          res,
+          409,
+          'invalid_request_error',
+          hold.kind === 'review'
+            ? `this payment is held for review (${hold.reviewId}); approve the review before capturing`
+            : 'a risk rule blocked this payment; its authorization is being released',
+          'payment_intent_unexpected_state',
+        );
         return;
       }
 

@@ -1,0 +1,250 @@
+---
+title: "Reviews"
+description: "The Reviews endpoints of the Peable API."
+order: 941
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Reviews
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/reviews`](#list-reviews) | List reviews |
+| [`GET /v1/reviews/{id}`](#retrieve-a-review) | Retrieve a review |
+| [`POST /v1/reviews/{id}/approve`](#approve-a-review) | Approve a review |
+| [`POST /v1/reviews/{id}/refuse`](#refuse-a-review) | Refuse a review |
+
+## List reviews
+
+`GET /v1/reviews`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reviews.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `open` | query | boolean | Only open (`true`) or closed (`false`) reviews. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Review](/reference/objects/review) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Review](/reference/objects/review) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "prv_0193b8f2c1a87d3e9f4a",
+      "object": "review",
+      "livemode": false,
+      "open": true,
+      "reason": "rule",
+      "opened_reason": "rule",
+      "closed_reason": null,
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "charge": "ch_0193b8f2c1a87d3e9f4a",
+      "rule": {
+        "id": "rule_0193b8f2c1a87d3e9f4a",
+        "action": "review",
+        "predicate": ":risk_level: = 'elevated'",
+        "version": 2
+      },
+      "created": 1793750400,
+      "closed_at": null
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/reviews"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `data.charge` → [Charge](/reference/objects/charge)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a review
+
+`GET /v1/reviews/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reviews.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The review (`prv_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Review](/reference/objects/review).
+
+```json
+{
+  "id": "prv_0193b8f2c1a87d3e9f4a",
+  "object": "review",
+  "livemode": false,
+  "open": true,
+  "reason": "rule",
+  "opened_reason": "rule",
+  "closed_reason": null,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "rule": {
+    "id": "rule_0193b8f2c1a87d3e9f4a",
+    "action": "review",
+    "predicate": ":risk_level: = 'elevated'",
+    "version": 2
+  },
+  "created": 1793750400,
+  "closed_at": null
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `charge` → [Charge](/reference/objects/charge)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Approve a review
+
+`POST /v1/reviews/{id}/approve`
+
+Closes it `approved`; a held capture may proceed.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reviews.approve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The review (`prv_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Review](/reference/objects/review).
+
+```json
+{
+  "id": "prv_0193b8f2c1a87d3e9f4a",
+  "object": "review",
+  "livemode": false,
+  "open": true,
+  "reason": "rule",
+  "opened_reason": "rule",
+  "closed_reason": null,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "rule": {
+    "id": "rule_0193b8f2c1a87d3e9f4a",
+    "action": "review",
+    "predicate": ":risk_level: = 'elevated'",
+    "version": 2
+  },
+  "created": 1793750400,
+  "closed_at": null
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `charge` → [Charge](/reference/objects/charge)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Refuse a review
+
+`POST /v1/reviews/{id}/refuse`
+
+Releases an uncaptured authorization (`canceled`) or refunds a captured payment in full (`refunded`, `refunded_as_fraud`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.reviews.refuse()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The review (`prv_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `reason` | string | `fraudulent` closes it `refunded_as_fraud` when the payment was captured. One of `fraudulent`, `requested_by_customer`. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Review](/reference/objects/review).
+
+```json
+{
+  "id": "prv_0193b8f2c1a87d3e9f4a",
+  "object": "review",
+  "livemode": false,
+  "open": true,
+  "reason": "rule",
+  "opened_reason": "rule",
+  "closed_reason": null,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "rule": {
+    "id": "rule_0193b8f2c1a87d3e9f4a",
+    "action": "review",
+    "predicate": ":risk_level: = 'elevated'",
+    "version": 2
+  },
+  "created": 1793750400,
+  "closed_at": null
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `charge` → [Charge](/reference/objects/charge)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

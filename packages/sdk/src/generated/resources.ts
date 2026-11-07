@@ -460,6 +460,136 @@ export interface DisputesResource {
 }
 
 /**
+ * Risk rules: `peable.radar.rules`.
+ */
+export interface RadarRulesResource {
+  /**
+   * Create a risk rule.
+   *
+   * Parsed and checked against the fact registry: a predicate that does not parse is a 400 with `param: predicate` and the position.
+   *
+   * `POST /v1/radar/rules`
+   */
+  create(
+    params: BodyOf<Op<'createRadarRule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createRadarRule'>>>;
+  /**
+   * List risk rules.
+   *
+   * `GET /v1/radar/rules`
+   */
+  list(
+    params?: QueryOf<Op<'listRadarRules'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listRadarRules'>>;
+  /**
+   * Retrieve a risk rule.
+   *
+   * `GET /v1/radar/rules/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveRadarRule'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveRadarRule'>>>;
+  /**
+   * Update a risk rule.
+   *
+   * A new `action` or `predicate` is a new `version`; `enabled` and `description` are not.
+   *
+   * `POST /v1/radar/rules/{id}`
+   */
+  update(
+    id: string,
+    params?: BodyOf<Op<'updateRadarRule'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'updateRadarRule'>>>;
+  /**
+   * Delete a risk rule.
+   *
+   * Evaluations and reviews keep the rule as it was when it decided.
+   *
+   * `DELETE /v1/radar/rules/{id}`
+   */
+  del(id: string, options?: RequestOptions): Promise<ResponseOf<Op<'deleteRadarRule'>>>;
+}
+
+/**
+ * Risk rules: `peable.radar.evaluations`.
+ */
+export interface RadarEvaluationsResource {
+  /**
+   * List rule evaluations.
+   *
+   * Every evaluation in which a rule matched: which rule, its version and the facts it named.
+   *
+   * `GET /v1/radar/evaluations`
+   */
+  list(
+    params?: QueryOf<Op<'listRadarEvaluations'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listRadarEvaluations'>>;
+}
+
+/**
+ * `peable.radar`.
+ */
+export interface RadarResource {
+  readonly rules: RadarRulesResource;
+  readonly evaluations: RadarEvaluationsResource;
+}
+
+/**
+ * Reviews: `peable.reviews`.
+ */
+export interface ReviewsResource {
+  /**
+   * List reviews.
+   *
+   * `GET /v1/reviews`
+   */
+  list(
+    params?: QueryOf<Op<'listReviews'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listReviews'>>;
+  /**
+   * Retrieve a review.
+   *
+   * `GET /v1/reviews/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveReview'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveReview'>>>;
+  /**
+   * Approve a review.
+   *
+   * Closes it `approved`; a held capture may proceed.
+   *
+   * `POST /v1/reviews/{id}/approve`
+   */
+  approve(
+    id: string,
+    params?: BodyOf<Op<'approveReview'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'approveReview'>>>;
+  /**
+   * Refuse a review.
+   *
+   * Releases an uncaptured authorization (`canceled`) or refunds a captured payment in full (`refunded`, `refunded_as_fraud`).
+   *
+   * `POST /v1/reviews/{id}/refuse`
+   */
+  refuse(
+    id: string,
+    params?: BodyOf<Op<'refuseReview'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'refuseReview'>>>;
+}
+
+/**
  * Setup intents: `peable.setupIntents`.
  */
 export interface SetupIntentsResource {
@@ -3226,6 +3356,8 @@ export interface GeneratedResources {
   readonly charges: ChargesResource;
   readonly refunds: RefundsResource;
   readonly disputes: DisputesResource;
+  readonly radar: RadarResource;
+  readonly reviews: ReviewsResource;
   readonly setupIntents: SetupIntentsResource;
   readonly testHelpers: TestHelpersResource;
   readonly checkout: CheckoutResource;
@@ -3672,6 +3804,116 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     path: '/v1/disputes/{disputeId}/settlement',
     pathParams: ['disputeId'],
     input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'radar.rules.create',
+    operationId: 'createRadarRule',
+    method: 'POST',
+    path: '/v1/radar/rules',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'radar.rules.list',
+    operationId: 'listRadarRules',
+    method: 'GET',
+    path: '/v1/radar/rules',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'radar.rules.retrieve',
+    operationId: 'retrieveRadarRule',
+    method: 'GET',
+    path: '/v1/radar/rules/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'radar.rules.update',
+    operationId: 'updateRadarRule',
+    method: 'POST',
+    path: '/v1/radar/rules/{id}',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'radar.rules.del',
+    operationId: 'deleteRadarRule',
+    method: 'DELETE',
+    path: '/v1/radar/rules/{id}',
+    pathParams: ['id'],
+    input: 'none',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'radar.evaluations.list',
+    operationId: 'listRadarEvaluations',
+    method: 'GET',
+    path: '/v1/radar/evaluations',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'reviews.list',
+    operationId: 'listReviews',
+    method: 'GET',
+    path: '/v1/reviews',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'reviews.retrieve',
+    operationId: 'retrieveReview',
+    method: 'GET',
+    path: '/v1/reviews/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reviews.approve',
+    operationId: 'approveReview',
+    method: 'POST',
+    path: '/v1/reviews/{id}/approve',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'reviews.refuse',
+    operationId: 'refuseReview',
+    method: 'POST',
+    path: '/v1/reviews/{id}/refuse',
+    pathParams: ['id'],
+    input: 'body',
     encoding: 'json',
     kind: 'json',
     account: false,
@@ -6200,6 +6442,8 @@ export class GeneratedClient implements GeneratedResources {
   readonly charges: GeneratedResources['charges'];
   readonly refunds: GeneratedResources['refunds'];
   readonly disputes: GeneratedResources['disputes'];
+  readonly radar: GeneratedResources['radar'];
+  readonly reviews: GeneratedResources['reviews'];
   readonly setupIntents: GeneratedResources['setupIntents'];
   readonly testHelpers: GeneratedResources['testHelpers'];
   readonly checkout: GeneratedResources['checkout'];
@@ -6248,6 +6492,8 @@ export class GeneratedClient implements GeneratedResources {
     this.charges = tree.charges;
     this.refunds = tree.refunds;
     this.disputes = tree.disputes;
+    this.radar = tree.radar;
+    this.reviews = tree.reviews;
     this.setupIntents = tree.setupIntents;
     this.testHelpers = tree.testHelpers;
     this.checkout = tree.checkout;

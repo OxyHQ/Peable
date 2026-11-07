@@ -23,6 +23,7 @@ export function intentFixture(overrides: Partial<PaymentIntent> = {}): PaymentIn
     customer: null,
     payment_method: null,
     latest_charge: null,
+    review: null,
     next_action: null,
     last_payment_error: null,
     cancellation_reason: null,

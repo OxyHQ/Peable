@@ -1,0 +1,49 @@
+---
+title: "RadarRule"
+description: "The radar.rule object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# RadarRule
+
+Object type: `radar.rule`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"radar.rule"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `action` | string | What a match does. Precedence: `allow` beats `block` beats `review`. |
+| `predicate` | string | The condition, in Radar's language: `:amount: > 100000 and :card_country: not in ('US', 'CA')`. |
+| `description` | string \| null |  |
+| `enabled` | boolean |  |
+| `version` | integer | Moves on every change of `action` or `predicate`; evaluations name it. At least -9007199254740991. |
+| `created` | integer | Unix seconds. |
+| `updated` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "rule_0193b8f2c1a87d3e9f4a",
+  "object": "radar.rule",
+  "livemode": false,
+  "action": "block",
+  "predicate": ":currency: = 'EUR' and :amount: > 100000 and :card_country: not in ('ES', 'FR')",
+  "description": "Large euro payments from cards issued outside our markets",
+  "enabled": true,
+  "version": 1,
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/radar/rules`](/reference/risk-rules#create-a-risk-rule) — Create a risk rule
+- [`GET /v1/radar/rules`](/reference/risk-rules#list-risk-rules) — List risk rules
+- [`GET /v1/radar/rules/{id}`](/reference/risk-rules#retrieve-a-risk-rule) — Retrieve a risk rule
+- [`POST /v1/radar/rules/{id}`](/reference/risk-rules#update-a-risk-rule) — Update a risk rule

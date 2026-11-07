@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { catalogFor, FALLBACK_LOCALE, getLocale, setLocale, SUPPORTED_LOCALES, t } from './i18n';
 import { MONEY_EN, MONEY_ES } from './money/strings';
+import { RADAR_EN, RADAR_ES } from './radar/strings';
 import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
@@ -61,6 +62,7 @@ describe('catalogs', () => {
     for (const [english, spanish] of [
       [MONEY_EN, MONEY_ES],
       [ORBIT_EN, ORBIT_ES],
+      [RADAR_EN, RADAR_ES],
     ] as const) {
       expect(Object.keys(spanish).sort()).toEqual(Object.keys(english).sort());
     }

@@ -848,6 +848,27 @@
       "when": 1794034735776,
       "tag": "0120_identity_verification_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1794036952083,
+      "tag": "0121_risk_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1794036953719,
+      "tag": "0122_payment_intents_customer_created_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1794036956602,
+      "tag": "0123_risk_rules_validate",
+      "breakpoints": true
     }
   ]
 }

@@ -57,6 +57,10 @@ const WRITE_RULES: readonly (readonly [RegExp, DashboardAction])[] = [
   [/^\/reporting\/report_runs$/, 'read'],
   // A schedule is standing configuration that mails people in the merchant's name.
   [/^\/reporting\/report_schedules(\/|$)/, 'configure'],
+  // Risk rules (ADR 0022): validating and previewing a predicate write nothing;
+  // every rule and review write decides which money is accepted.
+  [/^\/radar\/rules\/(validate|preview)$/, 'read'],
+  [/^\/(radar|reviews)(\/|$)/, 'money'],
   // A contribution link is a payment link.
   [/^\/contributions(\/|$)/, 'configure'],
 ];

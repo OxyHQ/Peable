@@ -1131,3 +1131,49 @@ otherwise undo:
 - **Migrations `0119`–`0120`.** `0119` the two tables and the widened
   `events_type_check` / `webhook_endpoints_enabled_events_check` `NOT VALID`;
   `0120` (post) validates them.
+
+## Risk rules and reviews (ADR 0022)
+
+`radar_rules`, `radar_evaluations`, `reviews` (`schema/radar.ts`) and
+`charges.radar_evaluated_at`. Decisions a reader would otherwise undo:
+
+- **A predicate is text, stored as written and never put in a statement.** It
+  is compiled before every write (`services/radar/rules.ts`) and at every
+  evaluation; `radar_rules_predicate_length_check` is the only CHECK on it —
+  the grammar lives in one module, not in SQL.
+- **No `livemode` column.** A merchant row is one mode (ADR 0017): the test and
+  live rule sets are different merchants' rows, read through
+  `merchantLivemodeOf` like every other child table.
+- **Evaluations and reviews COPY the deciding rule** (id, version, action,
+  predicate) instead of referencing it: a rule can be edited or deleted, and
+  the explanation of a decline must stay the rule as it was. Hence no foreign
+  key from either to `radar_rules`, and `reviews_rule_shape_check` keeps the
+  four columns all-or-none. `radar_evaluations.decision` IS the rule's action.
+- **Only the facts the deciding rule names are stored**, as strings — never
+  more card data than `charges` already holds.
+- **One review per payment** (`reviews_payment_intent_id_key`), opened with
+  `ON CONFLICT DO NOTHING`, so two judgments cannot open two.
+- **Open ⇔ `closed_reason is null`**, and `reviews_closed_shape_check` ties
+  `closed_at` to it, forbids a pending claim on a closed review and a lease
+  without a claim. `pending_closed_reason` is a refusal's CLAIM (a CAS on open +
+  no LIVE claim) and `pending_closed_until` its lease (10 minutes; NULL while a
+  refund it started is pending — held until the refund settles). An approval
+  requires no live claim; a cancellation, refund or dispute closes over it,
+  because the money already moved; `refund.failed` lets it go.
+- **`charges.radar_evaluated_at` is the once-per-charge CLAIM** of the
+  post-authorization judgment, set by one guarded `UPDATE` that also requires
+  `synced_at` — the facts it judges are the snapshot's. `charges` is not a hot
+  table, and the column is nullable without a default (no rewrite). The
+  migration that adds it marks every existing charge judged
+  (`coalesce(synced_at, created_at)`): a rule never reaches back into payments
+  authorized before rules existed.
+- **Velocity reads `payment_intents_customer_id_created_at_idx`** — the
+  customer, then the seven-day window as a range — and the customers by email
+  through `(merchant_id, lower(email))` (at most 100), each side capped at
+  10,000 rows. `receipt_email` is not indexed and is not read.
+- **Migrations `0121`–`0123`.** `0121`: new tables, the charge column and its
+  backfill, plus `events_type_check`, `events_intent_event_has_intent_check`
+  and `webhook_endpoints_enabled_events_check` widened for
+  `review.opened|closed` — re-added `NOT VALID` by hand. `0122`: the velocity
+  index on the hot `payment_intents`, alone and `IF NOT EXISTS` (build it
+  CONCURRENTLY out of band first). `0123` (`post`) validates the CHECKs.

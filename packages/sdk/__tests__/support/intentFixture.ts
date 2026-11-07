@@ -24,6 +24,7 @@ export function paymentIntentFixture(overrides: Partial<PaymentIntent> = {}): Pa
     customer: null,
     payment_method: null,
     latest_charge: null,
+    review: null,
     next_action: {
       type: 'faircoin_payment',
       faircoin_payment: {

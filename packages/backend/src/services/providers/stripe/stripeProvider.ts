@@ -1173,6 +1173,8 @@ export class StripePaymentProvider
         ? {
             networkStatus: outcome.network_status ?? null,
             riskLevel: outcome.risk_level ?? null,
+            riskScore: outcome.risk_score ?? null,
+            reason: outcome.reason ?? null,
             type: outcome.type ?? null,
           }
         : null,

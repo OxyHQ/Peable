@@ -128,7 +128,12 @@ describe('navModel', () => {
       'tax-group',
       'contributions',
     ]);
-    expect(products?.rows[0]?.children?.map((row) => row.key)).toEqual(['disputes', 'links']);
+    expect(products?.rows[0]?.children?.map((row) => row.key)).toEqual([
+      'disputes',
+      'radar',
+      'reviews',
+      'links',
+    ]);
     // The Tax workspace (ADR 0020): its overview first, collection last.
     expect(products?.rows[4]?.children?.map((row) => row.key)).toEqual([
       'tax',
@@ -180,6 +185,8 @@ describe('navModel', () => {
 
   it('knows which group holds a page', () => {
     expect(groupOf('disputes')).toBe('payments-group');
+    expect(groupOf('radar')).toBe('payments-group');
+    expect(groupOf('reviews')).toBe('payments-group');
     expect(groupOf('invoices')).toBe('billing');
     expect(groupOf('tax')).toBe('tax-group');
     expect(groupOf('tax-review')).toBe('tax-group');
@@ -199,5 +206,10 @@ describe('pages inside a destination', () => {
     expect(activeDestination('/developers/logs/req_1')?.key).toBe('developers');
     expect(activeDestination('/billing')?.key).toBe('billing-settings');
     expect(activeDestination('/connect/acct_1')?.key).toBe('connect');
+    // A rule and a review light up their destinations and lead back to them.
+    expect(activeDestination('/radar/new')?.key).toBe('radar');
+    expect(breadcrumbTrail('/radar/rule_1', 'Risk rule')[0]?.href).toBe('/radar');
+    expect(activeDestination('/reviews/prv_1')?.key).toBe('reviews');
+    expect(breadcrumbTrail('/reviews/prv_1', 'Review')[0]?.href).toBe('/reviews');
   });
 });

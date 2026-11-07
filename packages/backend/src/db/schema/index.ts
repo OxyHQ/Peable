@@ -102,3 +102,4 @@ export {
   oxyFileReferenceSyncs,
 } from './oxyFiles';
 export { reportRuns, reportSchedules } from './reporting';
+export { radarEvaluations, radarRules, reviews } from './radar';

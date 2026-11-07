@@ -376,6 +376,9 @@ export const WEBHOOK_EVENT_SCOPES = {
   'quote.finalized': 'merchant',
   'quote.accepted': 'merchant',
   'quote.canceled': 'merchant',
+  // Risk rules (ADR 0022): a review is about one card payment.
+  'review.opened': 'intent',
+  'review.closed': 'intent',
   // Peable Tax business compliance (ADR 0020): about the merchant's own
   // assessments and review queue.
   'tax.assessment.created': 'merchant',
@@ -525,6 +528,15 @@ export {
   VERIFICATION_REDACTION_STATUSES,
   VERIFICATION_SESSION_STATUSES,
   VERIFICATION_SESSION_TYPES,
+} from '@peable.to/shared-types';
+
+/** Risk rules and reviews (ADR 0022), re-exported from the wire contract. */
+export {
+  RADAR_EVALUATION_PHASES,
+  RADAR_LIMITS,
+  RADAR_RULE_ACTIONS,
+  REVIEW_CLOSED_REASONS,
+  REVIEW_OPENED_REASONS,
 } from '@peable.to/shared-types';
 
 /** The kinds of invoice line (`invoice_line_items.type`). */

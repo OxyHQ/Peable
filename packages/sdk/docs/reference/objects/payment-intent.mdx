@@ -31,6 +31,7 @@ Object type: `payment_intent`.
 | `customer` | string \| [Customer](/reference/objects/customer) \| null | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
 | `payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | `pm_…`, or the PaymentMethod with `expand[]=payment_method`. Card only. Expandable. |
 | `latest_charge` | string \| [Charge](/reference/objects/charge) \| null | `ch_…`, or the Charge with `expand[]=latest_charge`. Card only. Expandable. |
+| `review` | string \| [Review](/reference/objects/review) \| null | `prv_…` once a risk rule queued this payment for review (ADR 0022), or the Review. Card only. Expandable. |
 | `next_action` | [PaymentIntentNextAction](/reference/objects/payment-intent-next-action) \| null |  |
 | `last_payment_error` | [PaymentError](/reference/objects/payment-error) \| null |  |
 | `cancellation_reason` | string \| null | One of `abandoned`, `automatic`, `duplicate`, `faircoin_network_closed`, `fraudulent`, `recipient_key_changed`, `requested_by_customer`, `underpaid`. |
@@ -60,6 +61,7 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
 - `customer` → [Customer](/reference/objects/customer)
 - `payment_method` → [PaymentMethod](/reference/objects/payment-method)
 - `latest_charge` → [Charge](/reference/objects/charge)
+- `review` → [Review](/reference/objects/review)
 - `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
 
 ## Example
@@ -85,6 +87,7 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
   "customer": null,
   "payment_method": null,
   "latest_charge": null,
+  "review": null,
   "next_action": {
     "type": "faircoin_payment",
     "faircoin_payment": {
@@ -164,4 +167,4 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
 
 ## Used in
 
-[Charge](/reference/objects/charge) · [CheckoutSession](/reference/objects/checkout-session) · [CheckoutSessionPublic](/reference/objects/checkout-session-public) · [Dispute](/reference/objects/dispute) · [Error](/reference/objects/error) · [Event](/reference/objects/event) · [Invoice](/reference/objects/invoice) · [Refund](/reference/objects/refund) · [Settlement](/reference/objects/settlement) · [Transfer](/reference/objects/transfer) · [TransferWithReversal](/reference/objects/transfer-with-reversal)
+[Charge](/reference/objects/charge) · [CheckoutSession](/reference/objects/checkout-session) · [CheckoutSessionPublic](/reference/objects/checkout-session-public) · [Dispute](/reference/objects/dispute) · [Error](/reference/objects/error) · [Event](/reference/objects/event) · [Invoice](/reference/objects/invoice) · [RadarEvaluation](/reference/objects/radar-evaluation) · [Refund](/reference/objects/refund) · [Review](/reference/objects/review) · [Settlement](/reference/objects/settlement) · [Transfer](/reference/objects/transfer) · [TransferWithReversal](/reference/objects/transfer-with-reversal)

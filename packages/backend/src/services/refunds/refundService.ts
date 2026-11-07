@@ -6,6 +6,8 @@
  * sum of succeeded refund rows. A stored total on the payment would be a second
  * home for the same fact, and the two disagree the first time a write is lost.
  */
+import { closeReviewIn } from '../radar/reviewEvents';
+import { releaseReviewClose } from '../../db/radar/radarRepository';
 import type { CurrencyCode, RefundReason } from '@peable.to/shared-types';
 import {
   findRefundByPublicId,
@@ -350,11 +352,20 @@ export async function emitRefundEvents(
     return;
   } else if (refund.status === 'failed') {
     await recordRefundEvent(tx, intent, dto, 'refund.failed');
+    // A refusal waiting on this refund lets go of its claim: the review is
+    // open again, to approve or refuse anew (ADR 0022 D5).
+    await releaseReviewClose(tx, { paymentIntentId: intent.id }, ['refunded', 'refunded_as_fraud']);
     return;
   } else {
     await recordRefundEvent(tx, intent, dto, 'refund.updated');
   }
   if (refund.status === 'succeeded') {
+    // Money went back: the payment's open review is over (ADR 0022 D5).
+    await closeReviewIn(
+      tx,
+      intent,
+      refund.reason === 'fraudulent' ? 'refunded_as_fraud' : 'refunded',
+    );
     const charge = await findChargeForIntent(tx, intent.id);
     if (charge) await recordChargeEvent(tx, intent, toChargeDTO(charge), 'charge.refunded');
   }

@@ -12,6 +12,7 @@ import { updateChargeSnapshot } from '../db/payments/chargeRepository';
 import { linkProviderCharge, type PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import { isChargeReadingProvider } from './providers/provider';
 import { selectStoredProvider } from './providers/environmentGuard';
+import { judgeAuthorization } from './radar/gates';
 
 export async function syncChargeSnapshot(
   intent: PaymentIntentRow,
@@ -30,7 +31,11 @@ export async function syncChargeSnapshot(
     await updateChargeSnapshot(db, intent.id, snapshot);
   } catch {
     // Best-effort: the next `charge.*` event or reconciliation reads it again.
+    return;
   }
+  // The snapshot is what the post-authorization rules judge (ADR 0022 D3):
+  // the first read of it claims the judgment. Never throws.
+  await judgeAuthorization(intent.id);
 }
 
 /**

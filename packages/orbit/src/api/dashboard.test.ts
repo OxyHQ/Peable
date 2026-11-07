@@ -324,6 +324,71 @@ describe('disputes', () => {
   });
 });
 
+describe('risk rules and reviews (ADR 0022)', () => {
+  const list = () => ({ object: 'list', data: [], has_more: false });
+
+  it('lists, writes, validates and previews rules under the scope', async () => {
+    answer = (call) => (call.method === 'GET' && call.path.includes('/rules?') ? list() : {});
+    await api.radar.rules.list(live, { action: 'block', enabled: true, limit: 50 });
+    await api.radar.rules.retrieve(live, 'rule_1');
+    await api.radar.rules.create(live, { action: 'review', predicate: ':amount: > 100' });
+    await api.radar.rules.update(live, 'rule/1', { enabled: false, description: '' });
+    await api.radar.rules.delete(live, 'rule_1');
+    await api.radar.rules.validate(live, ":card_country: = 'US'");
+    await api.radar.rules.preview(live, ':amount: > 100');
+    const rules = '/v1/dashboard/applications/app_live/radar/rules';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', `${rules}?environment=production&action=block&enabled=true&limit=50`, undefined],
+      ['GET', `${rules}/rule_1?environment=production`, undefined],
+      [
+        'POST',
+        `${rules}?environment=production`,
+        { action: 'review', predicate: ':amount: > 100' },
+      ],
+      ['POST', `${rules}/rule%2F1?environment=production`, { enabled: false, description: '' }],
+      ['DELETE', `${rules}/rule_1?environment=production`, undefined],
+      // The editor's two read-only routes: never `rules/:id`.
+      ['POST', `${rules}/validate?environment=production`, { predicate: ":card_country: = 'US'" }],
+      ['POST', `${rules}/preview?environment=production`, { predicate: ':amount: > 100' }],
+    ]);
+  });
+
+  it("lists a payment's evaluations", async () => {
+    answer = list;
+    await api.radar.evaluations.list(scope, { payment_intent: 'pi_1', limit: 100 });
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      ['GET', `${base}/radar/evaluations?environment=development&payment_intent=pi_1&limit=100`],
+    ]);
+  });
+
+  it('reads the queue with each payment expanded, and approves and refuses with the bodies the contract takes', async () => {
+    answer = (call) => (call.path.includes('/reviews?') ? list() : { id: 'prv_1' });
+    await api.reviews.list(scope, { open: true, limit: 25 });
+    await api.reviews.list(scope, { open: false });
+    await api.reviews.retrieve(scope, 'prv_1');
+    await api.reviews.approve(scope, 'prv_1');
+    await api.reviews.refuse(scope, 'prv_1', { reason: 'fraudulent' });
+    await api.reviews.refuse(scope, 'prv_1');
+    const reviews = `${base}/reviews`;
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      [
+        'GET',
+        `${reviews}?environment=development&open=true&limit=25&expand%5B%5D=data.payment_intent`,
+        undefined,
+      ],
+      [
+        'GET',
+        `${reviews}?environment=development&open=false&expand%5B%5D=data.payment_intent`,
+        undefined,
+      ],
+      ['GET', `${reviews}/prv_1?environment=development&expand%5B%5D=payment_intent`, undefined],
+      ['POST', `${reviews}/prv_1/approve?environment=development`, {}],
+      ['POST', `${reviews}/prv_1/refuse?environment=development`, { reason: 'fraudulent' }],
+      ['POST', `${reviews}/prv_1/refuse?environment=development`, {}],
+    ]);
+  });
+});
+
 describe('files', () => {
   it('uploads as a form with the purpose and the file, never as JSON', async () => {
     answer = () => ({ id: 'file_1', object: 'file' });

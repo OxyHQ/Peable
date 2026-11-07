@@ -7,7 +7,7 @@ import { resolveClientIp, verifySecret } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import { findIntentByPublicId } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
-import { toPaymentIntentDTO } from '../lib/serialize';
+import { toPayerPaymentIntentDTO } from '../lib/serialize';
 
 /** Realtime room a single intent's updates are broadcast to. */
 export function intentRoom(id: string): string {
@@ -380,5 +380,5 @@ export function initPayerSocket(io: Server): void {
  * error and no unit test of either function alone would show.
  */
 export function emitIntentUpdate(io: Server, intent: PaymentIntentRow): void {
-  io.to(intentRoom(intent.publicId)).emit('intent.updated', toPaymentIntentDTO(intent));
+  io.to(intentRoom(intent.publicId)).emit('intent.updated', toPayerPaymentIntentDTO(intent));
 }

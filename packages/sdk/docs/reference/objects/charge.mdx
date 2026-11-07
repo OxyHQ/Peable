@@ -28,6 +28,7 @@ Object type: `charge`.
 | `captured` | boolean |  |
 | `refunded` | boolean | All of it came back — by refunds, or by releasing an uncaptured authorization. |
 | `disputed` | boolean |  |
+| `review` | string \| [Review](/reference/objects/review) \| null | `prv_…` while a review exists, or the Review. Expandable. |
 | `outcome` | [ChargeOutcome](/reference/objects/charge-outcome) \| null |  |
 | `billing_details` | [BillingDetails](/reference/objects/billing-details) \| null | Who the card's billing details name, as the provider reported them; `null` until the provider snapshot is read. |
 | `payment_method_details` | object \| null |  |
@@ -49,6 +50,7 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
 - `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
 - `customer` → [Customer](/reference/objects/customer)
 - `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `review` → [Review](/reference/objects/review)
 
 ## Example
 
@@ -69,11 +71,15 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
   "captured": true,
   "refunded": false,
   "disputed": false,
+  "review": null,
   "outcome": {
     "network_status": "approved_by_network",
     "risk_level": "normal",
     "type": "authorized",
-    "seller_message": "Payment complete."
+    "seller_message": "Payment complete.",
+    "risk_score": 12,
+    "reason": null,
+    "rule": null
   },
   "billing_details": null,
   "payment_method_details": {
@@ -110,4 +116,4 @@ Each is an id unless you ask for the object with `expand[]`; expansion resolves 
 
 ## Used in
 
-[Dispute](/reference/objects/dispute) · [Event](/reference/objects/event) · [PaymentIntent](/reference/objects/payment-intent)
+[Dispute](/reference/objects/dispute) · [Event](/reference/objects/event) · [PaymentIntent](/reference/objects/payment-intent) · [Review](/reference/objects/review)

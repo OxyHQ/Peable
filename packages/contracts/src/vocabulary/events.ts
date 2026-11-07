@@ -125,6 +125,8 @@ export const WEBHOOK_EVENT_OBJECTS = {
   'quote.finalized': 'quote',
   'quote.accepted': 'quote',
   'quote.canceled': 'quote',
+  'review.opened': 'review',
+  'review.closed': 'review',
   'tax.assessment.created': 'tax.assessment',
   'tax.review_item.created': 'tax.review_item',
   'tax.review_item.updated': 'tax.review_item',

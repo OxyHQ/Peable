@@ -23,6 +23,7 @@ import {
 import { getDb } from '../db/postgres';
 import { ensureProviderCustomer } from './customers/providerCustomer';
 import { applyProviderPaymentResult } from './intentReconciliation';
+import { gateBeforeAuthorization } from './radar/gates';
 import { selectStoredProvider } from './providers/environmentGuard';
 
 export type ConfirmOutcome =
@@ -47,6 +48,16 @@ export async function confirmCardIntent(input: {
     ? selectStoredProvider(intent.provider, intent.livemode)
     : undefined;
   if (!provider || !intent.providerObjectId) return { kind: 'unavailable' };
+  // The merchant's risk rules judge the attempt BEFORE the provider is asked
+  // (ADR 0022 D3), with the saved card's facts. A block is a declined attempt
+  // on the row, answered like any decline.
+  const verdict = await gateBeforeAuthorization(
+    intent,
+    { card: paymentMethod.card },
+    { record: true, point: 'server_confirm' },
+  );
+  if (verdict.kind === 'blocked') return { kind: 'confirmed', intent: verdict.intent };
+  if (verdict.kind === 'stale') return { kind: 'stale', current: verdict.current };
   const db = getDb();
   const prepared = await setIntentPaymentMethod(db, intent.id, intent.status, {
     paymentMethodId: paymentMethod.id,

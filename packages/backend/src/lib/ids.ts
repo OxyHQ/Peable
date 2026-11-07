@@ -85,7 +85,11 @@ export function newId(
     | 'recon'
     // Reporting: a report run (Stripe's `frr_`) and a report schedule.
     | 'frr'
-    | 'frs',
+    | 'frs'
+    // Risk rules (ADR 0022): a rule, an evaluation that matched, a review (Stripe's `prv_`).
+    | 'rule'
+    | 'reval'
+    | 'prv',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

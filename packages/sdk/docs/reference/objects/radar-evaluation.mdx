@@ -1,0 +1,57 @@
+---
+title: "RadarEvaluation"
+description: "The radar.evaluation object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# RadarEvaluation
+
+Object type: `radar.evaluation`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"radar.evaluation"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | `pi_…`, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `phase` | string | `pre_authorization`: before the provider was asked (a confirm, or handing out the payer credential). `post_authorization`: once, when the charge was first read. |
+| `decision` | string | What the rule set decided. One of `allow`, `block`, `review`. |
+| `rule` | [RadarRuleReference](/reference/objects/radar-rule-reference) | The rule that decided, as it was. |
+| `facts` | map of string or null | The values of the facts that rule names when it was judged (integers as base-10 strings); `null` is unknown. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+## Example
+
+```json
+{
+  "id": "reval_0193b8f2c1a87d3e9f4a",
+  "object": "radar.evaluation",
+  "livemode": false,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "phase": "pre_authorization",
+  "decision": "block",
+  "rule": {
+    "id": "rule_0193b8f2c1a87d3e9f4a",
+    "action": "block",
+    "predicate": ":amount: > 100000",
+    "version": 1
+  },
+  "facts": {
+    "amount": "250000"
+  },
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/radar/evaluations`](/reference/risk-rules#list-rule-evaluations) — List rule evaluations
