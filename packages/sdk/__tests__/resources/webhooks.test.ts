@@ -49,6 +49,30 @@ const VERIFICATION_SESSION = {
   created: 1_700_000_000,
 };
 
+/** A reader as an event carries it: its action, codes only (ADR 0024). */
+const TERMINAL_READER = {
+  id: 'tmr_fixture',
+  object: 'terminal.reader' as const,
+  livemode: false,
+  label: 'Front counter',
+  device_type: 'simulated_wisepos_e',
+  serial_number: 'SN-1',
+  status: 'online' as const,
+  last_seen_at: 1_700_000_000,
+  location: 'tml_fixture',
+  action: {
+    type: 'process_payment_intent' as const,
+    status: 'succeeded' as const,
+    failure_code: null,
+    failure_message: null,
+    process_payment_intent: {
+      payment_intent: 'pi_fixture',
+      process_config: { enable_customer_cancellation: false, skip_tipping: true as const },
+    },
+  },
+  metadata: {},
+};
+
 const SECRET = 'whsec_test_secret';
 const TIMESTAMP = 1700000000;
 
@@ -636,6 +660,16 @@ const payloads = {
     last_error: { code: 'document_expired', reason: 'The identity document has expired.' },
   },
   'identity.verification_session.canceled': { ...VERIFICATION_SESSION, status: 'canceled' },
+  'terminal.reader.action_succeeded': TERMINAL_READER,
+  'terminal.reader.action_failed': {
+    ...TERMINAL_READER,
+    action: {
+      ...TERMINAL_READER.action,
+      status: 'failed',
+      failure_code: 'card_declined',
+      failure_message: 'The card was declined.',
+    },
+  },
   'identity.verification_session.redacted': {
     ...VERIFICATION_SESSION,
     status: 'canceled',

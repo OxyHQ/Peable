@@ -35,6 +35,7 @@ import { RiRepeatLine } from '@oxy.so/bloom/icons/RiRepeatLine';
 import { RiReceiptLine } from '@oxy.so/bloom/icons/RiReceiptLine';
 import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
 import { RiShieldUserLine } from '@oxy.so/bloom/icons/RiShieldUserLine';
+import { RiSmartphoneLine } from '@oxy.so/bloom/icons/RiSmartphoneLine';
 import { RiStore2Line } from '@oxy.so/bloom/icons/RiStore2Line';
 import { RiTerminalBoxLine } from '@oxy.so/bloom/icons/RiTerminalBoxLine';
 import { RiWallet3Line } from '@oxy.so/bloom/icons/RiWallet3Line';
@@ -54,6 +55,7 @@ export const ORBIT_ICONS: Record<OrbitDestinationKey | OrbitNavGroupKey, OrbitGl
   radar: RiShieldLine,
   reviews: RiEyeLine,
   links: RiLinksLine,
+  terminal: RiSmartphoneLine,
   subscriptions: RiRepeatLine,
   invoices: RiFileList3Line,
   quotes: RiDraftLine,

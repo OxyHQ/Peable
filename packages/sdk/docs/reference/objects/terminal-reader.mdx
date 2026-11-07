@@ -1,0 +1,81 @@
+---
+title: "TerminalReader"
+description: "The terminal.reader object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TerminalReader
+
+Object type: `terminal.reader`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"terminal.reader"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `label` | string | Your name for the reader. |
+| `device_type` | string | The provider's device type (`stripe_s700`, `bbpos_wisepos_e`, `simulated_wisepos_e`, …). |
+| `serial_number` | string |  |
+| `status` | string \| null | Whether the provider last saw it online; refreshed on a retrieve. One of `online`, `offline`. |
+| `last_seen_at` | integer \| null | When the provider last heard from it. |
+| `location` | string \| [TerminalLocation](/reference/objects/terminal-location) \| null | The location (`tml_…`) it is registered to, or the TerminalLocation with `expand[]=location`. Expandable. |
+| `action` | [TerminalReaderAction](/reference/objects/terminal-reader-action) \| null | The PaymentIntent collection it is doing, or last did; `null` before the first. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `location` → [DeletedTerminalLocation](/reference/objects/deleted-terminal-location)
+
+## Example
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
+}
+```
+
+## Returned by
+
+- [`POST /v1/terminal/readers`](/reference/terminal#register-a-reader) — Register a reader
+- [`GET /v1/terminal/readers`](/reference/terminal#list-readers) — List readers
+- [`GET /v1/terminal/readers/{id}`](/reference/terminal#retrieve-a-reader) — Retrieve a reader
+- [`POST /v1/terminal/readers/{id}`](/reference/terminal#update-a-reader) — Update a reader
+- [`POST /v1/terminal/readers/{id}/cancel_action`](/reference/terminal#cancel-the-readers-action) — Cancel the reader’s action
+- [`POST /v1/terminal/readers/{id}/process_payment_intent`](/reference/terminal#collect-a-paymentintent-on-a-reader) — Collect a PaymentIntent on a reader
+- [`POST /v1/test_helpers/terminal/readers/{id}/present_payment_method`](/reference/test-helpers#present-a-card-to-a-simulated-reader) — Present a card to a simulated reader
+
+## Events
+
+- [`terminal.reader.action_failed`](/reference/webhook-events#terminalreaderaction_failed)
+- [`terminal.reader.action_succeeded`](/reference/webhook-events#terminalreaderaction_succeeded)
+
+## Used in
+
+[Event](/reference/objects/event)

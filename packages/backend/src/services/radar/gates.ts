@@ -92,12 +92,24 @@ const GATED_FROM: Readonly<Record<PreAuthorizationPoint, readonly PaymentIntentS
   server_confirm: ['requires_payment_method', 'requires_confirmation', 'requires_action'],
 };
 
+/**
+ * A card collected by a Terminal reader (ADR 0024 D8): merchant risk rules do
+ * not evaluate it — before authorization, after it, or at capture. Stripe
+ * Radar does not screen card-present payments either, and a rule written for
+ * an online payer has no point on a reader the merchant operates.
+ */
+export function isCardPresent(intent: Pick<PaymentIntentRow, 'paymentMethodTypes'>): boolean {
+  return intent.paymentMethodTypes?.includes('card_present') === true;
+}
+
 /** Whether a payment can be judged before authorization at this point. */
 export function gatesBeforeAuthorization(
   intent: PaymentIntentRow,
   point: PreAuthorizationPoint,
 ): boolean {
-  return intent.rail === 'card' && GATED_FROM[point].includes(intent.status);
+  return (
+    intent.rail === 'card' && !isCardPresent(intent) && GATED_FROM[point].includes(intent.status)
+  );
 }
 
 /**
@@ -218,8 +230,10 @@ async function judge(intentId: string): Promise<void> {
   if (intent.status !== 'requires_capture' && intent.status !== 'succeeded') return;
   const charge = await findChargeForIntent(db, intent.id);
   if (!charge || charge.radarEvaluatedAt !== null) return;
-  // Wallets are cards; anything else on the card rail is not judged.
-  const isCard = charge.paymentMethodDetails?.type === 'card';
+  // Wallets are cards; anything else on the card rail is not judged — and a
+  // card_present payment never is (ADR 0024 D8), whatever its snapshot holds.
+  // Its charge is still CLAIMED below, so the judge sweep does not keep it.
+  const isCard = charge.paymentMethodDetails?.type === 'card' && !isCardPresent(intent);
   const decision = isCard ? await evaluateRules(intent, 'post_authorization', { charge }) : null;
 
   const opened = await db.transaction(async (tx) => {
@@ -314,7 +328,7 @@ export type CaptureHold =
  * merchant cannot capture ahead of their own rules, nor while a review is open.
  */
 export async function holdBeforeCapture(intent: PaymentIntentRow): Promise<CaptureHold> {
-  if (intent.rail !== 'card') return { kind: 'clear' };
+  if (intent.rail !== 'card' || isCardPresent(intent)) return { kind: 'clear' };
   const db = getDb();
   let charge = await findChargeForIntent(db, intent.id);
   if (charge && charge.radarEvaluatedAt === null && (await hasEnabledRules(intent.merchantId))) {

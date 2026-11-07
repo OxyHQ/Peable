@@ -46,6 +46,8 @@ const WRITE_RULES: readonly (readonly [RegExp, DashboardAction])[] = [
   ],
   // Sending a person through identity verification, and erasing what they submitted (ADR 0023).
   [/^\/identity\//, 'money'],
+  // Registering card readers and taking a card on one (ADR 0024).
+  [/^\/terminal\//, 'money'],
   [/^\/(webhook_endpoints|webhook_deliveries)(\/|$)/, 'webhooks'],
   [
     /^\/(products|prices|coupons|promotion_codes|checkout_sessions|payment_links|branding|email_settings|payment_method_configurations|payment_method_domains)(\/|$)/,

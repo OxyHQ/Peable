@@ -1,0 +1,22 @@
+---
+title: "TerminalConnectionToken"
+description: "The terminal.connection_token object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TerminalConnectionToken
+
+Object type: `terminal.connection_token`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"terminal.connection_token"` |  |
+| `secret` | string | The provider's short-lived secret for its Terminal SDK. Never stored by Orbit. |
+| `location` | string | The location (`tml_…`) the token is limited to. |
+
+## Returned by
+
+- [`POST /v1/terminal/connection_tokens`](/reference/terminal#create-a-connection-token) — Create a connection token

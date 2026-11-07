@@ -94,6 +94,7 @@ touching the chain.
 | `payment_intent.processing`, `payment_intent.succeeded` | …paid and confirmed by the test helper |
 | `payment_intent.payment_failed` | …underpaid by the test helper (also `canceled`) |
 | `payment_intent.canceled` | …then cancelled |
+| `terminal.reader.action_succeeded` / `.action_failed` | a `card_present` payment collected on a simulated reader (registered once, in a CLI test location) and tapped by the test helper — USD 10.00, or 10.05 to be declined. Needs Terminal enabled in test mode |
 | `customer.created` / `.updated` / `.deleted` | a customer, then updated or deleted |
 | `product.created` / `.updated` / `.deleted` | a catalog product, then updated or deleted |
 | `price.created` | a product and a one-time EUR 10.00 price |

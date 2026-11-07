@@ -25,3 +25,4 @@ export * from './identityVerification';
 export * from './merchants';
 export * from './paymentMethodConfigurations';
 export * from './realtime';
+export * from './terminal';

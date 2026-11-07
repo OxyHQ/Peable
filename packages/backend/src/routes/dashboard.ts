@@ -51,6 +51,7 @@ import { CATALOG_ROUTES } from './catalog';
 import { mountSearchDashboardRoutes } from './search';
 import { mountReportingDashboardRoutes } from './reporting';
 import { mountIdentityDashboardRoutes } from './identity';
+import { mountTerminalDashboardRoutes } from './terminal';
 import { mountCatalogDashboardRoutes } from './catalogRoutes';
 import { answerRequestLogList, retrieveRequestLog } from './requestLogs';
 import { checkoutSessionRoutes } from './checkoutSessions';
@@ -376,6 +377,7 @@ export function createDashboardRouter(deps: {
   // Reporting: report types, runs, and the run's CSV through `…/files/:id/contents`.
   mountReportingDashboardRoutes(router, { base, requireOxyUser, gate });
   mountIdentityDashboardRoutes(router, { base, requireOxyUser, gate });
+  mountTerminalDashboardRoutes(router, { base, requireOxyUser, gate });
   router.get(
     `${base}/payment_method_configurations`,
     requireOxyUser,

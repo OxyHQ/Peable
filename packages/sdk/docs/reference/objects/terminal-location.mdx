@@ -1,0 +1,52 @@
+---
+title: "TerminalLocation"
+description: "The terminal.location object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TerminalLocation
+
+Object type: `terminal.location`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"terminal.location"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `display_name` | string | The name the location is shown with. |
+| `address` | [Address](/reference/objects/address) | Where the location is; `country` is always set. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+
+## Example
+
+```json
+{
+  "id": "tml_0193b8f2c1a87d3e9f4a",
+  "object": "terminal.location",
+  "livemode": false,
+  "display_name": "Valencia Street shop",
+  "address": {
+    "line1": "1272 Valencia Street",
+    "line2": null,
+    "city": "San Francisco",
+    "state": "CA",
+    "postal_code": "94110",
+    "country": "US"
+  },
+  "metadata": {}
+}
+```
+
+## Returned by
+
+- [`POST /v1/terminal/locations`](/reference/terminal#create-a-location) — Create a location
+- [`GET /v1/terminal/locations`](/reference/terminal#list-locations) — List locations
+- [`GET /v1/terminal/locations/{id}`](/reference/terminal#retrieve-a-location) — Retrieve a location
+- [`POST /v1/terminal/locations/{id}`](/reference/terminal#update-a-location) — Update a location
+
+## Used in
+
+[TerminalReader](/reference/objects/terminal-reader)

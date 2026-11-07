@@ -63,7 +63,7 @@ import {
   resolveCardPaymentMethods,
 } from './paymentMethods/configuration';
 import { findConfigurationById } from '../db/paymentMethods/paymentMethodConfigurationRepository';
-import { isPaymentMethodConfiguringProvider } from './providers/provider';
+import { isPaymentMethodConfiguringProvider, isTerminalProvider } from './providers/provider';
 import type { CardRailPaymentMethodType } from '@peable.to/shared-types';
 
 /**
@@ -825,6 +825,25 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   }
   const connectedAccountId = account?.id ?? null;
   const { customer, paymentMethod } = await resolvePaymentParties(merchant, rail, input);
+  // A card collected by a Terminal reader (ADR 0024) is confirmed by the
+  // reader and nothing else: no saved card, no confirm here, nothing saved.
+  const cardPresent =
+    rail === 'card' && input.paymentMethodTypes?.includes('card_present') === true;
+  if (cardPresent) {
+    for (const [field, param] of [
+      ['setupFutureUsage', 'setup_future_usage'],
+      ['offSession', 'off_session'],
+      ['returnUrl', 'return_url'],
+    ] as const) {
+      const value = input[field];
+      if (value !== undefined && value !== false) {
+        throw new IntentParameterError(
+          `${param} does not apply to a card_present payment: a reader collects it (POST /v1/terminal/readers/:id/process_payment_intent)`,
+          param,
+        );
+      }
+    }
+  }
   // What a card payment offers, decided ONCE, before anything is reserved or
   // written: named types, or the configuration's methods in this currency.
   const methods =
@@ -884,6 +903,9 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   const cardProvider = rail === 'card' ? selectCardProvider(merchant.environment) : undefined;
   if (rail === 'card' && !cardProvider) {
     throw new RailUnavailableError(cardRailUnavailable(merchant.environment));
+  }
+  if (cardPresent && cardProvider && !isTerminalProvider(cardProvider)) {
+    throw new RailUnavailableError('card readers are not available on this deployment');
   }
 
   const db = getDb();

@@ -100,6 +100,8 @@ const WEBHOOK_EVENT_TYPES = {
   'identity.verification_session.redacted': true,
   'review.opened': true,
   'review.closed': true,
+  'terminal.reader.action_succeeded': true,
+  'terminal.reader.action_failed': true,
   'connected_account.updated': true,
   'account.updated': true,
   'application_fee.created': true,

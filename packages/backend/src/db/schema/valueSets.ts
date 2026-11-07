@@ -391,6 +391,9 @@ export const WEBHOOK_EVENT_SCOPES = {
   'identity.verification_session.requires_input': 'merchant',
   'identity.verification_session.canceled': 'merchant',
   'identity.verification_session.redacted': 'merchant',
+  // Terminal (ADR 0024): the merchant's reader finished, or failed, its action.
+  'terminal.reader.action_succeeded': 'merchant',
+  'terminal.reader.action_failed': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
@@ -537,6 +540,13 @@ export {
   RADAR_RULE_ACTIONS,
   REVIEW_CLOSED_REASONS,
   REVIEW_OPENED_REASONS,
+} from '@peable.to/shared-types';
+
+/** Terminal's closed sets (ADR 0024), re-exported from the wire contract. */
+export {
+  TERMINAL_READER_ACTION_STATUSES,
+  TERMINAL_READER_ACTION_TYPES,
+  TERMINAL_READER_STATUSES,
 } from '@peable.to/shared-types';
 
 /** The kinds of invoice line (`invoice_line_items.type`). */

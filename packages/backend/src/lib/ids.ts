@@ -28,6 +28,9 @@ export function newId(
     // Identity verification (ADR 0023): sessions and their reports.
     | 'vs'
     | 'vr'
+    // Terminal (ADR 0024): locations and readers.
+    | 'tml'
+    | 'tmr'
     | 'prod'
     | 'price'
     | 'coupon'

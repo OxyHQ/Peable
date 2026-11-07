@@ -1182,3 +1182,44 @@ otherwise undo:
   the velocity index on the hot `payment_intents`, alone and `IF NOT EXISTS`.
   Build both indexes CONCURRENTLY out of band first. `0125` (`post`) validates
   the CHECKs.
+
+## Terminal (ADR 0024)
+
+`terminal_locations` (`tml_…`) and `terminal_readers` (`tmr_…`,
+`schema/terminal.ts`). Decisions a reader would otherwise undo:
+
+- **`provider_object_id` is `NOT NULL`**: a location and a reader are created
+  at the provider before the row (a Terminal-less account must leave no row).
+- **A reader's location is a composite `(location_id, merchant_id)` key** to
+  the same merchant's location, `on delete restrict`: "this merchant's
+  location" is structural, and a location with readers cannot be deleted
+  (`deleteTerminalLocation` also checks it in its own statement, so the race
+  answers 409 `terminal_location_in_use`, not a foreign-key failure).
+- **The `action_*` columns are one action, whole or absent**
+  (`terminal_readers_action_shape_check`): type, status, payment, its
+  configuration and `action_started_at` together; a failure code only while
+  `failed`. They move ONLY through the repository's compare-and-swaps —
+  `claimReaderAction` (refused while `in_progress`), `acknowledgeReaderAction`,
+  `releaseReaderAction`, `settleReaderAction` — each guarded on
+  `action_started_at` (the attempt's identity: the provider's action has none,
+  and one payment can be collected again on the same reader after a decline).
+  Never write them any other way, and never settle from an event's payload:
+  `reconcileReader` reads the provider's CURRENT reader.
+- **`action_acknowledged_at` is what makes a provider read count.** Between
+  the claim and the provider's answer the provider still shows the previous
+  attempt; settling then would end the new attempt with the old outcome.
+- **`action_payment_intent_id` references `payment_intents(id)`** (no
+  `(id, merchant_id)` key exists there to make "this merchant's" structural; the
+  claim's caller checks it). The action never writes the intent: the payment
+  moves on the card rail's own path.
+- **`card_present` widened `payment_intents_payment_method_types_check`** (it
+  is rendered from `CARD_RAIL_PAYMENT_METHOD_TYPES`).
+- **One reader collects a payment at a time**
+  (`terminal_readers_collecting_intent_key`, unique on
+  `action_payment_intent_id` WHERE `action_status = 'in_progress'`): a claim of
+  the same payment on a second reader is a unique violation, answered 409.
+- **Migrations `0126`–`0129`.** `0126` the two tables and the widened
+  `events_type_check` / `webhook_endpoints_enabled_events_check` `NOT VALID`;
+  `0127` the foreign key onto the hot `payment_intents`, alone, `NOT VALID`;
+  `0128` the `payment_intents` CHECK alone, `NOT VALID`; `0129` (post)
+  validates all four.

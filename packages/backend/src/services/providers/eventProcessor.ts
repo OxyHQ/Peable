@@ -44,6 +44,8 @@ import { findSetupIntentByProviderObject } from '../../db/customers/setupIntentR
 import { isIdentityVerifyingProvider, isSetupHoldingProvider } from './provider';
 import { findVerificationSessionByProviderObject } from '../../db/identity/verificationRepository';
 import { applyVerificationSnapshot } from '../identity/verificationSessions';
+import { findTerminalReaderByProviderObject } from '../../db/terminal/terminalRepository';
+import { reconcileReader } from '../terminal/terminal';
 import { selectStoredProvider } from './environmentGuard';
 import { toLastPaymentError } from '../intentReconciliation';
 import type { ProviderPaymentError } from './provider';
@@ -295,6 +297,9 @@ export async function processProviderEvent(event: ProviderEventRow): Promise<Pro
     }
     if (VERIFICATION_SESSION_EVENTS.has(event.type)) {
       return await handleVerificationSessionEvent(db, event);
+    }
+    if (TERMINAL_READER_EVENTS.has(event.type)) {
+      return await handleTerminalReaderEvent(db, event);
     }
     if (CHARGE_SNAPSHOT_EVENTS.has(event.type)) {
       return await handleChargeEvent(db, event);
@@ -1199,4 +1204,48 @@ async function handleVerificationSessionEvent(
   return outcome.kind === 'applied'
     ? { kind: 'applied', intentId: session.id, status: outcome.row.status }
     : { kind: 'noop', intentId: session.id };
+}
+
+/**
+ * Terminal reader events (ADR 0024). Like identity, every one means "re-read
+ * this reader": the provider's CURRENT reader is applied through
+ * `reconcileReader`, the one path — never the event's own copy of the action,
+ * which can describe an earlier attempt on the same reader. The PaymentIntent
+ * the reader collected moves on its own `payment_intent.*` events (and is
+ * reconciled by `reconcileReader` when the action settles).
+ */
+const TERMINAL_READER_EVENTS: ReadonlySet<string> = new Set([
+  'terminal.reader.action_succeeded',
+  'terminal.reader.action_failed',
+  'terminal.reader.action_updated',
+]);
+
+/** Which key in `object_ids` names the reader (the provider object's own `object`). */
+const TERMINAL_READER_OBJECT_KEY = 'terminal.reader';
+
+async function handleTerminalReaderEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const objectId = event.objectIds[TERMINAL_READER_OBJECT_KEY];
+  if (!objectId) {
+    const message = `no reader id on a ${event.type}`;
+    await markProviderEventFailed(db, event.id, message);
+    return { kind: 'failed', error: message };
+  }
+  const reader = await findTerminalReaderByProviderObject(
+    db,
+    event.provider as ProviderId,
+    objectId,
+  );
+  // A reader Orbit never registered (or one registered a moment ago) is not
+  // dropped: the drain retries it, and an operator sees what it never matched.
+  if (!reader) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, reader);
+  if (crossed) return crossed;
+  const settled = await reconcileReader(reader);
+  await markProviderEventProcessed(db, event.id);
+  return settled.action?.status !== reader.action?.status && settled.action !== null
+    ? { kind: 'applied', intentId: reader.id, status: settled.action.status }
+    : { kind: 'noop', intentId: reader.id };
 }

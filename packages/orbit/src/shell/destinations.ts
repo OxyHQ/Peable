@@ -13,7 +13,7 @@
  * - `main`     the always-visible rows (also the icons of a collapsed rail):
  *              Home, Balances, Transactions, Customers, Product catalog
  * - `products` the "Products" section: Payments (Disputes, Risk rules,
- *              Reviews, Payment Links),
+ *              Reviews, Payment Links, Terminal),
  *              Billing (Subscriptions, Invoices, settings and features),
  *              Connect, Reports, Tax, Contributions
  * - `business` the merchant's own account and how it presents itself
@@ -39,6 +39,7 @@ export type OrbitDestinationKey =
   | 'radar'
   | 'reviews'
   | 'links'
+  | 'terminal'
   | 'subscriptions'
   | 'invoices'
   | 'quotes'
@@ -163,6 +164,14 @@ export const ORBIT_DESTINATIONS: readonly OrbitDestination[] = [
     section: 'products',
     parent: 'payments-group',
     keywords: ['checkout', 'share', 'url'],
+  },
+  {
+    key: 'terminal',
+    labelKey: 'nav.terminal',
+    href: '/terminal',
+    section: 'products',
+    parent: 'payments-group',
+    keywords: ['card reader', 'in person', 'point of sale', 'pos', 'locations', 'readers', 'tap'],
   },
   {
     key: 'subscriptions',

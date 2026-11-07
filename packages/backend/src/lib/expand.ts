@@ -26,6 +26,8 @@ import {
   findVerificationSessionsForMerchantByPublicIds,
 } from '../db/identity/verificationRepository';
 import { toVerificationReportDTO, toVerificationSessionDTO } from './serializeIdentity';
+import { findTerminalLocationsForMerchantByPublicIds } from '../db/terminal/terminalRepository';
+import { toTerminalLocationDTO } from './serializeTerminal';
 import { sendError } from './http';
 import {
   toChargeDTO,
@@ -126,7 +128,9 @@ export type ExpandableType =
   | 'billing_portal.configuration'
   | 'billing_portal.session'
   | 'identity.verification_session'
-  | 'identity.verification_report';
+  | 'identity.verification_report'
+  | 'terminal.location'
+  | 'terminal.reader';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -147,7 +151,8 @@ type TargetType =
   | 'reporting.report_schedule'
   | 'identity.verification_session'
   | 'identity.verification_report'
-  | 'review';
+  | 'review'
+  | 'terminal.location';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -242,6 +247,9 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // Identity verification (ADR 0023): a session names its newest report, a report its session.
   'identity.verification_session': { last_verification_report: 'identity.verification_report' },
   'identity.verification_report': { verification_session: 'identity.verification_session' },
+  // Terminal (ADR 0024): a reader names its location.
+  'terminal.location': {},
+  'terminal.reader': { location: 'terminal.location' },
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
@@ -371,6 +379,13 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findReviewsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toReviewDTO(row),
+      ]),
+    ),
+  'terminal.location': async (merchantId, ids) =>
+    new Map(
+      (await findTerminalLocationsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toTerminalLocationDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

@@ -1,0 +1,675 @@
+---
+title: "Terminal"
+description: "The Terminal endpoints of the Peable API."
+order: 949
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Terminal
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/terminal/connection_tokens`](#create-a-connection-token) | Create a connection token |
+| [`POST /v1/terminal/locations`](#create-a-location) | Create a location |
+| [`GET /v1/terminal/locations`](#list-locations) | List locations |
+| [`GET /v1/terminal/locations/{id}`](#retrieve-a-location) | Retrieve a location |
+| [`POST /v1/terminal/locations/{id}`](#update-a-location) | Update a location |
+| [`DELETE /v1/terminal/locations/{id}`](#delete-a-location) | Delete a location |
+| [`POST /v1/terminal/readers`](#register-a-reader) | Register a reader |
+| [`GET /v1/terminal/readers`](#list-readers) | List readers |
+| [`GET /v1/terminal/readers/{id}`](#retrieve-a-reader) | Retrieve a reader |
+| [`POST /v1/terminal/readers/{id}`](#update-a-reader) | Update a reader |
+| [`DELETE /v1/terminal/readers/{id}`](#delete-a-reader) | Delete a reader |
+| [`POST /v1/terminal/readers/{id}/cancel_action`](#cancel-the-readers-action) | Cancel the reader’s action |
+| [`POST /v1/terminal/readers/{id}/process_payment_intent`](#collect-a-paymentintent-on-a-reader) | Collect a PaymentIntent on a reader |
+
+## Create a connection token
+
+`POST /v1/terminal/connection_tokens`
+
+A fresh token on every call, limited to one of your locations (unlike Stripe, `location` is required), answered with `Cache-Control: no-store` and never stored or replayed (no `Idempotency-Key` replay: a token is a credential, and minting two moves nothing). 503 `terminal_unavailable` when Terminal is not enabled in this mode.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.connectionTokens.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `location` **required** | string | The location (`tml_…`) whose readers the token may reach. Required: readers live on one provider account shared by every merchant, and a token without a location would reach all of them. 1–255 characters. |
+
+**Response `201`**
+
+Returns [TerminalConnectionToken](/reference/objects/terminal-connection-token).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a location
+
+`POST /v1/terminal/locations`
+
+Created at the provider first. 503 `terminal_unavailable` when Terminal is not enabled in this mode.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.locations.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `display_name` **required** | string | 1–100 characters. |
+| `address` **required** | object | Where the readers are. The provider may require more of the address in some countries. |
+| `address[line1]` | string | At most 500 characters. |
+| `address[line2]` | string | At most 500 characters. |
+| `address[city]` | string | At most 500 characters. |
+| `address[state]` | string | At most 500 characters. |
+| `address[postal_code]` | string | At most 40 characters. |
+| `address[country]` **required** | string | Matches `^[A-Z]{2}$`. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `201`**
+
+Returns [TerminalLocation](/reference/objects/terminal-location).
+
+```json
+{
+  "id": "tml_0193b8f2c1a87d3e9f4a",
+  "object": "terminal.location",
+  "livemode": false,
+  "display_name": "Valencia Street shop",
+  "address": {
+    "line1": "1272 Valencia Street",
+    "line2": null,
+    "city": "San Francisco",
+    "state": "CA",
+    "postal_code": "94110",
+    "country": "US"
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List locations
+
+`GET /v1/terminal/locations`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.terminal.locations.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TerminalLocation](/reference/objects/terminal-location) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TerminalLocation](/reference/objects/terminal-location) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "tml_0193b8f2c1a87d3e9f4a",
+      "object": "terminal.location",
+      "livemode": false,
+      "display_name": "Valencia Street shop",
+      "address": {
+        "line1": "1272 Valencia Street",
+        "line2": null,
+        "city": "San Francisco",
+        "state": "CA",
+        "postal_code": "94110",
+        "country": "US"
+      },
+      "metadata": {}
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/terminal/locations"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a location
+
+`GET /v1/terminal/locations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.terminal.locations.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The location (`tml_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TerminalLocation](/reference/objects/terminal-location).
+
+```json
+{
+  "id": "tml_0193b8f2c1a87d3e9f4a",
+  "object": "terminal.location",
+  "livemode": false,
+  "display_name": "Valencia Street shop",
+  "address": {
+    "line1": "1272 Valencia Street",
+    "line2": null,
+    "city": "San Francisco",
+    "state": "CA",
+    "postal_code": "94110",
+    "country": "US"
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a location
+
+`POST /v1/terminal/locations/{id}`
+
+The name and address are sent to the provider; metadata stays in Orbit.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.locations.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The location (`tml_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `display_name` | string | 1–100 characters. |
+| `address` | object |  |
+| `address[line1]` | string | At most 500 characters. |
+| `address[line2]` | string | At most 500 characters. |
+| `address[city]` | string | At most 500 characters. |
+| `address[state]` | string | At most 500 characters. |
+| `address[postal_code]` | string | At most 40 characters. |
+| `address[country]` **required** | string | Matches `^[A-Z]{2}$`. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [TerminalLocation](/reference/objects/terminal-location).
+
+```json
+{
+  "id": "tml_0193b8f2c1a87d3e9f4a",
+  "object": "terminal.location",
+  "livemode": false,
+  "display_name": "Valencia Street shop",
+  "address": {
+    "line1": "1272 Valencia Street",
+    "line2": null,
+    "city": "San Francisco",
+    "state": "CA",
+    "postal_code": "94110",
+    "country": "US"
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a location
+
+`DELETE /v1/terminal/locations/{id}`
+
+Refused with 409 `terminal_location_in_use` while readers are registered to it: delete them first.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.locations.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The location (`tml_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedTerminalLocation](/reference/objects/deleted-terminal-location).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Register a reader
+
+`POST /v1/terminal/readers`
+
+Registers the reader showing `registration_code` to a location, at the provider first. Simulated codes are refused in live mode. 503 `terminal_unavailable` when Terminal is not enabled in this mode.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.readers.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `registration_code` **required** | string | The code the reader shows. In test mode a simulated code (`simulated-wpe`, `simulated-s700`) registers a simulated reader. 1–100 characters. |
+| `location` **required** | string | The location (`tml_…`) to register it to. 1–255 characters. |
+| `label` | string | Defaults to the provider’s name for the device. 1–100 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `201`**
+
+Returns [TerminalReader](/reference/objects/terminal-reader).
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List readers
+
+`GET /v1/terminal/readers`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.terminal.readers.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `location` | query | string | Only readers at this location (`tml_…`). 1–255 characters. |
+| `status` | query | string | One of `online`, `offline`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TerminalReader](/reference/objects/terminal-reader) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TerminalReader](/reference/objects/terminal-reader) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "tmr_0193b8f2c1a87d3e9f4b",
+      "object": "terminal.reader",
+      "livemode": false,
+      "label": "Front counter",
+      "device_type": "simulated_wisepos_e",
+      "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+      "status": "online",
+      "last_seen_at": 1793750400,
+      "location": "tml_0193b8f2c1a87d3e9f4a",
+      "action": {
+        "type": "process_payment_intent",
+        "status": "in_progress",
+        "failure_code": null,
+        "failure_message": null,
+        "process_payment_intent": {
+          "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+          "process_config": {
+            "enable_customer_cancellation": false,
+            "skip_tipping": true
+          }
+        }
+      },
+      "metadata": {}
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/terminal/readers"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a reader
+
+`GET /v1/terminal/readers/{id}`
+
+Reconciled with the provider: its `status`, `last_seen_at` and the outcome of an action in progress.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.terminal.readers.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The reader (`tmr_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TerminalReader](/reference/objects/terminal-reader).
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a reader
+
+`POST /v1/terminal/readers/{id}`
+
+The label is sent to the provider; metadata stays in Orbit.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.readers.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The reader (`tmr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `label` | string | 1–100 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [TerminalReader](/reference/objects/terminal-reader).
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a reader
+
+`DELETE /v1/terminal/readers/{id}`
+
+Unregisters it at the provider. Refused with 409 `terminal_reader_busy` while it is collecting a payment.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.readers.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The reader (`tmr_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedTerminalReader](/reference/objects/deleted-terminal-reader).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel the reader’s action
+
+`POST /v1/terminal/readers/{id}/cancel_action`
+
+Stops a collection in progress. The PaymentIntent is not canceled: it stays payable, on this reader or another.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.readers.cancelAction()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The reader (`tmr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [TerminalReader](/reference/objects/terminal-reader).
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Collect a PaymentIntent on a reader
+
+`POST /v1/terminal/readers/{id}/process_payment_intent`
+
+The reader asks the cardholder to tap, insert or swipe. Answers the reader with its action `in_progress`; the outcome arrives as `terminal.reader.action_succeeded` or `…action_failed`, and the PaymentIntent moves through its own events. A declined card leaves it `requires_payment_method` with `last_payment_error`, collectable again. 409 `terminal_reader_busy` or `terminal_reader_offline` when the reader cannot take it.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.terminal.readers.processPaymentIntent()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The reader (`tmr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `payment_intent` **required** | string | A `card_present` PaymentIntent (`pi_…`) of this merchant that is still waiting for a payment method. 1–255 characters. |
+| `process_config` | object |  |
+| `process_config[enable_customer_cancellation]` | boolean |  |
+| `process_config[skip_tipping]` | `true` | Orbit offers no on-reader tipping: only `true` is accepted. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [TerminalReader](/reference/objects/terminal-reader).
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

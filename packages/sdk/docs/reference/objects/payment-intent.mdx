@@ -18,7 +18,7 @@ Object type: `payment_intent`.
 | `livemode` | boolean | `true` in live mode, `false` in test mode. |
 | `status` | string | One of `requires_payment_method`, `requires_confirmation`, `requires_action`, `processing`, `requires_capture`, `succeeded`, `canceled`. |
 | `rail` | string | Which rail moves this payment. Decides which fields below are populated. One of `faircoin`, `card`. |
-| `payment_method_types` | array of string | What the payer may pay with: `["faircoin"]` on the chain; on the card rail the types named at creation, or those the configuration offers in this currency. |
+| `payment_method_types` | array of string | What the payer may pay with: `["faircoin"]` on the chain; on the card rail the types named at creation (`["card_present"]` for a Terminal reader), or those the configuration offers in this currency. |
 | `payment_method_configuration_details` | object \| null | The `pmc_…` whose methods this card payment offers; `null` on the chain and when types were named. |
 | `payment_method_configuration_details.id` | string |  |
 | `amount` | string | Base units of `currency` as a canonical integer string: m⊜ (10⁻⁸ FAIR) on the faircoin rail, cents on a fiat one. Matches `^(0\|[1-9][0-9]*)$`. |

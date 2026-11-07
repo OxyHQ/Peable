@@ -1,5 +1,45 @@
 # Changelog
 
+## 6.7.0 — Terminal
+
+Requires `@peable.to/contracts` 6.6.0 and `@peable.to/shared-types` 6.6.0 (ADR 0024).
+
+Added:
+
+- `terminal.locations.create | list | retrieve | update | del`
+  (`/v1/terminal/locations`, `tml_…`): Stripe's `terminal.location` —
+  `display_name`, `address` (`country` required), metadata. A location with
+  readers cannot be deleted (409 `terminal_location_in_use`).
+- `terminal.readers.create | list | retrieve | update | del`
+  (`/v1/terminal/readers`, `tmr_…`): a reader registered with the code it
+  shows, at one of your locations (`simulated-wpe` / `simulated-s700` register a
+  simulated reader in test mode, refused in live); `label`, `device_type`,
+  `serial_number`, `status` (`online` / `offline`, refreshed on a retrieve),
+  `last_seen_at`, `location` (expandable) and `action`.
+- `terminal.readers.processPaymentIntent | cancelAction`: collect a
+  `card_present` PaymentIntent on a reader, or stop the collection. The reader's
+  `action` (`process_payment_intent`: `in_progress` → `succeeded` | `failed`,
+  `failure_code` and Peable's `failure_message`) records the attempt; the
+  PaymentIntent moves through its own events. 409 `terminal_reader_busy` /
+  `terminal_reader_offline`.
+- `terminal.connectionTokens.create` (`/v1/terminal/connection_tokens`): a
+  fresh token for the provider's Terminal SDKs, always limited to one of your
+  locations (`location` is required); never stored, never replayed.
+- `testHelpers.terminal.readers.presentPaymentMethod`: tap a test card on a
+  simulated reader (test mode only).
+- PaymentIntents take `payment_method_types: ['card_present']` (alone, card
+  rail): collected by a reader, never confirmed with a saved card, never in a
+  Checkout Session.
+- Events `terminal.reader.action_succeeded | terminal.reader.action_failed`.
+- Error codes `terminal_unavailable` (503: Terminal is not enabled in this
+  mode), `terminal_reader_busy`, `terminal_reader_offline`,
+  `terminal_location_in_use` (409). In live mode, Terminal for a merchant that
+  is not an Oxy product answers 403 `live_payments_gated` until the platform
+  opens it. A payment is collected by one reader at a time (409
+  `payment_intent_unexpected_state`).
+- Types `TerminalLocation`, `TerminalReader`, `TerminalConnectionToken` and
+  their params, and the vocabulary `TERMINAL_*` in contracts and shared-types.
+
 ## 6.6.0 — risk rules and reviews
 
 Requires `@peable.to/contracts` 6.5.0 and `@peable.to/shared-types` 6.5.0 (ADR 0022).

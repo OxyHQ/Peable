@@ -1,7 +1,7 @@
 ---
 title: "Test helpers"
 description: "The Test helpers endpoints of the Peable API."
-order: 950
+order: 951
 generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 ---
 
@@ -11,6 +11,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | --- | --- |
 | [`POST /v1/test_helpers/checkout_sessions/{id}/expire`](#expire-a-test-mode-checkout-session-now) | Expire a test-mode Checkout Session now |
 | [`POST /v1/test_helpers/payment_intents/{id}/simulate_faircoin_payment`](#simulate-a-faircoin-payment) | Simulate a FairCoin payment |
+| [`POST /v1/test_helpers/terminal/readers/{id}/present_payment_method`](#present-a-card-to-a-simulated-reader) | Present a card to a simulated reader |
 
 ## Expire a test-mode Checkout Session now
 
@@ -205,6 +206,66 @@ Returns [PaymentIntent](/reference/objects/payment-intent).
   "can_expire": true,
   "created": 1793750400,
   "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Present a card to a simulated reader
+
+`POST /v1/test_helpers/terminal/readers/{id}/present_payment_method`
+
+Taps a test card on a simulated reader collecting a PaymentIntent. The outcome follows the same path as a real one: the provider decides it, and its events move the reader and the PaymentIntent. A live credential is refused with 403 `test_mode_only`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.testHelpers.terminal.readers.presentPaymentMethod()`
+- **Mode:** Test mode only: a live credential is refused with [`test_mode_only`](/errors#test_mode_only).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The reader (`tmr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `"card_present"` | A test card tapped on a simulated reader. To simulate a decline, collect an amount ending in `01` (`call_issuer`) or `05` (`generic_decline`), as on the provider. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [TerminalReader](/reference/objects/terminal-reader).
+
+```json
+{
+  "id": "tmr_0193b8f2c1a87d3e9f4b",
+  "object": "terminal.reader",
+  "livemode": false,
+  "label": "Front counter",
+  "device_type": "simulated_wisepos_e",
+  "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+  "status": "online",
+  "last_seen_at": 1793750400,
+  "location": "tml_0193b8f2c1a87d3e9f4a",
+  "action": {
+    "type": "process_payment_intent",
+    "status": "in_progress",
+    "failure_code": null,
+    "failure_message": null,
+    "process_payment_intent": {
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+      "process_config": {
+        "enable_customer_cancellation": false,
+        "skip_tipping": true
+      }
+    }
+  },
+  "metadata": {}
 }
 ```
 

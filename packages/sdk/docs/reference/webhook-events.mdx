@@ -1,7 +1,7 @@
 ---
 title: "Webhook events"
 description: "Every webhook event type and its payload."
-order: 954
+order: 955
 generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 ---
 
@@ -111,6 +111,8 @@ Every event Peable sends to a [webhook endpoint](/webhooks), and records as an e
 | [`tax.assessment.created`](#taxassessmentcreated) | A tax compliance assessment was run. |
 | [`tax.review_item.created`](#taxreview_itemcreated) | A tax assessment finding opened a review item. |
 | [`tax.review_item.updated`](#taxreview_itemupdated) | A tax review item was decided, or found again. |
+| [`terminal.reader.action_failed`](#terminalreaderaction_failed) | A reader action failed (`action.failure_code`); the PaymentIntent stays payable. |
+| [`terminal.reader.action_succeeded`](#terminalreaderaction_succeeded) | A reader finished its action: the PaymentIntent it collected moves on its own events. |
 | [`test_helpers.test_clock.advancing`](#test_helperstest_clockadvancing) | A test clock started advancing. |
 | [`test_helpers.test_clock.created`](#test_helperstest_clockcreated) | A test clock was created. |
 | [`test_helpers.test_clock.deleted`](#test_helperstest_clockdeleted) | A test clock was deleted. |
@@ -2714,6 +2716,58 @@ A tax review item was decided, or found again.
 | `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
 | `data` | object |  |
 | `data.object` | [TaxReviewItem](/reference/objects/tax-review-item) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `terminal.reader.action_failed`
+
+A reader action failed (`action.failure_code`); the PaymentIntent stays payable.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"terminal.reader.action_failed"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TerminalReader](/reference/objects/terminal-reader) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `terminal.reader.action_succeeded`
+
+A reader finished its action: the PaymentIntent it collected moves on its own events.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"terminal.reader.action_succeeded"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [TerminalReader](/reference/objects/terminal-reader) |  |
 | `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
 | `request` | [EventRequest](/reference/objects/event-request) |  |
 

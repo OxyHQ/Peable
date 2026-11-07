@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — Terminal fixtures
+
+- `peable trigger terminal.reader.action_succeeded | terminal.reader.action_failed`:
+  a `card_present` PaymentIntent collected on a simulated reader and tapped by
+  `present_payment_method` (ADR 0024). The reader and its location are created
+  once and reused.
+
 ## 0.2.0 — checkout v2
 
 - `checkout_sessions create` creates an ORDER (Orbit Phase 3): `--price <price_…>`

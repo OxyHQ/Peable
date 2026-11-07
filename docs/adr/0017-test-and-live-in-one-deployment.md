@@ -91,7 +91,7 @@ not run.
   card rail answers 503 to every non-production credential.
 - **Provider endpoints.** Platform `https://api.peable.to/v1/webhooks/stripe`
   (payment intents, charges, refunds, disputes, setup intents, transfers,
-  application fees, `identity.verification_session.*` — ADR 0023) and connect `…/stripe/connect` (accounts, capabilities,
+  application fees, `identity.verification_session.*` — ADR 0023, `terminal.reader.action_*` — ADR 0024) and connect `…/stripe/connect` (accounts, capabilities,
   payouts, `balance.available`). Each mode's endpoint secret is the matching
   `STRIPE_*WEBHOOK_SECRET_LIVE`. An event type added to a handler set in
   `services/providers/eventProcessor.ts` must also be enabled on its endpoint,
