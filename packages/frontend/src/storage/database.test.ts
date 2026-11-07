@@ -5,6 +5,7 @@
  */
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { Database as BunSqlite } from 'bun:sqlite';
+import { getPublicKey } from '@noble/secp256k1';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -63,14 +64,31 @@ mock.module('expo-sqlite', () => ({
 
 const { Database } = await import('./database');
 const { KeyManager } = await import('@peable.to/pay');
-const { getNetwork } = await import('@fairco.in/core');
-const { openReceiveAddress } = await import('../wallet/receive-address');
+const {
+  getNetwork,
+  bytesToHex,
+  hexToBytes,
+  createMultisigRedeemScript,
+  multisigAddress,
+  parseMultisigRedeemScript,
+  publicKeyToAddress,
+} = await import('@fairco.in/core');
+const { reachLegacyPocket } = await import('../wallet/identity-namespace');
+const { openReceiveAddress, receiveProbeOf } = await import('../wallet/receive-address');
 
 const testnet = getNetwork('testnet');
 const OLD_KEY = '02'.padEnd(66, '1');
 const NEW_KEY = '03'.padEnd(66, '2');
 const oldTree = () => KeyManager.fromSeed(new Uint8Array(32).fill(1), testnet);
 const newTree = () => KeyManager.fromSeed(new Uint8Array(32).fill(2), testnet);
+
+function must<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('expected a value');
+  return value;
+}
+
+/** The wallet's probe of `tree`, as `wallet-store` builds it. */
+const probe = (tree: { accountXpub(): string }) => receiveProbeOf(tree, testnet);
 
 let counter = 0;
 const fresh = () => Database.open(`w${String(++counter)}`);
@@ -87,7 +105,7 @@ describe('the receive address is the open key’s (R6-1)', () => {
       await db.insertAddress({ ...derived, isChange: false, identityPublicKey: OLD_KEY });
     }
     const after = newTree();
-    const opened = await openReceiveAddress(db, after, NEW_KEY);
+    const opened = await openReceiveAddress(db, after, NEW_KEY, probe(after));
     expect(after.ownsAddress(opened.receiveAddress)).toBe(true);
     expect(before.ownsAddress(opened.receiveAddress)).toBe(false);
     expect(opened.addresses.every((address) => after.ownsAddress(address))).toBe(true);
@@ -104,7 +122,7 @@ describe('the receive address is the open key’s (R6-1)', () => {
     const mine = after.getNextAddress();
     await db.insertAddress({ ...mine, isChange: false, identityPublicKey: null });
 
-    const opened = await openReceiveAddress(db, newTree(), NEW_KEY);
+    const opened = await openReceiveAddress(db, newTree(), NEW_KEY, probe(newTree()));
     expect(opened.receiveAddress).toBe(mine.address);
     const rows = await db.getAddresses();
     expect(rows.find((r) => r.address === mine.address)?.identity_public_key).toBe(NEW_KEY);
@@ -122,8 +140,54 @@ describe('the receive address is the open key’s (R6-1)', () => {
     }
     expect(await db.getNextUnusedIndex(false, NEW_KEY)).toBe(0);
     expect(await db.getNextUnusedIndex(false, OLD_KEY)).toBe(30);
-    const opened = await openReceiveAddress(db, newTree(), NEW_KEY);
+    const opened = await openReceiveAddress(db, newTree(), NEW_KEY, probe(newTree()));
     expect(opened.receiveAddress).toBe(newTree().getNextAddress().address);
+    await db.close();
+  });
+
+  test('a used row far above a gap of unused ones is bound, and moves the cursor (R7-3)', async () => {
+    const db = await fresh();
+    // As the upgrade or a legacy move leaves it: every row unbound, the used
+    // one at index 29 behind unused 0..28 — outside the open tree's first
+    // window (0..19), on the receive chain and on the change chain.
+    const writer = newTree();
+    const rows = [];
+    for (let i = 0; i < 30; i++) rows.push(writer.getNextAddress());
+    const changeRows = [];
+    for (let i = 0; i < 16; i++) changeRows.push(writer.getNextChangeAddress());
+    for (const row of rows)
+      await db.insertAddress({ ...row, isChange: false, identityPublicKey: null });
+    for (const row of changeRows)
+      await db.insertAddress({ ...row, isChange: true, identityPublicKey: null });
+    const usedReceive = must(rows[29]);
+    const usedChange = must(changeRows[15]);
+    await db.markAddressUsed(usedReceive.address);
+    await db.markAddressUsed(usedChange.address);
+    // Another key's unbound rows stay unbound.
+    const foreign = oldTree().getNextAddress();
+    await db.insertAddress({ ...foreign, isChange: false, identityPublicKey: null });
+
+    const tree = newTree();
+    expect(tree.ownsAddress(usedReceive.address)).toBe(false);
+    const opened = await openReceiveAddress(db, tree, NEW_KEY, probe(tree));
+
+    const stored = await db.getAddresses();
+    const keyOf = (address: string) =>
+      stored.find((r) => r.address === address)?.identity_public_key;
+    expect(keyOf(usedReceive.address)).toBe(NEW_KEY);
+    expect(keyOf(usedChange.address)).toBe(NEW_KEY);
+    expect(keyOf(foreign.address)).toBeNull();
+    // The open tree now derives (signs for, watches) the used addresses and
+    // the gap above them.
+    expect(tree.ownsAddress(usedReceive.address)).toBe(true);
+    expect(tree.ownsAddress(usedChange.address)).toBe(true);
+    expect(tree.getNextExternalIndex()).toBe(30);
+    expect(tree.getNextChangeIndex()).toBe(16);
+    expect(await db.getNextUnusedIndex(false, NEW_KEY)).toBe(30);
+    // The lowest unused row of the open key is still the one offered.
+    expect(opened.receiveAddress).toBe(must(rows[0]).address);
+    expect(opened.addresses).toContain(usedReceive.address);
+    expect(opened.addresses).not.toContain(foreign.address);
     await db.close();
   });
 
@@ -135,7 +199,7 @@ describe('the receive address is the open key’s (R6-1)', () => {
     // A row its tree does not derive (planted, or from another key) is never offered.
     const foreign = oldTree().getNextAddress();
     await db.insertAddress({ ...foreign, index: -1, isChange: false, identityPublicKey: null });
-    const opened = await openReceiveAddress(db, newTree(), null);
+    const opened = await openReceiveAddress(db, newTree(), null, probe(newTree()));
     expect(opened.receiveAddress).toBe(derived.address);
     expect(opened.addresses).not.toContain(foreign.address);
     await db.close();
@@ -186,6 +250,7 @@ describe('a moved legacy namespace keeps only its owner’s data (R6-2)', () => 
       ownsHdAddress: (address) => owner.ownsAddress(address),
       keepsKey: (key) => key === OLD_KEY,
       derivesSocialRow: () => false,
+      namesOwnerKey: () => false,
     });
 
     expect((await db.getAddresses()).map((r) => r.address)).toEqual([mine.address]);
@@ -196,6 +261,87 @@ describe('a moved legacy namespace keeps only its owner’s data (R6-2)', () => 
     expect(await db.getAddressLabel(theirs.address)).toBeNull();
     expect(await db.getWatchAddresses()).toEqual([]);
     expect((await db.getSocialReceiveSet()).map((r) => r.address)).toEqual(['Smine']);
+    await db.close();
+  });
+});
+
+describe('a moved legacy namespace keeps everything its owner’s trees made (R7-6)', () => {
+  test('a change coin past index 9, a previous key’s far coin and the owner’s multisig stay', async () => {
+    const db = await fresh();
+    const owner = oldTree();
+    const previousTree = () => KeyManager.fromSeed(new Uint8Array(32).fill(3), testnet);
+    const previousKey = bytesToHex(getPublicKey(new Uint8Array(32).fill(7), true));
+    // Stored: the owner's receive rows 0..2, no change row at all.
+    for (let i = 0; i < 3; i++) {
+      await db.insertAddress({
+        ...owner.getNextAddress(),
+        isChange: false,
+        identityPublicKey: null,
+      });
+    }
+    // A coin at the owner's change index 25: the old window (0..9) dropped it.
+    const changeWriter = oldTree();
+    let farChange = changeWriter.getNextChangeAddress();
+    while (farChange.index < 25) farChange = changeWriter.getNextChangeAddress();
+    // A previous key's tree recorded at external 200, its coin at index 210.
+    await db.savePreviousKeyTree({
+      public_key: previousKey,
+      network: 'testnet',
+      external_next: 200,
+      change_next: 0,
+      discovered_at: 1,
+      vouched_for: null,
+    });
+    const previousWriter = previousTree();
+    previousWriter.restoreCursors(210, 0);
+    const farPrevious = previousWriter.getNextAddress();
+    expect(farPrevious.index).toBe(210);
+    const coin = (txid: string, address: string) =>
+      db.insertUTXO({ txid, vout: 0, address, value: 1n, script_pub_key: '76a9', block_height: 5 });
+    await coin('a1'.repeat(32), farChange.address);
+    await coin('a2'.repeat(32), farPrevious.address);
+    // Multisig: one naming the owner's receive key 0, one naming nobody's.
+    const ownerPubkey = hexToBytes(
+      bytesToHex(
+        getPublicKey(owner.getPrivateKeyForAddress(owner.getExternalAddresses()[0] ?? ''), true),
+      ),
+    );
+    const stranger = getPublicKey(new Uint8Array(32).fill(9), true);
+    const mine = createMultisigRedeemScript(1, [ownerPubkey, stranger]);
+    const theirs = createMultisigRedeemScript(1, [stranger]);
+    await db.insertWatchAddress(multisigAddress(mine, testnet), bytesToHex(mine), 'ours');
+    await db.insertWatchAddress(multisigAddress(theirs, testnet), bytesToHex(theirs), 'theirs');
+    await coin('a3'.repeat(32), multisigAddress(mine, testnet));
+
+    // The owner's candidate trees, as the move derives them.
+    const facts = await db.legacyPocketFacts();
+    const owned = new Set<string>();
+    for (const [tree, key] of [
+      [oldTree(), OLD_KEY],
+      [previousTree(), previousKey],
+    ] as const) {
+      reachLegacyPocket(tree, facts, key);
+      for (const address of [...tree.getExternalAddresses(), ...tree.getChangeAddresses()]) {
+        owned.add(address);
+      }
+    }
+    await db.keepOnlyOwnerData({
+      ownsHdAddress: (address) => owned.has(address),
+      keepsKey: (key) => key === OLD_KEY || key === previousKey,
+      derivesSocialRow: () => false,
+      namesOwnerKey: (script) =>
+        parseMultisigRedeemScript(hexToBytes(script)).pubkeys.some((pubkey) =>
+          owned.has(publicKeyToAddress(pubkey, testnet)),
+        ),
+    });
+
+    const kept = new Set((await db.getAllUTXOs()).map((u) => u.address));
+    expect(kept.has(farChange.address)).toBe(true);
+    expect(kept.has(farPrevious.address)).toBe(true);
+    expect(kept.has(multisigAddress(mine, testnet))).toBe(true);
+    expect((await db.getWatchAddresses()).map((w) => w.address)).toEqual([
+      multisigAddress(mine, testnet),
+    ]);
     await db.close();
   });
 });

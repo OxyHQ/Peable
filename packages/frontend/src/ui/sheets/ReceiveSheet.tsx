@@ -77,7 +77,26 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
 
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [showAllAddresses, setShowAllAddresses] = useState(false);
-  const displayAddress = selectedAddress ?? socialReceiveDefaultAddress ?? receiveAddress;
+  const activeAccount = useWalletStore((s) => s.activeAccount);
+  const network = useWalletStore((s) => s.network);
+  // A picked address belongs to the wallet, Pocket, network and key it was
+  // picked in (R7-12): forget it when any of them changes (state adjusted
+  // during render, React's pattern for a reset on a changed input)...
+  const pickScope = `${activeWalletId ?? ''}|${String(activeAccount)}|${network}`;
+  const [pickedIn, setPickedIn] = useState(pickScope);
+  if (pickedIn !== pickScope) {
+    setPickedIn(pickScope);
+    setSelectedAddress(null);
+    setShowAllAddresses(false);
+  }
+  // ...and show it only while the open wallet still lists it: `addresses` is
+  // the open key's own (`receive-address.ts`), so a rotation drops it too.
+  const pickedAddress =
+    selectedAddress !== null &&
+    (selectedAddress === receiveAddress || addresses.includes(selectedAddress))
+      ? selectedAddress
+      : null;
+  const displayAddress = pickedAddress ?? socialReceiveDefaultAddress ?? receiveAddress;
 
   const [message, setMessage] = useState<{
     title: string;

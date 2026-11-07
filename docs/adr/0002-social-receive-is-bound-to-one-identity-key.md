@@ -561,6 +561,91 @@ and an informational note). Fixed in the wallet; the gate stays closed:
 
 Oxy-side round-6 findings (R6-3, R6-5, R6-8 to R6-16) are fixed in OxyHQ/oxy.
 
+## Amendment (2026-11-07): review round 7 — every own row is bound, nothing blocks the open, evidence stays on its phone
+
+The seventh security review (Peable `732e8a0e`) found one blocking defect and
+six smaller ones on the Peable side (R7-3, R7-4's Peable half, R7-6 to R7-9,
+R7-12). Fixed in the wallet; the gate stays closed:
+
+- **Every row the open key derives is bound, however far up (R7-3,
+  blocking).** Round 6 bound the rows written before keys were recorded only
+  inside the open tree's window — the cursor, restored from rows ALREADY
+  bound, plus the gap of 20 — and a legacy move clears every row's key. So
+  after the upgrade or a move, a used address at index 29 behind unused 0..28
+  was never bound: the person's own coin showed stranded and unspendable, and
+  new payments to it went unwatched (the reviewer's probe with the real
+  `Database` and `KeyManager` confirmed it). Now `openReceiveAddress` judges
+  the unbound rows with a PROBE of the open key's tree — a public-only
+  `KeyManager` from the open tree's account xpub, derived through the highest
+  unbound index of each chain — so the open tree's cursor never moves for a
+  row it does not own; the bound used rows then move it through the ordinary
+  restore. Tested on a real SQLite with a 29-row gap on the receive chain and
+  a 15-row gap on the change chain.
+- **Core's `null` for a key this device holds is no answer (R7-4, Peable
+  half).** The legacy check treated `deriveScopedSeed`'s `null` — which core
+  also answers while Commons is busy or updating — as "this device does not
+  hold that key", recorded the account as not the owner, and Settings offered
+  the real owner "Remove". Now a `null` for the account's current key, or for
+  the key its wallet opened with this session, makes the check `indefinite`:
+  nothing is recorded, asked again later. Core has no typed "unavailable" yet
+  (the oxy half of R7-4); when it does, every key's "unavailable" becomes
+  indefinite the same way, and `null` keeps meaning "not held" only for a
+  previous key.
+- **The legacy check never blocks the account's own wallet (R7-8).** An
+  unmoved legacy namespace answered `unverified` offline before looking at
+  its record, and the wallet refused to open on it: offline, the person's own
+  wallet did not open while the legacy file was on the phone. Now nothing the
+  legacy check answers (or throws) stops the open; whether the wallet opens
+  offline is `decideIdentityKey`'s call alone (its stored key). The check is
+  asked again on the next open and from Settings, and a later proof merges
+  into the wallet in use (R6-6).
+- **The init queue is a real mutex (R7-9).** It ran a call inline whenever
+  ANY task was in flight — meant for a task's own nested `initialize`, but it
+  could not tell that from a call from outside (a focus re-run, "Check
+  again"), so two legacy moves ran at once on one scratch file (two measured).
+  `wallet/init-queue.ts` now always waits its turn and is not re-entrant: the
+  queued tasks that bring a wallet up (restore, switch wallet, Pocket,
+  network) call `initializeHeld`, the body `initialize` queues.
+- **A legacy move keeps everything its owner's trees made (R7-6).** The move
+  derived each candidate tree only to the highest stored row of each chain
+  plus the gap — change addresses 0..9 when no change row was stored — so a
+  change coin further up, or a previous key's coin beyond its first window,
+  was dropped with its history; and every multisig watch row was deleted. Now
+  each tree is derived past the highest stored index of EITHER chain and that
+  key's `previous_key_trees` cursors by 50, then walked over every stored row
+  and coin address with the gap (`reachLegacyPocket`); and a multisig row
+  stays when its redeem script names one of the owner's keys — an HD key of a
+  tree the owner holds, or an identity key in its history — with its coins.
+- **Install evidence stays on its phone; the PIN is never adopted; 1.2–1.4
+  adoptions are asked again (R7-7).** The round-6 evidence was a sandbox file,
+  which an unencrypted Finder/iTunes backup restores onto a NEW phone, whose
+  shared group holds only what other apps wrote — so a phrase planted under a
+  restored wallet's id was adoptable after one tap. Now the record carries a
+  random nonce that is also written to the wallet's own keychain group with
+  `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`, which no backup carries to another
+  phone; the evidence counts only while both agree, a record without it is
+  never recomputed, and the unbound round-6 record is no evidence (it cannot
+  be told apart from a restored one). Evidence that cannot be read now (a
+  locked keychain) leaves the move without its marker, to ask again. The PIN
+  record and its attempt count are never taken from the shared group (the
+  person sets a new PIN). And once, every wallet whose phrase or xpub is in
+  the own group when the move marker already exists is listed as adopted
+  (`peable_keychain_split_v2`): 1.2–1.4 builds adopted from the shared group
+  with no proof and no record, and which wallets they took cannot be told
+  apart now — each asks the person once on the Receive sheet. Residual,
+  recorded: the sandbox of a phone that never ran 1.5 or later (so has no
+  evidence record at all), restored onto a new phone, gives evidence from the
+  restored databases on this build's first look there; the adopted-wallet
+  confirmation still covers its phrases.
+- **A picked receive address belongs to where it was picked (R7-12).** The
+  Receive sheet kept the address the person picked from the list across a
+  Pocket, network, wallet or key change. It now forgets it on any of those,
+  and shows it only while the open wallet still lists it (`addresses` is the
+  open key's own, so a rotation drops it too).
+
+No native code changed: the wallet version stays 1.5.0. The other round-7
+findings, and R7-4's core half, belong to OxyHQ/oxy.
+
 ## Still required before mainnet
 
 Unchanged by this ADR, and none of them are code (the owner waived the second

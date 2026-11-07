@@ -52,6 +52,8 @@ function createNativeAdapter(): StorageAdapter {
   const policy: SharedGroupPolicy = {
     readWithoutInteraction: nonPromptingSharedRead(readSharedWithoutInteraction),
     evidence: readInstallEvidence,
+    // The evidence's nonce never leaves this phone in a backup (R7-7).
+    deviceOnly: { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY },
   };
   return createGroupedKeychainAdapter(SecureStore, resolveKeychainAccess, policy);
 }

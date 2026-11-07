@@ -21,13 +21,26 @@
  * and is never offered (a previous key's, still read to advance that key's
  * tree when it is reached). Another key's rows never move the open tree's
  * cursor either.
+ *
+ * Round 7 (R7-3): which unbound rows the open key derives is judged by a
+ * PROBE of the open key's tree that reaches the highest unbound index of each
+ * chain, not by the open tree's own window. That window is the cursor plus
+ * the gap, and the cursor is restored from rows already bound — so after the
+ * upgrade, or a legacy move (which clears every row's key), a used address at
+ * index 29 behind unused 0..28 lay outside it: never bound, its coin stranded
+ * and new payments to it unwatched. The probe derives from the same account
+ * key and never moves the open tree's cursor; the bound used rows then do,
+ * through the ordinary restore.
  */
+import type { NetworkConfig } from '@fairco.in/core';
+import { KeyManager } from '@peable.to/pay';
 import type { AddressInsert, AddressKeyScope, AddressRow } from '../storage/database';
 
 /** The part of `Database` this needs. */
 export interface ReceiveAddressStore {
   getNextUnusedIndex(isChange: boolean, scope: AddressKeyScope): Promise<number>;
   bindAddressRows(key: string, derives: (address: string) => boolean): Promise<number>;
+  getHighestUnboundIndices(): Promise<{ external: number; change: number }>;
   getUnusedAddresses(isChange: boolean, scope: AddressKeyScope): Promise<AddressRow[]>;
   getAddressesOf(scope: AddressKeyScope): Promise<AddressRow[]>;
   insertAddress(row: AddressInsert): Promise<void>;
@@ -40,15 +53,38 @@ export interface ReceiveTree {
   getNextAddress(): { address: string; path: string; index: number };
 }
 
+/**
+ * A tree of the open key that derives at least every index up to
+ * `externalThrough` / `changeThrough` (`-1`: none of that chain), built
+ * beside the open tree so its cursor never moves (R7-3). In the wallet, a
+ * public-only `KeyManager` from the open tree's account xpub.
+ */
+export type ReceiveProbe = (
+  externalThrough: number,
+  changeThrough: number,
+) => { ownsAddress(address: string): boolean };
+
+/**
+ * The wallet's {@link ReceiveProbe}: a public-only tree from the open tree's
+ * account xpub (the same addresses, no private key), derived far enough.
+ */
+export function receiveProbeOf(
+  tree: { accountXpub(): string },
+  network: NetworkConfig,
+): ReceiveProbe {
+  return (externalThrough, changeThrough) => {
+    const window = KeyManager.fromXpub(tree.accountXpub(), network);
+    window.restoreCursors(externalThrough + 1, changeThrough + 1);
+    return window;
+  };
+}
+
 export interface OpenedReceive {
   /** The address the Receive sheet offers. */
   readonly receiveAddress: string;
   /** Every stored address of the open key the tree derives, for the address list. */
   readonly addresses: string[];
 }
-
-/** A bound used row can widen the window, which may derive more rows: at most this many passes. */
-const MAX_BIND_PASSES = 16;
 
 /**
  * Restore the open tree's cursors from its own rows, bind the rows written
@@ -60,6 +96,7 @@ export async function openReceiveAddress(
   db: ReceiveAddressStore,
   tree: ReceiveTree,
   scope: AddressKeyScope,
+  probe: ReceiveProbe,
 ): Promise<OpenedReceive> {
   const restore = async (): Promise<void> => {
     tree.restoreCursors(
@@ -69,10 +106,13 @@ export async function openReceiveAddress(
   };
   await restore();
   if (scope !== null) {
-    for (let pass = 0; pass < MAX_BIND_PASSES; pass++) {
-      const bound = await db.bindAddressRows(scope, (address) => tree.ownsAddress(address));
-      if (bound === 0) break;
-      await restore();
+    // Every unbound row is judged, however far above the open tree's window
+    // it lies (R7-3); the bound used rows then move the cursor.
+    const highest = await db.getHighestUnboundIndices();
+    if (highest.external >= 0 || highest.change >= 0) {
+      const window = probe(highest.external, highest.change);
+      const bound = await db.bindAddressRows(scope, (address) => window.ownsAddress(address));
+      if (bound > 0) await restore();
     }
   }
 
