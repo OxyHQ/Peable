@@ -69,6 +69,9 @@ export function decideActingSubject(account: {
  *   forbidden     the person is not an owner or admin (403
  *                 `ORGANIZATION_KEY_FORBIDDEN`): only they can hold the key
  *   unavailable   Oxy could not be asked and this phone holds no key
+ *   key-unavailable  this phone's key could not be READ now (core's
+ *                 `IdentityUnavailableError`: the keychain locked, Commons
+ *                 busy or updating) — try again; never `not-on-device`
  */
 export type OrganizationWalletStatus =
   | { readonly status: 'ready'; readonly publishedPublicKey: string | null }
@@ -77,7 +80,8 @@ export type OrganizationWalletStatus =
   | { readonly status: 'keyless' }
   | { readonly status: 'not-on-device' }
   | { readonly status: 'forbidden' }
-  | { readonly status: 'unavailable' };
+  | { readonly status: 'unavailable' }
+  | { readonly status: 'key-unavailable' };
 
 export interface OrganizationWalletDeps {
   /** Whether this host has an identity keystore (`hasIdentityKeystore`). */
@@ -86,6 +90,25 @@ export interface OrganizationWalletDeps {
   readonly readIdentityKey: (accountId: string) => Promise<{ publicKey: string | null }>;
   /** `KeyManager.getIdentityPublicKeyForMoney({ accountId })` — the key THIS phone spends with, or `null`. */
   readonly readDevicePublicKey: (accountId: string) => Promise<string | null>;
+  /**
+   * Whether this phone holds the organization key `publicKey`, by a selected
+   * derivation (`deriveScopedSeed` with `publicKey`, the seed zeroed at once):
+   * `false` only when DEFINITIVELY not held; throws (`IdentityUnavailableError`)
+   * when it cannot tell now. Asked when the device read answered nothing,
+   * which core also answers while the keychain is locked or Commons busy.
+   */
+  readonly holdsKey: (accountId: string, publicKey: string) => Promise<boolean>;
+}
+
+/** `read()`, or `KEY_UNAVAILABLE` when it threw: a key read that failed is no answer. */
+const KEY_UNAVAILABLE = Symbol('key-unavailable');
+async function readKey<T>(read: () => Promise<T>): Promise<T | typeof KEY_UNAVAILABLE> {
+  try {
+    return await read();
+  } catch (error) {
+    console.warn('[organization-wallet] the key could not be read now; asking again:', error);
+    return KEY_UNAVAILABLE;
+  }
 }
 
 const FORBIDDEN = 403;
@@ -104,7 +127,8 @@ export async function resolveOrganizationWallet(
     // personal wallet) and leaves the comparison to the cursor sync; a phone
     // without it has nothing to open and must not guess why.
     if (!deps.hasIdentityKeystore) return { status: 'read-only' };
-    const device = await deps.readDevicePublicKey(accountId);
+    const device = await readKey(() => deps.readDevicePublicKey(accountId));
+    if (device === KEY_UNAVAILABLE) return { status: 'key-unavailable' };
     return device ? { status: 'ready', publishedPublicKey: null } : { status: 'unavailable' };
   }
 
@@ -112,8 +136,16 @@ export async function resolveOrganizationWallet(
   if (published === null) return { status: 'keyless' };
   if (!deps.hasIdentityKeystore) return { status: 'read-only' };
 
-  const device = await deps.readDevicePublicKey(accountId);
-  if (device === null) return { status: 'not-on-device' };
+  const device = await readKey(() => deps.readDevicePublicKey(accountId));
+  if (device === KEY_UNAVAILABLE) return { status: 'key-unavailable' };
+  if (device === null) {
+    // The device read answers `null` while the keychain is locked or Commons
+    // busy too: only a selected derivation that answers "not held" says the
+    // key is not on this phone (core 7.40.0, R7-4).
+    const held = await readKey(() => deps.holdsKey(accountId, published));
+    if (held === KEY_UNAVAILABLE) return { status: 'key-unavailable' };
+    return held ? { status: 'ready', publishedPublicKey: published } : { status: 'not-on-device' };
+  }
   return compressedPublicKeyHex(device) === compressedPublicKeyHex(published)
     ? { status: 'ready', publishedPublicKey: published }
     : { status: 'replaced-key', publishedPublicKey: published };

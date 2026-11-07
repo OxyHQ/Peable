@@ -402,6 +402,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       '{amount} FAIR was received under a previous identity key this phone cannot reach, so it is not in your balance. Add your previous recovery phrase in Commons (Backup & recovery → Previous keys) to spend it here.',
     'wallet.previousKey.stranded.organization':
       "{amount} FAIR was received under a previous key of this organization that this phone cannot reach, so it is not in the balance. Add the organization's previous phrase in Commons (Settings → Organizations → Organization wallets → Add the key you were given) to spend it here.",
+    'wallet.previousKey.unavailable':
+      "{amount} FAIR was received under a previous key that can't be read right now: the phone may be locked or Commons busy. Nothing is lost. Peable tries again in a moment and adds it to your balance once the key can be read.",
     'wallet.previousKey.openCommons': 'Open Commons',
     'wallet.previousKey.feeCustom': 'Custom',
     'wallet.previousKey.feeCustomPlaceholder': 'Units per byte, {min} to {max}',
@@ -580,6 +582,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'organizationWallet.unverified.title': 'Your wallet could not be checked',
     'organizationWallet.unverified.body':
       'Peable opens your wallet only with a key your Oxy account vouches for, and Oxy could not be reached to ask. Check your connection and try again.',
+    'organizationWallet.keyUnavailable.title': "Your wallet key can't be read right now",
+    'organizationWallet.keyUnavailable.body':
+      "Peable couldn't read the key of {name}'s wallet on this phone at the moment: the phone may be locked or Commons busy or updating. Nothing has changed. Unlock your phone or open Commons, then check again.",
     'organizationWallet.checkAgain': 'Check again',
     'organizationWallet.switchAccount': 'Switch account',
     'organizationWallet.commonsNotInstalled':
@@ -1347,6 +1352,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       '{amount} FAIR se recibieron con una clave de identidad anterior que este tel\u00e9fono no alcanza, as\u00ed que no est\u00e1n en tu saldo. A\u00f1ade tu frase de recuperaci\u00f3n anterior en Commons (Copia de seguridad y recuperaci\u00f3n \u2192 Claves anteriores) para gastarlos aqu\u00ed.',
     'wallet.previousKey.stranded.organization':
       '{amount} FAIR se recibieron con una clave anterior de esta organizaci\u00f3n que este tel\u00e9fono no alcanza, as\u00ed que no est\u00e1n en el saldo. A\u00f1ade la frase anterior de la organizaci\u00f3n en Commons (Ajustes \u2192 Organizaciones \u2192 Monederos de organizaciones \u2192 A\u00f1adir la clave que te dieron) para gastarlos aqu\u00ed.',
+    'wallet.previousKey.unavailable':
+      '{amount} FAIR se recibió con una clave anterior que ahora no se puede leer: puede que el teléfono esté bloqueado o Commons ocupado. No se ha perdido nada. Peable lo intenta de nuevo en un momento y lo suma a tu saldo en cuanto pueda leer la clave.',
     'wallet.previousKey.openCommons': 'Abrir Commons',
     'wallet.previousKey.feeCustom': 'Personalizada',
     'wallet.previousKey.feeCustomPlaceholder': 'Unidades por byte, de {min} a {max}',
@@ -1535,6 +1542,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'organizationWallet.unverified.title': 'No se pudo comprobar tu monedero',
     'organizationWallet.unverified.body':
       'Peable abre tu monedero solo con una clave que tu cuenta Oxy avala, y no se pudo contactar con Oxy. Comprueba tu conexi\u00f3n e int\u00e9ntalo de nuevo.',
+    'organizationWallet.keyUnavailable.title': 'Ahora no se puede leer la clave de tu monedero',
+    'organizationWallet.keyUnavailable.body':
+      'Peable no ha podido leer ahora la clave del monedero de {name} en este teléfono: puede que el teléfono esté bloqueado o Commons ocupado o actualizándose. No ha cambiado nada. Desbloquea el teléfono o abre Commons y vuelve a comprobarlo.',
     'organizationWallet.checkAgain': 'Comprobar de nuevo',
     'organizationWallet.switchAccount': 'Cambiar de cuenta',
     'organizationWallet.commonsNotInstalled':

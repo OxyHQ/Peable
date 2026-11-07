@@ -5,7 +5,7 @@
     "": {
       "name": "peable",
       "dependencies": {
-        "@oxy.so/core": "7.39.0",
+        "@oxy.so/core": "7.42.0",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
@@ -21,7 +21,7 @@
       "dependencies": {
         "@aws-sdk/credential-provider-node": "3.972.84",
         "@fairco.in/core": "0.5.0",
-        "@oxy.so/core": "7.39.0",
+        "@oxy.so/core": "7.42.0",
         "@oxy.so/db": "1.4.0",
         "@peable.to/contracts": "workspace:6.1.0",
         "@peable.to/shared-types": "*",
@@ -37,7 +37,7 @@
       "devDependencies": {
         "@noble/hashes": "1.8.0",
         "@noble/secp256k1": "2.3.0",
-        "@oxy.so/contracts": "6.15.0",
+        "@oxy.so/contracts": "6.19.0",
         "@peable.to/pay": "*",
         "@peable.to/sdk": "*",
         "@types/bun": "latest",
@@ -114,8 +114,8 @@
         "@noble/secp256k1": "2.3.0",
         "@oxy.so/app-preset": "^6.5.0",
         "@oxy.so/bloom": "17.15.0",
-        "@oxy.so/contracts": "6.15.0",
-        "@oxy.so/core": "7.39.0",
+        "@oxy.so/contracts": "6.19.0",
+        "@oxy.so/core": "7.42.0",
         "@oxy.so/services": "^14.14.0",
         "@peable.to/contracts": "workspace:6.1.0",
         "@peable.to/pay": "workspace:^",
@@ -215,8 +215,8 @@
         "@expo/vector-icons": "^15.1.1",
         "@oxy.so/app-preset": "^6.5.0",
         "@oxy.so/bloom": "17.15.0",
-        "@oxy.so/contracts": "6.15.0",
-        "@oxy.so/core": "7.39.0",
+        "@oxy.so/contracts": "6.19.0",
+        "@oxy.so/core": "7.42.0",
         "@oxy.so/services": "^14.14.0",
         "@peable.to/contracts": "workspace:6.1.0",
         "@peable.to/shared-types": "*",
@@ -349,8 +349,8 @@
   },
   "overrides": {
     "@oxy.so/bloom": "17.15.0",
-    "@oxy.so/contracts": "6.15.0",
-    "@oxy.so/core": "7.39.0",
+    "@oxy.so/contracts": "6.19.0",
+    "@oxy.so/core": "7.42.0",
     "@oxy.so/protocol": "1.11.0",
     "@oxy.so/telemetry": "2.1.0",
     "@peable.to/sdk": "workspace:*",
@@ -792,9 +792,9 @@
 
     "@oxy.so/bloom": ["@oxy.so/bloom@17.15.0", "", { "dependencies": { "@tanstack/react-virtual": "^3.14.23", "react-native-css": "3.1.0-rc.0", "react-remove-scroll-bar": "^2.3.8" }, "peerDependencies": { "@lottiefiles/dotlottie-react": ">=0.13.0", "@oxy.so/bloom-avatar-native": "0.1.2", "@react-native-community/netinfo": ">=11.1.0", "@shopify/flash-list": ">=2.0.0", "expo": "*", "expo-blur": "*", "expo-clipboard": "*", "expo-font": "*", "expo-haptics": "*", "expo-image": "*", "expo-router": ">=3.0.0", "expo-video": "*", "expo-web-browser": "*", "lottie-react-native": ">=7.0.0", "nativewind": ">=5.0.0 || 5.0.0-rc.0", "react": ">=18.0.0", "react-dom": ">=18.0.0", "react-native": ">=0.73.0", "react-native-gesture-handler": ">=2.16.1", "react-native-keyboard-controller": ">=1.11.4", "react-native-pager-view": ">=6.0.0", "react-native-reanimated": ">=3.13.0", "react-native-safe-area-context": ">=5.0.0", "react-native-screens": ">=3.16.0", "react-native-svg": ">=13.0.0", "react-native-webview": ">=13.0.0" }, "optionalPeers": ["@lottiefiles/dotlottie-react", "@oxy.so/bloom-avatar-native", "@react-native-community/netinfo", "@shopify/flash-list", "expo", "expo-clipboard", "expo-font", "expo-haptics", "expo-router", "expo-video", "expo-web-browser", "lottie-react-native", "nativewind", "react-dom", "react-native-keyboard-controller", "react-native-pager-view", "react-native-webview"] }, "sha512-Je+dvMg9cGZSGEb8hFXjYlbQ0+UBMOsEP86YvuC4pzwf5u2rMruzzE0k8WceGayZmRn1Y3nK8DChJQUzl4fFaw=="],
 
-    "@oxy.so/contracts": ["@oxy.so/contracts@6.15.0", "", { "dependencies": { "zod": "^4.6.7" } }, "sha512-zuBT1B4Bfj62BMeK2UCk5iY25cLid6cHNDdeHvQJbO3OPHu862sNhf7rWsEkYS2DDZWbMPyT4rorVYtiFqS1ww=="],
+    "@oxy.so/contracts": ["@oxy.so/contracts@6.19.0", "", { "dependencies": { "zod": "^4.6.7" } }, "sha512-0P/35qu7fvqlk41s5JD54qGULRrgVixzMQ/DNk+KtBn7gyze8fhBfelDd6Qcn3oU7HHDtwTz6AntaP7t34tg0A=="],
 
-    "@oxy.so/core": ["@oxy.so/core@7.39.0", "", { "dependencies": { "@noble/ciphers": "^2.4.0", "@noble/hashes": "^2.4.0", "@oxy.so/contracts": "^6.15.0", "@oxy.so/protocol": "^1.11.0", "@oxy.so/telemetry": "^2.1.0", "@scure/bip39": "^2.4.0", "buffer": "^6.0.3", "express-rate-limit": "^8.6.0", "helmet": "^8.3.0", "invariant": "^2.2.4", "jwt-decode": "^4.0.0", "socket.io-client": "^4.8.4", "tldts": "^7.4.19", "zod": "^4.6.7" }, "peerDependencies": { "@aws-sdk/credential-provider-ini": ">=3.973.16 <4", "@aws-sdk/credential-provider-node": ">=3.972.83 <4", "@react-native-async-storage/async-storage": "<4.0.0", "expo-crypto": "<59.0.0", "expo-secure-store": "<59.0.0", "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["@aws-sdk/credential-provider-ini", "@aws-sdk/credential-provider-node", "@react-native-async-storage/async-storage", "expo-crypto", "expo-secure-store", "express"] }, "sha512-CN0+lRMiB72Qj6VFJypFS8Y0fxXcpkFwRDDiN4AAlRMnvnYj4uI6rnTtjORP9gzqajMJ7HW3Tz8FzIEQZ6ZNbw=="],
+    "@oxy.so/core": ["@oxy.so/core@7.42.0", "", { "dependencies": { "@noble/ciphers": "^2.4.0", "@noble/hashes": "^2.4.0", "@oxy.so/contracts": "^6.19.0", "@oxy.so/protocol": "^1.11.0", "@oxy.so/telemetry": "^2.1.0", "@scure/bip39": "^2.4.0", "buffer": "^6.0.3", "express-rate-limit": "^8.6.0", "helmet": "^8.3.0", "invariant": "^2.2.4", "jwt-decode": "^4.0.0", "socket.io-client": "^4.8.4", "tldts": "^7.4.19", "zod": "^4.6.7" }, "peerDependencies": { "@aws-sdk/credential-provider-ini": ">=3.973.16 <4", "@aws-sdk/credential-provider-node": ">=3.972.83 <4", "@react-native-async-storage/async-storage": "<4.0.0", "expo-crypto": "<59.0.0", "expo-secure-store": "<59.0.0", "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["@aws-sdk/credential-provider-ini", "@aws-sdk/credential-provider-node", "@react-native-async-storage/async-storage", "expo-crypto", "expo-secure-store", "express"] }, "sha512-4Q3EAQgIEzBSuQVi7qQoKz9rcIv1xQ9V2r87EVwsZSA8fbyEhBTtEEx5mxU4wLH99Y+R9vmakiMNQSTSTn50CA=="],
 
     "@oxy.so/db": ["@oxy.so/db@1.4.0", "", { "peerDependencies": { "drizzle-orm": "^0.45.2", "postgres": "^3.4.9" }, "bin": { "oxy-db-check-migration-locks": "dist/cjs/bin/check-migration-locks.js" } }, "sha512-qumZQoZ4khGXOl+LYC5uZquw5N3DdjBZoV3+WbwJ/zlLXCJ180Qhg72nRSalvIUQHoFIosuIr5DFHT0ia3Garg=="],
 

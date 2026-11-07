@@ -16,8 +16,8 @@
  * wallet shell to show — full and read-only — into `(tabs)`.
  */
 
-import { useCallback, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, ActivityIndicator, AppState } from 'react-native';
 import { Redirect, useFocusEffect } from 'expo-router';
 import { useAuth } from '@oxy.so/services/ui/client';
 import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
@@ -26,6 +26,7 @@ import { useLockStore } from '../src/wallet/lock-store';
 import { hasPin } from '../src/storage/secure-store';
 import { decideEntryRoute, type WalletBlock } from '../src/wallet/entry-route';
 import {
+  deriveIdentitySeed,
   identityWalletIdOf,
   personalSubject,
   type IdentitySubject,
@@ -66,6 +67,13 @@ async function resolveWalletTarget(account: {
     // The key this phone can SPEND with (core 7.33.0, R5-1), never the shared
     // group's public item another app could have written.
     readDevicePublicKey: (id) => IdentityKeyManager.getIdentityPublicKeyForMoney({ accountId: id }),
+    // A selected derivation: `null` is definitive, a throw is "cannot tell now"
+    // (core 7.40.0). The seed proves possession and is zeroed at once.
+    holdsKey: async (id, publicKey) => {
+      const seed = await deriveIdentitySeed({ kind: 'organization', accountId: id }, publicKey);
+      seed?.fill(0);
+      return seed !== null;
+    },
   });
   switch (status.status) {
     case 'ready':
@@ -77,6 +85,8 @@ async function resolveWalletTarget(account: {
       };
     case 'read-only':
       return { kind: 'read-only' };
+    case 'key-unavailable':
+      return { kind: 'blocked', block: { kind: 'key-unavailable' } };
     default:
       return { kind: 'blocked', block: { kind: 'organization', accountId, status: status.status } };
   }
@@ -154,11 +164,14 @@ export default function IndexScreen() {
         // Superseded: closed (another account switch) while deriving; the
         // boot that closed it decides what opens next.
         if (stale() || result === 'superseded') return;
-        if (result === 'unverified') {
+        if (result === 'unverified' || result === 'unavailable') {
           // No key the account vouches for could be decided (Oxy unreachable
           // and nothing stored from an earlier check): ask again, never open
-          // on a key nobody vouched for (R5-1, R5-2).
-          setBlock({ kind: 'unverified' });
+          // on a key nobody vouched for (R5-1, R5-2). Or the key could not be
+          // READ now (core's `IdentityUnavailableError`: the keychain locked,
+          // Commons busy): ask again — never sign-in, never "set up your Oxy
+          // ID", never a replaced key.
+          setBlock(result === 'unverified' ? { kind: 'unverified' } : { kind: 'key-unavailable' });
           setHasPinConfigured(pinSet);
           markNoPinUnlocked();
           return;
@@ -219,6 +232,17 @@ export default function IndexScreen() {
     setIdentityInit(null);
     void boot(() => false);
   }, [boot]);
+
+  // A key that could not be read is usually waiting for the phone to be
+  // unlocked or Commons to finish: ask again when the app comes back.
+  const keyUnavailable = block?.kind === 'key-unavailable';
+  useEffect(() => {
+    if (!keyUnavailable) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') retry();
+    });
+    return () => subscription.remove();
+  }, [keyUnavailable, retry]);
 
   if (errorMsg) {
     return (

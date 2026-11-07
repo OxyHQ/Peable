@@ -187,21 +187,48 @@ describe('probePreviousKeys', () => {
   test('reachable keys build a tree from their seed, which is zeroed after', async () => {
     const seeds = new Map<string, Uint8Array>([['a', seed()]]);
     const seen: string[] = [];
-    const { reachable, unreachable } = await probePreviousKeys(
-      ['a', 'b', 'c'],
-      async (key) => {
-        if (key === 'c') throw new Error('Commons absent');
-        return seeds.get(key) ?? null;
-      },
+    const { reachable, unreachable, unavailable } = await probePreviousKeys(
+      ['a', 'b'],
+      async (key) => seeds.get(key) ?? null,
       (key, bytes) => {
         seen.push(`${key}:${bytes.some((b) => b !== 0)}`);
         return key.toUpperCase();
       },
     );
     expect([...reachable.entries()]).toEqual([['a', 'A']]);
-    expect(unreachable).toEqual(['b', 'c']);
+    expect(unreachable).toEqual(['b']);
+    expect(unavailable).toEqual([]);
     expect(seen).toEqual(['a:true']);
     expect(seeds.get('a')?.every((b) => b === 0)).toBe(true);
+  });
+
+  test('a key that cannot be read now is unavailable, never unreachable (core 7.40.0, R7-4)', async () => {
+    const locked = Object.assign(new Error('Commons is busy'), {
+      name: 'IdentityUnavailableError',
+    });
+    const { reachable, unreachable, unavailable } = await probePreviousKeys(
+      ['busy', 'gone', 'other'],
+      async (key) => {
+        if (key === 'busy') throw locked;
+        if (key === 'other') throw new Error('IPC failed');
+        return null;
+      },
+      () => 'tree',
+    );
+    expect(reachable.size).toBe(0);
+    // Only a null is "not on this phone"; every throw is asked again later.
+    expect(unreachable).toEqual(['gone']);
+    expect(unavailable).toEqual(['busy', 'other']);
+  });
+});
+
+describe('previousKeyCopy', () => {
+  test('an unreadable key has its own line, never the "add your previous phrase" one', () => {
+    for (const kind of ['personal', 'organization'] as const) {
+      const copy = previousKeyCopy(kind);
+      expect(copy.unavailable).toBe('wallet.previousKey.unavailable');
+      expect(copy.unavailable).not.toBe(copy.stranded);
+    }
   });
 });
 

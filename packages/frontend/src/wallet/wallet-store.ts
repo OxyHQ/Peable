@@ -104,6 +104,7 @@ import {
   type IdentitySubject,
 } from './identity-wallet';
 import { decideIdentityKey, type AccountKeys } from './identity-key';
+import { asWalletKeyError } from './identity-unavailable';
 import {
   keepsLegacyKey,
   legacyCheckFingerprint,
@@ -213,7 +214,13 @@ export type IdentityInitResult =
   | 'no-keystore'
   | 'superseded'
   /** No vouched key could be decided now (R5-1, R5-2): retry once online. */
-  | 'unverified';
+  | 'unverified'
+  /**
+   * The key could not be READ now (core's `IdentityUnavailableError`: the
+   * keychain locked, Commons busy): retry later. Never "no identity", never a
+   * replaced key, never sign-in — nothing about the wallet changed.
+   */
+  | 'unavailable';
 
 /**
  * Discrete P2P network states. Stored on the wallet store as a key (rather
@@ -303,6 +310,14 @@ export interface WalletState {
    * database file, belong to that network's view.)
    */
   strandedBalance: bigint;
+  /**
+   * A previous key this wallet knows of could not be READ at the last probe
+   * (core's `IdentityUnavailableError`: the keychain locked, Commons busy or
+   * updating). Its coins stay in `strandedBalance`, and the notice says they
+   * are waiting for the key — never that its phrase is missing — until a
+   * later refresh reads it. Nothing recorded for it is touched.
+   */
+  previousKeysUnavailable: boolean;
   /**
    * The part of `balance` held under a PREVIOUS identity key this device still
    * reaches (ADR 0002, amended 2026-11-06 "previous keys stay spendable"):
@@ -586,14 +601,20 @@ const openedIdentityKeys = new Map<string, string>();
 /**
  * The seed of an identity wallet, from the key it opened with
  * ({@link openedIdentityKeys}, else the key its database stored). `null` when
- * no key is known or this device no longer holds it: the caller refuses.
+ * no key is known or this device no longer holds it: the caller refuses. A key
+ * that cannot be read NOW throws `WalletKeyUnavailableError` ("try again"),
+ * whose message the unlock and Pocket screens show.
  */
 async function deriveOpenIdentitySeed(subject: IdentitySubject): Promise<Uint8Array | null> {
   const walletId = identityWalletIdOf(subject);
   const key = openedIdentityKeys.get(walletId) ?? (await readStoredIdentityKey(walletId));
   if (!key) return null;
   openedIdentityKeys.set(walletId, key);
-  return deriveIdentitySeed(subject, key);
+  try {
+    return await deriveIdentitySeed(subject, key);
+  } catch (error) {
+    throw asWalletKeyError(error);
+  }
 }
 
 /** The key an identity wallet's own database stored (`getIdentityWalletKey`), or `null`. */
@@ -1737,12 +1758,15 @@ async function loadPreviousKeys(
       !excluded.has(row.public_key),
   );
   // A key this device cannot reach leaves its coins stranded;
-  // `refreshPreviousKeys` asks again on its interval.
-  const { reachable } = await probePreviousKeys(
+  // `refreshPreviousKeys` asks again on its interval. A key that could not be
+  // READ now (locked keychain, busy Commons) is no answer: its row stays as
+  // recorded, and the notice says its coins are waiting for it.
+  const { reachable, unavailable } = await probePreviousKeys(
     rows.map((row) => row.public_key),
     (key) => derivePreviousKeySeed(subject, key),
     buildPreviousTree(network, account),
   );
+  useWalletStore.setState({ previousKeysUnavailable: unavailable.length > 0 });
   for (const row of rows)
     reachable.get(row.public_key)?.restoreCursors(row.external_next, row.change_next);
   previousTrees = reachable;
@@ -1810,10 +1834,14 @@ async function refreshPreviousKeys(): Promise<void> {
     excluded,
     open: previousTrees,
   });
-  if (candidates.size === 0) return;
+  if (candidates.size === 0) {
+    set({ previousKeysUnavailable: false });
+    return;
+  }
   // Every key not open yet is asked again each time: one the person has just
-  // added in Commons is reached on the next refresh.
-  const { reachable } = await probePreviousKeys(
+  // added in Commons is reached on the next refresh, and one that could not
+  // be read (locked keychain, busy Commons) once it can.
+  const { reachable, unavailable } = await probePreviousKeys(
     [...candidates],
     (key) => derivePreviousKeySeed(subject, key),
     buildPreviousTree(network, account),
@@ -1822,6 +1850,7 @@ async function refreshPreviousKeys(): Promise<void> {
     for (const tree of reachable.values()) tree.wipe();
   };
   if (!current()) return discard();
+  set({ previousKeysUnavailable: unavailable.length > 0 });
   if (reachable.size === 0) return;
 
   const known = new Set<string>();
@@ -2676,6 +2705,7 @@ const DEFAULT_WALLET_STATE = {
   identityReceiveConfirmed: false,
   adoptedWalletUnconfirmed: false,
   strandedBalance: 0n,
+  previousKeysUnavailable: false,
   previousKeyBalance: 0n,
   activeAccount: 0,
   pockets: [] as PocketInfo[],
@@ -3203,6 +3233,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   identityReceiveConfirmed: false,
   adoptedWalletUnconfirmed: false,
   strandedBalance: 0n,
+  previousKeysUnavailable: false,
   previousKeyBalance: 0n,
   activeAccount: 0,
   pockets: [],
@@ -3312,6 +3343,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       derive: (key) => deriveIdentitySeed(subject, key),
     });
     if (decision.kind === 'none') {
+      if (decision.reason === 'unavailable') return 'unavailable';
       return decision.reason === 'unverified' ? 'unverified' : 'no-identity';
     }
     let secret: string;

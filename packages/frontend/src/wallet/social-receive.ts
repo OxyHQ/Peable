@@ -30,6 +30,7 @@ import {
 import type { NetworkConfig, Transaction } from '@fairco.in/core';
 import { Point } from '@noble/secp256k1';
 import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
+import { asWalletKeyError } from './identity-unavailable';
 import { identityKeyOptions, type IdentitySubject } from './identity-wallet';
 
 /**
@@ -51,14 +52,18 @@ export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
  * never the shared group's public item every Oxy app can write; on Android
  * Commons' own key. Still only a candidate: `identity-key.ts` opens it only
  * when the account's key history names it and a derivation selecting it
- * succeeds. `null` on web, for a keyless account, or when nothing answers.
+ * succeeds. `null` on web, for a keyless account, when nothing answers, or for
+ * an answer that does not parse. A read that THROWS (core's
+ * `IdentityUnavailableError`) is passed on: it is "cannot tell now", never
+ * "no key here" (`identity-key.ts` stops as `unavailable`).
  */
 export async function readDeviceKeyHint(subject: IdentitySubject): Promise<string | null> {
+  const publicKey = await IdentityKeyManager.getIdentityPublicKeyForMoney(
+    subject.kind === 'organization' ? { accountId: subject.accountId } : undefined,
+  );
+  if (!publicKey) return null;
   try {
-    const publicKey = await IdentityKeyManager.getIdentityPublicKeyForMoney(
-      subject.kind === 'organization' ? { accountId: subject.accountId } : undefined,
-    );
-    return publicKey ? compressedPublicKeyHex(publicKey) : null;
+    return compressedPublicKeyHex(publicKey);
   } catch {
     return null;
   }
@@ -123,6 +128,9 @@ export interface SocialReceiveKeySelector {
  * the identity key's holder. Throws when no holder answers (Commons absent,
  * keyless, web) or when the key that signed is not the one `address` belongs
  * to — broadcasting that would be rejected by every node after the bytes left.
+ * A key that cannot be read NOW (core's `IdentityUnavailableError`: a locked
+ * keychain, a busy Commons) throws `WalletKeyUnavailableError` — "try
+ * again", never "this coin is not yours"; nothing is signed or sent.
  */
 export async function signSocialReceiveInput(
   tx: Transaction,
@@ -144,7 +152,12 @@ export async function signSocialReceiveInput(
     ...identityKeyOptions(subject),
     ...(selector.publicKey !== undefined ? { publicKey: selector.publicKey } : {}),
   };
-  const signed = await sign(index, sighash, options);
+  let signed: Awaited<ReturnType<SocialReceiveSign>>;
+  try {
+    signed = await sign(index, sighash, options);
+  } catch (error) {
+    throw asWalletKeyError(error);
+  }
   if (!signed) {
     throw new Error('Cannot sign for a social-receive address without the Oxy identity');
   }

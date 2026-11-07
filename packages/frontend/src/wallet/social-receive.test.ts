@@ -1,5 +1,6 @@
 import { describe, test, expect, mock } from 'bun:test';
 import { getPublicKey } from '@noble/secp256k1';
+import type { SocialReceiveSign } from './social-receive';
 import {
   buildTransaction,
   bytesToHex,
@@ -68,6 +69,7 @@ const {
   judgeSocialReceiveKey,
   accountKeyFromDidDocument,
 } = await import('./social-receive');
+const { WalletKeyUnavailableError, isIdentityUnavailable } = await import('./identity-unavailable');
 
 const TESTNET = getNetwork('testnet');
 
@@ -90,6 +92,13 @@ describe('readDeviceKeyHint (an UNTRUSTED hint, R5-1)', () => {
     const subject = { kind: 'organization', accountId: ORG_ID } as const;
     expect(await readDeviceKeyHint(subject)).toBe(compressedPublicKeyHex(ORG_PUB));
     expect(getIdentityPublicKeyForMoney).toHaveBeenLastCalledWith({ accountId: ORG_ID });
+  });
+
+  test('a read that throws is passed on: "cannot tell now", never "no key here"', async () => {
+    getIdentityPublicKeyForMoney.mockImplementationOnce(async () => {
+      throw Object.assign(new Error('locked'), { name: 'IdentityUnavailableError' });
+    });
+    await expect(readDeviceKeyHint(PERSON)).rejects.toThrow('locked');
   });
 
   test("for an organization this phone cannot reach, is null — never the person's key", async () => {
@@ -220,6 +229,33 @@ describe('signSocialReceiveInput', () => {
       signSocialReceiveInput(orgTx, 0, orgScript, 1, orgSlot.address, TESTNET, subject),
     ).rejects.toThrow(/without the Oxy identity/);
     orgHolderKey = ORG_KEY;
+  });
+
+  test('a key that cannot be read now (IdentityUnavailableError) is "try again", not "not yours"', async () => {
+    const locked: SocialReceiveSign = async () => {
+      throw Object.assign(new Error('The identity slots cannot be read right now.'), {
+        name: 'IdentityUnavailableError',
+      });
+    };
+    const attempt = signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET, PERSON, {
+      publicKey: IDENTITY_PUB_A,
+      sign: locked,
+    });
+    await expect(attempt).rejects.toBeInstanceOf(WalletKeyUnavailableError);
+    await expect(attempt).rejects.toThrow(/try again/i);
+    // Still recognisable upstream as core's "cannot tell now".
+    await attempt.catch((error: unknown) => expect(isIdentityUnavailable(error)).toBe(true));
+  });
+
+  test('any other signing failure is passed on as it is', async () => {
+    const broken: SocialReceiveSign = async () => {
+      throw new Error('IPC exploded');
+    };
+    await expect(
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET, PERSON, {
+        sign: broken,
+      }),
+    ).rejects.toThrow('IPC exploded');
   });
 
   test('refuses a signature from a key that does not own the address', async () => {
