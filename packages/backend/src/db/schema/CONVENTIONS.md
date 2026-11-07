@@ -1163,17 +1163,22 @@ otherwise undo:
 - **`charges.radar_evaluated_at` is the once-per-charge CLAIM** of the
   post-authorization judgment, set by one guarded `UPDATE` that also requires
   `synced_at` — the facts it judges are the snapshot's. `charges` is not a hot
-  table, and the column is nullable without a default (no rewrite). The
-  migration that adds it marks every existing charge judged
+  table, and the column is nullable without a default (no rewrite). A
+  migration of its own marks every existing charge judged
   (`coalesce(synced_at, created_at)`): a rule never reaches back into payments
-  authorized before rules existed.
+  authorized before rules existed. `radar_judge_attempted_at` is the judge
+  sweep's backoff and order; `charges_radar_unjudged_idx` (partial, `WHERE
+  radar_evaluated_at IS NULL`) its queue, empty in the steady state.
 - **Velocity reads `payment_intents_customer_id_created_at_idx`** — the
   customer, then the seven-day window as a range — and the customers by email
   through `(merchant_id, lower(email))` (at most 100), each side capped at
   10,000 rows. `receipt_email` is not indexed and is not read.
-- **Migrations `0121`–`0123`.** `0121`: new tables, the charge column and its
-  backfill, plus `events_type_check`, `events_intent_event_has_intent_check`
-  and `webhook_endpoints_enabled_events_check` widened for
-  `review.opened|closed` — re-added `NOT VALID` by hand. `0122`: the velocity
-  index on the hot `payment_intents`, alone and `IF NOT EXISTS` (build it
-  CONCURRENTLY out of band first). `0123` (`post`) validates the CHECKs.
+- **Migrations `0121`–`0125`.** `0121`: new tables, the two charge columns,
+  plus `events_type_check`, `events_intent_event_has_intent_check` and
+  `webhook_endpoints_enabled_events_check` widened for `review.opened|closed`
+  — re-added `NOT VALID` by hand. `0122`: the charges backfill, alone (ROW
+  EXCLUSIVE only — no ACCESS EXCLUSIVE lock is held while it scans). `0123`:
+  the sweep's partial index on `charges`, alone and `IF NOT EXISTS`. `0124`:
+  the velocity index on the hot `payment_intents`, alone and `IF NOT EXISTS`.
+  Build both indexes CONCURRENTLY out of band first. `0125` (`post`) validates
+  the CHECKs.

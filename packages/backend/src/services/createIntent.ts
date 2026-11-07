@@ -1054,7 +1054,9 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
           await gateBeforeAuthorization(
             intent,
             { card: paymentMethod.card },
-            { record: true, point: 'server_confirm' },
+            // No provider payment exists yet: the row is declined, and the
+            // provider's payment is created without the card.
+            { record: true, point: 'server_confirm', providerUnattached: true },
           )
         ).kind !== 'proceed';
       const clientAction = await attachProviderPayment(db, intent, cardProvider, {

@@ -124,7 +124,12 @@ A `block` declines the attempt exactly as a declined card:
 ```
 
 The payment stays payable and `payment_intent.payment_failed` is sent (once:
-asking again under the same rule records nothing new). A payment in
+asking again under the same rule records nothing new). A payment that already
+carries a saved card (created with `payment_method`, `requires_confirmation`)
+is judged with that card; a block answers the same `402` and hands out no
+credential, but leaves the payment as it is — the card stays attached at the
+provider, and nothing confirms it until you confirm it again with another card
+or the rule no longer blocks. A payment in
 `requires_action` — 3DS in progress at the provider — is never declined
 before authorization; it is judged after.
 

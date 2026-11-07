@@ -25,7 +25,12 @@ import {
   claimChargeRadarEvaluation,
   findChargeForIntent,
 } from '../../db/payments/chargeRepository';
-import { findIntentById, type PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
+import {
+  findIntentById,
+  lockIntentForUpdate,
+  type PaymentIntentRow,
+} from '../../db/payments/paymentIntentRepository';
+import { findPaymentMethodById } from '../../db/customers/paymentMethodRepository';
 import { getDb } from '../../db/postgres';
 import {
   findLatestRadarEvaluation,
@@ -53,67 +58,109 @@ export const RADAR_BLOCK_ERROR: PaymentIntentLastPaymentError = {
 export type PreAuthorizationVerdict =
   /** Nothing blocked: ask the provider. */
   | { readonly kind: 'proceed' }
-  /** A rule blocked; the attempt is declined (or, on a read, would be). */
-  | { readonly kind: 'blocked'; readonly intent: PaymentIntentRow }
+  /**
+   * A rule blocked; the attempt is declined (or, on a read, would be).
+   * `moved`: the row was declined (`requires_payment_method` with
+   * `last_payment_error`). `false` for a payment whose card is already attached
+   * at the provider (`requires_confirmation`): the row is left as it is, the
+   * provider's payment too, and the answer is the decline — nothing is confirmed
+   * and no credential is handed out, so the provider's payment cannot complete
+   * through Peable, and the row never says "declined" over a payment the
+   * provider still holds confirmable.
+   */
+  | { readonly kind: 'blocked'; readonly intent: PaymentIntentRow; readonly moved: boolean }
   /** The payment moved while it was judged; nothing was written. */
   | { readonly kind: 'stale'; readonly current: PaymentIntentRow | null };
 
 /**
- * Where a pre-authorization block may decline from. `credential`: handing out
- * the payer's confirmation credential — only a payment with nothing attached
- * at the provider (`requires_payment_method`). `server_confirm`: the gateway is
- * itself about to confirm a saved card, and nothing is in flight at the
- * provider (`requires_payment_method`, `requires_confirmation`). Never from
- * `requires_action`: a 3DS challenge is in flight at the provider, and only
- * the post-authorization judgment can decide it (ADR 0022 D3).
+ * Where a pre-authorization block may decline from: a payment with nothing in
+ * flight at the provider — `requires_payment_method`, or `requires_confirmation`
+ * (a saved card attached, judged with that card). Both points: a server-side
+ * confirm with a saved card, and handing out the payer's confirmation
+ * credential. Never from `requires_action`: a 3DS challenge is in flight at the
+ * provider, and only the post-authorization judgment can decide it
+ * (ADR 0022 D3).
  */
 export type PreAuthorizationPoint = 'credential' | 'server_confirm';
 
-const GATED_FROM: Readonly<Record<PreAuthorizationPoint, readonly PaymentIntentStatus[]>> = {
-  credential: ['requires_payment_method'],
-  server_confirm: ['requires_payment_method', 'requires_confirmation'],
-};
+const GATED_FROM: readonly PaymentIntentStatus[] = [
+  'requires_payment_method',
+  'requires_confirmation',
+];
 
 /** Whether a payment can be judged before authorization at this point. */
 export function gatesBeforeAuthorization(
   intent: PaymentIntentRow,
-  point: PreAuthorizationPoint,
+  _point: PreAuthorizationPoint,
 ): boolean {
-  return intent.rail === 'card' && GATED_FROM[point].includes(intent.status);
+  return intent.rail === 'card' && GATED_FROM.includes(intent.status);
 }
 
 /**
  * Judge an attempt before authorization.
  *
+ * @param sources.card the card the attempt would use; absent, the payment's
+ *   own saved card when one is attached, else no card (the payer has not
+ *   entered one yet).
  * @param options.record `false` for a read (the merchant's GET): a block is
  *   answered but nothing is written — a read never records an attempt.
+ * @param options.providerUnattached the provider holds no payment for this row
+ *   yet (a create with `confirm` judges before it creates one): the row can be
+ *   declined whatever its status, and the provider's payment is then created
+ *   without the card.
  */
 export async function gateBeforeAuthorization(
   intent: PaymentIntentRow,
   sources: { readonly card?: CardDetails | null },
-  options: { readonly record: boolean; readonly point: PreAuthorizationPoint },
+  options: {
+    readonly record: boolean;
+    readonly point: PreAuthorizationPoint;
+    readonly providerUnattached?: boolean;
+  },
 ): Promise<PreAuthorizationVerdict> {
   if (!gatesBeforeAuthorization(intent, options.point)) return { kind: 'proceed' };
   let decision: RadarDecision | null;
   try {
-    decision = await evaluateRules(intent, 'pre_authorization', sources);
+    const card =
+      sources.card ??
+      (intent.paymentMethodId === null
+        ? null
+        : ((await findPaymentMethodById(getDb(), intent.paymentMethodId))?.card ?? null));
+    decision = await evaluateRules(intent, 'pre_authorization', { card });
   } catch (error) {
     console.error(`[radar] pre-authorization evaluation of ${intent.publicId} failed`, error);
     return { kind: 'proceed' };
   }
   if (decision?.action !== 'block') return { kind: 'proceed' };
-  if (!options.record) return { kind: 'blocked', intent };
+  const declinesRow =
+    intent.status === 'requires_payment_method' || options.providerUnattached === true;
+  if (!options.record) return { kind: 'blocked', intent, moved: declinesRow };
   // The same rule (and version) already declined this payment's last attempt:
   // the answer is the same, and nothing new is recorded — a payer page that
   // asks again is not another attempt, and not another event.
   if (
-    intent.status === 'requires_payment_method' &&
-    intent.lastPaymentError?.decline_code === RADAR_BLOCK_DECLINE_CODE
+    !declinesRow ||
+    (intent.status === 'requires_payment_method' &&
+      intent.lastPaymentError?.decline_code === RADAR_BLOCK_DECLINE_CODE)
   ) {
     const last = await findLatestRadarEvaluation(getDb(), intent.id, 'pre_authorization');
     if (last?.ruleId === decision.rule.publicId && last.ruleVersion === decision.rule.version) {
-      return { kind: 'blocked', intent };
+      return { kind: 'blocked', intent, moved: declinesRow };
     }
+  }
+  const evaluation = {
+    merchantId: intent.merchantId,
+    paymentIntentId: intent.id,
+    phase: 'pre_authorization' as const,
+    decision: 'block' as const,
+    rule: decision.rule,
+    facts: decision.facts,
+  };
+  if (!declinesRow) {
+    // The card is attached at the provider: the row is left as it is, and the
+    // decision is recorded (the explanation of the 402).
+    await insertRadarEvaluation(getDb(), evaluation);
+    return { kind: 'blocked', intent, moved: false };
   }
 
   let target: PaymentIntentRow['status'];
@@ -130,23 +177,14 @@ export async function gateBeforeAuthorization(
       status: target,
       lastPaymentError: RADAR_BLOCK_ERROR,
     });
-    if (moved.kind === 'updated') {
-      await insertRadarEvaluation(tx, {
-        merchantId: intent.merchantId,
-        paymentIntentId: intent.id,
-        phase: 'pre_authorization',
-        decision: 'block',
-        rule: decision.rule,
-        facts: decision.facts,
-      });
-    }
+    if (moved.kind === 'updated') await insertRadarEvaluation(tx, evaluation);
     return moved;
   });
   if (result.kind !== 'updated') {
     return { kind: 'stale', current: await findIntentById(getDb(), intent.id) };
   }
   announceIntentChange(result.row);
-  return { kind: 'blocked', intent: result.row };
+  return { kind: 'blocked', intent: result.row, moved: true };
 }
 
 /**
@@ -176,8 +214,12 @@ async function judge(intentId: string): Promise<void> {
   const decision = isCard ? await evaluateRules(intent, 'post_authorization', { charge }) : null;
 
   const opened = await db.transaction(async (tx) => {
+    // The payment as it is NOW, locked: a cancellation or a refund committing
+    // while the rules were judged must not be followed by a review of a
+    // payment that has ended (ADR 0022 D3).
+    const locked = await lockIntentForUpdate(tx, intent.id);
     if (!(await claimChargeRadarEvaluation(tx, intent.id))) return { claimed: false as const };
-    if (decision === null) return { claimed: true as const, review: false };
+    if (decision === null || !locked) return { claimed: true as const, act: 'none' as const };
     await insertRadarEvaluation(tx, {
       merchantId: intent.merchantId,
       paymentIntentId: intent.id,
@@ -186,21 +228,23 @@ async function judge(intentId: string): Promise<void> {
       rule: decision.rule,
       facts: decision.facts,
     });
+    const refundedInFull =
+      locked.amountReceived !== '0' &&
+      BigInt(locked.amountRefunded) >= BigInt(locked.amountReceived);
+    const live =
+      (locked.status === 'requires_capture' || locked.status === 'succeeded') && !refundedInFull;
+    if (!live || decision.action === 'allow')
+      return { claimed: true as const, act: 'none' as const };
     // A review, and a block on money already captured, open the queue now.
-    const reviewNow =
-      decision.action === 'review' ||
-      (decision.action === 'block' && intent.status === 'succeeded');
-    if (reviewNow) await openReviewIn(tx, intent, decision.rule);
-    return { claimed: true as const, review: reviewNow };
+    if (decision.action === 'review' || locked.status === 'succeeded') {
+      await openReviewIn(tx, locked, decision.rule);
+      return { claimed: true as const, act: 'reviewed' as const };
+    }
+    return { claimed: true as const, act: 'release' as const, intent: locked };
   });
   if (!opened.claimed || decision === null) return;
-  if (opened.review) {
-    kickWebhookOutbox();
-    return;
-  }
-  if (decision.action === 'block' && intent.status === 'requires_capture') {
-    await releaseBlockedAuthorization(intent, decision);
-  }
+  if (opened.act === 'reviewed') kickWebhookOutbox();
+  if (opened.act === 'release') await releaseBlockedAuthorization(opened.intent, decision);
 }
 
 /**

@@ -835,21 +835,24 @@ parses Radar's language into closures over a fact record — never `eval`, never
 closed `RADAR_FACTS` registry (contracts vocabulary), three-valued so an unknown
 fact never matches. `allow` beats `block` beats `review`.
 `services/radar/gates.ts` is the only place a decision acts:
-`gateBeforeAuthorization` (in `confirmCardIntent` and a create with `confirm`,
-from `requires_payment_method`/`requires_confirmation`; handing out the payer's
-credential — the create's `client_action` and `POST …/client_action` — from
-`requires_payment_method` only; NEVER from `requires_action`, where 3DS is in
-flight at the provider; the merchant's GET evaluates read-only) declines a
-`block` as a declined card — ONE `transitionIntentIn` to
+`gateBeforeAuthorization` (in `confirmCardIntent`, a create with `confirm`, the
+create's `client_action` and `POST …/client_action`, from
+`requires_payment_method` and `requires_confirmation` — the latter judged with
+the attached saved card; NEVER from `requires_action`, where 3DS is in flight at
+the provider; the merchant's GET evaluates read-only) declines a `block`: from
+`requires_payment_method` as a declined card — ONE `transitionIntentIn` to
 `requires_payment_method` with `last_payment_error` (`blocked_by_rule`) plus the
-evaluation row, so it stays payable, and the same rule version declining again
-writes nothing. A fact a phase cannot know (the card before one is entered, the
+evaluation row, still payable; from `requires_confirmation` (a card attached at
+the provider) WITHOUT moving the row — 402, no credential, nothing confirmed,
+the evaluation recorded (a declined invoice collection records its failed
+attempt itself). The same rule version declining again writes nothing. A fact a phase cannot know (the card before one is entered, the
 provider's risk before authorization) is UNKNOWN even to `is_missing`. Payer
 surfaces (client-secret reads, sockets, the checkout's session view, the
 payer's 402) render through `toPayerPaymentIntentDTO`: no `blocked_by_rule`, no
 `review`; `judgeAuthorization`, called from
 `syncChargeSnapshot` after the snapshot is written, claims the charge ONCE
-(`charges.radar_evaluated_at`), releases a blocked held authorization through
+(`charges.radar_evaluated_at`) in a transaction that locks the payment row (no
+review on a payment cancelled or fully refunded meanwhile), releases a blocked held authorization through
 `cancelCardPaymentAtProvider` and moves the row only on `canceled`, and opens a
 review for everything it cannot release — captured money is never refunded by a
 rule. `POST …/capture` runs `holdBeforeCapture` first (judges if not judged, 503

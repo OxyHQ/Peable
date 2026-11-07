@@ -151,8 +151,12 @@ const { charges, events, radarEvaluations, reviews } = await import('../../db/sc
 const { findRefundByExternalRef, markRefundFailed } = await import(
   '../../db/refunds/refundRepository'
 );
-const { emitRefundEvents } = await import('../../services/refunds/refundService');
-const { claimReviewClose, findReviewForMerchant } = await import('../../db/radar/radarRepository');
+const { createRefund, emitRefundEvents } = await import('../../services/refunds/refundService');
+const { syncChargeFromProvider } = await import('../../services/charges');
+const { claimUnjudgedCharges } = await import('../../db/payments/chargeRepository');
+const { claimReviewClose, findReviewForMerchant, holdReviewClose } = await import(
+  '../../db/radar/radarRepository'
+);
 const { runJudgeSweep } = await import('../../services/radar/judgeSweeper');
 const { eq } = await import('drizzle-orm');
 const { uuidv7 } = await import('@oxy.so/db');
@@ -897,6 +901,100 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('risk rules and reviews (ADR 0022)', ()
       .where(eq(charges.paymentIntentId, intent.id));
     expect(await runJudgeSweep()).toBeGreaterThanOrEqual(1);
     expect((await call('GET', `/v1/payment_intents/${paid.id}`)).body.review).toMatch(/^prv_/);
+  });
+
+  test('a saved card attached at create is judged when its credential is handed out', async () => {
+    await rule('block', ":amount: >= 2000 and :card_country: = 'ES'");
+    const { customer, paymentMethod } = await customerWithCard('ES');
+    const created = await call('POST', '/v1/payment_intents', {
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
+      customer: customer.publicId,
+      payment_method: paymentMethod.publicId,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.status).toBe('requires_confirmation');
+    expect(created.body.client_action).toBeUndefined();
+    const intent = must(await findIntentByPublicId(gatewayDb(), created.body.id));
+    const asked = await call(
+      'POST',
+      `/v1/payment_intents/${created.body.id}/client_action`,
+      undefined,
+      {
+        'X-Peable-Client-Secret': intent.clientSecret,
+      },
+    );
+    expect(asked.status).toBe(402);
+    expect(asked.body.error.decline_code).toBeUndefined();
+    expect(JSON.stringify(asked.body)).not.toContain('pi_test_');
+    expect(
+      (await call('GET', `/v1/payment_intents/${created.body.id}`)).body.client_action,
+    ).toBeUndefined();
+
+    // The server confirm declines too — and leaves the payment (and the
+    // provider's, which still holds the card) as it was: nothing confirmed.
+    const confirmed = await call('POST', `/v1/payment_intents/${created.body.id}/confirm`, {});
+    expect(confirmed.status).toBe(402);
+    expect(confirmed.body.error).toMatchObject({
+      type: 'card_error',
+      code: 'card_declined',
+      decline_code: 'blocked_by_rule',
+    });
+    expect(confirmed.body.error.payment_intent.status).toBe('requires_confirmation');
+    expect(calls).not.toContain('confirm');
+    expect(await eventsAbout(created.body.id)).toEqual(['payment_intent.created']);
+    // One decision, recorded once however often it was asked.
+    expect(await evaluationCount()).toBe(1);
+  });
+
+  test('a judgment never opens a review on a payment refunded while it was judged', async () => {
+    await rule('review', ':amount: > 0');
+    snapshotFails = true;
+    const paid = await paidByCard({ amount: '1500' });
+    const intent = must(await findIntentByPublicId(gatewayDb(), paid.id));
+    await createRefund({ merchantId: merchant.id, intent, externalRef: 'full', amount: '1500' });
+    snapshotFails = false;
+    await syncChargeFromProvider(must(await findIntentByPublicId(gatewayDb(), paid.id)));
+    expect((await call('GET', `/v1/payment_intents/${paid.id}`)).body.review).toBeNull();
+    expect(await evaluationCount()).toBe(1);
+  });
+
+  test("another refund failing does not free a refusal's claim", async () => {
+    await rule('review', ':amount: > 0');
+    const paid = await paidByCard({ amount: '4000' });
+    const reviewId = must((await call('GET', `/v1/payment_intents/${paid.id}`)).body.review);
+    const review = must(await findReviewForMerchant(gatewayDb(), reviewId, merchant.id));
+    expect(await claimReviewClose(gatewayDb(), review.id, 'refunded')).toBe(true);
+    await holdReviewClose(gatewayDb(), review.id, 'refunded');
+    refundState = 'pending';
+    const intent = must(await findIntentByPublicId(gatewayDb(), paid.id));
+    const { refund } = await createRefund({
+      merchantId: merchant.id,
+      intent,
+      externalRef: 'merchant_partial',
+      amount: '1000',
+    });
+    await gatewayDb().transaction(async (tx) => {
+      const failed = must(await markRefundFailed(tx, refund.id, 'bank_rejected'));
+      await emitRefundEvents(tx, intent, failed, refund.status);
+    });
+    expect((await call('POST', `/v1/reviews/${reviewId}/approve`, {})).status).toBe(409);
+  });
+
+  test('the judge sweep backs off a charge it just tried', async () => {
+    await rule('review', ':amount: > 0');
+    snapshotFails = true;
+    const paid = await paidByCard();
+    const intent = must(await findIntentByPublicId(gatewayDb(), paid.id));
+    await gatewayDb()
+      .update(charges)
+      .set({ createdAt: new Date(Date.now() - 120_000) })
+      .where(eq(charges.paymentIntentId, intent.id));
+    const first = await claimUnjudgedCharges(gatewayDb(), 50);
+    expect(first.map((row) => row.paymentIntentId)).toContain(intent.id);
+    const again = await claimUnjudgedCharges(gatewayDb(), 50);
+    expect(again.map((row) => row.paymentIntentId)).not.toContain(intent.id);
   });
 
   // ── FairCoin is never touched (ADR 0022 D6) ──────────────────────────────

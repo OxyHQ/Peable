@@ -373,6 +373,21 @@ export async function attemptInvoicePayment(
     if (outcome.kind === 'unavailable') {
       return { kind: 'deferred', invoice: await deferAttempt(invoice) };
     }
+    if (outcome.kind === 'blocked') {
+      // A merchant's risk rule declined the attempt while the card stays
+      // attached at the provider (ADR 0022 D3): the payment did not move, so
+      // the invoice is told here — a failed attempt, retried on its schedule.
+      await getDb().transaction(async (tx) => {
+        const locked = await lockInvoice(tx, invoice.id);
+        if (locked?.status !== 'open') return;
+        await recordFailedAttempt(tx, locked, await engineNow(tx, locked.testClockId));
+      });
+      return {
+        kind: 'attempted',
+        invoice: (await findInvoiceById(db, invoice.id)) ?? invoice,
+        intent: outcome.intent,
+      };
+    }
     await settleAttemptSchedule(invoice.id);
     const after = (await findInvoiceById(db, invoice.id)) ?? invoice;
     const current = outcome.kind === 'confirmed' ? outcome.intent : (outcome.current ?? intent);

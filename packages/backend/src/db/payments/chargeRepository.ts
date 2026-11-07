@@ -275,28 +275,39 @@ export async function claimChargeRadarEvaluation(
   return rows.length === 1;
 }
 
+/** How long the judge sweep waits before trying a charge again. */
+export const JUDGE_RETRY_BACKOFF = "interval '5 minutes'";
+
 /**
- * Charges the post-authorization rules have not judged yet (ADR 0022 D3): a
- * judgment that threw, or a snapshot that was never read. Older than a minute
- * (the ordinary path judges at once) and younger than a day, oldest first.
+ * Claim the next charges the post-authorization rules have not judged
+ * (ADR 0022 D3): a judgment that threw, or a snapshot never read. Older than a
+ * minute (the ordinary path judges at once), younger than a day, whose payment
+ * is still held or captured, not tried in the last five minutes — the least
+ * recently tried first, so a charge that keeps failing never starves the rest.
+ * One statement: `for update skip locked` and the attempt stamp, so two tasks
+ * never take the same charge. Walks `charges_radar_unjudged_idx`.
  */
-export async function findUnjudgedCharges(
+export async function claimUnjudgedCharges(
   db: DatabaseOrTransaction,
   limit: number,
 ): Promise<{ paymentIntentId: string }[]> {
-  return db
-    .select({ paymentIntentId: charges.paymentIntentId })
-    .from(charges)
-    .where(
-      and(
-        sql`${charges.radarEvaluatedAt} is null`,
-        // Only a payment the judgment still applies to: a released
-        // authorization has nothing left to judge.
-        sql`exists (select 1 from payment_intents p where p.id = ${charges.paymentIntentId} and p.status in ('requires_capture', 'succeeded'))`,
-        sql`${charges.createdAt} < now() - interval '1 minute'`,
-        sql`${charges.createdAt} > now() - interval '1 day'`,
-      ),
+  const rows = await db.execute<{ payment_intent_id: string }>(sql`
+    update charges set radar_judge_attempted_at = now()
+    where id in (
+      select c.id from charges c
+      where c.radar_evaluated_at is null
+        and (c.radar_judge_attempted_at is null or c.radar_judge_attempted_at < now() - ${sql.raw(JUDGE_RETRY_BACKOFF)})
+        and c.created_at < now() - interval '1 minute'
+        and c.created_at > now() - interval '1 day'
+        and exists (
+          select 1 from payment_intents p
+          where p.id = c.payment_intent_id and p.status in ('requires_capture', 'succeeded')
+        )
+      order by c.radar_judge_attempted_at asc nulls first, c.created_at asc
+      limit ${limit}
+      for update skip locked
     )
-    .orderBy(charges.createdAt)
-    .limit(limit);
+    returning payment_intent_id
+  `);
+  return [...rows].map((row) => ({ paymentIntentId: row.payment_intent_id }));
 }

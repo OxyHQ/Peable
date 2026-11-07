@@ -141,20 +141,33 @@ gateway is about to let the provider authorize:
 2. **Handing out the payer's confirmation credential** (`POST …/client_action`, and
    the `client_action` a create answers the merchant with — a replayed create
    re-judges without recording), before the credential is read from the
-   provider — from `requires_payment_method` only, a payment with nothing attached at
-   the provider. The payer has not entered a card yet, so the card facts are unknown
-   there and only rules over amount, currency, customer, email and velocity can
-   match.
+   provider — from `requires_payment_method` (no card yet: the card facts are unknown
+   there, so only rules over amount, currency, customer, email and velocity can
+   match) and from `requires_confirmation`, judged with the saved card the payment
+   already carries (a create with `payment_method` attaches it at the provider, and
+   the payer would confirm with it as it is).
 
 **Never from `requires_action`.** A 3DS challenge is in flight at the provider:
 declining the row locally would leave the provider's payment completable, and the
 payer finishing the challenge would move it to `succeeded` under a "declined" row.
-Such a payment is judged after authorization only. (A `requires_confirmation` payment
-whose credential a payer already holds can likewise be confirmed at the provider after
-a local decline; the provider's event then moves it on and the post-authorization
-judgment decides — the decline never hid money.)
+Such a payment is judged after authorization only.
 
-A `block` declines the attempt as Stripe does: one `transitionIntent` (CAS on the
+**A card attached at the provider is declined without moving the row.** From
+`requires_payment_method` the row is declined (below) — the provider's payment
+holds no card, so the two agree. From `requires_confirmation` the provider's payment
+already holds the card, and a row moved to `requires_payment_method` would say
+"declined" over a payment the provider still holds confirmable. So the row (and the
+provider's payment) are left as they are, the evaluation is recorded, and the answer
+is the decline: 402 to the confirm, 402 and no credential to the payer, no
+`client_action` on the create. Nothing confirms it through Peable. A credential
+handed out before the rule existed can still confirm it at the provider; the
+provider's event then moves it and the post-authorization judgment decides — the
+decline never hides money. A billing-engine collection declined this way records the
+invoice's failed attempt itself (the payment did not move), so dunning goes on. A
+create with `confirm: true` judges BEFORE the provider's payment exists, so it
+declines the row and creates the provider's payment without the card.
+
+Otherwise a `block` declines the attempt as Stripe does: one `transitionIntent` (CAS on the
 status read) to `requires_payment_method` with `last_payment_error` = `{type:
 'card_error', code: 'card_declined', decline_code: 'blocked_by_rule', message: 'The
 payment was declined.'}`, recording `payment_intent.payment_failed`. The payment stays
@@ -177,12 +190,18 @@ when a rule blocks — a read never records an attempt. A pre-authorization `rev
 holds the charge's provider snapshot (`syncChargeSnapshot`, whichever path reached
 `requires_capture` / `succeeded`: a server confirm, a capture, a provider event,
 reconciliation). The claim is `charges.radar_evaluated_at`, set by one guarded
-`UPDATE`; a snapshot that cannot be read, or a judgment that threw, claims nothing and
-is retried by the judge sweep (`services/radar/judgeSweeper.ts`, every minute, charges
-between a minute and a day old whose payment is still held or captured) and by the
-next `charge.*` event or reconciliation. **Charges that existed before this feature
-are never judged**: the migration that adds the column marks every existing charge
-judged (`coalesce(synced_at, created_at)`), so a rule written later cannot reach back
+`UPDATE` in a transaction that first LOCKS the payment row (`for update`): a
+cancellation or a full refund that committed while the rules were judged is seen,
+and no review is opened on a payment that has ended (the evaluation is still
+recorded). A snapshot that cannot be read, or a judgment that threw, claims nothing
+and is retried by the judge sweep (`services/radar/judgeSweeper.ts`, every minute:
+charges between a minute and a day old whose payment is still held or captured,
+claimed `for update skip locked` with an attempt stamp, least recently tried first and
+not again within five minutes, so a charge that keeps failing never starves the rest;
+`charges_radar_unjudged_idx` is its queue) and by the next `charge.*` event or
+reconciliation. **Charges that existed before this feature
+are never judged**: a migration of its own, right after the one that adds the column,
+marks every existing charge judged (`coalesce(synced_at, created_at)`), so a rule written later cannot reach back
 into payments authorized when no rule existed; a charge older than a day is never
 swept. Then:
 
@@ -265,7 +284,9 @@ A Review (`review`, `prv_…`) is Stripe's object: `open`, `reason` (the current
 - **A refund still pending holds the claim** (`pending_closed_until` NULL): the review
   stays open — neither approvable nor closed — until the refund succeeds (the refund
   closes it `refunded` / `refunded_as_fraud` in its transaction) or fails (the claim is
-  let go in the `refund.failed` transaction, and the review is open again).
+  let go in the `refund.failed` transaction of THAT refund — `external_ref`
+  `review:<prv>` — and the review is open again; another refund of the payment failing
+  frees nothing).
 - A cancellation, or **any** succeeded refund — partial ones included, Stripe's
   behaviour — closes an open review in ITS transaction (`canceled`, `refunded`, or
   `refunded_as_fraud` for a `fraudulent` refund); a dispute closes it `disputed`.

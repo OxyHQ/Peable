@@ -281,7 +281,7 @@ export const paymentIntents = pgTable(
     index('payment_intents_customer_id_idx').on(table.customerId),
     // Risk rules' velocity facts (ADR 0022 D2): a customer's payments of the
     // last seven days, a range of this index. Built CONCURRENTLY out of band
-    // first (0122), alone on the hot table.
+    // first (0124), alone on the hot table.
     index('payment_intents_customer_id_created_at_idx').on(table.customerId, table.createdAt),
     uniqueIndex('payment_intents_public_id_key').on(table.publicId),
     // Stripe-style idempotency: one intent per (merchant, Idempotency-Key).

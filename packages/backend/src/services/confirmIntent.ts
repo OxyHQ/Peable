@@ -28,6 +28,12 @@ import { selectStoredProvider } from './providers/environmentGuard';
 
 export type ConfirmOutcome =
   | { readonly kind: 'confirmed'; readonly intent: PaymentIntentRow }
+  /**
+   * A risk rule declined the attempt on a payment whose card is attached at
+   * the provider (`requires_confirmation`): nothing was confirmed and the row
+   * is as it was; the answer is the decline (ADR 0022 D3).
+   */
+  | { readonly kind: 'blocked'; readonly intent: PaymentIntentRow }
   | { readonly kind: 'stale'; readonly current: PaymentIntentRow | null }
   | { readonly kind: 'unavailable' };
 
@@ -56,7 +62,11 @@ export async function confirmCardIntent(input: {
     { card: paymentMethod.card },
     { record: true, point: 'server_confirm' },
   );
-  if (verdict.kind === 'blocked') return { kind: 'confirmed', intent: verdict.intent };
+  if (verdict.kind === 'blocked') {
+    return verdict.moved
+      ? { kind: 'confirmed', intent: verdict.intent }
+      : { kind: 'blocked', intent: verdict.intent };
+  }
   if (verdict.kind === 'stale') return { kind: 'stale', current: verdict.current };
   const db = getDb();
   const prepared = await setIntentPaymentMethod(db, intent.id, intent.status, {

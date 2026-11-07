@@ -1,5 +1,5 @@
 {
-  "id": "c26ef0c0-742c-4690-ad25-f23bfa013a74",
+  "id": "aa2c51e0-4d29-4c75-980d-9521a0a4da25",
   "prevId": "564f50c3-ce45-4c59-9776-2beec60efc80",
   "version": "7",
   "dialect": "postgresql",
@@ -1667,6 +1667,12 @@
         },
         "radar_evaluated_at": {
           "name": "radar_evaluated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "radar_judge_attempted_at": {
+          "name": "radar_judge_attempted_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

@@ -1,17 +1,16 @@
 -- oxy:deploy-phase=pre
--- Risk rules (ADR 0022), part 1 of 3: the `radar_rules`, `radar_evaluations`
+-- Risk rules (ADR 0022), part 1 of 5: the `radar_rules`, `radar_evaluations`
 -- and `reviews` tables, `charges.radar_evaluated_at` (the post-authorization
--- judgment's once-per-charge claim, nullable, no default: no rewrite), and the
+-- judgment's once-per-charge claim) and `charges.radar_judge_attempted_at`
+-- (the judge sweep's backoff) — both nullable, no default: no rewrite — and the
 -- event catalog widened for review.opened / review.closed. Additive for the
 -- image still serving: nothing it reads changes.
 -- HAND EDIT: the three CHECKs re-added to existing tables (events,
 -- webhook_endpoints) are NOT VALID, so none scans under ACCESS EXCLUSIVE; the
--- post migration (0123) validates them under SHARE UPDATE EXCLUSIVE. Each only
--- widens its set, so every existing row already satisfies it.
--- HAND EDIT: every charge that exists when this runs is marked judged
--- (`radar_evaluated_at = coalesce(synced_at, created_at)`), so a rule written
--- later never judges a payment authorized before rules existed. `charges` is
--- not a hot table; the old image serving meanwhile never reads the column.
+-- post migration (0125) validates them under SHARE UPDATE EXCLUSIVE. Each only
+-- widens its set, so every existing row already satisfies it. The backfill of
+-- the new column is its own migration (0122), so nothing here holds a lock
+-- while a table is scanned.
 CREATE TABLE "radar_evaluations" (
 	"id" text PRIMARY KEY NOT NULL,
 	"public_id" text NOT NULL,
@@ -77,7 +76,7 @@ ALTER TABLE "events" DROP CONSTRAINT "events_type_check";--> statement-breakpoin
 ALTER TABLE "events" DROP CONSTRAINT "events_intent_event_has_intent_check";--> statement-breakpoint
 ALTER TABLE "webhook_endpoints" DROP CONSTRAINT "webhook_endpoints_enabled_events_check";--> statement-breakpoint
 ALTER TABLE "charges" ADD COLUMN "radar_evaluated_at" timestamp with time zone;--> statement-breakpoint
-UPDATE "charges" SET "radar_evaluated_at" = coalesce("synced_at", "created_at") WHERE "radar_evaluated_at" IS NULL;--> statement-breakpoint
+ALTER TABLE "charges" ADD COLUMN "radar_judge_attempted_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "radar_evaluations" ADD CONSTRAINT "radar_evaluations_merchant_fkey" FOREIGN KEY ("merchant_id") REFERENCES "public"."merchants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "radar_evaluations" ADD CONSTRAINT "radar_evaluations_payment_intent_fkey" FOREIGN KEY ("payment_intent_id") REFERENCES "public"."payment_intents"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "radar_rules" ADD CONSTRAINT "radar_rules_merchant_fkey" FOREIGN KEY ("merchant_id") REFERENCES "public"."merchants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint

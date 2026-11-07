@@ -1,5 +1,5 @@
 -- oxy:deploy-phase=post
--- Risk rules (ADR 0022), part 3 of 3: validates the CHECKs 0121 added NOT
+-- Risk rules (ADR 0022), part 5 of 5: validates the CHECKs 0121 added NOT
 -- VALID. VALIDATE takes SHARE UPDATE EXCLUSIVE, so reads and writes continue
 -- while it scans.
 ALTER TABLE "events" VALIDATE CONSTRAINT "events_type_check";--> statement-breakpoint

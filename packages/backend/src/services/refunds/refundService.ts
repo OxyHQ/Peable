@@ -7,7 +7,7 @@
  * home for the same fact, and the two disagree the first time a write is lost.
  */
 import { closeReviewIn } from '../radar/reviewEvents';
-import { releaseReviewClose } from '../../db/radar/radarRepository';
+import { releaseReviewClose, REVIEW_REFUND_REF_PREFIX } from '../../db/radar/radarRepository';
 import type { CurrencyCode, RefundReason } from '@peable.to/shared-types';
 import {
   findRefundByPublicId,
@@ -354,7 +354,18 @@ export async function emitRefundEvents(
     await recordRefundEvent(tx, intent, dto, 'refund.failed');
     // A refusal waiting on this refund lets go of its claim: the review is
     // open again, to approve or refuse anew (ADR 0022 D5).
-    await releaseReviewClose(tx, { paymentIntentId: intent.id }, ['refunded', 'refunded_as_fraud']);
+    // Only the refund a refusal made (`review:<prv>`): any other refund of the
+    // payment failing says nothing about the refusal.
+    if (refund.externalRef?.startsWith(REVIEW_REFUND_REF_PREFIX)) {
+      await releaseReviewClose(
+        tx,
+        {
+          paymentIntentId: intent.id,
+          publicId: refund.externalRef.slice(REVIEW_REFUND_REF_PREFIX.length),
+        },
+        ['refunded', 'refunded_as_fraud'],
+      );
+    }
     return;
   } else {
     await recordRefundEvent(tx, intent, dto, 'refund.updated');

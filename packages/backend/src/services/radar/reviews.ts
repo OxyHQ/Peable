@@ -18,6 +18,7 @@ import {
   findReviewForMerchant,
   holdReviewClose,
   releaseReviewClose,
+  REVIEW_REFUND_REF_PREFIX,
   type ReviewRow,
 } from '../../db/radar/radarRepository';
 import { cancelCardPaymentAtProvider } from '../cardCancellation';
@@ -213,7 +214,7 @@ async function refundInFull(
     const { refund } = await createRefund({
       merchantId: merchant.id,
       intent,
-      externalRef: `review:${review.publicId}`,
+      externalRef: `${REVIEW_REFUND_REF_PREFIX}${review.publicId}`,
       amount: remaining,
       ...(reason !== undefined ? { reason } : {}),
     });

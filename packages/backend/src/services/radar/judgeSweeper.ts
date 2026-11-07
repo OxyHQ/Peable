@@ -5,7 +5,7 @@
  * task from judging one charge twice; a charge older than a day is left alone
  * (the payment has long moved on, and judging it now would be retroactive).
  */
-import { findUnjudgedCharges } from '../../db/payments/chargeRepository';
+import { claimUnjudgedCharges } from '../../db/payments/chargeRepository';
 import { findIntentById } from '../../db/payments/paymentIntentRepository';
 import { getDb } from '../../db/postgres';
 import { syncChargeFromProvider } from '../charges';
@@ -16,7 +16,7 @@ const BATCH = 50;
 /** One pass: read the snapshot of each unjudged charge, which judges it. */
 export async function runJudgeSweep(): Promise<number> {
   const db = getDb();
-  const due = await findUnjudgedCharges(db, BATCH);
+  const due = await claimUnjudgedCharges(db, BATCH);
   for (const { paymentIntentId } of due) {
     const intent = await findIntentById(db, paymentIntentId);
     // `syncChargeFromProvider` reads the payment's charge and its snapshot,

@@ -74,6 +74,7 @@ import {
   gateBeforeAuthorization,
   gatesBeforeAuthorization,
   holdBeforeCapture,
+  RADAR_BLOCK_ERROR,
 } from '../services/radar/gates';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
 import { toPayerPaymentIntentDTO, toPaymentIntentDTO } from '../lib/serialize';
@@ -146,9 +147,15 @@ function sendCardDecline(
   res: Response,
   intent: PaymentIntentRow,
   audience: 'merchant' | 'payer',
+  /** A rule's decline the row does not carry (a card attached at the provider). */
+  ruleDecline = false,
 ): void {
   const dto = audience === 'payer' ? toPayerPaymentIntentDTO(intent) : toPaymentIntentDTO(intent);
-  const error = dto.last_payment_error;
+  const error = ruleDecline
+    ? audience === 'payer'
+      ? { code: 'card_declined', decline_code: null, message: 'The card was declined.' }
+      : RADAR_BLOCK_ERROR
+    : dto.last_payment_error;
   res.status(402).json({
     error: {
       type: 'card_error',
@@ -848,7 +855,7 @@ export function createPaymentIntentsRouter(deps: {
           },
         );
         if (verdict.kind === 'blocked') {
-          sendCardDecline(res, verdict.intent, 'payer');
+          sendCardDecline(res, verdict.intent, 'payer', !verdict.moved);
           return;
         }
         if (verdict.kind === 'stale') {
@@ -1003,6 +1010,12 @@ export function createPaymentIntentsRouter(deps: {
         });
         if (outcome.kind === 'unavailable') {
           sendError(res, 503, 'api_error', 'the card rail cannot reach this payment right now');
+          return;
+        }
+        if (outcome.kind === 'blocked') {
+          // A risk rule declined it with the card attached at the provider: the
+          // payment is as it was, and the answer is the decline (ADR 0022 D3).
+          sendCardDecline(res, outcome.intent, 'merchant', true);
           return;
         }
         if (outcome.kind === 'stale') {

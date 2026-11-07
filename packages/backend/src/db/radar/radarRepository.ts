@@ -621,9 +621,12 @@ export async function holdReviewClose(
  * Let go of a refusal's claim: the provider refused to act, or the refund it
  * started failed. `where` names the review, or the payment whose review it is.
  */
+/** The `external_ref` of the refund a refusal makes: `review:<prv>`. */
+export const REVIEW_REFUND_REF_PREFIX = 'review:';
+
 export async function releaseReviewClose(
   db: DatabaseOrTransaction,
-  where: { readonly id: string } | { readonly paymentIntentId: string },
+  where: { readonly id: string } | { readonly paymentIntentId: string; readonly publicId: string },
   reasons: readonly ReviewClosedReason[],
 ): Promise<void> {
   await db
@@ -637,7 +640,10 @@ export async function releaseReviewClose(
       and(
         'id' in where
           ? eq(reviews.id, where.id)
-          : eq(reviews.paymentIntentId, where.paymentIntentId),
+          : and(
+              eq(reviews.paymentIntentId, where.paymentIntentId),
+              eq(reviews.publicId, where.publicId),
+            ),
         isNull(reviews.closedReason),
         inArray(reviews.pendingClosedReason, [...reasons]),
       ),

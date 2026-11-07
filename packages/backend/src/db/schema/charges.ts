@@ -57,6 +57,11 @@ export const charges = pgTable(
      * (ADR 0022 D3) — the once-per-charge CLAIM, set by one guarded UPDATE.
      */
     radarEvaluatedAt: timestamptz(),
+    /**
+     * When the judge sweep last tried this unjudged charge: its backoff and its
+     * order, so a charge that keeps failing goes to the back of the queue.
+     */
+    radarJudgeAttemptedAt: timestamptz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -90,5 +95,9 @@ export const charges = pgTable(
     ),
     /** Every charge search and list walks `merchant_id = … order by id desc` (`db/search`). */
     index('charges_merchant_id_id_idx').on(table.merchantId, table.id),
+    /** The judge sweep's queue (ADR 0022 D3): only the unjudged charges. */
+    index('charges_radar_unjudged_idx')
+      .on(table.radarJudgeAttemptedAt, table.createdAt)
+      .where(sql`${table.radarEvaluatedAt} is null`),
   ],
 );
