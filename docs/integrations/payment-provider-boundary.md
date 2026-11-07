@@ -24,7 +24,9 @@ interface. `providers/__tests__/providerBoundary.test.ts` fails on an import of
 exceptions (the registry, Stripe's inbound webhook route, boot, the Stripe Tax
 adapter of Peable Tax, and the local test harness). A new provider capability
 (Identity, Terminal, …) goes on the interface with its Stripe implementation
-under `providers/stripe/`.
+under `providers/stripe/`. Identity is the first: `IdentityVerifyingProvider`
+(ADR 0023), implemented in `providers/stripe/identity.ts`, which is also where
+the person's data stops — the interface carries verdicts only.
 
 Peable holds processing credentials. Merchant and payer authority, environment
 isolation, idempotency, status transitions and signed notifications remain Peable

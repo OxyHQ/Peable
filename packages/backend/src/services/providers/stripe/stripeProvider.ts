@@ -63,7 +63,13 @@ import {
   retrieveStripeChargeWithLedger,
   retrieveStripePayout,
   updateStripeAccount,
+  cancelStripeVerificationSession,
+  createStripeVerificationSession,
+  redactStripeVerificationSession,
+  retrieveStripeVerificationSession,
+  updateStripeVerificationSession,
 } from './client';
+import { toStripeOptions, toVerificationSession, toVerifiedOutputs } from './identity';
 import { toDisputeStatus } from '../disputeStatus';
 import {
   toAccountSettings,
@@ -122,6 +128,11 @@ import {
   type ProviderApplicationFee,
   type ProviderBalanceTransaction,
   type ProviderPayout,
+  type CreateVerificationSessionRequest,
+  type IdentityVerifyingProvider,
+  type ProviderVerificationOptions,
+  type ProviderVerificationSession,
+  type ProviderVerifiedOutputs,
 } from '../provider';
 import { mapPaymentIntentStatus, toProviderEventEnvelope } from './verify';
 import { fromUnix } from '../../../lib/time';
@@ -411,7 +422,8 @@ export class StripePaymentProvider
     SetupHoldingProvider,
     PaymentMethodConfiguringProvider,
     DomainRegisteringProvider,
-    MoneyMirroringProvider
+    MoneyMirroringProvider,
+    IdentityVerifyingProvider
 {
   readonly id = 'stripe' as const;
   readonly mode: ProviderMode;
@@ -979,6 +991,96 @@ export class StripePaymentProvider
       request.idempotencyKey,
     );
     return { providerObjectId: customer.id };
+  }
+
+  // -------------------------------------------------------------------------
+  // Identity verification (ADR 0023)
+  // -------------------------------------------------------------------------
+
+  async createVerificationSession(
+    request: CreateVerificationSessionRequest,
+  ): Promise<ProviderVerificationSession> {
+    const options = toStripeOptions(request.type, request.options);
+    const session = await createStripeVerificationSession(
+      this.mode,
+      {
+        type: request.type,
+        ...(options !== undefined ? { options } : {}),
+        ...(request.returnUrl !== null ? { return_url: request.returnUrl } : {}),
+        // Orbit's own correlation key and nothing else: the merchant's
+        // metadata and reference stay in Orbit, so nothing about the person
+        // is handed to the provider beyond what they submit themselves.
+        metadata: { peable_verification_session_id: request.verificationSessionId },
+      },
+      request.idempotencyKey,
+    );
+    return toVerificationSession(session);
+  }
+
+  async getVerificationSession(providerObjectId: string): Promise<ProviderVerificationSession> {
+    return toVerificationSession(
+      await retrieveStripeVerificationSession(this.mode, providerObjectId),
+    );
+  }
+
+  async updateVerificationSession(request: {
+    readonly providerObjectId: string;
+    readonly type?: 'document' | 'id_number';
+    readonly options?: ProviderVerificationOptions;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderVerificationSession> {
+    const options =
+      request.options !== undefined && request.type !== undefined
+        ? toStripeOptions(request.type, request.options)
+        : undefined;
+    const session = await updateStripeVerificationSession(
+      this.mode,
+      request.providerObjectId,
+      {
+        ...(request.type !== undefined ? { type: request.type } : {}),
+        ...(options !== undefined ? { options } : {}),
+      },
+      request.idempotencyKey,
+    );
+    return toVerificationSession(session);
+  }
+
+  async cancelVerificationSession(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderVerificationSession> {
+    return toVerificationSession(
+      await cancelStripeVerificationSession(
+        this.mode,
+        request.providerObjectId,
+        request.idempotencyKey,
+      ),
+    );
+  }
+
+  async redactVerificationSession(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderVerificationSession> {
+    return toVerificationSession(
+      await redactStripeVerificationSession(
+        this.mode,
+        request.providerObjectId,
+        request.idempotencyKey,
+      ),
+    );
+  }
+
+  async getVerifiedOutputs(
+    providerObjectId: string,
+    include: { readonly dob: boolean; readonly idNumber: boolean },
+  ): Promise<ProviderVerifiedOutputs | null> {
+    const session = await retrieveStripeVerificationSession(this.mode, providerObjectId, [
+      'verified_outputs',
+      ...(include.dob ? ['verified_outputs.dob'] : []),
+      ...(include.idNumber ? ['verified_outputs.id_number'] : []),
+    ]);
+    return toVerifiedOutputs(session, include);
   }
 
   // -------------------------------------------------------------------------

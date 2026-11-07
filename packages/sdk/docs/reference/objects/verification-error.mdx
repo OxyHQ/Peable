@@ -1,0 +1,19 @@
+---
+title: "VerificationError"
+description: "The VerificationError shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# VerificationError
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `code` | string \| null | One of `abandoned`, `consent_declined`, `country_not_supported`, `device_not_supported`, `document_expired`, `document_type_not_supported`, `document_unverified_other`, `email_unverified_other`, `email_verification_declined`, `id_number_insufficient_document_data`, `id_number_mismatch`, `id_number_unverified_other`, `phone_unverified_other`, `phone_verification_declined`, `selfie_document_missing_photo`, `selfie_face_mismatch`, `selfie_manipulated`, `selfie_unverified_other`, `under_supported_age`. |
+| `reason` | string | Orbit's explanation of `code` (never the provider's prose). |
+
+## Used in
+
+[VerificationCheck](/reference/objects/verification-check) · [VerificationSession](/reference/objects/verification-session)

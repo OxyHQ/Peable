@@ -1,0 +1,138 @@
+---
+title: "Identity verification"
+description: "Verify a person's identity document and selfie on a hosted page, read the outcome, and erase what was collected."
+order: 13.5
+---
+
+# Identity verification
+
+A verification session (`vs_…`) sends one person through a hosted
+identity check: a photo of a government ID (`document`), optionally a selfie
+matched against it and an ID number, or an ID number check alone
+(`id_number`). It follows Stripe's lifecycle:
+
+| Status | What it means | What can happen |
+|---|---|---|
+| `requires_input` | Waiting for the person — a new session, or an attempt that failed (`last_error`) | `update`, `cancel`, `redact`; the person submits |
+| `processing` | Submitted; the checks are running (usually under a minute) | — |
+| `verified` | Every check passed | `redact` |
+| `canceled` | It can never be submitted again | `redact` |
+
+**What Peable keeps, and what it does not.** Peable stores the session's
+configuration, its status, and each check's outcome (`verified` /
+`unverified` and an error code). The person's document images, name, date of
+birth, address and document number stay with the verification provider and
+are never stored by Peable: you read them live with `expand[]=verified_outputs`
+when you need them, and you can erase them with `redact`.
+
+## Create a session and send the person to it
+
+```ts
+const session = await peable.identity.verificationSessions.create({
+  type: 'document',
+  options: {
+    document: {
+      allowed_types: ['passport', 'id_card', 'driving_license'],
+      require_live_capture: true,
+      require_matching_selfie: true,
+    },
+  },
+  return_url: 'https://example.com/verified',
+  client_reference_id: 'user_42', // your own reference; never sent to the provider
+  metadata: { plan: 'pro' },
+});
+
+// Redirect the person to the hosted page (single use, valid 48 hours).
+redirect(session.url);
+```
+
+`url` and `client_secret` are the person's single-use credentials. They are on
+the create answer and on a retrieve while the session is `requires_input` —
+never on a list, never in an event, and Peable does not store them. Hand them
+to the person and to no one else.
+
+`id_number` sessions take no `options`; `options.document` on one is a 400.
+
+## Follow the outcome
+
+Subscribe your webhook endpoint to the session's events (see
+[Webhooks and events](/webhooks)). Each carries the session under
+`data.object`:
+
+| Event | When |
+|---|---|
+| `identity.verification_session.created` | The session was created |
+| `identity.verification_session.processing` | The person submitted; the checks are running |
+| `identity.verification_session.requires_input` | An attempt failed — `last_error.code` says why — and the person can try again |
+| `identity.verification_session.verified` | Every check passed |
+| `identity.verification_session.canceled` | The session was canceled |
+| `identity.verification_session.redacted` | The provider finished erasing what was collected |
+
+`last_error.reason` is Peable's own sentence for the code — safe to show the
+person — never the provider's text.
+
+```ts
+const event = peable.webhooks.constructEvent(rawBody, signature, secret);
+if (event.type === 'identity.verification_session.verified') {
+  await markVerified(event.data.object.client_reference_id);
+}
+```
+
+## Read the checks
+
+Each attempt produces a report (`vr_…`) with the outcome of every check it
+ran. The session's `last_verification_report` names the newest one:
+
+```ts
+const session = await peable.identity.verificationSessions.retrieve('vs_…', {
+  expand: ['last_verification_report'],
+});
+// { document: { status: 'verified', error: null }, selfie: { status: 'unverified',
+//   error: { code: 'selfie_face_mismatch', reason: '…' } }, id_number: null }
+console.log(session.last_verification_report);
+
+const reports = await peable.identity.verificationReports.list({ verification_session: 'vs_…' });
+```
+
+A report carries outcomes only — no names, dates, numbers or images.
+
+## Read the verified data
+
+Once `verified`, a retrieve with `expand[]=verified_outputs` reads the
+person's verified data **live from the provider**, for that one answer:
+
+```ts
+const { verified_outputs } = await peable.identity.verificationSessions.retrieve('vs_…', {
+  expand: ['verified_outputs', 'verified_outputs.dob'],
+});
+// { first_name, last_name, address, email, phone, id_number_type, dob }
+```
+
+`dob` and `id_number` are only included when you name them
+(`verified_outputs.dob`, `verified_outputs.id_number`). Before `verified`, or
+after a redaction, `verified_outputs` is `null`. The answer is sent with
+`Cache-Control: no-store`; don't log it. Orbit never shows this data.
+
+## Update, cancel, redact
+
+While `requires_input` you can change `type` and `options` (sent to the
+provider) and `metadata`, or `cancel` the session. Any other status answers
+409 `verification_session_unexpected_state`.
+
+`redact` erases what was collected, irreversibly: the provider redacts the
+session and its reports (`redaction.status` is `processing`, then `redacted`
+with an `identity.verification_session.redacted` event — this can take up to
+four days), and Peable erases the session's `metadata` and
+`client_reference_id`, including in its stored events. A `requires_input`
+session is also canceled. A `processing` session cannot be redacted.
+
+```ts
+await peable.identity.verificationSessions.redact('vs_…');
+```
+
+## Test and live
+
+A session belongs to the mode of the credential that created it; test
+sessions never reach live verification and the reverse. If identity
+verification is not enabled for a mode, every call answers 503
+`identity_unavailable`.

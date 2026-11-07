@@ -381,6 +381,13 @@ export const WEBHOOK_EVENT_SCOPES = {
   'tax.assessment.created': 'merchant',
   'tax.review_item.created': 'merchant',
   'tax.review_item.updated': 'merchant',
+  // Identity verification (ADR 0023): about the merchant's own sessions.
+  'identity.verification_session.created': 'merchant',
+  'identity.verification_session.processing': 'merchant',
+  'identity.verification_session.verified': 'merchant',
+  'identity.verification_session.requires_input': 'merchant',
+  'identity.verification_session.canceled': 'merchant',
+  'identity.verification_session.redacted': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
@@ -506,6 +513,18 @@ export {
   SUBSCRIPTION_STATUSES,
   TEST_CLOCK_STATUSES,
   TRIAL_END_BEHAVIORS,
+} from '@peable.to/shared-types';
+
+/**
+ * Identity verification's closed sets (ADR 0023), re-exported from the wire
+ * contract for the same reason as the catalog's.
+ */
+export {
+  VERIFICATION_CHECK_STATUSES,
+  VERIFICATION_ERROR_CODES,
+  VERIFICATION_REDACTION_STATUSES,
+  VERIFICATION_SESSION_STATUSES,
+  VERIFICATION_SESSION_TYPES,
 } from '@peable.to/shared-types';
 
 /** The kinds of invoice line (`invoice_line_items.type`). */

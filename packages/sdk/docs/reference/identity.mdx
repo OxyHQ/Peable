@@ -1,0 +1,560 @@
+---
+title: "Identity"
+description: "The Identity endpoints of the Peable API."
+order: 923
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Identity
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/identity/verification_reports`](#list-verification-reports) | List verification reports |
+| [`GET /v1/identity/verification_reports/{id}`](#retrieve-a-verification-report) | Retrieve a verification report |
+| [`POST /v1/identity/verification_sessions`](#create-a-verification-session) | Create a verification session |
+| [`GET /v1/identity/verification_sessions`](#list-verification-sessions) | List verification sessions |
+| [`GET /v1/identity/verification_sessions/{id}`](#retrieve-a-verification-session) | Retrieve a verification session |
+| [`POST /v1/identity/verification_sessions/{id}`](#update-a-verification-session) | Update a verification session |
+| [`POST /v1/identity/verification_sessions/{id}/cancel`](#cancel-a-verification-session) | Cancel a verification session |
+| [`POST /v1/identity/verification_sessions/{id}/redact`](#redact-a-verification-session) | Redact a verification session |
+
+## List verification reports
+
+`GET /v1/identity/verification_reports`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.identity.verificationReports.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `verification_session` | query | string | Only this session's reports (`vs_…`). 1–255 characters. |
+| `type` | query | string | One of `document`, `id_number`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [VerificationReport](/reference/objects/verification-report) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [VerificationReport](/reference/objects/verification-report) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "vr_0193b8f2c1a87d3e9f4b",
+      "object": "identity.verification_report",
+      "livemode": false,
+      "type": "document",
+      "verification_session": "vs_0193b8f2c1a87d3e9f4a",
+      "options": {
+        "document": {
+          "allowed_types": null,
+          "require_id_number": null,
+          "require_live_capture": null,
+          "require_matching_selfie": true
+        }
+      },
+      "document": {
+        "status": "verified",
+        "error": null
+      },
+      "id_number": null,
+      "selfie": {
+        "status": "verified",
+        "error": null
+      },
+      "created": 1793750460
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/identity/verification_reports"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.verification_session` → [VerificationSession](/reference/objects/verification-session)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a verification report
+
+`GET /v1/identity/verification_reports/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.identity.verificationReports.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The verification report (`vr_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [VerificationReport](/reference/objects/verification-report).
+
+```json
+{
+  "id": "vr_0193b8f2c1a87d3e9f4b",
+  "object": "identity.verification_report",
+  "livemode": false,
+  "type": "document",
+  "verification_session": "vs_0193b8f2c1a87d3e9f4a",
+  "options": {
+    "document": {
+      "allowed_types": null,
+      "require_id_number": null,
+      "require_live_capture": null,
+      "require_matching_selfie": true
+    }
+  },
+  "document": {
+    "status": "verified",
+    "error": null
+  },
+  "id_number": null,
+  "selfie": {
+    "status": "verified",
+    "error": null
+  },
+  "created": 1793750460
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `verification_session` → [VerificationSession](/reference/objects/verification-session)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a verification session
+
+`POST /v1/identity/verification_sessions`
+
+Creates the session at the provider and answers its hosted `url` and `client_secret` — this answer and a retrieve are the only places they appear. 503 `identity_unavailable` when identity verification is not enabled in this mode.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.identity.verificationSessions.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` **required** | string | The check to perform. One of `document`, `id_number`. |
+| `options` | object | `document` options apply to a `document` session only. |
+| `options[document]` | object |  |
+| `options[document][allowed_types]` | array of string | At most 3 items. At least 1 item. |
+| `options[document][require_id_number]` | boolean |  |
+| `options[document][require_live_capture]` | boolean |  |
+| `options[document][require_matching_selfie]` | boolean |  |
+| `return_url` | string | At most 2048 characters. |
+| `client_reference_id` | string | 1–255 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `201`**
+
+Returns [VerificationSession](/reference/objects/verification-session).
+
+```json
+{
+  "id": "vs_0193b8f2c1a87d3e9f4a",
+  "object": "identity.verification_session",
+  "livemode": false,
+  "type": "document",
+  "status": "requires_input",
+  "options": {
+    "document": {
+      "allowed_types": [
+        "passport",
+        "id_card"
+      ],
+      "require_id_number": null,
+      "require_live_capture": true,
+      "require_matching_selfie": true
+    }
+  },
+  "client_secret": null,
+  "url": null,
+  "return_url": "https://example.com/verified",
+  "client_reference_id": "user_42",
+  "last_error": null,
+  "last_verification_report": null,
+  "redaction": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List verification sessions
+
+`GET /v1/identity/verification_sessions`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.identity.verificationSessions.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `status` | query | string | One of `requires_input`, `processing`, `verified`, `canceled`. |
+| `client_reference_id` | query | string | Only sessions with this reference. 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [VerificationSession](/reference/objects/verification-session) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [VerificationSession](/reference/objects/verification-session) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "vs_0193b8f2c1a87d3e9f4a",
+      "object": "identity.verification_session",
+      "livemode": false,
+      "type": "document",
+      "status": "requires_input",
+      "options": {
+        "document": {
+          "allowed_types": [
+            "passport",
+            "id_card"
+          ],
+          "require_id_number": null,
+          "require_live_capture": true,
+          "require_matching_selfie": true
+        }
+      },
+      "client_secret": null,
+      "url": null,
+      "return_url": "https://example.com/verified",
+      "client_reference_id": "user_42",
+      "last_error": null,
+      "last_verification_report": null,
+      "redaction": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/identity/verification_sessions"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a verification session
+
+`GET /v1/identity/verification_sessions/{id}`
+
+Reconciled with the provider while not terminal; carries `url` and `client_secret` while `requires_input`. `expand[]=verified_outputs` reads the verified data live.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.identity.verificationSessions.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The verification session (`vs_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [VerificationSession](/reference/objects/verification-session).
+
+```json
+{
+  "id": "vs_0193b8f2c1a87d3e9f4a",
+  "object": "identity.verification_session",
+  "livemode": false,
+  "type": "document",
+  "status": "requires_input",
+  "options": {
+    "document": {
+      "allowed_types": [
+        "passport",
+        "id_card"
+      ],
+      "require_id_number": null,
+      "require_live_capture": true,
+      "require_matching_selfie": true
+    }
+  },
+  "client_secret": null,
+  "url": null,
+  "return_url": "https://example.com/verified",
+  "client_reference_id": "user_42",
+  "last_error": null,
+  "last_verification_report": null,
+  "redaction": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a verification session
+
+`POST /v1/identity/verification_sessions/{id}`
+
+Only while `requires_input`: its `type` and `options` (sent to the provider) and its metadata.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.identity.verificationSessions.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The verification session (`vs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | One of `document`, `id_number`. |
+| `options` | object |  |
+| `options[document]` | object |  |
+| `options[document][allowed_types]` | array of string | At most 3 items. At least 1 item. |
+| `options[document][require_id_number]` | boolean |  |
+| `options[document][require_live_capture]` | boolean |  |
+| `options[document][require_matching_selfie]` | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [VerificationSession](/reference/objects/verification-session).
+
+```json
+{
+  "id": "vs_0193b8f2c1a87d3e9f4a",
+  "object": "identity.verification_session",
+  "livemode": false,
+  "type": "document",
+  "status": "requires_input",
+  "options": {
+    "document": {
+      "allowed_types": [
+        "passport",
+        "id_card"
+      ],
+      "require_id_number": null,
+      "require_live_capture": true,
+      "require_matching_selfie": true
+    }
+  },
+  "client_secret": null,
+  "url": null,
+  "return_url": "https://example.com/verified",
+  "client_reference_id": "user_42",
+  "last_error": null,
+  "last_verification_report": null,
+  "redaction": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a verification session
+
+`POST /v1/identity/verification_sessions/{id}/cancel`
+
+Only while `requires_input`; the person can never submit it again.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.identity.verificationSessions.cancel()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The verification session (`vs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [VerificationSession](/reference/objects/verification-session).
+
+```json
+{
+  "id": "vs_0193b8f2c1a87d3e9f4a",
+  "object": "identity.verification_session",
+  "livemode": false,
+  "type": "document",
+  "status": "requires_input",
+  "options": {
+    "document": {
+      "allowed_types": [
+        "passport",
+        "id_card"
+      ],
+      "require_id_number": null,
+      "require_live_capture": true,
+      "require_matching_selfie": true
+    }
+  },
+  "client_secret": null,
+  "url": null,
+  "return_url": "https://example.com/verified",
+  "client_reference_id": "user_42",
+  "last_error": null,
+  "last_verification_report": null,
+  "redaction": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Redact a verification session
+
+`POST /v1/identity/verification_sessions/{id}/redact`
+
+Erases what was collected: the provider redacts the session and its reports (`redaction.status` `processing`, then `redacted`); Orbit erases the metadata and `client_reference_id` of the session and of its stored events. A `requires_input` session is also canceled. Irreversible; refused while `processing`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.identity.verificationSessions.redact()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The verification session (`vs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [VerificationSession](/reference/objects/verification-session).
+
+```json
+{
+  "id": "vs_0193b8f2c1a87d3e9f4a",
+  "object": "identity.verification_session",
+  "livemode": false,
+  "type": "document",
+  "status": "requires_input",
+  "options": {
+    "document": {
+      "allowed_types": [
+        "passport",
+        "id_card"
+      ],
+      "require_id_number": null,
+      "require_live_capture": true,
+      "require_matching_selfie": true
+    }
+  },
+  "client_secret": null,
+  "url": null,
+  "return_url": "https://example.com/verified",
+  "client_reference_id": "user_42",
+  "last_error": null,
+  "last_verification_report": null,
+  "redaction": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1096,3 +1096,38 @@ otherwise undo:
 - **Migrations `0107`–`0109`.** `0107` the customers column and its CHECK `NOT
   VALID`; `0108` `checkout_sessions`' hot-table DDL alone (nullable column, CHECK
   `NOT VALID`); `0109` (post) both `VALIDATE`s.
+
+## Identity verification (ADR 0023)
+
+`verification_sessions` (`vs_…`) and `verification_reports` (`vr_…`,
+`schema/identity.ts`). Decisions a reader would otherwise undo:
+
+- **No column for the person, ever.** A session holds the merchant's
+  configuration and the provider's verdict; a report holds each check's
+  `*_status` and `*_error_code`. Names, dates, numbers, addresses, the document
+  type and issuing country, and the provider's image File ids are not stored —
+  `verified_outputs` is a live read. `identity.realdb.test.ts` pins the column
+  lists and searches every row for the fake provider's personal values; a new
+  column is a decision to argue in ADR 0023 first.
+- **No `url` / `client_secret` column.** They are the person's single-use
+  credentials, passed through on a create and a retrieve.
+- **`provider_object_id` is `NOT NULL`**: the session is created at the
+  provider before the row (an Identity-less account must leave no row).
+- **`has_last_error` beside `last_error_code`** (`verification_sessions_last_error_check`:
+  a code implies a failure): a failure whose code Orbit does not know is still
+  a failure, rendered with the generic reason, never dropped.
+- **`verification_sessions_redacted_holds_no_reference_check`**: once
+  `redaction_status` is set, `metadata = '{}'` and `client_reference_id` is
+  null. `updateVerificationSessionState` erases both in the statement that sets
+  it; `redactVerificationSessionEvents` erases the same two fields in the
+  session's stored events (the one update to an `events` row).
+- **`last_verification_report` is not a column**: it is the newest report of
+  the session, read in the row's statement (a column would make the two tables
+  reference each other).
+- **A report is recorded once** — `unique(provider, provider_object_id)`,
+  insert-or-nothing in `recordVerificationReport`; the composite
+  `(verification_session_id, merchant_id)` reference makes "this merchant's
+  session" structural.
+- **Migrations `0119`–`0120`.** `0119` the two tables and the widened
+  `events_type_check` / `webhook_endpoints_enabled_events_check` `NOT VALID`;
+  `0120` (post) validates them.

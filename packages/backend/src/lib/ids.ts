@@ -25,6 +25,9 @@ export function newId(
     | 'cus'
     | 'pm'
     | 'seti'
+    // Identity verification (ADR 0023): sessions and their reports.
+    | 'vs'
+    | 'vr'
     | 'prod'
     | 'price'
     | 'coupon'

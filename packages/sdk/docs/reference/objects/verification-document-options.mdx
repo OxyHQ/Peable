@@ -1,0 +1,21 @@
+---
+title: "VerificationDocumentOptions"
+description: "The VerificationDocumentOptions shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# VerificationDocumentOptions
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `allowed_types` | array of string \| null | The documents accepted; `null` accepts all three. |
+| `require_id_number` | boolean \| null | Also collect an ID number and check it against the document. |
+| `require_live_capture` | boolean \| null | Refuse uploads: the document must be captured with the camera. |
+| `require_matching_selfie` | boolean \| null | Capture a selfie and compare it with the document's photo. |
+
+## Used in
+
+[VerificationOptions](/reference/objects/verification-options)

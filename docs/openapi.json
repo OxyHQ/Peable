@@ -87,6 +87,9 @@
       "name": "Hosted portal"
     },
     {
+      "name": "Identity"
+    },
+    {
       "name": "Invoice items"
     },
     {
@@ -13826,6 +13829,1238 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/verification_reports": {
+      "get": {
+        "operationId": "listVerificationReports",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "List verification reports",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "identity.verificationReports.list",
+        "x-peable-expandable": "identity.verification_report",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "verification_session",
+            "description": "Only this session's reports (`vs_…`).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "document",
+                "id_number"
+              ]
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationReport"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/verification_reports/{id}": {
+      "get": {
+        "operationId": "retrieveVerificationReport",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Retrieve a verification report",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "identity.verificationReports.retrieve",
+        "x-peable-expandable": "identity.verification_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The verification report (`vr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/verification_sessions": {
+      "post": {
+        "operationId": "createVerificationSession",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Create a verification session",
+        "description": "Creates the session at the provider and answers its hosted `url` and `client_secret` — this answer and a retrieve are the only places they appear. 503 `identity_unavailable` when identity verification is not enabled in this mode.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "identity.verificationSessions.create",
+        "x-peable-expandable": "identity.verification_session",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "document",
+                      "id_number"
+                    ],
+                    "description": "The check to perform."
+                  },
+                  "options": {
+                    "type": "object",
+                    "properties": {
+                      "document": {
+                        "type": "object",
+                        "properties": {
+                          "allowed_types": {
+                            "minItems": 1,
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "driving_license",
+                                "id_card",
+                                "passport"
+                              ]
+                            }
+                          },
+                          "require_id_number": {
+                            "type": "boolean"
+                          },
+                          "require_live_capture": {
+                            "type": "boolean"
+                          },
+                          "require_matching_selfie": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "`document` options apply to a `document` session only."
+                  },
+                  "return_url": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "client_reference_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listVerificationSessions",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "List verification sessions",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "identity.verificationSessions.list",
+        "x-peable-expandable": "identity.verification_session",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "requires_input",
+                "processing",
+                "verified",
+                "canceled"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "client_reference_id",
+            "description": "Only sessions with this reference.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationSession"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/verification_sessions/{id}": {
+      "get": {
+        "operationId": "retrieveVerificationSession",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Retrieve a verification session",
+        "description": "Reconciled with the provider while not terminal; carries `url` and `client_secret` while `requires_input`. `expand[]=verified_outputs` reads the verified data live.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "identity.verificationSessions.retrieve",
+        "x-peable-expandable": "identity.verification_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The verification session (`vs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "updateVerificationSession",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Update a verification session",
+        "description": "Only while `requires_input`: its `type` and `options` (sent to the provider) and its metadata.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "identity.verificationSessions.update",
+        "x-peable-expandable": "identity.verification_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The verification session (`vs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "document",
+                      "id_number"
+                    ]
+                  },
+                  "options": {
+                    "type": "object",
+                    "properties": {
+                      "document": {
+                        "type": "object",
+                        "properties": {
+                          "allowed_types": {
+                            "minItems": 1,
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "driving_license",
+                                "id_card",
+                                "passport"
+                              ]
+                            }
+                          },
+                          "require_id_number": {
+                            "type": "boolean"
+                          },
+                          "require_live_capture": {
+                            "type": "boolean"
+                          },
+                          "require_matching_selfie": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/verification_sessions/{id}/cancel": {
+      "post": {
+        "operationId": "cancelVerificationSession",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Cancel a verification session",
+        "description": "Only while `requires_input`; the person can never submit it again.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "identity.verificationSessions.cancel",
+        "x-peable-expandable": "identity.verification_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The verification session (`vs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/verification_sessions/{id}/redact": {
+      "post": {
+        "operationId": "redactVerificationSession",
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Redact a verification session",
+        "description": "Erases what was collected: the provider redacts the session and its reports (`redaction.status` `processing`, then `redacted`); Orbit erases the metadata and `client_reference_id` of the session and of its stored events. A `requires_input` session is also canceled. Irreversible; refused while `processing`.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "identity.verificationSessions.redact",
+        "x-peable-expandable": "identity.verification_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The verification session (`vs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationSession"
                 }
               }
             }
@@ -43103,7 +44338,7 @@
                   },
                   "enabled_events": {
                     "minItems": 1,
-                    "maxItems": 97,
+                    "maxItems": 103,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -43204,7 +44439,13 @@
                         "quote.canceled",
                         "tax.assessment.created",
                         "tax.review_item.created",
-                        "tax.review_item.updated"
+                        "tax.review_item.updated",
+                        "identity.verification_session.created",
+                        "identity.verification_session.processing",
+                        "identity.verification_session.verified",
+                        "identity.verification_session.requires_input",
+                        "identity.verification_session.canceled",
+                        "identity.verification_session.redacted"
                       ]
                     }
                   },
@@ -43641,7 +44882,7 @@
                   },
                   "enabled_events": {
                     "minItems": 1,
-                    "maxItems": 97,
+                    "maxItems": 103,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -43742,7 +44983,13 @@
                         "quote.canceled",
                         "tax.assessment.created",
                         "tax.review_item.created",
-                        "tax.review_item.updated"
+                        "tax.review_item.updated",
+                        "identity.verification_session.created",
+                        "identity.verification_session.processing",
+                        "identity.verification_session.verified",
+                        "identity.verification_session.requires_input",
+                        "identity.verification_session.canceled",
+                        "identity.verification_session.redacted"
                       ]
                     }
                   },
@@ -47973,6 +49220,618 @@
                     "properties": {
                       "object": {
                         "$ref": "#/components/schemas/ActiveEntitlementSummary"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "identity.verification_session.canceled": {
+      "post": {
+        "operationId": "webhook_identity_verification_session_canceled",
+        "summary": "identity.verification_session.canceled",
+        "description": "A VerificationSession was canceled.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "identity.verification_session.canceled"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/VerificationSession"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "identity.verification_session.created": {
+      "post": {
+        "operationId": "webhook_identity_verification_session_created",
+        "summary": "identity.verification_session.created",
+        "description": "A VerificationSession was created.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "identity.verification_session.created"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/VerificationSession"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "identity.verification_session.processing": {
+      "post": {
+        "operationId": "webhook_identity_verification_session_processing",
+        "summary": "identity.verification_session.processing",
+        "description": "A VerificationSession was submitted and is being checked.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "identity.verification_session.processing"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/VerificationSession"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "identity.verification_session.redacted": {
+      "post": {
+        "operationId": "webhook_identity_verification_session_redacted",
+        "summary": "identity.verification_session.redacted",
+        "description": "A VerificationSession's collected data was erased at the provider.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "identity.verification_session.redacted"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/VerificationSession"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "identity.verification_session.requires_input": {
+      "post": {
+        "operationId": "webhook_identity_verification_session_requires_input",
+        "summary": "identity.verification_session.requires_input",
+        "description": "A VerificationSession attempt failed (`last_error`) and needs the person again.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "identity.verification_session.requires_input"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/VerificationSession"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "identity.verification_session.verified": {
+      "post": {
+        "operationId": "webhook_identity_verification_session_verified",
+        "summary": "identity.verification_session.verified",
+        "description": "A VerificationSession was verified: every check passed.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "identity.verification_session.verified"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/VerificationSession"
                       },
                       "previous_attributes": {
                         "type": "object",
@@ -60272,7 +62131,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 115 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 117 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -60436,6 +62295,12 @@
               "tax.assessment.created",
               "tax.review_item.created",
               "tax.review_item.updated",
+              "identity.verification_session.created",
+              "identity.verification_session.processing",
+              "identity.verification_session.verified",
+              "identity.verification_session.requires_input",
+              "identity.verification_session.canceled",
+              "identity.verification_session.redacted",
               "webhook_endpoint.test"
             ]
           },
@@ -60554,6 +62419,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/TaxReviewItem"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VerificationSession"
                   },
                   {
                     "$ref": "#/components/schemas/WebhookEndpoint"
@@ -71417,6 +73285,573 @@
         ],
         "additionalProperties": false
       },
+      "VerificationCheck": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "unverified"
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when `unverified`."
+          }
+        },
+        "required": [
+          "status",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "VerificationDocumentOptions": {
+        "type": "object",
+        "properties": {
+          "allowed_types": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "driving_license",
+                    "id_card",
+                    "passport"
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The documents accepted; `null` accepts all three."
+          },
+          "require_id_number": {
+            "description": "Also collect an ID number and check it against the document.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "require_live_capture": {
+            "description": "Refuse uploads: the document must be captured with the camera.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "require_matching_selfie": {
+            "description": "Capture a selfie and compare it with the document's photo.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "allowed_types",
+          "require_id_number",
+          "require_live_capture",
+          "require_matching_selfie"
+        ],
+        "additionalProperties": false
+      },
+      "VerificationError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "abandoned",
+                  "consent_declined",
+                  "country_not_supported",
+                  "device_not_supported",
+                  "document_expired",
+                  "document_type_not_supported",
+                  "document_unverified_other",
+                  "email_unverified_other",
+                  "email_verification_declined",
+                  "id_number_insufficient_document_data",
+                  "id_number_mismatch",
+                  "id_number_unverified_other",
+                  "phone_unverified_other",
+                  "phone_verification_declined",
+                  "selfie_document_missing_photo",
+                  "selfie_face_mismatch",
+                  "selfie_manipulated",
+                  "selfie_unverified_other",
+                  "under_supported_age"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Orbit's explanation of `code` (never the provider's prose)."
+          }
+        },
+        "required": [
+          "code",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "VerificationOptions": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/VerificationDocumentOptions"
+          },
+          "id_number": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "VerificationReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "identity.verification_report"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "`true` in live mode, `false` in test mode."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "document",
+              "id_number"
+            ]
+          },
+          "verification_session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/VerificationSession"
+              }
+            ],
+            "x-peable-expandable": "identity.verification_session",
+            "description": "The session (`vs_…`) this attempt belongs to, or the VerificationSession with `expand[]=verification_session`."
+          },
+          "options": {
+            "$ref": "#/components/schemas/VerificationOptions"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id_number": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selfie": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Unix seconds."
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "type",
+          "verification_session",
+          "options",
+          "document",
+          "id_number",
+          "selfie",
+          "created"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "vr_0193b8f2c1a87d3e9f4b",
+            "object": "identity.verification_report",
+            "livemode": false,
+            "type": "document",
+            "verification_session": "vs_0193b8f2c1a87d3e9f4a",
+            "options": {
+              "document": {
+                "allowed_types": null,
+                "require_id_number": null,
+                "require_live_capture": null,
+                "require_matching_selfie": true
+              }
+            },
+            "document": {
+              "status": "verified",
+              "error": null
+            },
+            "id_number": null,
+            "selfie": {
+              "status": "verified",
+              "error": null
+            },
+            "created": 1793750460
+          }
+        ]
+      },
+      "VerificationSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "identity.verification_session"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "`true` in live mode, `false` in test mode."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "document",
+              "id_number"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "requires_input",
+              "processing",
+              "verified",
+              "canceled"
+            ]
+          },
+          "options": {
+            "$ref": "#/components/schemas/VerificationOptions"
+          },
+          "client_secret": {
+            "description": "The provider's short-lived secret for its in-page verification modal. Only on a create or retrieve while `requires_input`; never stored by Orbit, never on a list or an event.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "description": "The provider-hosted page that verifies the person (single use, 48 hours). Only on a create or retrieve while `requires_input`; never stored by Orbit, never on a list or an event.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "return_url": {
+            "description": "Where the hosted page sends the person when done.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_reference_id": {
+            "description": "Your own reference for the person.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last attempt failed, while `requires_input`."
+          },
+          "last_verification_report": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VerificationReport"
+                  }
+                ],
+                "x-peable-expandable": "identity.verification_report",
+                "description": "The newest report (`vr_…`), or the VerificationReport with `expand[]=last_verification_report`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "redaction": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "processing",
+                      "redacted"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` until the session is redacted."
+          },
+          "verified_outputs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifiedOutputs"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only with `expand[]=verified_outputs` on a retrieve: read live from the provider, `null` until `verified` or once redacted."
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500."
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Unix seconds."
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "type",
+          "status",
+          "options",
+          "client_secret",
+          "url",
+          "return_url",
+          "client_reference_id",
+          "last_error",
+          "last_verification_report",
+          "redaction",
+          "metadata",
+          "created"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "vs_0193b8f2c1a87d3e9f4a",
+            "object": "identity.verification_session",
+            "livemode": false,
+            "type": "document",
+            "status": "requires_input",
+            "options": {
+              "document": {
+                "allowed_types": [
+                  "passport",
+                  "id_card"
+                ],
+                "require_id_number": null,
+                "require_live_capture": true,
+                "require_matching_selfie": true
+              }
+            },
+            "client_secret": null,
+            "url": null,
+            "return_url": "https://example.com/verified",
+            "client_reference_id": "user_42",
+            "last_error": null,
+            "last_verification_report": null,
+            "redaction": null,
+            "metadata": {},
+            "created": 1793750400
+          }
+        ]
+      },
+      "VerifiedOutputs": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id_number_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "br_cpf",
+                  "sg_nric",
+                  "us_ssn"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dob": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "day": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "month": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "year": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "day",
+                  "month",
+                  "year"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "address",
+          "email",
+          "phone",
+          "id_number_type"
+        ],
+        "additionalProperties": false
+      },
       "WebhookDelivery": {
         "type": "object",
         "properties": {
@@ -71534,6 +73969,12 @@
               "tax.assessment.created",
               "tax.review_item.created",
               "tax.review_item.updated",
+              "identity.verification_session.created",
+              "identity.verification_session.processing",
+              "identity.verification_session.verified",
+              "identity.verification_session.requires_input",
+              "identity.verification_session.canceled",
+              "identity.verification_session.redacted",
               "webhook_endpoint.test"
             ]
           },
@@ -71742,7 +74183,13 @@
                 "quote.canceled",
                 "tax.assessment.created",
                 "tax.review_item.created",
-                "tax.review_item.updated"
+                "tax.review_item.updated",
+                "identity.verification_session.created",
+                "identity.verification_session.processing",
+                "identity.verification_session.verified",
+                "identity.verification_session.requires_input",
+                "identity.verification_session.canceled",
+                "identity.verification_session.redacted"
               ]
             },
             "description": "The event types sent to it; `*` is every type, including ones added later."
@@ -71956,7 +74403,13 @@
                 "quote.canceled",
                 "tax.assessment.created",
                 "tax.review_item.created",
-                "tax.review_item.updated"
+                "tax.review_item.updated",
+                "identity.verification_session.created",
+                "identity.verification_session.processing",
+                "identity.verification_session.verified",
+                "identity.verification_session.requires_input",
+                "identity.verification_session.canceled",
+                "identity.verification_session.redacted"
               ]
             },
             "description": "The event types sent to it; `*` is every type, including ones added later."

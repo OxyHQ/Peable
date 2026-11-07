@@ -147,6 +147,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   subscription_unexpected_state:
     'The subscription is in a status that does not allow this operation.',
   report_schedule_unexpected_state: 'A canceled report schedule never changes.',
+  identity_unavailable: 'Identity verification is off in this mode.',
+  verification_session_unexpected_state: "The session's status does not allow this.",
   customer_currency_mismatch: "The currency differs from the customer's billing currency.",
   customer_test_clock_mismatch: 'The objects live on different test clocks.',
   coupon_invalid: 'The coupon does not exist or is no longer valid.',

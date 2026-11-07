@@ -397,6 +397,16 @@ export const WEBHOOK_EVENT_DESCRIPTIONS: Readonly<Record<WebhookEventType, strin
     'A tax compliance assessment was run. Nothing was registered, filed or collected.',
   'tax.review_item.created': 'A tax assessment finding opened a review item.',
   'tax.review_item.updated': 'A tax review item was decided, or found again.',
+  'identity.verification_session.created': 'A VerificationSession was created.',
+  'identity.verification_session.processing':
+    'A VerificationSession was submitted and is being checked.',
+  'identity.verification_session.verified':
+    'A VerificationSession was verified: every check passed.',
+  'identity.verification_session.requires_input':
+    'A VerificationSession attempt failed (`last_error`) and needs the person again.',
+  'identity.verification_session.canceled': 'A VerificationSession was canceled.',
+  'identity.verification_session.redacted':
+    "A VerificationSession's collected data was erased at the provider.",
   'webhook_endpoint.test':
     'A test event, sent to ONE endpoint when its owner asks. It cannot be subscribed to.',
 };

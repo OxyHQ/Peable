@@ -52,6 +52,7 @@ export type OrbitDestinationKey =
   | 'tax-collection'
   | 'contributions'
   | 'account'
+  | 'identity'
   | 'branding'
   | 'developers'
   | 'settings';
@@ -267,6 +268,13 @@ export const ORBIT_DESTINATIONS: readonly OrbitDestination[] = [
     href: '/account',
     section: 'business',
     keywords: ['onboarding', 'verification', 'capabilities', 'requirements'],
+  },
+  {
+    key: 'identity',
+    labelKey: 'nav.identity',
+    href: '/identity',
+    section: 'business',
+    keywords: ['identity verification', 'kyc', 'id document', 'passport', 'selfie', 'verify'],
   },
   {
     key: 'branding',

@@ -41,7 +41,9 @@ import { syncChargeFromProvider, syncChargeSnapshot } from '../charges';
 import { saveIntentPaymentMethod } from '../customers/paymentMethodService';
 import { applySetupResult } from '../customers/setupIntentService';
 import { findSetupIntentByProviderObject } from '../../db/customers/setupIntentRepository';
-import { isSetupHoldingProvider } from './provider';
+import { isIdentityVerifyingProvider, isSetupHoldingProvider } from './provider';
+import { findVerificationSessionByProviderObject } from '../../db/identity/verificationRepository';
+import { applyVerificationSnapshot } from '../identity/verificationSessions';
 import { selectStoredProvider } from './environmentGuard';
 import { toLastPaymentError } from '../intentReconciliation';
 import type { ProviderPaymentError } from './provider';
@@ -290,6 +292,9 @@ export async function processProviderEvent(event: ProviderEventRow): Promise<Pro
     }
     if (SETUP_INTENT_EVENTS.has(event.type)) {
       return await handleSetupIntentEvent(db, event);
+    }
+    if (VERIFICATION_SESSION_EVENTS.has(event.type)) {
+      return await handleVerificationSessionEvent(db, event);
     }
     if (CHARGE_SNAPSHOT_EVENTS.has(event.type)) {
       return await handleChargeEvent(db, event);
@@ -1138,4 +1143,60 @@ async function handleSetupIntentEvent(
   return outcome.kind === 'applied'
     ? { kind: 'applied', intentId: setup.id, status: outcome.row.status }
     : { kind: 'noop', intentId: setup.id };
+}
+
+/**
+ * Identity verification events (ADR 0023). Like SetupIntents, every one means
+ * "re-read this session": the stored payload is redacted, and the provider's
+ * read — reduced to its verdict by the adapter — is applied through
+ * `applyVerificationSnapshot`, the one path a provider session becomes a
+ * change (compare-and-swap, the report's outcomes, events in the same commit).
+ */
+const VERIFICATION_SESSION_EVENTS: ReadonlySet<string> = new Set([
+  'identity.verification_session.created',
+  'identity.verification_session.processing',
+  'identity.verification_session.verified',
+  'identity.verification_session.requires_input',
+  'identity.verification_session.canceled',
+  'identity.verification_session.redacted',
+]);
+
+/** Which key in `object_ids` names the session (the provider object's own `object`). */
+const VERIFICATION_SESSION_OBJECT_KEY = 'identity.verification_session';
+
+async function handleVerificationSessionEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const provider = event.provider as ProviderId;
+  const objectId = event.objectIds[VERIFICATION_SESSION_OBJECT_KEY];
+  if (!objectId) {
+    const message = `no verification session id on a ${event.type}`;
+    await markProviderEventFailed(db, event.id, message);
+    return { kind: 'failed', error: message };
+  }
+  const session = await findVerificationSessionByProviderObject(db, provider, objectId);
+  // Created at the provider first and stored a moment later: its own
+  // `created` can arrive in that window, and is retried rather than dropped.
+  if (!session) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, session);
+  if (crossed) return crossed;
+  const adapter = selectStoredProvider(session.provider, session.livemode);
+  if (!adapter || !isIdentityVerifyingProvider(adapter)) {
+    const message = `the ${session.provider} rail cannot read verification sessions in this mode`;
+    await markProviderEventFailed(db, event.id, message);
+    return { kind: 'failed', error: message };
+  }
+  const outcome = await applyVerificationSnapshot(
+    session,
+    await adapter.getVerificationSession(objectId),
+  );
+  if (outcome.kind === 'irreconcilable') {
+    await markProviderEventFailed(db, event.id, redactProviderMessage(outcome.error));
+    return { kind: 'failed', error: outcome.error };
+  }
+  await markProviderEventProcessed(db, event.id);
+  return outcome.kind === 'applied'
+    ? { kind: 'applied', intentId: session.id, status: outcome.row.status }
+    : { kind: 'noop', intentId: session.id };
 }

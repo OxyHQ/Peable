@@ -44,6 +44,8 @@ const WRITE_RULES: readonly (readonly [RegExp, DashboardAction])[] = [
     /^\/(subscriptions|subscription_items|invoices|invoiceitems|credit_notes|quotes|customers|test_helpers|billing_settings|billing|entitlements|billing_portal)(\/|$)/,
     'money',
   ],
+  // Sending a person through identity verification, and erasing what they submitted (ADR 0023).
+  [/^\/identity\//, 'money'],
   [/^\/(webhook_endpoints|webhook_deliveries)(\/|$)/, 'webhooks'],
   [
     /^\/(products|prices|coupons|promotion_codes|checkout_sessions|payment_links|branding|email_settings|payment_method_configurations|payment_method_domains)(\/|$)/,

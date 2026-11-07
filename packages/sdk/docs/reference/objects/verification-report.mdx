@@ -1,0 +1,70 @@
+---
+title: "VerificationReport"
+description: "The identity.verification_report object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# VerificationReport
+
+Object type: `identity.verification_report`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"identity.verification_report"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `type` | string | One of `document`, `id_number`. |
+| `verification_session` | string \| [VerificationSession](/reference/objects/verification-session) | The session (`vs_…`) this attempt belongs to, or the VerificationSession with `expand[]=verification_session`. Expandable. |
+| `options` | [VerificationOptions](/reference/objects/verification-options) |  |
+| `document` | [VerificationCheck](/reference/objects/verification-check) \| null |  |
+| `id_number` | [VerificationCheck](/reference/objects/verification-check) \| null |  |
+| `selfie` | [VerificationCheck](/reference/objects/verification-check) \| null |  |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `verification_session` → [VerificationSession](/reference/objects/verification-session)
+
+## Example
+
+```json
+{
+  "id": "vr_0193b8f2c1a87d3e9f4b",
+  "object": "identity.verification_report",
+  "livemode": false,
+  "type": "document",
+  "verification_session": "vs_0193b8f2c1a87d3e9f4a",
+  "options": {
+    "document": {
+      "allowed_types": null,
+      "require_id_number": null,
+      "require_live_capture": null,
+      "require_matching_selfie": true
+    }
+  },
+  "document": {
+    "status": "verified",
+    "error": null
+  },
+  "id_number": null,
+  "selfie": {
+    "status": "verified",
+    "error": null
+  },
+  "created": 1793750460
+}
+```
+
+## Returned by
+
+- [`GET /v1/identity/verification_reports`](/reference/identity#list-verification-reports) — List verification reports
+- [`GET /v1/identity/verification_reports/{id}`](/reference/identity#retrieve-a-verification-report) — Retrieve a verification report
+
+## Used in
+
+[VerificationSession](/reference/objects/verification-session)

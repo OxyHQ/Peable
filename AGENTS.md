@@ -395,7 +395,7 @@ Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
 `paymentMethodConfigurations` (configurations and wallet domains),
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
-`refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `taxCompliance`, `transfers`,
+`identity`, `refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `taxCompliance`, `transfers`,
 `webhookDeliveries`, `webhookEndpoints`, and the billing engine's
 `billingEngine/*` (subscriptions, invoices, credit notes, quotes, test clocks,
 settings, meters, entitlements, portal, and its anonymous `public` invoice and
@@ -764,7 +764,8 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 (`paymentMethodConfigurationRepository`: configurations, their provider
 bindings, wallet domains), `money/` (`ledgerRepository`, `payoutRepository`,
 `applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`),
-`reporting/` (`reportRunRepository`, `reportScheduleRepository`, `reportData`), `search/` (`searchFields`).
+`reporting/` (`reportRunRepository`, `reportScheduleRepository`, `reportData`), `search/` (`searchFields`),
+`identity/` (`verificationRepository`).
 
 **Payment method breadth is a card-rail intersection, decided once per
 payment.** `services/paymentMethods/configuration.ts`: a merchant's
@@ -981,6 +982,24 @@ not any endpoint wants it.
 An account acts through the provider on its OWN row, never
 `resolveCardProvider()` — that is only for opening a new one.
 
+**Identity verification keeps the verdict, never the person (ADR 0023).**
+`verification_sessions` (`vs_…`) hold the merchant's configuration and the
+provider's verdict (status, error CODE, redaction); `verification_reports`
+(`vr_…`) each check's outcome. No column holds a name, date, number, address,
+image or file id, and nothing ever will: `verified_outputs` is read LIVE on a
+retrieve that asks for it (`no-store`, never in a list, an event or Orbit), the
+hosted `url` / `client_secret` are passed through and never stored, and the
+provider is sent Orbit's correlation id but never `client_reference_id` or
+metadata. The Stripe adapter (`providers/stripe/identity.ts`) is the firewall:
+`IdentityVerifyingProvider` carries verdicts only. A session is created at the
+provider FIRST (an Identity-less account leaves no row); every later change goes
+through `applyVerificationSnapshot` — CAS on status, the report once, the
+`identity.verification_session.*` event in the same transaction. Redaction
+erases the session's metadata and `client_reference_id` in the row (a CHECK) AND
+in its stored events (`redactVerificationSessionEvents`). A mode without a key
+or an account without Identity is 503 `identity_unavailable`. Orbit: reads
+`read`, writes `money`.
+
 **Stripe stays behind the provider interface.** Its SDK and adapter live under
 `services/providers/stripe/`; the rest of the gateway talks to
 `services/providers/provider.ts` through `registry.ts`, and
@@ -1121,7 +1140,7 @@ gateway, and on a permission string spelled out in the gateway.
 | `read` | `app:read` | every GET, search, a report run (membership itself) |
 | `configure` | `app:update` | branding and customer emails, catalog, checkout sessions, payment links, contribution links, payment methods and wallet domains, report schedules, a `business_logo` upload |
 | `webhooks` | `webhooks:update` | webhook endpoints, secrets, test events, redelivery |
-| `money` | `billing:manage` | the merchant (its confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, evidence/identity/tax uploads |
+| `money` | `billing:manage` | the merchant (its confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, identity verification sessions, evidence/identity/tax uploads |
 | `taxRead` | `billing:read` | Peable Tax reads and previews (`billing:manage` contains it) |
 
 A new route names its action; `routes/__tests__/dashboardPermissions.realdb.test.ts`

@@ -22,6 +22,11 @@ import type {
   QuoteStatus,
   CreateQuoteParams,
   UpdateQuoteParams,
+  CreateVerificationSessionParams,
+  UpdateVerificationSessionParams,
+  VerificationReport,
+  VerificationSession,
+  VerificationSessionStatus,
   Subscription,
   SubscriptionStatus,
   UpdateBillingSettingsParams,
@@ -220,6 +225,13 @@ export interface QuoteListParams extends PageParams {
   customer?: string;
   status?: QuoteStatus;
 }
+
+export interface VerificationSessionListParams extends PageParams {
+  status?: VerificationSessionStatus;
+}
+
+/** What a verification session's actions are: each a `POST …/verification_sessions/:id/<action>`. */
+export type VerificationSessionAction = 'cancel' | 'redact';
 
 /** What a quote's actions are: each a `POST …/quotes/:id/<action>`. */
 export type QuoteAction = 'finalize' | 'accept' | 'cancel';
@@ -597,6 +609,64 @@ export function createDashboardApi(transport: OrbitTransport) {
           dashboardPath(scope, `/invoices/${id(invoiceId)}/${action}`),
           { body: {} },
         ),
+    },
+
+    /**
+     * Identity verification (ADR 0023): sessions over the provider's hosted
+     * flow and their reports' check outcomes. Orbit never asks for
+     * `verified_outputs` — the gateway refuses it here; personal data is read
+     * with the merchant credential only.
+     */
+    identity: {
+      sessions: {
+        list: (scope: DashboardScope, params: VerificationSessionListParams = {}) =>
+          list<VerificationSession>(
+            dashboardPath(scope, '/identity/verification_sessions', { ...params }),
+          ),
+        /** While `requires_input`, carries the hosted `url` (read fresh from the provider). */
+        retrieve: (scope: DashboardScope, sessionId: string) =>
+          get<VerificationSession>(
+            dashboardPath(scope, `/identity/verification_sessions/${id(sessionId)}`),
+          ),
+        /** One key per attempt: a retry after an unknown outcome makes one session, not two. */
+        create: (
+          scope: DashboardScope,
+          body: CreateVerificationSessionParams,
+          idempotencyKey?: string,
+        ) =>
+          transport.request<VerificationSession>(
+            'POST',
+            dashboardPath(scope, '/identity/verification_sessions'),
+            { body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+          ),
+        update: (scope: DashboardScope, sessionId: string, body: UpdateVerificationSessionParams) =>
+          transport.request<VerificationSession>(
+            'POST',
+            dashboardPath(scope, `/identity/verification_sessions/${id(sessionId)}`),
+            { body },
+          ),
+        /** `cancel` (only while `requires_input`) or `redact` (irreversible; refused while `processing`). */
+        act: (scope: DashboardScope, sessionId: string, action: VerificationSessionAction) =>
+          transport.request<VerificationSession>(
+            'POST',
+            dashboardPath(scope, `/identity/verification_sessions/${id(sessionId)}/${action}`),
+            { body: {} },
+          ),
+      },
+      reports: {
+        /** A session's reports, newest first — one per attempt. */
+        list: (scope: DashboardScope, sessionId: string) =>
+          list<VerificationReport>(
+            dashboardPath(scope, '/identity/verification_reports', {
+              verification_session: sessionId,
+              limit: 100,
+            }),
+          ),
+        retrieve: (scope: DashboardScope, reportId: string) =>
+          get<VerificationReport>(
+            dashboardPath(scope, `/identity/verification_reports/${id(reportId)}`),
+          ),
+      },
     },
 
     /** Quotes (`qt_…`, ADR 0018 §5): a draft, finalized with its tax, accepted into billing. */

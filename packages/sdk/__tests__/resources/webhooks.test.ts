@@ -30,6 +30,25 @@ import {
 import { checkoutSessionFixture, paymentLinkFixture } from '../support/checkoutFixture';
 import { BILLING_EVENT_PAYLOADS } from '../support/billingFixtures';
 
+/** A verification session as an event carries it: no credentials, no person (ADR 0023). */
+const VERIFICATION_SESSION = {
+  id: 'vs_fixture',
+  object: 'identity.verification_session' as const,
+  livemode: false,
+  type: 'document' as const,
+  status: 'requires_input' as const,
+  options: { id_number: {} },
+  client_secret: null,
+  url: null,
+  return_url: null,
+  client_reference_id: null,
+  last_error: null,
+  last_verification_report: null,
+  redaction: null,
+  metadata: {},
+  created: 1_700_000_000,
+};
+
 const SECRET = 'whsec_test_secret';
 const TIMESTAMP = 1700000000;
 
@@ -592,6 +611,19 @@ const payloads = {
   },
   'tax.review_item.created': reviewItemFixture(),
   'tax.review_item.updated': reviewItemFixture(),
+  'identity.verification_session.created': VERIFICATION_SESSION,
+  'identity.verification_session.processing': { ...VERIFICATION_SESSION, status: 'processing' },
+  'identity.verification_session.verified': { ...VERIFICATION_SESSION, status: 'verified' },
+  'identity.verification_session.requires_input': {
+    ...VERIFICATION_SESSION,
+    last_error: { code: 'document_expired', reason: 'The identity document has expired.' },
+  },
+  'identity.verification_session.canceled': { ...VERIFICATION_SESSION, status: 'canceled' },
+  'identity.verification_session.redacted': {
+    ...VERIFICATION_SESSION,
+    status: 'canceled',
+    redaction: { status: 'redacted' },
+  },
   'webhook_endpoint.test': {
     id: 'we_fixture',
     object: 'webhook_endpoint',

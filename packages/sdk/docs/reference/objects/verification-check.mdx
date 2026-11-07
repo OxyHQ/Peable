@@ -1,0 +1,19 @@
+---
+title: "VerificationCheck"
+description: "The VerificationCheck shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# VerificationCheck
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `status` | string | One of `verified`, `unverified`. |
+| `error` | [VerificationError](/reference/objects/verification-error) \| null | Present when `unverified`. |
+
+## Used in
+
+[VerificationReport](/reference/objects/verification-report)

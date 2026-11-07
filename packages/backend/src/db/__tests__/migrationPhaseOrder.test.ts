@@ -171,6 +171,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the report schedule migrations `0117`–`0118` merged.
   '0116_quotes_validate':
     'released with #289; its post phase applied by the 24f5c08e deploy (run 42345432605)',
+  // The report schedules' validate half shipped with #288, whose deploy of
+  // 497acc3e (Deploy to AWS run 42347678256, 2026-11-07) ran its post phase
+  // successfully before identity verification's `0119`–`0120` merged.
+  '0118_report_schedules_validate':
+    'released with #288; its post phase applied by the 497acc3e deploy (run 42347678256)',
 };
 
 interface Migration {

@@ -131,8 +131,12 @@ const ENTRIES: Readonly<Record<string, Entry>> = {
 
 // Minified bytes the Peable packages may add to one entry. Measured at 11,626
 // (`checkout`) and 1,072 (`checkout/ui`); through the barrels they were 31,693
-// (20 modules) and 46,961 (52 modules).
-const CEILING_BYTES = 14 * 1024;
+// (20 modules) and 46,961 (52 modules). Raised from 14 KiB to 15 KiB with
+// identity verification (ADR 0023): `checkout/ui` reads the error vocabulary,
+// a closed list every feature appends a code to, and it had reached 14,3xx
+// bytes; the ceiling exists to catch a BARREL import (tens of KiB, see the
+// last test), which 15 KiB still does by a factor of two.
+const CEILING_BYTES = 15 * 1024;
 
 describe('browser and React Native entries', () => {
   for (const [name, { source, peable }] of Object.entries(ENTRIES)) {
