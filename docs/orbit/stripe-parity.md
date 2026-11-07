@@ -167,7 +167,11 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Search API | ✅ (Phase 0 row) |
 | Report runs (`reporting.report_types`, `reporting.report_runs`: the six layouts above; leased background worker; CSV as a `finance_report_run` File with `GET /v1/files/:id/contents`; `reporting.report_run.succeeded\|failed`; Orbit Reports; SDK `reporting`) | ✅ |
 | Recurring report schedules (a report emailed or delivered on a cadence) | ❌ later |
-| Risk rules, Quotes, Identity, Terminal, multi-provider routing | ❌ later |
+| Risk rules (Radar-like allow / block / review on card payments) | ❌ later |
+| Quotes (`qt_`) | ❌ later |
+| Identity (`verification_sessions`) | ❌ later |
+| Terminal (locations, readers, card-present payments) | ❌ later |
+| Multi-provider routing | ⛔ needs a second contracted provider (business decision). Stripe is the one contracted card provider; the boundary stays clean so a second one is one adapter and one registry entry: the gateway talks to `services/providers/provider.ts`, and `providers/__tests__/providerBoundary.test.ts` fails on a Stripe import outside `providers/stripe/` and its named exceptions |
 | Issuing, Treasury, Capital | ⛔ need banking authorisation (ADR 0015) |
 | Buying or selling FairCoin | ⛔ product boundary (`AGENTS.md`) |
 | Peable-held fiat balances | ⛔ ADR 0015 |

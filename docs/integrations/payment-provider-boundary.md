@@ -10,9 +10,21 @@ that platform; they do not define the product name or replace Peable's public AP
 
 `packages/backend/src/services/providers/provider.ts` defines provider contracts;
 `registry.ts` resolves implementations. The current card integration is Stripe,
-under `providers/stripe/`. Additional providers are planned, not currently proven
-interchangeable or enabled. Stored payments retain their actual provider binding;
+under `providers/stripe/`. Stored payments retain their actual provider binding;
 existing operations must not silently switch provider when defaults change.
+
+Stripe is the only contracted card provider, so there is no routing between
+providers and no speculative multi-provider abstraction: routing waits on a
+second contracted provider, which is a business decision
+(`docs/orbit/stripe-parity.md`). What is kept instead is the boundary. Stripe's
+SDK and adapter live under `providers/stripe/`; everything else asks
+`registry.ts` for a `PaymentProvider` by `(provider, mode)` and talks to the
+interface. `providers/__tests__/providerBoundary.test.ts` fails on an import of
+`stripe` or `providers/stripe/*` anywhere else, except the named, reasoned
+exceptions (the registry, Stripe's inbound webhook route, boot, the Stripe Tax
+adapter of Peable Tax, and the local test harness). A new provider capability
+(Identity, Terminal, …) goes on the interface with its Stripe implementation
+under `providers/stripe/`.
 
 Peable holds processing credentials. Merchant and payer authority, environment
 isolation, idempotency, status transitions and signed notifications remain Peable

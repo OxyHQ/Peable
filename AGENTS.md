@@ -952,6 +952,14 @@ not any endpoint wants it.
 An account acts through the provider on its OWN row, never
 `resolveCardProvider()` — that is only for opening a new one.
 
+**Stripe stays behind the provider interface.** Its SDK and adapter live under
+`services/providers/stripe/`; the rest of the gateway talks to
+`services/providers/provider.ts` through `registry.ts`, and
+`providers/__tests__/providerBoundary.test.ts` fails on a Stripe import anywhere
+else outside its named exceptions. A new provider capability is a method on the
+interface, implemented there. There is no multi-provider routing until a second
+provider is contracted (a business decision), and no abstraction built for one.
+
 **Test and live live in ONE deployment, and the credential selects the key
 (ADR 0017).** `STRIPE_SECRET_KEY_TEST` and `STRIPE_SECRET_KEY_LIVE` (each with
 its own publishable key and platform/connect endpoint secrets, all `_TEST`/`_LIVE`)
