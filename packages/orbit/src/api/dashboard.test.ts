@@ -840,6 +840,81 @@ describe('the billing engine (ADR 0018)', () => {
     ]);
   });
 
+  it('lists, registers and acts on terminal locations and readers', async () => {
+    answer = list;
+    await api.terminal.locations.list(scope, { limit: 100 });
+    await api.terminal.readers.list(scope, { location: 'tml_1', status: 'online' });
+    answer = () => ({ id: 'x' });
+    await api.terminal.locations.retrieve(scope, 'tml_1');
+    await api.terminal.locations.create(
+      scope,
+      { display_name: 'Shop', address: { country: 'US' } },
+      'key-1',
+    );
+    await api.terminal.locations.update(scope, 'tml_1', { display_name: 'Shop 2' });
+    await api.terminal.locations.delete(scope, 'tml_1');
+    await api.terminal.readers.retrieve(scope, 'tmr_1');
+    await api.terminal.readers.register(
+      scope,
+      { registration_code: 'simulated-wpe', location: 'tml_1' },
+      'key-2',
+    );
+    await api.terminal.readers.update(scope, 'tmr_1', { label: 'Till' });
+    await api.terminal.readers.delete(scope, 'tmr_1');
+    await api.terminal.readers.collect(
+      scope,
+      'tmr_1',
+      { amount: '1000', currency: 'USD' },
+      'key-3',
+    );
+    await api.terminal.readers.cancelAction(scope, 'tmr_1');
+    await api.terminal.readers.presentPaymentMethod(scope, 'tmr_1');
+    const base = '/v1/dashboard/applications/app%201';
+    const env = 'environment=development';
+    expect(
+      calls.map((call) => [
+        call.method,
+        call.path,
+        call.options?.body,
+        call.options?.idempotencyKey,
+      ]),
+    ).toEqual([
+      ['GET', `${base}/terminal/locations?${env}&limit=100`, undefined, undefined],
+      ['GET', `${base}/terminal/readers?${env}&location=tml_1&status=online`, undefined, undefined],
+      ['GET', `${base}/terminal/locations/tml_1?${env}`, undefined, undefined],
+      [
+        'POST',
+        `${base}/terminal/locations?${env}`,
+        { display_name: 'Shop', address: { country: 'US' } },
+        'key-1',
+      ],
+      ['POST', `${base}/terminal/locations/tml_1?${env}`, { display_name: 'Shop 2' }, undefined],
+      ['DELETE', `${base}/terminal/locations/tml_1?${env}`, undefined, undefined],
+      ['GET', `${base}/terminal/readers/tmr_1?${env}`, undefined, undefined],
+      [
+        'POST',
+        `${base}/terminal/readers?${env}`,
+        { registration_code: 'simulated-wpe', location: 'tml_1' },
+        'key-2',
+      ],
+      ['POST', `${base}/terminal/readers/tmr_1?${env}`, { label: 'Till' }, undefined],
+      ['DELETE', `${base}/terminal/readers/tmr_1?${env}`, undefined, undefined],
+      [
+        'POST',
+        `${base}/terminal/readers/tmr_1/collect?${env}`,
+        { amount: '1000', currency: 'USD' },
+        'key-3',
+      ],
+      ['POST', `${base}/terminal/readers/tmr_1/cancel_action?${env}`, {}, undefined],
+      [
+        'POST',
+        `${base}/test_helpers/terminal/readers/tmr_1/present_payment_method?${env}`,
+        {},
+        undefined,
+      ],
+    ]);
+  });
+
   it('reads and updates billing settings', async () => {
     answer = () => ({ object: 'billing_settings' });
     await api.billingSettings.retrieve(scope);

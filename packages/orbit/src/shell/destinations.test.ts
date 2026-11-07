@@ -133,6 +133,7 @@ describe('navModel', () => {
       'radar',
       'reviews',
       'links',
+      'terminal',
     ]);
     // The Tax workspace (ADR 0020): its overview first, collection last.
     expect(products?.rows[4]?.children?.map((row) => row.key)).toEqual([

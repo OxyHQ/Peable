@@ -48,6 +48,7 @@ import { createRequestLogsRouter } from './routes/requestLogs';
 import { createSearchRouter } from './routes/search';
 import { createReportingRouter } from './routes/reporting';
 import { createIdentityRouter } from './routes/identity';
+import { createTerminalRouter } from './routes/terminal';
 import { startReportRunWorker, stopReportRunWorker } from './services/reporting/reportRunWorker';
 import { startReportScheduler, stopReportScheduler } from './services/reporting/reportScheduler';
 import { createTestHelpersRouter } from './routes/testHelpers';
@@ -359,6 +360,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createRequestLogsRouter({ requireMerchant }));
   app.use(createReportingRouter({ requireMerchant }));
   app.use(createIdentityRouter({ requireMerchant }));
+  app.use(createTerminalRouter({ requireMerchant }));
   app.use(createTestHelpersRouter({ requireMerchant }));
   // The billing engine (ADR 0018).
   configureBillingEngine({ tax: deps.taxService });

@@ -26,7 +26,10 @@ adapter of Peable Tax, and the local test harness). A new provider capability
 (Identity, Terminal, …) goes on the interface with its Stripe implementation
 under `providers/stripe/`. Identity is the first: `IdentityVerifyingProvider`
 (ADR 0023), implemented in `providers/stripe/identity.ts`, which is also where
-the person's data stops — the interface carries verdicts only.
+the person's data stops — the interface carries verdicts only. Terminal is the
+second: `TerminalProvider` (ADR 0024), implemented in `providers/stripe/terminal.ts`
+(mappings) and `stripeProvider.ts`; a reader's action crosses as codes, and the
+payment it collects stays an ordinary card PaymentIntent.
 
 Peable holds processing credentials. Merchant and payer authority, environment
 isolation, idempotency, status transitions and signed notifications remain Peable

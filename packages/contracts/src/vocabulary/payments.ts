@@ -75,13 +75,19 @@ export type PaymentIntentCaptureMethod = (typeof PAYMENT_INTENT_CAPTURE_METHODS)
 export const PAYMENT_INTENT_SETUP_FUTURE_USAGES = ['on_session', 'off_session'] as const;
 export type PaymentIntentSetupFutureUsage = (typeof PAYMENT_INTENT_SETUP_FUTURE_USAGES)[number];
 
-/** The card-rail types a PaymentIntent can carry in `payment_method_types`. */
+/**
+ * The card-rail types a PaymentIntent can carry in `payment_method_types`.
+ * `card_present` is a card collected by a Terminal reader (ADR 0024): never
+ * part of a configuration, never offered in a checkout, and alone on its
+ * PaymentIntent.
+ */
 export const CARD_RAIL_PAYMENT_METHOD_TYPES = [
   'card',
   'sepa_debit',
   'ideal',
   'bancontact',
   'eps',
+  'card_present',
 ] as const;
 export type CardRailPaymentMethodType = (typeof CARD_RAIL_PAYMENT_METHOD_TYPES)[number];
 

@@ -18,6 +18,7 @@ export { customerProviderBindings, customers, paymentMethods } from './customers
 export { charges } from './charges';
 export { setupIntents } from './setupIntents';
 export { verificationReports, verificationSessions } from './identity';
+export { terminalLocations, terminalReaders } from './terminal';
 export {
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
   socialReceiveCursors,

@@ -68,7 +68,24 @@ import {
   redactStripeVerificationSession,
   retrieveStripeVerificationSession,
   updateStripeVerificationSession,
+  cancelStripeTerminalReaderAction,
+  createStripeTerminalConnectionToken,
+  createStripeTerminalLocation,
+  createStripeTerminalReader,
+  deleteStripeTerminalLocation,
+  deleteStripeTerminalReader,
+  presentStripeTerminalPaymentMethod,
+  processStripeTerminalPayment,
+  retrieveStripeTerminalReader,
+  updateStripeTerminalLocation,
+  updateStripeTerminalReader,
 } from './client';
+import {
+  toLiveTerminalReader,
+  toStripeAddress,
+  toTerminalLocation,
+  toTerminalReader,
+} from './terminal';
 import { toStripeOptions, toVerificationSession, toVerifiedOutputs } from './identity';
 import { toDisputeStatus } from '../disputeStatus';
 import {
@@ -133,7 +150,11 @@ import {
   type ProviderVerificationOptions,
   type ProviderVerificationSession,
   type ProviderVerifiedOutputs,
+  type ProviderTerminalLocation,
+  type ProviderTerminalReader,
+  type TerminalProvider,
 } from '../provider';
+import type { Address } from '@peable.to/shared-types';
 import { mapPaymentIntentStatus, toProviderEventEnvelope } from './verify';
 import { fromUnix } from '../../../lib/time';
 
@@ -423,7 +444,8 @@ export class StripePaymentProvider
     PaymentMethodConfiguringProvider,
     DomainRegisteringProvider,
     MoneyMirroringProvider,
-    IdentityVerifyingProvider
+    IdentityVerifyingProvider,
+    TerminalProvider
 {
   readonly id = 'stripe' as const;
   readonly mode: ProviderMode;
@@ -1081,6 +1103,197 @@ export class StripePaymentProvider
       ...(include.idNumber ? ['verified_outputs.id_number'] : []),
     ]);
     return toVerifiedOutputs(session, include);
+  }
+
+  // -------------------------------------------------------------------------
+  // Terminal (ADR 0024)
+  // -------------------------------------------------------------------------
+
+  async createTerminalLocation(request: {
+    readonly locationId: string;
+    readonly displayName: string;
+    readonly address: Address;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalLocation> {
+    const location = await createStripeTerminalLocation(
+      this.mode,
+      {
+        display_name: request.displayName,
+        address: toStripeAddress(request.address),
+        // Orbit's correlation key and nothing else: the merchant's metadata stays in Orbit.
+        metadata: { peable_terminal_location_id: request.locationId },
+      },
+      request.idempotencyKey,
+    );
+    return toTerminalLocation(location);
+  }
+
+  async updateTerminalLocation(request: {
+    readonly providerObjectId: string;
+    readonly displayName?: string;
+    readonly address?: Address;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalLocation> {
+    const location = await updateStripeTerminalLocation(
+      this.mode,
+      request.providerObjectId,
+      {
+        ...(request.displayName !== undefined ? { display_name: request.displayName } : {}),
+        ...(request.address !== undefined ? { address: toStripeAddress(request.address) } : {}),
+      },
+      request.idempotencyKey,
+    );
+    if (location.deleted === true) {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'terminal',
+        message: 'the location no longer exists at the provider',
+        retryable: false,
+        code: 'resource_missing',
+      });
+    }
+    return toTerminalLocation(location);
+  }
+
+  async deleteTerminalLocation(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<void> {
+    await deleteStripeTerminalLocation(this.mode, request.providerObjectId, request.idempotencyKey);
+  }
+
+  async registerTerminalReader(request: {
+    readonly readerId: string;
+    readonly registrationCode: string;
+    readonly label?: string;
+    readonly locationObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader> {
+    const reader = await createStripeTerminalReader(
+      this.mode,
+      {
+        registration_code: request.registrationCode,
+        location: request.locationObjectId,
+        ...(request.label !== undefined ? { label: request.label } : {}),
+        metadata: { peable_terminal_reader_id: request.readerId },
+      },
+      request.idempotencyKey,
+    );
+    return toTerminalReader(reader);
+  }
+
+  async getTerminalReader(providerObjectId: string): Promise<ProviderTerminalReader | null> {
+    return toLiveTerminalReader(await retrieveStripeTerminalReader(this.mode, providerObjectId));
+  }
+
+  async updateTerminalReader(request: {
+    readonly providerObjectId: string;
+    readonly label: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader> {
+    const reader = toLiveTerminalReader(
+      await updateStripeTerminalReader(
+        this.mode,
+        request.providerObjectId,
+        { label: request.label },
+        request.idempotencyKey,
+      ),
+    );
+    if (!reader) {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'terminal',
+        message: 'the reader no longer exists at the provider',
+        retryable: false,
+        code: 'resource_missing',
+      });
+    }
+    return reader;
+  }
+
+  async deleteTerminalReader(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<void> {
+    await deleteStripeTerminalReader(this.mode, request.providerObjectId, request.idempotencyKey);
+  }
+
+  async processTerminalPayment(request: {
+    readonly readerObjectId: string;
+    readonly paymentObjectId: string;
+    readonly enableCustomerCancellation: boolean;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader> {
+    const reader = await processStripeTerminalPayment(
+      this.mode,
+      request.readerObjectId,
+      {
+        payment_intent: request.paymentObjectId,
+        // The amount is the PaymentIntent's and nothing on the reader changes
+        // it: no on-reader tip (ADR 0024).
+        process_config: {
+          skip_tipping: true,
+          enable_customer_cancellation: request.enableCustomerCancellation,
+        },
+      },
+      request.idempotencyKey,
+    );
+    return toTerminalReader(reader);
+  }
+
+  async cancelTerminalReaderAction(request: {
+    readonly readerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader> {
+    const reader = toLiveTerminalReader(
+      await cancelStripeTerminalReaderAction(
+        this.mode,
+        request.readerObjectId,
+        request.idempotencyKey,
+      ),
+    );
+    if (!reader) {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'terminal',
+        message: 'the reader no longer exists at the provider',
+        retryable: false,
+        code: 'resource_missing',
+      });
+    }
+    return reader;
+  }
+
+  async createTerminalConnectionToken(request: {
+    readonly locationObjectId: string;
+  }): Promise<{ readonly secret: string }> {
+    // Never unscoped: a token without a location reaches every reader on the
+    // platform account, every merchant's.
+    const token = await createStripeTerminalConnectionToken(this.mode, {
+      location: request.locationObjectId,
+    });
+    return { secret: token.secret };
+  }
+
+  async presentTerminalPaymentMethod(request: {
+    readonly readerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader> {
+    if (this.mode !== 'test') {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'terminal',
+        message: 'a test card can only be presented to a test-mode reader',
+        retryable: false,
+      });
+    }
+    return toTerminalReader(
+      await presentStripeTerminalPaymentMethod(
+        this.mode,
+        request.readerObjectId,
+        request.idempotencyKey,
+      ),
+    );
   }
 
   // -------------------------------------------------------------------------

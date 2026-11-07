@@ -66,8 +66,9 @@ describe('closed value sets', () => {
     // two (Orbit Phase 3) + reporting's report run pair (Phase 8) + the billing
     // engine's 34 (ADR 0018) + business compliance's three (ADR 0020) + the
     // quotes' four (ADR 0018 §5) + identity verification's six (ADR 0023) + the
-    // review pair (ADR 0022).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(105);
+    // review pair (ADR 0022)
+    // + Terminal's two (ADR 0024).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(107);
     for (const retired of [
       'billing.observation.updated',
       'payment_intent.settled',

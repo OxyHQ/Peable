@@ -738,12 +738,38 @@ export interface TestHelpersTestClocksResource {
 }
 
 /**
+ * Test helpers: `peable.testHelpers.terminal.readers`.
+ */
+export interface TestHelpersTerminalReadersResource {
+  /**
+   * Present a card to a simulated reader.
+   *
+   * Taps a test card on a simulated reader collecting a PaymentIntent. The outcome follows the same path as a real one: the provider decides it, and its events move the reader and the PaymentIntent. A live credential is refused with 403 `test_mode_only`.
+   *
+   * `POST /v1/test_helpers/terminal/readers/{id}/present_payment_method`
+   */
+  presentPaymentMethod(
+    id: string,
+    params?: BodyOf<Op<'presentTerminalReaderPaymentMethod'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'presentTerminalReaderPaymentMethod'>>>;
+}
+
+/**
+ * `peable.testHelpers.terminal`.
+ */
+export interface TestHelpersTerminalResource {
+  readonly readers: TestHelpersTerminalReadersResource;
+}
+
+/**
  * `peable.testHelpers`.
  */
 export interface TestHelpersResource {
   readonly paymentIntents: TestHelpersPaymentIntentsResource;
   readonly checkoutSessions: TestHelpersCheckoutSessionsResource;
   readonly testClocks: TestHelpersTestClocksResource;
+  readonly terminal: TestHelpersTerminalResource;
 }
 
 /**
@@ -3196,6 +3222,170 @@ export interface IdentityResource {
 }
 
 /**
+ * Terminal: `peable.terminal.locations`.
+ */
+export interface TerminalLocationsResource {
+  /**
+   * Create a location.
+   *
+   * Created at the provider first. 503 `terminal_unavailable` when Terminal is not enabled in this mode.
+   *
+   * `POST /v1/terminal/locations`
+   */
+  create(
+    params: BodyOf<Op<'createTerminalLocation'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createTerminalLocation'>>>;
+  /**
+   * List locations.
+   *
+   * `GET /v1/terminal/locations`
+   */
+  list(
+    params?: QueryOf<Op<'listTerminalLocations'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listTerminalLocations'>>;
+  /**
+   * Retrieve a location.
+   *
+   * `GET /v1/terminal/locations/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveTerminalLocation'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveTerminalLocation'>>>;
+  /**
+   * Update a location.
+   *
+   * The name and address are sent to the provider; metadata stays in Orbit.
+   *
+   * `POST /v1/terminal/locations/{id}`
+   */
+  update(
+    id: string,
+    params?: BodyOf<Op<'updateTerminalLocation'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'updateTerminalLocation'>>>;
+  /**
+   * Delete a location.
+   *
+   * Refused with 409 `terminal_location_in_use` while readers are registered to it: delete them first.
+   *
+   * `DELETE /v1/terminal/locations/{id}`
+   */
+  del(id: string, options?: RequestOptions): Promise<ResponseOf<Op<'deleteTerminalLocation'>>>;
+}
+
+/**
+ * Terminal: `peable.terminal.readers`.
+ */
+export interface TerminalReadersResource {
+  /**
+   * Register a reader.
+   *
+   * Registers the reader showing `registration_code` to a location, at the provider first. Simulated codes are refused in live mode. 503 `terminal_unavailable` when Terminal is not enabled in this mode.
+   *
+   * `POST /v1/terminal/readers`
+   */
+  create(
+    params: BodyOf<Op<'createTerminalReader'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createTerminalReader'>>>;
+  /**
+   * List readers.
+   *
+   * `GET /v1/terminal/readers`
+   */
+  list(
+    params?: QueryOf<Op<'listTerminalReaders'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listTerminalReaders'>>;
+  /**
+   * Retrieve a reader.
+   *
+   * Reconciled with the provider: its `status`, `last_seen_at` and the outcome of an action in progress.
+   *
+   * `GET /v1/terminal/readers/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveTerminalReader'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveTerminalReader'>>>;
+  /**
+   * Update a reader.
+   *
+   * The label is sent to the provider; metadata stays in Orbit.
+   *
+   * `POST /v1/terminal/readers/{id}`
+   */
+  update(
+    id: string,
+    params?: BodyOf<Op<'updateTerminalReader'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'updateTerminalReader'>>>;
+  /**
+   * Delete a reader.
+   *
+   * Unregisters it at the provider. Refused with 409 `terminal_reader_busy` while it is collecting a payment.
+   *
+   * `DELETE /v1/terminal/readers/{id}`
+   */
+  del(id: string, options?: RequestOptions): Promise<ResponseOf<Op<'deleteTerminalReader'>>>;
+  /**
+   * Collect a PaymentIntent on a reader.
+   *
+   * The reader asks the cardholder to tap, insert or swipe. Answers the reader with its action `in_progress`; the outcome arrives as `terminal.reader.action_succeeded` or `…action_failed`, and the PaymentIntent moves through its own events. A declined card leaves it `requires_payment_method` with `last_payment_error`, collectable again. 409 `terminal_reader_busy` or `terminal_reader_offline` when the reader cannot take it.
+   *
+   * `POST /v1/terminal/readers/{id}/process_payment_intent`
+   */
+  processPaymentIntent(
+    id: string,
+    params: BodyOf<Op<'processTerminalReaderPaymentIntent'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'processTerminalReaderPaymentIntent'>>>;
+  /**
+   * Cancel the reader’s action.
+   *
+   * Stops a collection in progress. The PaymentIntent is not canceled: it stays payable, on this reader or another.
+   *
+   * `POST /v1/terminal/readers/{id}/cancel_action`
+   */
+  cancelAction(
+    id: string,
+    params?: BodyOf<Op<'cancelTerminalReaderAction'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'cancelTerminalReaderAction'>>>;
+}
+
+/**
+ * Terminal: `peable.terminal.connectionTokens`.
+ */
+export interface TerminalConnectionTokensResource {
+  /**
+   * Create a connection token.
+   *
+   * A fresh token on every call, limited to one of your locations (unlike Stripe, `location` is required), answered with `Cache-Control: no-store` and never stored or replayed (no `Idempotency-Key` replay: a token is a credential, and minting two moves nothing). 503 `terminal_unavailable` when Terminal is not enabled in this mode.
+   *
+   * `POST /v1/terminal/connection_tokens`
+   */
+  create(
+    params: BodyOf<Op<'createTerminalConnectionToken'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createTerminalConnectionToken'>>>;
+}
+
+/**
+ * `peable.terminal`.
+ */
+export interface TerminalResource {
+  readonly locations: TerminalLocationsResource;
+  readonly readers: TerminalReadersResource;
+  readonly connectionTokens: TerminalConnectionTokensResource;
+}
+
+/**
  * Events: `peable.events`.
  */
 export interface EventsResource {
@@ -3394,6 +3584,7 @@ export interface GeneratedResources {
   readonly requestLogs: RequestLogsResource;
   readonly tax: TaxResource;
   readonly identity: IdentityResource;
+  readonly terminal: TerminalResource;
   readonly events: EventsResource;
   readonly webhookEndpoints: WebhookEndpointsResource;
   readonly webhookDeliveries: WebhookDeliveriesResource;
@@ -6300,6 +6491,160 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     account: false,
   },
   {
+    sdk: 'terminal.locations.create',
+    operationId: 'createTerminalLocation',
+    method: 'POST',
+    path: '/v1/terminal/locations',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.locations.list',
+    operationId: 'listTerminalLocations',
+    method: 'GET',
+    path: '/v1/terminal/locations',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'terminal.locations.retrieve',
+    operationId: 'retrieveTerminalLocation',
+    method: 'GET',
+    path: '/v1/terminal/locations/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.locations.update',
+    operationId: 'updateTerminalLocation',
+    method: 'POST',
+    path: '/v1/terminal/locations/{id}',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.locations.del',
+    operationId: 'deleteTerminalLocation',
+    method: 'DELETE',
+    path: '/v1/terminal/locations/{id}',
+    pathParams: ['id'],
+    input: 'none',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.create',
+    operationId: 'createTerminalReader',
+    method: 'POST',
+    path: '/v1/terminal/readers',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.list',
+    operationId: 'listTerminalReaders',
+    method: 'GET',
+    path: '/v1/terminal/readers',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.retrieve',
+    operationId: 'retrieveTerminalReader',
+    method: 'GET',
+    path: '/v1/terminal/readers/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.update',
+    operationId: 'updateTerminalReader',
+    method: 'POST',
+    path: '/v1/terminal/readers/{id}',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.del',
+    operationId: 'deleteTerminalReader',
+    method: 'DELETE',
+    path: '/v1/terminal/readers/{id}',
+    pathParams: ['id'],
+    input: 'none',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.processPaymentIntent',
+    operationId: 'processTerminalReaderPaymentIntent',
+    method: 'POST',
+    path: '/v1/terminal/readers/{id}/process_payment_intent',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.readers.cancelAction',
+    operationId: 'cancelTerminalReaderAction',
+    method: 'POST',
+    path: '/v1/terminal/readers/{id}/cancel_action',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'terminal.connectionTokens.create',
+    operationId: 'createTerminalConnectionToken',
+    method: 'POST',
+    path: '/v1/terminal/connection_tokens',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'testHelpers.terminal.readers.presentPaymentMethod',
+    operationId: 'presentTerminalReaderPaymentMethod',
+    method: 'POST',
+    path: '/v1/test_helpers/terminal/readers/{id}/present_payment_method',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
     sdk: 'events.list',
     operationId: 'listEvents',
     method: 'GET',
@@ -6480,6 +6825,7 @@ export class GeneratedClient implements GeneratedResources {
   readonly requestLogs: GeneratedResources['requestLogs'];
   readonly tax: GeneratedResources['tax'];
   readonly identity: GeneratedResources['identity'];
+  readonly terminal: GeneratedResources['terminal'];
   readonly events: GeneratedResources['events'];
   readonly webhookEndpoints: GeneratedResources['webhookEndpoints'];
   readonly webhookDeliveries: GeneratedResources['webhookDeliveries'];
@@ -6530,6 +6876,7 @@ export class GeneratedClient implements GeneratedResources {
     this.requestLogs = tree.requestLogs;
     this.tax = tree.tax;
     this.identity = tree.identity;
+    this.terminal = tree.terminal;
     this.events = tree.events;
     this.webhookEndpoints = tree.webhookEndpoints;
     this.webhookDeliveries = tree.webhookDeliveries;

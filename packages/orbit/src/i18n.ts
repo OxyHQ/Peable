@@ -26,6 +26,7 @@ import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
 import { SHELL_EN, SHELL_ES } from './shell/strings';
+import { TERMINAL_EN, TERMINAL_ES } from './terminal/strings';
 import { STATES_EN, STATES_ES } from './ui/stateStrings';
 import { PARITY_EN, PARITY_ES } from './ui/parityStrings';
 import { TAX_COMPLIANCE_EN } from './tax/strings';
@@ -36,6 +37,7 @@ export const FALLBACK_LOCALE = 'en';
 
 const en: Record<string, string> = {
   ...IDENTITY_EN,
+  ...TERMINAL_EN,
   ...MONEY_EN,
   ...QUOTES_EN,
   ...RADAR_EN,
@@ -1058,6 +1060,7 @@ const en: Record<string, string> = {
 
 const es: Record<string, string> = {
   ...IDENTITY_ES,
+  ...TERMINAL_ES,
   ...MONEY_ES,
   ...QUOTES_ES,
   ...RADAR_ES,

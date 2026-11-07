@@ -395,7 +395,7 @@ Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
 `paymentMethodConfigurations` (configurations and wallet domains),
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
-`identity`, `refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `taxCompliance`, `transfers`,
+`identity`, `refunds`, `reporting`, `terminal`, `search`, `setupIntents`, `social`, `tax`, `taxCompliance`, `transfers`,
 `webhookDeliveries`, `webhookEndpoints`, and the billing engine's
 `billingEngine/*` (subscriptions, invoices, credit notes, quotes, test clocks,
 settings, meters, entitlements, portal, and its anonymous `public` invoice and
@@ -765,7 +765,7 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 bindings, wallet domains), `money/` (`ledgerRepository`, `payoutRepository`,
 `applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`),
 `reporting/` (`reportRunRepository`, `reportScheduleRepository`, `reportData`), `search/` (`searchFields`),
-`identity/` (`verificationRepository`).
+`identity/` (`verificationRepository`), `terminal/` (`terminalRepository`).
 
 **Payment method breadth is a card-rail intersection, decided once per
 payment.** `services/paymentMethods/configuration.ts`: a merchant's
@@ -1040,6 +1040,26 @@ in its stored events (`redactVerificationSessionEvents`). A mode without a key
 or an account without Identity is 503 `identity_unavailable`. Orbit: reads
 `read`, writes `money`.
 
+**A Terminal sale is a card payment collected by a reader (ADR 0024).** A
+`card_present` PaymentIntent (`payment_method_types: ['card_present']`, alone)
+is on the card rail and takes ALL of it — `createIntent`, routing and the live
+gate decided at create, `transitionIntent` with CAS, the charge, capture,
+refunds — and is never offered in a checkout or a link, never confirmed with a
+saved card, never FairCoin. Locations (`tml_…`) and readers (`tmr_…`) are created
+at the provider first; a reader's action moves only through
+`terminalRepository`'s compare-and-swaps (claim → acknowledge → settle, keyed by
+`action_started_at`), and `reconcileReader` (`services/terminal/terminal.ts`) is
+the ONE place a provider reader read becomes a change — always the provider's
+CURRENT read, never an event's copy, settled once with its
+`terminal.reader.action_*` event in the same transaction. The action never
+writes the PaymentIntent: the intent moves on `payment_intent.*` events and
+`reconcileIntentWithProvider`. Connection tokens are passed through, never
+stored or replayed, and ALWAYS limited to one of the merchant's locations
+(readers share the platform account; an unscoped token reaches every
+merchant's readers). Merchant risk rules do not evaluate `card_present`. A mode
+without a key or an account without Terminal is 503 `terminal_unavailable`.
+Orbit: reads `read`, writes (and the collect / simulated tap) `money`.
+
 **Stripe stays behind the provider interface.** Its SDK and adapter live under
 `services/providers/stripe/`; the rest of the gateway talks to
 `services/providers/provider.ts` through `registry.ts`, and
@@ -1180,7 +1200,7 @@ gateway, and on a permission string spelled out in the gateway.
 | `read` | `app:read` | every GET, search, a report run (membership itself) |
 | `configure` | `app:update` | branding and customer emails, catalog, checkout sessions, payment links, contribution links, payment methods and wallet domains, report schedules, a `business_logo` upload |
 | `webhooks` | `webhooks:update` | webhook endpoints, secrets, test events, redelivery |
-| `money` | `billing:manage` | the merchant (its confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, identity verification sessions, evidence/identity/tax uploads |
+| `money` | `billing:manage` | the merchant (its confirmations), the provider account and onboarding, payouts, Connect sellers and transfers, disputes, the billing engine, every Peable Tax change and decision, identity verification sessions, Terminal locations, readers and collections, evidence/identity/tax uploads |
 | `taxRead` | `billing:read` | Peable Tax reads and previews (`billing:manage` contains it) |
 
 A new route names its action; `routes/__tests__/dashboardPermissions.realdb.test.ts`

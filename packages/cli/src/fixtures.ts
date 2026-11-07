@@ -8,7 +8,8 @@ import type { Peable, WebhookEventType } from '@peable.to/sdk';
  *
  * A FairCoin fixture makes a testnet payment and finishes it with the test
  * helper `simulate_faircoin_payment`, which drives the real state machine
- * without touching the chain. Events not listed here (refunds, disputes,
+ * without touching the chain. A Terminal fixture collects a `card_present`
+ * payment on a simulated reader and taps it with `present_payment_method`. Events not listed here (refunds, disputes,
  * charges, setup intents) need a card payment confirmed at the provider and
  * cannot be caused from the API alone.
  */
@@ -70,6 +71,63 @@ async function testCustomer({ peable, log }: FixtureContext) {
   return customer;
 }
 
+/**
+ * A simulated reader to collect on: one this command registered before, or a
+ * new location and reader (Terminal must be enabled in test mode).
+ */
+async function simulatedReader({ peable, log }: FixtureContext) {
+  const readers = await peable.terminal.readers.list({ limit: 100 });
+  const known = readers.data.find(
+    (reader) =>
+      reader.metadata.created_by === METADATA.created_by && reader.action?.status !== 'in_progress',
+  );
+  if (known) return known;
+  const location = await peable.terminal.locations.create({
+    display_name: 'Peable CLI test location',
+    address: {
+      line1: '1272 Valencia Street',
+      city: 'San Francisco',
+      state: 'CA',
+      postal_code: '94110',
+      country: 'US',
+    },
+    metadata: METADATA,
+  });
+  log(`POST /v1/terminal/locations → ${location.id}`);
+  const reader = await peable.terminal.readers.create({
+    registration_code: 'simulated-wpe',
+    location: location.id,
+    label: 'Peable CLI test reader',
+    metadata: METADATA,
+  });
+  log(`POST /v1/terminal/readers → ${reader.id}`);
+  return reader;
+}
+
+/**
+ * A card_present payment collected on a simulated reader, the card tapped by
+ * the test helper. The provider's test amounts decide: `…05` is declined.
+ */
+async function tapped(context: FixtureContext, amount: string) {
+  const reader = await simulatedReader(context);
+  const intent = await context.peable.paymentIntents.create({
+    amount,
+    currency: 'USD',
+    rail: 'card',
+    payment_method_types: ['card_present'],
+    metadata: METADATA,
+  });
+  context.log(`POST /v1/payment_intents → ${intent.id} (card_present)`);
+  await context.peable.terminal.readers.processPaymentIntent(reader.id, {
+    payment_intent: intent.id,
+  });
+  context.log(`POST /v1/terminal/readers/${reader.id}/process_payment_intent`);
+  const after = await context.peable.testHelpers.terminal.readers.presentPaymentMethod(reader.id);
+  context.log(
+    `POST /v1/test_helpers/terminal/readers/${reader.id}/present_payment_method → ${after.action?.status ?? 'no action'}`,
+  );
+}
+
 const settledPayment: Fixture = {
   description: 'a FairCoin testnet payment, paid and confirmed by the test helper',
   causes: ['payment_intent.created', 'payment_intent.processing', 'payment_intent.succeeded'],
@@ -106,6 +164,24 @@ export const FIXTURES = {
       });
       context.log(`POST /v1/payment_intents/${intent.id}/cancel → ${canceled.status}`);
     },
+  },
+  'terminal.reader.action_succeeded': {
+    description: 'a card_present payment collected on a simulated reader',
+    causes: [
+      'payment_intent.created',
+      'terminal.reader.action_succeeded',
+      'payment_intent.succeeded',
+    ],
+    run: (context) => tapped(context, '1000'),
+  },
+  'terminal.reader.action_failed': {
+    description: 'a card_present payment declined on a simulated reader',
+    causes: [
+      'payment_intent.created',
+      'terminal.reader.action_failed',
+      'payment_intent.payment_failed',
+    ],
+    run: (context) => tapped(context, '1005'),
   },
   'customer.created': {
     description: 'a customer',

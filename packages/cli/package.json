@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "The Peable command line: log in with an Oxy application credential, forward test-mode events to a local webhook endpoint (`peable listen`), trigger them (`peable trigger`), tail your request log, and work with payment intents, checkout sessions and webhook endpoints.",
   "type": "module",
@@ -46,8 +46,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@peable.to/sdk": "workspace:6.6.0",
-    "@peable.to/shared-types": "workspace:6.5.0"
+    "@peable.to/sdk": "workspace:6.7.0",
+    "@peable.to/shared-types": "workspace:6.6.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

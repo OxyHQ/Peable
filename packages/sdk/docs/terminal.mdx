@@ -1,0 +1,113 @@
+---
+title: "In-person payments (Terminal)"
+description: "Register card readers at your locations and collect a card-present PaymentIntent on one."
+order: 7.5
+---
+
+# In-person payments (Terminal)
+
+A **reader** (`tmr_…`) is a card reader registered to one of your
+**locations** (`tml_…`). To take a card in person you create a PaymentIntent
+with `payment_method_types: ['card_present']` and hand it to a reader; the
+cardholder taps, inserts or swipes, and the PaymentIntent moves exactly like
+any card payment — the same statuses, events, charge, capture, refunds and
+disputes, routed and settled the same way.
+
+Terminal must be enabled for your account's mode. Until it is, every
+Terminal call answers 503 `terminal_unavailable`.
+
+## Locations and readers
+
+```ts
+const location = await peable.terminal.locations.create({
+  display_name: 'Valencia Street shop',
+  address: {
+    line1: '1272 Valencia Street',
+    city: 'San Francisco',
+    state: 'CA',
+    postal_code: '94110',
+    country: 'US',
+  },
+});
+
+// The code the reader shows on its screen. In test mode, `simulated-wpe`
+// registers a simulated reader you can drive with a test helper.
+const reader = await peable.terminal.readers.create({
+  registration_code: 'simulated-wpe',
+  location: location.id,
+  label: 'Front counter',
+});
+```
+
+A reader's `status` (`online` / `offline`) and `last_seen_at` are refreshed
+when you retrieve it. A location with readers cannot be deleted (409
+`terminal_location_in_use`); a reader collecting a payment cannot be deleted
+(409 `terminal_reader_busy`).
+
+## Collect a payment on a reader
+
+```ts
+const intent = await peable.paymentIntents.create({
+  amount: '2500',
+  currency: 'USD',
+  rail: 'card',
+  payment_method_types: ['card_present'],
+  capture_method: 'automatic', // or 'manual', then capture it as usual
+});
+
+const busy = await peable.terminal.readers.processPaymentIntent(reader.id, {
+  payment_intent: intent.id,
+  process_config: { enable_customer_cancellation: true },
+});
+// busy.action → { type: 'process_payment_intent', status: 'in_progress', … }
+```
+
+The outcome arrives as events:
+
+| Event | What it means |
+|---|---|
+| `terminal.reader.action_succeeded` | The reader collected the card. The PaymentIntent is `succeeded` (or `requires_capture` with manual capture) — `payment_intent.succeeded` / `payment_intent.amount_capturable_updated` |
+| `terminal.reader.action_failed` | The attempt ended without a payment: `action.failure_code` (`card_declined`, `customer_canceled`, …) and Peable's `action.failure_message`. A declined card also sends `payment_intent.payment_failed`; the PaymentIntent stays `requires_payment_method` and can be collected again, on this reader or another |
+
+Fulfil on the PaymentIntent's events, never on the reader's: the reader says
+how the attempt on the device ended, the PaymentIntent says whether you were
+paid.
+
+`cancelAction` stops a collection in progress; the PaymentIntent is not
+canceled. A reader already collecting answers 409 `terminal_reader_busy`; one
+the provider cannot reach, 409 `terminal_reader_offline`.
+
+What a `card_present` PaymentIntent is never: offered in a Checkout Session or
+a Payment Link, confirmed with a saved card (`confirm` refuses it), or paid in
+FairCoin. FairCoin stays offered on every order exactly as before. Your risk
+rules do not evaluate card-present payments, and on-reader tipping is not
+offered — the amount collected is the PaymentIntent's.
+
+## Client SDKs
+
+If your point of sale uses the provider's Terminal SDK (JavaScript, iOS,
+Android, React Native) instead of the server-driven calls above, it needs a
+connection token:
+
+```ts
+const token = await peable.terminal.connectionTokens.create({ location: location.id });
+// Hand token.secret to the SDK. A fresh token every call; Peable never stores it.
+```
+
+`location` is required (Stripe makes it optional): a token only ever reaches
+the readers of one of your locations.
+
+## Test mode
+
+With a simulated reader, tap a test card:
+
+```ts
+await peable.testHelpers.terminal.readers.presentPaymentMethod(reader.id);
+```
+
+The provider decides the outcome by its test amounts: an amount ending in
+`05` is declined (`generic_decline`), `01` asks to call the issuer, anything
+else succeeds. The helper is refused in live mode (403 `test_mode_only`).
+
+In Orbit, **Terminal** lists your locations and readers; a reader's page
+collects a payment for an amount you type and, in test mode, simulates the tap.

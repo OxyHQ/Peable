@@ -268,7 +268,7 @@ export const paymentIntentSchema = defineObject(
       payment_method_types: z
         .array(z.enum(PAYMENT_METHOD_TYPES))
         .describe(
-          'What the payer may pay with: `["faircoin"]` on the chain; on the card rail the types named at creation, or those the configuration offers in this currency.',
+          'What the payer may pay with: `["faircoin"]` on the chain; on the card rail the types named at creation (`["card_present"]` for a Terminal reader), or those the configuration offers in this currency.',
         ),
       payment_method_configuration_details: z
         .object({ id: z.string() })
@@ -483,7 +483,7 @@ export const createPaymentIntentParams = z
       .max(CARD_RAIL_PAYMENT_METHOD_TYPES.length)
       .optional()
       .describe(
-        '`["faircoin"]` on the chain rail; on the card rail any of the card-rail types the provider offers in `currency`, instead of a configuration.',
+        '`["faircoin"]` on the chain rail; on the card rail any of the card-rail types the provider offers in `currency`, instead of a configuration — or `["card_present"]` alone, collected by a Terminal reader (`POST /v1/terminal/readers/{id}/process_payment_intent`).',
       ),
     payment_method_configuration: idParam
       .optional()

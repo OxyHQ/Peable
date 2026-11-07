@@ -35,6 +35,14 @@ import type {
   RefuseReviewParams,
   Review,
   UpdateRadarRuleParams,
+  CreateTerminalLocationParams,
+  CreateTerminalReaderParams,
+  CurrencyCode,
+  TerminalLocation,
+  TerminalReader,
+  TerminalReaderStatus,
+  UpdateTerminalLocationParams,
+  UpdateTerminalReaderParams,
   Subscription,
   SubscriptionStatus,
   UpdateBillingSettingsParams,
@@ -240,6 +248,30 @@ export interface VerificationSessionListParams extends PageParams {
 
 /** What a verification session's actions are: each a `POST …/verification_sessions/:id/<action>`. */
 export type VerificationSessionAction = 'cancel' | 'redact';
+
+export interface TerminalReaderListParams extends PageParams {
+  /** Only the readers registered to this location (`tml_…`). */
+  location?: string;
+  status?: TerminalReaderStatus;
+}
+
+/**
+ * Orbit's "collect a payment" (`POST …/terminal/readers/:id/collect`, dashboard
+ * only): a `card_present` PaymentIntent created and started on the reader in
+ * one request. Fiat only — a reader never takes FairCoin.
+ */
+export interface CollectOnReaderBody {
+  /** Base units, a positive integer string. */
+  amount: string;
+  currency: Exclude<CurrencyCode, 'FAIR'>;
+  description?: string;
+  capture_method?: 'automatic' | 'manual';
+}
+
+export interface CollectOnReaderResult {
+  reader: TerminalReader;
+  payment_intent: PaymentIntent;
+}
 
 /** What a quote's actions are: each a `POST …/quotes/:id/<action>`. */
 export type QuoteAction = 'finalize' | 'accept' | 'cancel';
@@ -714,6 +746,100 @@ export function createDashboardApi(transport: OrbitTransport) {
         retrieve: (scope: DashboardScope, reportId: string) =>
           get<VerificationReport>(
             dashboardPath(scope, `/identity/verification_reports/${id(reportId)}`),
+          ),
+      },
+    },
+
+    /**
+     * Terminal (ADR 0024): the merchant's locations and the card readers
+     * registered to them, and collecting a payment on one. Reads are `read`;
+     * every write is `money`. A write while Terminal is off in this mode is
+     * 503 `terminal_unavailable`.
+     */
+    terminal: {
+      locations: {
+        list: (scope: DashboardScope, params: PageParams = {}) =>
+          list<TerminalLocation>(dashboardPath(scope, '/terminal/locations', { ...params })),
+        retrieve: (scope: DashboardScope, locationId: string) =>
+          get<TerminalLocation>(dashboardPath(scope, `/terminal/locations/${id(locationId)}`)),
+        /** One key per attempt: a retry after an unknown outcome makes one location, not two. */
+        create: (
+          scope: DashboardScope,
+          body: CreateTerminalLocationParams,
+          idempotencyKey?: string,
+        ) =>
+          transport.request<TerminalLocation>('POST', dashboardPath(scope, '/terminal/locations'), {
+            body,
+            ...(idempotencyKey ? { idempotencyKey } : {}),
+          }),
+        update: (scope: DashboardScope, locationId: string, body: UpdateTerminalLocationParams) =>
+          transport.request<TerminalLocation>(
+            'POST',
+            dashboardPath(scope, `/terminal/locations/${id(locationId)}`),
+            { body },
+          ),
+        /** 409 `terminal_location_in_use` while readers are registered there. */
+        delete: (scope: DashboardScope, locationId: string) =>
+          transport.request<Deleted>(
+            'DELETE',
+            dashboardPath(scope, `/terminal/locations/${id(locationId)}`),
+          ),
+      },
+      readers: {
+        list: (scope: DashboardScope, params: TerminalReaderListParams = {}) =>
+          list<TerminalReader>(dashboardPath(scope, '/terminal/readers', { ...params })),
+        /** Reconciled with the provider: refreshes the status and a running action. */
+        retrieve: (scope: DashboardScope, readerId: string) =>
+          get<TerminalReader>(dashboardPath(scope, `/terminal/readers/${id(readerId)}`)),
+        /** One key per attempt: a retry after an unknown outcome registers the reader once. */
+        register: (
+          scope: DashboardScope,
+          body: CreateTerminalReaderParams,
+          idempotencyKey?: string,
+        ) =>
+          transport.request<TerminalReader>('POST', dashboardPath(scope, '/terminal/readers'), {
+            body,
+            ...(idempotencyKey ? { idempotencyKey } : {}),
+          }),
+        update: (scope: DashboardScope, readerId: string, body: UpdateTerminalReaderParams) =>
+          transport.request<TerminalReader>(
+            'POST',
+            dashboardPath(scope, `/terminal/readers/${id(readerId)}`),
+            { body },
+          ),
+        /** 409 `terminal_reader_busy` while it is collecting. */
+        delete: (scope: DashboardScope, readerId: string) =>
+          transport.request<Deleted>(
+            'DELETE',
+            dashboardPath(scope, `/terminal/readers/${id(readerId)}`),
+          ),
+        /** One key per attempt: a retry after an unknown outcome charges once. */
+        collect: (
+          scope: DashboardScope,
+          readerId: string,
+          body: CollectOnReaderBody,
+          idempotencyKey?: string,
+        ) =>
+          transport.request<CollectOnReaderResult>(
+            'POST',
+            dashboardPath(scope, `/terminal/readers/${id(readerId)}/collect`),
+            { body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+          ),
+        cancelAction: (scope: DashboardScope, readerId: string) =>
+          transport.request<TerminalReader>(
+            'POST',
+            dashboardPath(scope, `/terminal/readers/${id(readerId)}/cancel_action`),
+            { body: {} },
+          ),
+        /** Test mode only (403 `test_mode_only` in live): the simulated reader is tapped. */
+        presentPaymentMethod: (scope: DashboardScope, readerId: string) =>
+          transport.request<TerminalReader>(
+            'POST',
+            dashboardPath(
+              scope,
+              `/test_helpers/terminal/readers/${id(readerId)}/present_payment_method`,
+            ),
+            { body: {} },
           ),
       },
     },

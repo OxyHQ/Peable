@@ -1,0 +1,24 @@
+---
+title: "TerminalReaderAction"
+description: "The TerminalReaderAction shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TerminalReaderAction
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | One of `process_payment_intent`. |
+| `status` | string | One of `in_progress`, `succeeded`, `failed`. |
+| `failure_code` | string \| null | The provider's code for a failed action (`card_declined`, `customer_canceled`, …); `null` unless `failed`. |
+| `failure_message` | string \| null | Orbit's own sentence for `failure_code` (never the provider's prose); `null` unless `failed`. |
+| `process_payment_intent` | object |  |
+| `process_payment_intent.payment_intent` | string | The PaymentIntent being collected (`pi_…`). |
+| `process_payment_intent.process_config` | [TerminalProcessConfig](/reference/objects/terminal-process-config) |  |
+
+## Used in
+
+[TerminalReader](/reference/objects/terminal-reader)

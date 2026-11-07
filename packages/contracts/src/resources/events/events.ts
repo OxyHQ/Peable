@@ -411,6 +411,10 @@ export const WEBHOOK_EVENT_DESCRIPTIONS: Readonly<Record<WebhookEventType, strin
   'identity.verification_session.canceled': 'A VerificationSession was canceled.',
   'identity.verification_session.redacted':
     "A VerificationSession's collected data was erased at the provider.",
+  'terminal.reader.action_succeeded':
+    'A reader finished its action: the PaymentIntent it collected moves on its own events.',
+  'terminal.reader.action_failed':
+    'A reader action failed (`action.failure_code`); the PaymentIntent stays payable.',
   'webhook_endpoint.test':
     'A test event, sent to ONE endpoint when its owner asks. It cannot be subscribed to.',
 };

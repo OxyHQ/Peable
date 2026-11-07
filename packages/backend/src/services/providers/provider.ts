@@ -31,6 +31,7 @@
  */
 
 import type {
+  Address,
   AccountBusinessProfile,
   AccountSettings,
   BalanceTransactionType,
@@ -49,6 +50,8 @@ import type {
   SetupIntentCancellationReason,
   SetupIntentStatus,
   SetupIntentUsage,
+  TerminalReaderActionStatus,
+  TerminalReaderStatus,
   VerificationCheckStatus,
   VerificationDocumentType,
   VerificationErrorCode,
@@ -112,7 +115,11 @@ export type ProviderStage =
   | 'balance'
   | 'payout'
   // Identity verification (ADR 0023): a session or a report. Moves no money.
-  | 'identity';
+  | 'identity'
+  // Terminal (ADR 0024): locations, readers and their actions. A reader's
+  // collection is an instruction to the device; the money moves on the
+  // PaymentIntent, through its own stages.
+  | 'terminal';
 
 /**
  * A failure from a payment provider.
@@ -1294,5 +1301,138 @@ export function isIdentityVerifyingProvider(
     typeof candidate.cancelVerificationSession === 'function' &&
     typeof candidate.redactVerificationSession === 'function' &&
     typeof candidate.getVerifiedOutputs === 'function'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Terminal (ADR 0024)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `ProviderError.code`s an adapter answers for Terminal: not enabled on
+ * the provider account (503 `terminal_unavailable`), a reader that is already
+ * doing something (409 `terminal_reader_busy`) or cannot be reached (409
+ * `terminal_reader_offline`). Never the provider's prose.
+ */
+export const TERMINAL_UNAVAILABLE_CODE = 'terminal_unavailable';
+export const TERMINAL_READER_BUSY_CODE = 'terminal_reader_busy';
+export const TERMINAL_READER_OFFLINE_CODE = 'terminal_reader_offline';
+
+export interface ProviderTerminalLocation {
+  readonly providerObjectId: string;
+  readonly displayName: string;
+  readonly address: Address;
+}
+
+/**
+ * The reader's action as the gateway may see it: which payment it collects
+ * and how it ended, as CODES. `other` is an action Orbit did not start (a
+ * cart display, a refund on the device) — reported so the gateway can tell it
+ * apart, never followed.
+ */
+export interface ProviderTerminalReaderAction {
+  readonly type: 'process_payment_intent' | 'other';
+  readonly status: TerminalReaderActionStatus;
+  /** The provider's PaymentIntent the action collects, for `process_payment_intent`. */
+  readonly paymentObjectId: string | null;
+  readonly failureCode: string | null;
+}
+
+export interface ProviderTerminalReader {
+  readonly providerObjectId: string;
+  readonly label: string;
+  readonly deviceType: string;
+  readonly serialNumber: string;
+  readonly status: TerminalReaderStatus | null;
+  readonly lastSeenAt: Date | null;
+  readonly locationObjectId: string | null;
+  readonly action: ProviderTerminalReaderAction | null;
+}
+
+/**
+ * A provider with card readers (Stripe Terminal). Optional, like every
+ * capability: a provider without it answers 503 `terminal_unavailable`.
+ * Locations and readers belong to the PLATFORM account in the credential's
+ * mode; a reader's collection confirms the gateway's own card PaymentIntent,
+ * whose routing (platform or destination charge) was decided at its create.
+ */
+export interface TerminalProvider extends PaymentProvider {
+  createTerminalLocation(request: {
+    /** Orbit's `tml_…` — correlation and idempotency basis. */
+    readonly locationId: string;
+    readonly displayName: string;
+    readonly address: Address;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalLocation>;
+  updateTerminalLocation(request: {
+    readonly providerObjectId: string;
+    readonly displayName?: string;
+    readonly address?: Address;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalLocation>;
+  /** Already gone at the provider is success. */
+  deleteTerminalLocation(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<void>;
+  registerTerminalReader(request: {
+    /** Orbit's `tmr_…` — correlation and idempotency basis. */
+    readonly readerId: string;
+    readonly registrationCode: string;
+    readonly label?: string;
+    readonly locationObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader>;
+  /** The provider's view; `null` when the reader no longer exists there. */
+  getTerminalReader(providerObjectId: string): Promise<ProviderTerminalReader | null>;
+  updateTerminalReader(request: {
+    readonly providerObjectId: string;
+    readonly label: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader>;
+  /** Already gone at the provider is success. */
+  deleteTerminalReader(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<void>;
+  /** Hand the reader a PaymentIntent to collect. Answers the reader as the provider took it. */
+  processTerminalPayment(request: {
+    readonly readerObjectId: string;
+    readonly paymentObjectId: string;
+    readonly enableCustomerCancellation: boolean;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader>;
+  cancelTerminalReaderAction(request: {
+    readonly readerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader>;
+  /**
+   * A fresh SDK credential, handed through and never stored — always limited
+   * to one location: readers are on the platform account every merchant shares.
+   */
+  createTerminalConnectionToken(request: {
+    readonly locationObjectId: string;
+  }): Promise<{ readonly secret: string }>;
+  /** TEST MODE: a test card tapped on a simulated reader. */
+  presentTerminalPaymentMethod(request: {
+    readonly readerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderTerminalReader>;
+}
+
+export function isTerminalProvider(provider: PaymentProvider): provider is TerminalProvider {
+  const candidate = provider as Partial<TerminalProvider>;
+  return (
+    typeof candidate.createTerminalLocation === 'function' &&
+    typeof candidate.updateTerminalLocation === 'function' &&
+    typeof candidate.deleteTerminalLocation === 'function' &&
+    typeof candidate.registerTerminalReader === 'function' &&
+    typeof candidate.getTerminalReader === 'function' &&
+    typeof candidate.updateTerminalReader === 'function' &&
+    typeof candidate.deleteTerminalReader === 'function' &&
+    typeof candidate.processTerminalPayment === 'function' &&
+    typeof candidate.cancelTerminalReaderAction === 'function' &&
+    typeof candidate.createTerminalConnectionToken === 'function' &&
+    typeof candidate.presentTerminalPaymentMethod === 'function'
   );
 }

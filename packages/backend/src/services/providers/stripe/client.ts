@@ -27,6 +27,9 @@ import { config } from '../../../config';
 import {
   IDENTITY_UNAVAILABLE_CODE,
   ProviderError,
+  TERMINAL_READER_BUSY_CODE,
+  TERMINAL_READER_OFFLINE_CODE,
+  TERMINAL_UNAVAILABLE_CODE,
   type ProviderMode,
   type ProviderStage,
 } from '../provider';
@@ -797,6 +800,195 @@ export function redactStripeVerificationSession(
     stripe.identity.verificationSessions.redact(
       id,
       { expand: VERIFICATION_SESSION_EXPAND },
+      { idempotencyKey },
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Terminal (ADR 0024)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a Stripe refusal means "this account cannot use Terminal" — not
+ * activated, or a restricted key without the permission. The gateway answers
+ * 503 `terminal_unavailable`, never Stripe's prose.
+ */
+export function isTerminalUnavailableError(error: unknown): boolean {
+  if (error instanceof Stripe.errors.StripePermissionError) return true;
+  if (!(error instanceof Stripe.errors.StripeInvalidRequestError)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('terminal') &&
+    /(not (yet )?(been )?(enabled|activated|available|set up)|activate|onboard|apply for)/.test(
+      message,
+    )
+  );
+}
+
+/** Stripe's reader codes the gateway answers by name; everything else is a plain refusal. */
+const TERMINAL_READER_CODES: Readonly<Record<string, string>> = {
+  terminal_reader_busy: TERMINAL_READER_BUSY_CODE,
+  terminal_reader_offline: TERMINAL_READER_OFFLINE_CODE,
+};
+
+async function terminalCall<T>(mode: ProviderMode, fn: (stripe: Stripe) => Promise<T>): Promise<T> {
+  try {
+    return await fn(getStripeClient(mode));
+  } catch (error) {
+    if (isTerminalUnavailableError(error)) {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'terminal',
+        message: 'Terminal is not enabled on the provider account',
+        retryable: false,
+        code: TERMINAL_UNAVAILABLE_CODE,
+      });
+    }
+    const readerCode =
+      error instanceof Stripe.errors.StripeError && error.code !== undefined
+        ? TERMINAL_READER_CODES[error.code]
+        : undefined;
+    if (readerCode !== undefined) {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'terminal',
+        message:
+          readerCode === TERMINAL_READER_BUSY_CODE
+            ? 'the reader is busy with another action'
+            : 'the reader is offline',
+        retryable: false,
+        code: readerCode,
+      });
+    }
+    throw toProviderError(error, 'terminal');
+  }
+}
+
+/** Whether Stripe answered "no such object" — a delete of something already gone. */
+function isResourceMissing(error: unknown): boolean {
+  return error instanceof Stripe.errors.StripeError && error.code === 'resource_missing';
+}
+
+export function createStripeTerminalLocation(
+  mode: ProviderMode,
+  params: Stripe.Terminal.LocationCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Location> {
+  return terminalCall(mode, (stripe) =>
+    stripe.terminal.locations.create(params, { idempotencyKey }),
+  );
+}
+
+export function updateStripeTerminalLocation(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.Terminal.LocationUpdateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Location | Stripe.Terminal.DeletedLocation> {
+  return terminalCall(mode, (stripe) =>
+    stripe.terminal.locations.update(id, params, { idempotencyKey }),
+  );
+}
+
+export async function deleteStripeTerminalLocation(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await terminalCall(mode, async (stripe) => {
+    try {
+      await stripe.terminal.locations.del(id, {}, { idempotencyKey });
+    } catch (error) {
+      if (!isResourceMissing(error)) throw error;
+    }
+  });
+}
+
+export function createStripeTerminalReader(
+  mode: ProviderMode,
+  params: Stripe.Terminal.ReaderCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Reader> {
+  return terminalCall(mode, (stripe) => stripe.terminal.readers.create(params, { idempotencyKey }));
+}
+
+export async function retrieveStripeTerminalReader(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader | null> {
+  return terminalCall(mode, async (stripe) => {
+    try {
+      return await stripe.terminal.readers.retrieve(id);
+    } catch (error) {
+      if (isResourceMissing(error)) return null;
+      throw error;
+    }
+  });
+}
+
+export function updateStripeTerminalReader(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.Terminal.ReaderUpdateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader> {
+  return terminalCall(mode, (stripe) =>
+    stripe.terminal.readers.update(id, params, { idempotencyKey }),
+  );
+}
+
+export async function deleteStripeTerminalReader(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await terminalCall(mode, async (stripe) => {
+    try {
+      await stripe.terminal.readers.del(id, {}, { idempotencyKey });
+    } catch (error) {
+      if (!isResourceMissing(error)) throw error;
+    }
+  });
+}
+
+export function processStripeTerminalPayment(
+  mode: ProviderMode,
+  readerId: string,
+  params: Stripe.Terminal.ReaderProcessPaymentIntentParams,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Reader> {
+  return terminalCall(mode, (stripe) =>
+    stripe.terminal.readers.processPaymentIntent(readerId, params, { idempotencyKey }),
+  );
+}
+
+export function cancelStripeTerminalReaderAction(
+  mode: ProviderMode,
+  readerId: string,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader> {
+  return terminalCall(mode, (stripe) =>
+    stripe.terminal.readers.cancelAction(readerId, {}, { idempotencyKey }),
+  );
+}
+
+export function createStripeTerminalConnectionToken(
+  mode: ProviderMode,
+  params: Stripe.Terminal.ConnectionTokenCreateParams,
+): Promise<Stripe.Terminal.ConnectionToken> {
+  return terminalCall(mode, (stripe) => stripe.terminal.connectionTokens.create(params));
+}
+
+export function presentStripeTerminalPaymentMethod(
+  mode: ProviderMode,
+  readerId: string,
+  idempotencyKey: string,
+): Promise<Stripe.Terminal.Reader> {
+  return terminalCall(mode, (stripe) =>
+    stripe.testHelpers.terminal.readers.presentPaymentMethod(
+      readerId,
+      { type: 'card_present' },
       { idempotencyKey },
     ),
   );

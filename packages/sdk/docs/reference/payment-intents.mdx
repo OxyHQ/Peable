@@ -48,7 +48,7 @@ generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 | `connected_account` | string | FairCoin only: pay this seller (`ca_…`). 1–255 characters. |
 | `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
 | `expires_in_seconds` | integer | How long the payment stays payable, in seconds: at most 86400 (24 hours). Defaults to 900 (15 minutes). At most 86400. |
-| `payment_method_types` | array of string | `["faircoin"]` on the chain rail; on the card rail any of the card-rail types the provider offers in `currency`, instead of a configuration. At most 5 items. At least 1 item. |
+| `payment_method_types` | array of string | `["faircoin"]` on the chain rail; on the card rail any of the card-rail types the provider offers in `currency`, instead of a configuration — or `["card_present"]` alone, collected by a Terminal reader (`POST /v1/terminal/readers/{id}/process_payment_intent`). At most 6 items. At least 1 item. |
 | `payment_method_configuration` | string | Card only: the `pmc_…` whose methods to offer. Defaults to the merchant's default. 1–255 characters. |
 | `customer` | string | `cus_…`. 1–255 characters. |
 | `payment_method` | string | Card only: a saved payment method (`pm_…`) of `customer`. 1–255 characters. |

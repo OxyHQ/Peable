@@ -251,6 +251,30 @@ export async function resolveCardPaymentMethods(
   }
   if (input.paymentMethodTypes !== undefined) {
     const types = [...new Set(input.paymentMethodTypes)];
+    // A card collected by a Terminal reader (ADR 0024): alone on its payment,
+    // never with a saved card, never from a configuration. The provider
+    // decides which currencies its readers take.
+    if (types.includes('card_present')) {
+      if (types.length !== 1) {
+        throw new PaymentMethodsParameterError(
+          "card_present is collected by a reader and cannot be offered beside other methods: name ['card_present'] alone",
+          'payment_method_types',
+        );
+      }
+      if (input.savedPaymentMethod) {
+        throw new PaymentMethodsParameterError(
+          'a card_present payment is collected by a reader, not charged to a saved card',
+          'payment_method',
+        );
+      }
+      if (!(PAYMENT_METHOD_CURRENCIES.card as readonly string[]).includes(currency)) {
+        throw new PaymentMethodsParameterError(
+          `'card_present' does not take payments in ${currency}`,
+          'payment_method_types',
+        );
+      }
+      return { types: ['card_present'], configuration: null };
+    }
     for (const type of types) {
       if (!(CARD_RAIL_PAYMENT_METHOD_TYPES as readonly string[]).includes(type)) {
         throw new PaymentMethodsParameterError(
@@ -258,7 +282,7 @@ export async function resolveCardPaymentMethods(
           'payment_method_types',
         );
       }
-      const known = type as CardRailPaymentMethodType;
+      const known = type as Exclude<CardRailPaymentMethodType, 'card_present'>;
       if (!PROVIDER_PAYMENT_METHODS[CARD_PROVIDER].includes(known)) {
         throw new PaymentMethodsParameterError(
           `'${type}' is not offered by the processing provider`,

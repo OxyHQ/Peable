@@ -944,6 +944,19 @@ export function createPaymentIntentsRouter(deps: {
         sendCardOnly(res, 'confirm', 'payment_method');
         return;
       }
+      // A card_present payment is confirmed by the reader that reads the card
+      // (ADR 0024), never with a saved card here.
+      if (intent.paymentMethodTypes?.includes('card_present')) {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          'a card_present payment is collected by a reader: POST /v1/terminal/readers/:id/process_payment_intent',
+          'parameter_invalid',
+          'payment_method',
+        );
+        return;
+      }
       if (
         intent.status !== 'requires_payment_method' &&
         intent.status !== 'requires_confirmation' &&

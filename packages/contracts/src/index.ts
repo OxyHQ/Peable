@@ -25,4 +25,5 @@ export * from './resources/billingEngine';
 export * from './resources/connect';
 export * from './resources/tax';
 export * from './resources/identity';
+export * from './resources/terminal';
 export * from './resources/events';

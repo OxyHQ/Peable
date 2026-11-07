@@ -136,6 +136,8 @@ export const WEBHOOK_EVENT_OBJECTS = {
   'identity.verification_session.requires_input': 'identity.verification_session',
   'identity.verification_session.canceled': 'identity.verification_session',
   'identity.verification_session.redacted': 'identity.verification_session',
+  'terminal.reader.action_succeeded': 'terminal.reader',
+  'terminal.reader.action_failed': 'terminal.reader',
   'webhook_endpoint.test': 'webhook_endpoint',
 } as const;
 
