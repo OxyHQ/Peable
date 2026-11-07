@@ -1,0 +1,186 @@
+{
+  "network": "testnet",
+  "started_at": "2026-11-07T03:02:44.198Z",
+  "steps": [
+    {
+      "name": "start",
+      "at": "2026-11-07T03:02:45.340Z",
+      "tip": 60
+    },
+    {
+      "name": "fund payer",
+      "at": "2026-11-07T03:02:48.087Z",
+      "address": "TFhhMTKzX5j8gBRVFuujYNNuak7RS8H7FJ",
+      "txid": "8f6d50271cee1ad0565f82c3eae0fa5657e25e166222f01a4476120574e20b01",
+      "fair": 1000
+    },
+    {
+      "name": "social: reserved",
+      "at": "2026-11-07T03:02:48.113Z",
+      "address": "TYybzh5CosKkXGf7m3QUTJTu6gzx13P4Bm",
+      "index": 1
+    },
+    {
+      "name": "payer broadcast",
+      "at": "2026-11-07T03:02:48.202Z",
+      "to": "TYybzh5CosKkXGf7m3QUTJTu6gzx13P4Bm",
+      "amount_sat": "2500000000",
+      "txid": "5e426868fb7e90cfce31b593b80898f9adfe8c678ac77cf81ea392efe0f52901",
+      "fee_sat": "2260"
+    },
+    {
+      "name": "merchant (EUR, person-owned): confirmed",
+      "at": "2026-11-07T03:02:54.625Z",
+      "session": "cs_05a0b66131bd6a5053f3bafc",
+      "payment_intent": "pi_2f8d3bdf5ee1fc63d4dce1a3",
+      "order": "1250 EUR",
+      "amount_fair_base_units": "2843412399",
+      "quote": {
+        "rate": "0.439612629",
+        "price": {
+          "source": "wfair-base",
+          "observed_at": 1794020574,
+          "usd_per_fair": "0.4908275003129989"
+        },
+        "amount": "1250",
+        "currency": "EUR",
+        "quoted_at": 1794020574,
+        "expires_at": 1794021174,
+        "reference_rates": {
+          "source": "ecb",
+          "observed_at": 1793977200,
+          "usd_per_eur": "1.1165",
+          "currency_per_eur": "1"
+        }
+      },
+      "address": "TNAuPqWGFok9UDMvYKmqsD4DKm6mW6nWEV",
+      "recipient_account": "canary_person_0001"
+    },
+    {
+      "name": "payer broadcast",
+      "at": "2026-11-07T03:02:54.747Z",
+      "to": "TNAuPqWGFok9UDMvYKmqsD4DKm6mW6nWEV",
+      "amount_sat": "2843412399",
+      "txid": "95813a19b76f8653a6b6b359bbdfa599347d62916d3c502be32ba0121bd2df45",
+      "fee_sat": "2260"
+    },
+    {
+      "name": "merchant (EUR, person-owned): settled by the watcher",
+      "at": "2026-11-07T03:05:09.672Z",
+      "payment_intent": "pi_2f8d3bdf5ee1fc63d4dce1a3",
+      "status": "succeeded",
+      "confirmations": 2,
+      "tip": 64,
+      "session_status": "complete",
+      "payment_status": "paid"
+    },
+    {
+      "name": "merchant (FAIR, organization-owned): confirmed",
+      "at": "2026-11-07T03:05:09.752Z",
+      "session": "cs_5a8c3829ec7f7c251a126ddc",
+      "payment_intent": "pi_6ad4ac74b37f9294476e8213",
+      "order": "1500000000 FAIR",
+      "amount_fair_base_units": "1500000000",
+      "quote": null,
+      "address": "TSyNq1469nAN78y5RRyfVemUc7JAiYKs86",
+      "recipient_account": "canary_org_0001"
+    },
+    {
+      "name": "payer broadcast",
+      "at": "2026-11-07T03:05:09.919Z",
+      "to": "TSyNq1469nAN78y5RRyfVemUc7JAiYKs86",
+      "amount_sat": "1500000000",
+      "txid": "4dfb47b1189c9fe950fd883d00dac8b6eb3b1740cd24bc4b56ec586818ba91b3",
+      "fee_sat": "2260"
+    },
+    {
+      "name": "merchant (FAIR, organization-owned): settled by the watcher",
+      "at": "2026-11-07T03:09:53.401Z",
+      "payment_intent": "pi_6ad4ac74b37f9294476e8213",
+      "status": "succeeded",
+      "confirmations": 2,
+      "tip": 66,
+      "session_status": "complete",
+      "payment_status": "paid"
+    },
+    {
+      "name": "receive addresses: synced",
+      "at": "2026-11-07T03:09:53.414Z",
+      "person": 2,
+      "organization": 1
+    }
+  ],
+  "receiveAddresses": {
+    "person": {
+      "addresses": [
+        {
+          "address": "TYybzh5CosKkXGf7m3QUTJTu6gzx13P4Bm",
+          "derivation_index": 1,
+          "identity_public_key": "04dfddb85845f9c6205ea604df537fd911b9352cacdb2836cbe8a829ecf96cfdc65cb3d4c46e5ec60ecbf17f481b73bba766d54c102b00e4a5ccfa36d086c052d8",
+          "network": "testnet",
+          "created": 1794020568
+        },
+        {
+          "address": "TNAuPqWGFok9UDMvYKmqsD4DKm6mW6nWEV",
+          "derivation_index": 2,
+          "identity_public_key": "04dfddb85845f9c6205ea604df537fd911b9352cacdb2836cbe8a829ecf96cfdc65cb3d4c46e5ec60ecbf17f481b73bba766d54c102b00e4a5ccfa36d086c052d8",
+          "network": "testnet",
+          "created": 1794020574
+        }
+      ],
+      "has_more": false,
+      "sync_cursor": 2
+    },
+    "organization": {
+      "addresses": [
+        {
+          "address": "TSyNq1469nAN78y5RRyfVemUc7JAiYKs86",
+          "derivation_index": 1,
+          "identity_public_key": "04ed3ea261188f8f778dbc00ca4f92ecb9f1c938bf11b2183fa047b0e5415dd38ed4942e75e83e5a66af0d8e13e2ceade0fbd78ed044fe47133caffe6279858fed",
+          "network": "testnet",
+          "created": 1794020709
+        }
+      ],
+      "has_more": false,
+      "sync_cursor": 1
+    }
+  },
+  "wallets": {
+    "person": {
+      "account": "canary_person_0001",
+      "cursor": {
+        "reserved_through": 2,
+        "identity_public_key": "04dfddb85845f9c6205ea604df537fd911b9352cacdb2836cbe8a829ecf96cfdc65cb3d4c46e5ec60ecbf17f481b73bba766d54c102b00e4a5ccfa36d086c052d8",
+        "account_identity_public_key": "04dfddb85845f9c6205ea604df537fd911b9352cacdb2836cbe8a829ecf96cfdc65cb3d4c46e5ec60ecbf17f481b73bba766d54c102b00e4a5ccfa36d086c052d8"
+      },
+      "received": [
+        {
+          "address": "TYybzh5CosKkXGf7m3QUTJTu6gzx13P4Bm",
+          "txid": "5e426868fb7e90cfce31b593b80898f9adfe8c678ac77cf81ea392efe0f52901",
+          "amount": "2500000000"
+        },
+        {
+          "address": "TNAuPqWGFok9UDMvYKmqsD4DKm6mW6nWEV",
+          "txid": "95813a19b76f8653a6b6b359bbdfa599347d62916d3c502be32ba0121bd2df45",
+          "amount": "2843412399"
+        }
+      ]
+    },
+    "organization": {
+      "account": "canary_org_0001",
+      "cursor": {
+        "reserved_through": 1,
+        "identity_public_key": "04ed3ea261188f8f778dbc00ca4f92ecb9f1c938bf11b2183fa047b0e5415dd38ed4942e75e83e5a66af0d8e13e2ceade0fbd78ed044fe47133caffe6279858fed",
+        "account_identity_public_key": "04ed3ea261188f8f778dbc00ca4f92ecb9f1c938bf11b2183fa047b0e5415dd38ed4942e75e83e5a66af0d8e13e2ceade0fbd78ed044fe47133caffe6279858fed"
+      },
+      "received": [
+        {
+          "address": "TSyNq1469nAN78y5RRyfVemUc7JAiYKs86",
+          "txid": "4dfb47b1189c9fe950fd883d00dac8b6eb3b1740cd24bc4b56ec586818ba91b3",
+          "amount": "1500000000"
+        }
+      ]
+    }
+  },
+  "finished_at": "2026-11-07T03:09:53.463Z"
+}

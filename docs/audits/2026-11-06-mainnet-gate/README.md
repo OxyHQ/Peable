@@ -7,7 +7,7 @@ mainnet as soon as both pass, without waiting for (2), the legal opinion, or
 (3), physical-device verification. The waiver itself is recorded in ADR 0002
 ("Owner's mainnet waiver"). This folder is the evidence for (1) and (4).
 
-**Result: the gate is NOT opened.** The owner decided the five round-3 risks
+**Result: the gate is OPEN since 2026-11-07** (see "Opened" at the end). Before that: The owner decided the five round-3 risks
 on 2026-11-06 — *"Fix F5, F1 and D9; accept F9"* (ADR 0002, "Owner's decision
 on the round-3 risks") — and they were fixed and F9 accepted. Three further
 review rounds (4–6) and their fixes followed; the canary passed on every final
@@ -360,3 +360,49 @@ Remaining owner steps that do not gate opening: the iOS builds (Peable wallet
 `bunx oxy-check-keychain-entitlements <bundle id> <.xcarchive|.ipa>` on each
 archive before upload), and the waived legal opinion and device verification
 (ADR 0002) — still not done.
+
+## Opened (2026-11-07)
+
+1. **Canary on the opening code** (Peable `b4666d80` — this PR's wallet flip on
+   top of #283; its package code is identical to the merged commit), a fresh
+   private testnet from the same released `faircoind` v3.0.6, new throwaway
+   keys and credentials, destroyed after the run. Passed, tip 60 → 68
+   (`canary-gateway-opening.json`, `canary-wallet-opening.json`):
+
+   | When (UTC) | Step | Evidence |
+   |---|---|---|
+   | 03:02:48 | social `@canaryperson`: index 1, payer pays | `TYybzh5CosKkXGf7m3QUTJTu6gzx13P4Bm`, `5e426868fb7e90cfce31b593b80898f9adfe8c678ac77cf81ea392efe0f52901` |
+   | 03:02:54 | EUR 12.50 session (person-owned), index 2; payer pays | `pi_2f8d3bdf5ee1fc63d4dce1a3`, `TNAuPqWGFok9UDMvYKmqsD4DKm6mW6nWEV`, `95813a19b76f8653a6b6b359bbdfa599347d62916d3c502be32ba0121bd2df45` |
+   | 03:05:09 | watcher: `succeeded` at 2 confirmations; session `complete` | tip 64 |
+   | 03:05:09 | 15 FAIR session (organization-owned), organization index 1; payer pays | `pi_6ad4ac74b37f9294476e8213`, `TSyNq1469nAN78y5RRyfVemUc7JAiYKs86`, `4dfb47b1189c9fe950fd883d00dac8b6eb3b1740cd24bc4b56ec586818ba91b3` |
+   | 03:09:53 | watcher: `succeeded`; receive sets synced | tip 66 |
+   | 03:11:05 | person's wallet: key `match`, watches {0, 1, 2}, spends both coins | `7a5c7ee8342fb990fe5d6075d268f087e85be049307ac82d80b541031c9f7599`, tip 67 |
+   | 03:12:13 | organization's wallet: key `match`, watches {0, 1}, spends its coin | `4b939876e33c15947044bb3a70c008c4b58c11e76de5303ef104d5fa3db66bcc`, tip 68 |
+
+2. **Gateway.** Task definition `oxy-peable:285` registered from the RUNNING
+   `oxy-peable:284` with only `PEABLE_SOCIAL_PAY_NETWORK=mainnet` added (the
+   input diffed before registering: that one variable, nothing else);
+   `update-service`; steady state (1/1 running on `:285`, rollout
+   `COMPLETED`); `https://api.peable.to/health` 200 `{"status":"ok"}`. Peable's
+   own deploy derives each release from the service's current revision
+   (`.github/scripts/ecs-release.py`), so the variable carries forward.
+3. **Infrastructure mirror.** OxyHQ/oxy-infra#436 adds the variable to
+   `terraform-uswest2/app-peable.tf`.
+4. **Live check, read-only** (a one-off task from `oxy-peable:285`, command
+   overridden, computing each live merchant's FairCoin option for a EUR and a
+   FAIR order with `faircoinAvailability`, no write): `identityNetworkOpen
+   ('mainnet')` is true; the two live first-party merchants (`merch_e7853…`,
+   `merch_bd106…`, owned by the organization `oxy`) answer
+   `faircoin_wallet_missing` — no longer `faircoin_network_closed` — until an
+   owner of `oxy` creates the organization's Peable wallet in Commons (ADR 0021
+   D5's one human step).
+5. **Wallet.** This PR flips `packages/frontend/src/pay/social-network.ts`
+   `SOCIAL_PAY_NETWORK` to `mainnet` (web deploy + OTA on merge); the
+   `@username` page's network state is now "switch this wallet to mainnet", and
+   the testnet-only note is gone.
+
+Owner steps that remain (none gates the open state): create the `oxy`
+organization's Peable wallet in Commons (first-party FairCoin stays
+`faircoin_wallet_missing` until then); the iOS builds (Peable wallet 1.5.0,
+then Commons 1.14.0; `oxy-check-keychain-entitlements` on each archive); the
+waived legal opinion and device verification (ADR 0002).
