@@ -73,27 +73,31 @@ export type PreAuthorizationVerdict =
   | { readonly kind: 'stale'; readonly current: PaymentIntentRow | null };
 
 /**
- * Where a pre-authorization block may decline from: a payment with nothing in
- * flight at the provider — `requires_payment_method`, or `requires_confirmation`
- * (a saved card attached, judged with that card). Both points: a server-side
- * confirm with a saved card, and handing out the payer's confirmation
- * credential. Never from `requires_action`: a 3DS challenge is in flight at the
- * provider, and only the post-authorization judgment can decide it
- * (ADR 0022 D3).
+ * Where a pre-authorization block may decline from (ADR 0022 D3).
+ *
+ *  - `credential` (handing out the payer's confirmation credential):
+ *    `requires_payment_method`, and `requires_confirmation` judged with the
+ *    saved card attached. Never `requires_action`: a 3DS challenge the payer is
+ *    in is in flight at the provider, and only the post-authorization
+ *    judgment can decide it.
+ *  - `server_confirm` (the gateway confirming a saved card it names): those
+ *    two, and `requires_action` too — a NEW confirm with a card the gateway
+ *    names is a new attempt, judged with that card. From `requires_action` and
+ *    `requires_confirmation` the row is never moved (see the verdict).
  */
 export type PreAuthorizationPoint = 'credential' | 'server_confirm';
 
-const GATED_FROM: readonly PaymentIntentStatus[] = [
-  'requires_payment_method',
-  'requires_confirmation',
-];
+const GATED_FROM: Readonly<Record<PreAuthorizationPoint, readonly PaymentIntentStatus[]>> = {
+  credential: ['requires_payment_method', 'requires_confirmation'],
+  server_confirm: ['requires_payment_method', 'requires_confirmation', 'requires_action'],
+};
 
 /** Whether a payment can be judged before authorization at this point. */
 export function gatesBeforeAuthorization(
   intent: PaymentIntentRow,
-  _point: PreAuthorizationPoint,
+  point: PreAuthorizationPoint,
 ): boolean {
-  return intent.rail === 'card' && GATED_FROM.includes(intent.status);
+  return intent.rail === 'card' && GATED_FROM[point].includes(intent.status);
 }
 
 /**
@@ -121,9 +125,14 @@ export async function gateBeforeAuthorization(
   if (!gatesBeforeAuthorization(intent, options.point)) return { kind: 'proceed' };
   let decision: RadarDecision | null;
   try {
+    // The card the attempt will use: the one named, else — only where the
+    // provider already holds it (`requires_confirmation`) — the saved card
+    // attached. A card stored on a payment back in `requires_payment_method`
+    // is one that was declined or replaced: the payer is about to enter
+    // another, so the card is unknown.
     const card =
       sources.card ??
-      (intent.paymentMethodId === null
+      (intent.status !== 'requires_confirmation' || intent.paymentMethodId === null
         ? null
         : ((await findPaymentMethodById(getDb(), intent.paymentMethodId))?.card ?? null));
     decision = await evaluateRules(intent, 'pre_authorization', { card });

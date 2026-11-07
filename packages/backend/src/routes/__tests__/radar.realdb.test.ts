@@ -138,6 +138,7 @@ const { createChargesRouter } = await import('../charges');
 const { createCheckoutSessionsRouter } = await import('../checkoutSessions');
 const { createCatalogApiRouter } = await import('../catalogRoutes');
 const { RADAR_ROUTES } = await import('../radar');
+const { createBillingEngineRouter } = await import('../billingEngine');
 const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
@@ -298,6 +299,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('risk rules and reviews (ADR 0022)', ()
       createCheckoutSessionsRouter({ requireMerchant: stubAuth, publicRateLimit: passThrough }),
     );
     app.use(createCatalogApiRouter(RADAR_ROUTES, { requireMerchant: stubAuth }));
+    app.use(createBillingEngineRouter({ requireMerchant: stubAuth }));
     server = app.listen(0);
     baseUrl = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
   });
@@ -577,8 +579,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('risk rules and reviews (ADR 0022)', ()
     expect(large.body.last_payment_error.decline_code).toBe('blocked_by_rule');
   });
 
-  test('a payment mid-3DS is never declined locally: post-authorization decides', async () => {
-    const { customer, paymentMethod } = await customerWithCard();
+  test('mid-3DS: the payer is never declined; a new server confirm is judged with its card', async () => {
+    const { customer, paymentMethod } = await customerWithCard('ES');
     confirmOutcome = 'challenge';
     const created = await call('POST', '/v1/payment_intents', {
       amount: '2500',
@@ -589,8 +591,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('risk rules and reviews (ADR 0022)', ()
       confirm: true,
     });
     expect(created.body.status).toBe('requires_action');
-    await rule('block', ':amount: >= 1');
+    await rule('block', ":card_country: = 'ES'");
     const intent = must(await findIntentByPublicId(gatewayDb(), created.body.id));
+    // The payer finishing the challenge gets the credential: 3DS is in flight.
     const asked = await call(
       'POST',
       `/v1/payment_intents/${created.body.id}/client_action`,
@@ -600,15 +603,53 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('risk rules and reviews (ADR 0022)', ()
       },
     );
     expect(asked.status).toBe(200);
-    confirmOutcome = 'succeeded';
+    // A NEW confirm the gateway makes with a card is a new attempt: judged, 402,
+    // the row as it was, the provider never asked.
+    calls.length = 0;
     const confirmed = await call('POST', `/v1/payment_intents/${created.body.id}/confirm`, {
       payment_method: paymentMethod.publicId,
     });
-    expect(confirmed.status).toBe(200);
-    expect(calls).toContain('confirm');
+    expect(confirmed.status).toBe(402);
+    expect(confirmed.body.error.decline_code).toBe('blocked_by_rule');
+    expect(confirmed.body.error.payment_intent.status).toBe('requires_action');
+    expect(calls).not.toContain('confirm');
     expect(await eventsAbout(created.body.id)).not.toContain('payment_intent.payment_failed');
-    // Captured: the block becomes a review after authorization.
-    expect(confirmed.body.review).toMatch(/^prv_/);
+  });
+
+  test('an invoice collection retrying a payment mid-3DS is judged with the card it charges', async () => {
+    const { customer, paymentMethod } = await customerWithCard('ES');
+    const invoice = await call('POST', '/v1/invoices', {
+      customer: customer.publicId,
+      currency: 'EUR',
+      collection_method: 'charge_automatically',
+    });
+    expect(invoice.status).toBe(200);
+    await call('POST', '/v1/invoiceitems', {
+      customer: customer.publicId,
+      invoice: invoice.body.id,
+      amount: '2500',
+      currency: 'EUR',
+    });
+    expect((await call('POST', `/v1/invoices/${invoice.body.id}/finalize`, {})).status).toBe(200);
+    confirmOutcome = 'challenge';
+    await call('POST', `/v1/invoices/${invoice.body.id}/pay`, {
+      payment_method: paymentMethod.publicId,
+    });
+    const before = (await call('GET', `/v1/invoices/${invoice.body.id}`)).body;
+    const pi = must(before.payment_intent);
+    expect((await call('GET', `/v1/payment_intents/${pi}`)).body.status).toBe('requires_action');
+
+    await rule('block', ":card_country: = 'ES'");
+    confirmOutcome = 'succeeded';
+    calls.length = 0;
+    await call('POST', `/v1/invoices/${invoice.body.id}/pay`, {
+      payment_method: paymentMethod.publicId,
+    });
+    expect(calls).not.toContain('confirm');
+    const after = (await call('GET', `/v1/invoices/${invoice.body.id}`)).body;
+    expect(after.status).toBe('open');
+    expect(after.attempt_count).toBe(before.attempt_count + 1);
+    expect((await call('GET', `/v1/payment_intents/${pi}`)).body.status).toBe('requires_action');
   });
 
   test('a create hands out no credential a rule blocks: the attempt is declined', async () => {

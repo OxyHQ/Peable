@@ -147,10 +147,17 @@ gateway is about to let the provider authorize:
    already carries (a create with `payment_method` attaches it at the provider, and
    the payer would confirm with it as it is).
 
-**Never from `requires_action`.** A 3DS challenge is in flight at the provider:
-declining the row locally would leave the provider's payment completable, and the
-payer finishing the challenge would move it to `succeeded` under a "declined" row.
-Such a payment is judged after authorization only.
+**The payer is never declined from `requires_action`.** A 3DS challenge is in flight
+at the provider: declining the row locally would leave the provider's payment
+completable, and the payer finishing the challenge would move it to `succeeded` under
+a "declined" row. The payer's credential is therefore handed out, and the challenge
+is judged after authorization. A NEW server-side confirm from `requires_action` — the
+merchant's `POST …/confirm` with a card, or an invoice collection retrying the linked
+payment with the customer's chargeable card — is a new attempt with a card the
+gateway names: it is judged with that card, and a block answers 402 without moving
+the row (below). A card stored on a payment back in `requires_payment_method` is one
+that was declined or replaced, so handing out the credential there judges with the
+card UNKNOWN, never with that stale card.
 
 **A card attached at the provider is declined without moving the row.** From
 `requires_payment_method` the row is declined (below) — the provider's payment
