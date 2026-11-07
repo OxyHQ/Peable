@@ -42,7 +42,14 @@ export type WalletBlock =
    * one-time move of the pre-round-5 shared wallet needs Oxy's answer (R5-1,
    * R5-2). Retry once online.
    */
-  | { readonly kind: 'unverified' };
+  | { readonly kind: 'unverified' }
+  /**
+   * The wallet's key could not be READ now (`@oxy.so/core`'s
+   * `IdentityUnavailableError`: the keychain locked, Commons busy or
+   * updating). Retry later; it is never "no wallet", "not this key" or
+   * sign-in, and nothing about the wallet changed.
+   */
+  | { readonly kind: 'key-unavailable' };
 
 export type EntryRoute =
   | { kind: 'loading' | 'signin' | 'create-identity' | 'needs-pin' | 'ready' | 'read-only' }
@@ -65,6 +72,10 @@ export function decideEntryRoute(input: {
   // Signed in: the identity/wallet probe runs asynchronously; wait for it.
   if (identityInit === null || identityInit === 'superseded') return { kind: 'loading' };
   if (identityInit === 'no-keystore') return { kind: 'read-only' };
+  // A key that cannot be read now is "try again", never "set up your Oxy ID".
+  if (identityInit === 'unavailable') {
+    return { kind: 'blocked', block: { kind: 'key-unavailable' } };
+  }
   if (identityInit === 'no-identity') return { kind: 'create-identity' };
 
   // Wallet initialized: PIN gate before any authenticated screen (spec §7).

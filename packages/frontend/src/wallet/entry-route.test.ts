@@ -141,6 +141,19 @@ describe('decideEntryRoute', () => {
     ).toBe('signin');
   });
 
+  test('a key that cannot be read now is "try again": never sign-in, create-identity or the wallet', () => {
+    for (const hasPinConfigured of [null, false, true]) {
+      expect(
+        decideEntryRoute({
+          isAuthResolved: true,
+          isAuthenticated: true,
+          identityInit: 'unavailable',
+          hasPinConfigured,
+        }),
+      ).toEqual({ kind: 'blocked', block: { kind: 'key-unavailable' } });
+    }
+  });
+
   test('an init superseded by an account switch waits for the next one', () => {
     expect(
       decideEntryRoute({

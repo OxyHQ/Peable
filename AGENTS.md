@@ -1177,7 +1177,15 @@ Which key a wallet opens with is `wallet/identity-key.ts`'s decision from what
 the ACCOUNT vouches for, and every seed derivation and social-receive
 signature names that key (`publicKey` selector);
 `KeyManager.getSharedPublicKey` (the iOS keychain group every Oxy app can
-write) is a hint only. **Every `addresses` row records the key it derives from
+write) is a hint only. **Only a `null` key read means "not held here"**: a
+throw (`@oxy.so/core`'s `IdentityUnavailableError` from a selected derivation
+or signature while the keychain is locked or Commons busy, or any other) is
+"try again later" (`wallet/identity-unavailable.ts`) — the decision stops as
+`unavailable` rather than opening another key as `replaced`, a previous key is
+`unavailable` rather than stranded, and the entry screen shows the
+`key-unavailable` block, never sign-in, "set up your Oxy ID" or
+`not-on-device`. Nothing is retired, unbound or hidden, and social receive
+stays as the gateway's verdict left it. **Every `addresses` row records the key it derives from
 (`identity_public_key`), and only the open key's rows that the open tree
 derives are ever offered** (`wallet/receive-address.ts`): after a rotation the
 same file still holds the replaced key's rows. Unbound rows are judged by a

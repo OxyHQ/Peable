@@ -23,7 +23,8 @@ import { t } from '../../i18n';
 type BlockReason =
   | Extract<WalletBlock, { kind: 'organization' }>['status']
   | 'unsupported'
-  | 'unverified';
+  | 'unverified'
+  | 'key-unavailable';
 
 /** Translation keys per reason; `cta` only where Commons is the fix. */
 const COPY: Record<BlockReason, { title: string; body: string; cta?: string }> = {
@@ -52,6 +53,10 @@ const COPY: Record<BlockReason, { title: string; body: string; cta?: string }> =
   unverified: {
     title: 'organizationWallet.unverified.title',
     body: 'organizationWallet.unverified.body',
+  },
+  'key-unavailable': {
+    title: 'organizationWallet.keyUnavailable.title',
+    body: 'organizationWallet.keyUnavailable.body',
   },
 };
 

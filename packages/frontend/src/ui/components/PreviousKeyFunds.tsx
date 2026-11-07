@@ -14,6 +14,10 @@
  *   by a compromise the move races whoever else holds the key.
  * - **Unreachable** (`strandedBalance`): not in the balance, never selected
  *   (F8), with the path to spend it here: add the previous phrase in Commons.
+ *   While a previous key could not be READ (`previousKeysUnavailable`: the
+ *   keychain locked, Commons busy) the line says the coins are waiting for
+ *   the key instead — it may well be on this phone, so its phrase is not
+ *   asked for.
  *
  * Rendered only for an open wallet: the web build is read-only and has no
  * keys, so it never has either figure.
@@ -48,6 +52,7 @@ const MOVE_FEE_CHOICES: readonly MoveFeeChoice[] = ['low', 'medium', 'high', 'cu
 export function PreviousKeyFunds() {
   const previousKeyBalance = useWalletStore((s) => s.previousKeyBalance);
   const strandedBalance = useWalletStore((s) => s.strandedBalance);
+  const keysUnavailable = useWalletStore((s) => s.previousKeysUnavailable);
   const activeWalletId = useWalletStore((s) => s.activeWalletId);
   const planMove = useWalletStore((s) => s.planPreviousKeyMove);
   // Subscribed so the card re-plans when this phone's key stops (or starts
@@ -195,9 +200,11 @@ export function PreviousKeyFunds() {
       {strandedBalance > 0n ? (
         <View className="gap-2">
           <Text className="text-muted-foreground text-xs leading-4">
-            {t(copy.stranded, { amount: formatFairAmount(strandedBalance) })}
+            {t(keysUnavailable ? copy.unavailable : copy.stranded, {
+              amount: formatFairAmount(strandedBalance),
+            })}
           </Text>
-          {subject?.kind === 'organization' ? (
+          {subject?.kind === 'organization' && !keysUnavailable ? (
             <Button
               title={t('wallet.previousKey.openCommons')}
               onPress={() => void openCommons()}

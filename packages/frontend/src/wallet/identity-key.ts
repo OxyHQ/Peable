@@ -27,6 +27,14 @@
  * the account when it was stored. Nothing else ever does — a wallet with no
  * vouched key does not open, rather than open on a key nobody vouched for.
  *
+ * Only a `null` derivation means "not held here" (core 7.40.0, R7-4). A
+ * derivation that THROWS — `IdentityUnavailableError` while the keychain is
+ * locked or Commons is busy, or anything else — is no answer: the decision
+ * stops at once as `unavailable` and is asked again later. It never moves on
+ * to the next candidate, which would open a held previous key as `replaced`
+ * (social receive off) while the current key is merely locked, and it never
+ * reads as `not-held` (the "set up your Oxy ID" screen).
+ *
  * Receiving is a SEPARATE, later gate (`wallet-store.ts`'s
  * `syncSocialReceiveSet`): nothing receivable is shown until the gateway's
  * fresh answer for `#key-1` equals the open key.
@@ -57,30 +65,50 @@ export type IdentityKeyDecision =
     }
   /**
    * No key opens: `unverified` — Oxy could not be asked and this wallet has no
-   * stored key; `not-held` — no key the account vouches for is on this device.
+   * stored key; `not-held` — no key the account vouches for is on this device;
+   * `unavailable` — a key could not be read NOW (locked keychain, busy
+   * Commons): try again later, nothing about the wallet changed.
    */
-  | { readonly kind: 'none'; readonly reason: 'unverified' | 'not-held' };
+  | {
+      readonly kind: 'none';
+      readonly reason: 'unverified' | 'not-held' | 'unavailable';
+    };
 
 export interface IdentityKeyDeps {
   /** The account's keys now, or `null` when they cannot be read. */
   readonly accountKeys: AccountKeys | null;
   /** The key this wallet last opened with, from its own database, or `null`. */
   readonly storedKey: string | null;
-  /** The key this device says it holds (untrusted), or `null`. Read lazily. */
+  /**
+   * The key this device says it holds (untrusted), or `null`. Read lazily. A
+   * throw is "cannot tell now", like a derivation's.
+   */
   readonly deviceHint: () => Promise<string | null>;
-  /** `deriveScopedSeed` selecting `key`: `null` when this device does not hold it. */
+  /**
+   * `deriveScopedSeed` selecting `key`: `null` when this device DEFINITIVELY
+   * does not hold it; throws (`IdentityUnavailableError`) when it cannot tell now.
+   */
   readonly derive: (key: string) => Promise<Uint8Array | null>;
 }
 
-async function tryDerive(
-  derive: IdentityKeyDeps['derive'],
-  key: string,
-): Promise<Uint8Array | null> {
+const UNAVAILABLE: IdentityKeyDecision = { kind: 'none', reason: 'unavailable' };
+
+/** A read that threw: the decision stops here, and is asked again later. */
+class Unavailable {
+  constructor(readonly error: unknown) {}
+}
+
+async function attempt<T>(read: () => Promise<T>): Promise<T | Unavailable> {
   try {
-    return await derive(key);
-  } catch {
-    return null;
+    return await read();
+  } catch (error) {
+    return new Unavailable(error);
   }
+}
+
+function logUnavailable(error: unknown): IdentityKeyDecision {
+  console.warn('[identity-key] a key could not be read now; asking again later:', error);
+  return UNAVAILABLE;
 }
 
 export async function decideIdentityKey(deps: IdentityKeyDeps): Promise<IdentityKeyDecision> {
@@ -88,7 +116,8 @@ export async function decideIdentityKey(deps: IdentityKeyDeps): Promise<Identity
   const accountKeys = deps.accountKeys;
   if (accountKeys === null) {
     if (stored === null) return { kind: 'none', reason: 'unverified' };
-    const seed = await tryDerive(deps.derive, stored);
+    const seed = await attempt(() => deps.derive(stored));
+    if (seed instanceof Unavailable) return logUnavailable(seed.error);
     return seed
       ? { kind: 'held', key: stored, seed, reason: 'offline' }
       : { kind: 'none', reason: 'not-held' };
@@ -96,7 +125,9 @@ export async function decideIdentityKey(deps: IdentityKeyDeps): Promise<Identity
 
   const current = canonicalKey(accountKeys.current);
   if (current !== null) {
-    const seed = await tryDerive(deps.derive, current);
+    const seed = await attempt(() => deps.derive(current));
+    // The current key may be here, only locked: never try a previous key in its place.
+    if (seed instanceof Unavailable) return logUnavailable(seed.error);
     if (seed) return { kind: 'current', key: current, seed };
   }
   const history = canonicalKeySet([...accountKeys.history]);
@@ -104,18 +135,15 @@ export async function decideIdentityKey(deps: IdentityKeyDeps): Promise<Identity
   const consider = async (key: string | null): Promise<IdentityKeyDecision | null> => {
     if (key === null || tried.has(key) || !history.has(key)) return null;
     tried.add(key);
-    const seed = await tryDerive(deps.derive, key);
+    const seed = await attempt(() => deps.derive(key));
+    if (seed instanceof Unavailable) return logUnavailable(seed.error);
     return seed ? { kind: 'held', key, seed, reason: 'replaced' } : null;
   };
   const fromStored = await consider(stored);
   if (fromStored) return fromStored;
-  let hint: string | null = null;
-  try {
-    hint = canonicalKey(await deps.deviceHint());
-  } catch {
-    hint = null;
-  }
-  const fromHint = await consider(hint);
+  const hint = await attempt(deps.deviceHint);
+  if (hint instanceof Unavailable) return logUnavailable(hint.error);
+  const fromHint = await consider(canonicalKey(hint));
   if (fromHint) return fromHint;
   return { kind: 'none', reason: 'not-held' };
 }

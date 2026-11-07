@@ -200,24 +200,33 @@ export function canonicalKeySet(keys: readonly (string | null | undefined)[]): S
 /**
  * Which `keys` this device can reach: `derive(key)` is
  * `deriveScopedSeed(PEABLE_SEED_INFO, { ...subject, publicKey: key })`, which
- * answers `null` for a key this device does not hold. A reachable key's seed
- * is handed to `build` (the HD KeyManager) and ZEROED right after — a seed is
- * never kept, here or anywhere (identity-wallet.ts). A key whose derivation
- * throws is unreachable this time, and asked again next time.
+ * answers `null` for a key this device DEFINITIVELY does not hold
+ * (`unreachable`). A reachable key's seed is handed to `build` (the HD
+ * KeyManager) and ZEROED right after — a seed is never kept, here or anywhere
+ * (identity-wallet.ts).
+ *
+ * A key whose derivation THROWS is `unavailable`, never `unreachable` (core
+ * 7.40.0, R7-4): `IdentityUnavailableError` means the keychain is locked or
+ * Commons busy, and the key may well be here. It is asked again on the next
+ * refresh; nothing recorded for it is retired, unbound or forgotten, and its
+ * coins are said to be waiting, never to need the previous phrase.
  */
 export async function probePreviousKeys<T>(
   keys: readonly string[],
   derive: (key: string) => Promise<Uint8Array | null>,
   build: (key: string, seed: Uint8Array) => T,
-): Promise<{ reachable: Map<string, T>; unreachable: string[] }> {
+): Promise<{ reachable: Map<string, T>; unreachable: string[]; unavailable: string[] }> {
   const reachable = new Map<string, T>();
   const unreachable: string[] = [];
+  const unavailable: string[] = [];
   for (const key of keys) {
-    let seed: Uint8Array | null = null;
+    let seed: Uint8Array | null;
     try {
       seed = await derive(key);
-    } catch {
-      seed = null;
+    } catch (error) {
+      console.warn('[previous-keys] a previous key could not be read now; asking again:', error);
+      unavailable.push(key);
+      continue;
     }
     if (!seed) {
       unreachable.push(key);
@@ -229,7 +238,7 @@ export async function probePreviousKeys<T>(
       seed.fill(0);
     }
   }
-  return { reachable, unreachable };
+  return { reachable, unreachable, unavailable };
 }
 
 /** What the Explorer says of one address, for discovery. */
@@ -510,14 +519,18 @@ export function samePreviousKeyMovePlan(
  * The translation keys the previous-key notices use, by whose wallet it is.
  * The stranded line names the path to spend it HERE — the previous phrase
  * added in Commons — never "outside Peable": Commons keeps a key added that
- * way, and the wallet reaches it on its next refresh.
+ * way, and the wallet reaches it on its next refresh. While a previous key
+ * could not be READ (locked keychain, busy Commons), `unavailable` replaces it:
+ * the key may be here, so asking for its phrase would be wrong.
  */
 export function previousKeyCopy(subjectKind: 'personal' | 'organization'): {
   readonly body: string;
   readonly stranded: string;
+  readonly unavailable: string;
 } {
   return {
     body: `wallet.previousKey.body.${subjectKind}`,
     stranded: `wallet.previousKey.stranded.${subjectKind}`,
+    unavailable: 'wallet.previousKey.unavailable',
   };
 }

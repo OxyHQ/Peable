@@ -17,11 +17,19 @@ function forbidden(): Error {
   return Object.assign(new Error('ORGANIZATION_KEY_FORBIDDEN'), { status: 403 });
 }
 
+/** Core's "cannot tell now" (`@oxy.so/core` 7.40.0, R7-4), matched by name. */
+function identityUnavailable(): Error {
+  return Object.assign(new Error('The key this payment needs cannot be read right now.'), {
+    name: 'IdentityUnavailableError',
+  });
+}
+
 function deps(overrides: Partial<OrganizationWalletDeps> = {}): OrganizationWalletDeps {
   return {
     hasIdentityKeystore: true,
     readIdentityKey: mock(async () => ({ publicKey: KEY_A })),
     readDevicePublicKey: mock(async () => KEY_A),
+    holdsKey: mock(async () => false),
     ...overrides,
   };
 }
@@ -92,6 +100,54 @@ describe('resolveOrganizationWallet', () => {
   test('the organization has a key, this phone does not: add it in Commons', async () => {
     const d = deps({ readDevicePublicKey: mock(async () => null) });
     expect(await resolveOrganizationWallet(ORG_ID, d)).toEqual({ status: 'not-on-device' });
+    // Only once a selected derivation said so: the device read alone is `null`
+    // while the keychain is locked too.
+    expect(d.holdsKey).toHaveBeenCalledWith(ORG_ID, KEY_A);
+  });
+
+  test('the device read answered nothing but the key is held: open it', async () => {
+    const d = deps({
+      readDevicePublicKey: mock(async () => null),
+      holdsKey: mock(async () => true),
+    });
+    expect(await resolveOrganizationWallet(ORG_ID, d)).toEqual({
+      status: 'ready',
+      publishedPublicKey: KEY_A,
+    });
+  });
+
+  describe('a key that cannot be read now (IdentityUnavailableError) is "try again"', () => {
+    test('never not-on-device when the derivation cannot tell', async () => {
+      const d = deps({
+        readDevicePublicKey: mock(async () => null),
+        holdsKey: mock(async () => {
+          throw identityUnavailable();
+        }),
+      });
+      expect(await resolveOrganizationWallet(ORG_ID, d)).toEqual({ status: 'key-unavailable' });
+    });
+
+    test('never not-on-device or replaced-key when the device read throws', async () => {
+      const d = deps({
+        readDevicePublicKey: mock(async () => {
+          throw identityUnavailable();
+        }),
+      });
+      expect(await resolveOrganizationWallet(ORG_ID, d)).toEqual({ status: 'key-unavailable' });
+      expect(d.holdsKey).not.toHaveBeenCalled();
+    });
+
+    test('Oxy unreachable and the device read throws: key-unavailable, not a guess', async () => {
+      const d = deps({
+        readIdentityKey: mock(async () => {
+          throw Object.assign(new Error('offline'), { status: 0 });
+        }),
+        readDevicePublicKey: mock(async () => {
+          throw identityUnavailable();
+        }),
+      });
+      expect(await resolveOrganizationWallet(ORG_ID, d)).toEqual({ status: 'key-unavailable' });
+    });
   });
 
   test('this phone holds a replaced key: open it, with social receive off', async () => {
