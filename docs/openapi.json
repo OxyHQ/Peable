@@ -126,6 +126,9 @@
       "name": "Promotion codes"
     },
     {
+      "name": "Quotes"
+    },
+    {
       "name": "Refunds"
     },
     {
@@ -28702,6 +28705,1542 @@
         }
       }
     },
+    "/v1/quotes": {
+      "post": {
+        "operationId": "createQuote",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Create a quote",
+        "description": "A draft for one customer, priced from catalog Prices with the catalog's own pricing. Its tax is computed when it finalizes.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "quotes.create",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "customer": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "line_items": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "price": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255,
+                          "description": "An active, licensed catalog Price (`price_…`), one-time or recurring."
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000,
+                          "description": "Default 1."
+                        }
+                      },
+                      "required": [
+                        "price"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Each price once, in one currency; every recurring price on one interval. Replaces every line on an update."
+                  },
+                  "collection_method": {
+                    "type": "string",
+                    "enum": [
+                      "charge_automatically",
+                      "send_invoice"
+                    ],
+                    "description": "Default `charge_automatically`; a FairCoin (`FAIR`) quote is always `send_invoice`."
+                  },
+                  "invoice_settings": {
+                    "type": "object",
+                    "properties": {
+                      "days_until_due": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "subscription_data": {
+                    "type": "object",
+                    "properties": {
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "trial_period_days": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 730
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 500
+                        },
+                        "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "discounts": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "coupon": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "promotion_code": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "description": "At most one: a coupon or a promotion code."
+                  },
+                  "automatic_tax": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "enabled"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "expires_at": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 253402300799,
+                    "description": "Default: 30 days from now (the customer's test clock time when it has one)."
+                  },
+                  "header": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1500
+                  },
+                  "footer": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "required": [
+                  "customer",
+                  "line_items"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listQuotes",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "List quotes",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "quotes.list",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "open",
+                "accepted",
+                "canceled"
+              ]
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Quote"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quotes/{id}": {
+      "get": {
+        "operationId": "retrieveQuote",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Retrieve a quote",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "quotes.retrieve",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "updateQuote",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Update a quote",
+        "description": "Drafts only, except `metadata`. `line_items` replaces every line; a field sent as `\"\"` is cleared; `metadata` is a patch.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "quotes.update",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "line_items": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "price": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255,
+                          "description": "An active, licensed catalog Price (`price_…`), one-time or recurring."
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000,
+                          "description": "Default 1."
+                        }
+                      },
+                      "required": [
+                        "price"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Each price once, in one currency; every recurring price on one interval. Replaces every line on an update."
+                  },
+                  "collection_method": {
+                    "type": "string",
+                    "enum": [
+                      "charge_automatically",
+                      "send_invoice"
+                    ]
+                  },
+                  "invoice_settings": {
+                    "type": "object",
+                    "properties": {
+                      "days_until_due": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "subscription_data": {
+                    "type": "object",
+                    "properties": {
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "trial_period_days": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 730
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 500
+                        },
+                        "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "discounts": {
+                    "anyOf": [
+                      {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "coupon": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 255
+                            },
+                            "promotion_code": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 255
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      {
+                        "type": "string",
+                        "const": ""
+                      }
+                    ]
+                  },
+                  "automatic_tax": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "enabled"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "expires_at": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 253402300799
+                  },
+                  "header": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50
+                      },
+                      {
+                        "type": "string",
+                        "const": ""
+                      }
+                    ]
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1500
+                      },
+                      {
+                        "type": "string",
+                        "const": ""
+                      }
+                    ]
+                  },
+                  "footer": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "string",
+                        "const": ""
+                      }
+                    ]
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quotes/{id}/accept": {
+      "post": {
+        "operationId": "acceptQuote",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Accept an open quote",
+        "description": "The customer said yes. One-time lines become an invoice; recurring lines a subscription whose first invoice also carries the one-time lines. The invoice is finalized (tax before finalize) and collected as the engine collects any other: charged when `charge_automatically` and the customer has a card, otherwise paid on its hosted page — where FairCoin is always offered.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "quotes.accept",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quotes/{id}/cancel": {
+      "post": {
+        "operationId": "cancelQuote",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Cancel a quote",
+        "description": "A draft or an open quote; an accepted one cannot be cancelled.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "quotes.cancel",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quotes/{id}/finalize": {
+      "post": {
+        "operationId": "finalizeQuote",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Finalize a draft quote",
+        "description": "It gets its number, its discount and its Peable Tax. Tax fails closed: a quote whose tax cannot be computed stays a draft (`automatic_tax.status` says why).",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "quotes.finalizeQuote",
+        "x-peable-expandable": "quote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expires_at": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 253402300799,
+                    "description": "A new expiry, set as it finalizes."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quotes/{id}/line_items": {
+      "get": {
+        "operationId": "listQuoteLineItems",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "List a quote's line items",
+        "description": "In their order (at most twenty); the cursor is a line's own `li_…`.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "quotes.listLineItems",
+        "x-peable-expandable": "item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CheckoutLineItem"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/quotes/{id}/pdf": {
+      "get": {
+        "operationId": "retrieveQuotePdf",
+        "tags": [
+          "Quotes"
+        ],
+        "summary": "Download a quote's PDF",
+        "description": "A draft renders marked as a draft, without a number.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "quotes.pdf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The quote (`qt_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/refunds": {
       "post": {
         "operationId": "createRefund",
@@ -40482,7 +42021,7 @@
                   },
                   "enabled_events": {
                     "minItems": 1,
-                    "maxItems": 93,
+                    "maxItems": 97,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -40577,6 +42116,10 @@
                         "billing_portal.configuration.created",
                         "billing_portal.configuration.updated",
                         "billing_portal.session.created",
+                        "quote.created",
+                        "quote.finalized",
+                        "quote.accepted",
+                        "quote.canceled",
                         "tax.assessment.created",
                         "tax.review_item.created",
                         "tax.review_item.updated"
@@ -41016,7 +42559,7 @@
                   },
                   "enabled_events": {
                     "minItems": 1,
-                    "maxItems": 93,
+                    "maxItems": 97,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -41111,6 +42654,10 @@
                         "billing_portal.configuration.created",
                         "billing_portal.configuration.updated",
                         "billing_portal.session.created",
+                        "quote.created",
+                        "quote.finalized",
+                        "quote.accepted",
+                        "quote.canceled",
                         "tax.assessment.created",
                         "tax.review_item.created",
                         "tax.review_item.updated"
@@ -49118,6 +50665,414 @@
                     "properties": {
                       "object": {
                         "$ref": "#/components/schemas/PromotionCode"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "quote.accepted": {
+      "post": {
+        "operationId": "webhook_quote_accepted",
+        "summary": "quote.accepted",
+        "description": "A Quote was accepted: its `invoice` (and, for recurring lines, its `subscription`) exists.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "quote.accepted"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/Quote"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "quote.canceled": {
+      "post": {
+        "operationId": "webhook_quote_canceled",
+        "summary": "quote.canceled",
+        "description": "A Quote was cancelled, or expired while open.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "quote.canceled"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/Quote"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "quote.created": {
+      "post": {
+        "operationId": "webhook_quote_created",
+        "summary": "quote.created",
+        "description": "A draft Quote was created.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "quote.created"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/Quote"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "quote.finalized": {
+      "post": {
+        "operationId": "webhook_quote_finalized",
+        "summary": "quote.finalized",
+        "description": "A Quote was finalized: numbered, priced and taxed, waiting for its customer.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "quote.finalized"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/Quote"
                       },
                       "previous_attributes": {
                         "type": "object",
@@ -57235,7 +59190,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 111 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 114 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -57392,6 +59347,10 @@
               "billing_portal.configuration.created",
               "billing_portal.configuration.updated",
               "billing_portal.session.created",
+              "quote.created",
+              "quote.finalized",
+              "quote.accepted",
+              "quote.canceled",
               "tax.assessment.created",
               "tax.review_item.created",
               "tax.review_item.updated",
@@ -57504,6 +59463,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/BillingPortalSession"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Quote"
                   },
                   {
                     "$ref": "#/components/schemas/TaxAssessment"
@@ -57955,7 +59917,8 @@
               "subscription_cycle",
               "subscription_update",
               "subscription_cancel",
-              "upcoming"
+              "upcoming",
+              "quote_accept"
             ]
           },
           "collection_method": {
@@ -62659,6 +64622,437 @@
           "items"
         ],
         "additionalProperties": false
+      },
+      "Quote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "quote"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "`true` in live mode, `false` in test mode."
+          },
+          "number": {
+            "description": "`null` while a draft; `QT-PREFIX-0001` once finalized — per merchant.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "open",
+              "accepted",
+              "canceled"
+            ]
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/Customer"
+              }
+            ],
+            "x-peable-expandable": "customer",
+            "description": "`cus_…`, or the Customer with `expand[]=customer`."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "FAIR",
+              "EUR",
+              "USD",
+              "GBP",
+              "CHF",
+              "SEK",
+              "NOK",
+              "DKK",
+              "PLN",
+              "CZK",
+              "CAD",
+              "AUD",
+              "JPY"
+            ],
+            "description": "Uppercase ISO 4217 code, or `FAIR`."
+          },
+          "collection_method": {
+            "type": "string",
+            "enum": [
+              "charge_automatically",
+              "send_invoice"
+            ]
+          },
+          "invoice_settings": {
+            "type": "object",
+            "properties": {
+              "days_until_due": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "`send_invoice` only; the billing settings' default when `null`."
+              }
+            },
+            "required": [
+              "days_until_due"
+            ],
+            "additionalProperties": false
+          },
+          "subscription_data": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trial_period_days": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500."
+              }
+            },
+            "required": [
+              "description",
+              "trial_period_days",
+              "metadata"
+            ],
+            "additionalProperties": false,
+            "description": "What the subscription an accepted quote with recurring lines starts with."
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Discount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "automatic_tax": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "requires_location_inputs",
+                      "failed",
+                      "complete"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tax_calculation": {
+                "description": "The Peable Tax calculation (`taxcalc_…`) the quote finalized with.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "enabled",
+              "status",
+              "tax_calculation"
+            ],
+            "additionalProperties": false
+          },
+          "amount_subtotal": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Every line before discount and tax (one period of a recurring line)."
+          },
+          "amount_total": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "`amount_subtotal - amount_discount + exclusive tax`."
+          },
+          "total_details": {
+            "type": "object",
+            "properties": {
+              "amount_discount": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+              },
+              "amount_shipping": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Always `0`: a quote ships nothing."
+              },
+              "amount_tax": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "description": "Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR)."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Every tax, inclusive and exclusive; `null` on a draft whose tax is not known yet."
+              }
+            },
+            "required": [
+              "amount_discount",
+              "amount_shipping",
+              "amount_tax"
+            ],
+            "additionalProperties": false
+          },
+          "expires_at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "An open quote is cancelled at this instant."
+          },
+          "header": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "footer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invoice": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Invoice"
+                  }
+                ],
+                "x-peable-expandable": "invoice",
+                "description": "The invoice accepting made (`in_…`, expandable): the one-time invoice, or the subscription's first."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Subscription"
+                  }
+                ],
+                "x-peable-expandable": "subscription",
+                "description": "The subscription accepting made (`sub_…`, expandable); `null` without recurring lines."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status_transitions": {
+            "type": "object",
+            "properties": {
+              "finalized_at": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "accepted_at": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "canceled_at": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "finalized_at",
+              "accepted_at",
+              "canceled_at"
+            ],
+            "additionalProperties": false
+          },
+          "test_clock": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500."
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Unix seconds."
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "number",
+          "status",
+          "customer",
+          "currency",
+          "collection_method",
+          "invoice_settings",
+          "subscription_data",
+          "discount",
+          "automatic_tax",
+          "amount_subtotal",
+          "amount_total",
+          "total_details",
+          "expires_at",
+          "header",
+          "description",
+          "footer",
+          "invoice",
+          "subscription",
+          "status_transitions",
+          "test_clock",
+          "metadata",
+          "created"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "qt_0193b8f2c1a87d3e9f4a",
+            "object": "quote",
+            "livemode": false,
+            "number": "QT-ACME-0001",
+            "status": "open",
+            "customer": "cus_0193b8f2c1a87d3e9f4a",
+            "currency": "EUR",
+            "collection_method": "send_invoice",
+            "invoice_settings": {
+              "days_until_due": 30
+            },
+            "subscription_data": {
+              "description": null,
+              "trial_period_days": null,
+              "metadata": {}
+            },
+            "discount": null,
+            "automatic_tax": {
+              "enabled": false,
+              "status": null,
+              "tax_calculation": null
+            },
+            "amount_subtotal": "120000",
+            "amount_total": "120000",
+            "total_details": {
+              "amount_discount": "0",
+              "amount_shipping": "0",
+              "amount_tax": "0"
+            },
+            "expires_at": 1796342400,
+            "header": "Annual support",
+            "description": null,
+            "footer": null,
+            "invoice": null,
+            "subscription": null,
+            "status_transitions": {
+              "finalized_at": 1793750400,
+              "accepted_at": null,
+              "canceled_at": null
+            },
+            "test_clock": null,
+            "metadata": {},
+            "created": 1793750400
+          }
+        ]
       },
       "Refund": {
         "type": "object",
@@ -67796,6 +70190,10 @@
               "billing_portal.configuration.created",
               "billing_portal.configuration.updated",
               "billing_portal.session.created",
+              "quote.created",
+              "quote.finalized",
+              "quote.accepted",
+              "quote.canceled",
               "tax.assessment.created",
               "tax.review_item.created",
               "tax.review_item.updated",
@@ -68001,6 +70399,10 @@
                 "billing_portal.configuration.created",
                 "billing_portal.configuration.updated",
                 "billing_portal.session.created",
+                "quote.created",
+                "quote.finalized",
+                "quote.accepted",
+                "quote.canceled",
                 "tax.assessment.created",
                 "tax.review_item.created",
                 "tax.review_item.updated"
@@ -68211,6 +70613,10 @@
                 "billing_portal.configuration.created",
                 "billing_portal.configuration.updated",
                 "billing_portal.session.created",
+                "quote.created",
+                "quote.finalized",
+                "quote.accepted",
+                "quote.canceled",
                 "tax.assessment.created",
                 "tax.review_item.created",
                 "tax.review_item.updated"

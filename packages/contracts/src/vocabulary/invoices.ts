@@ -13,6 +13,9 @@ export const INVOICE_BILLING_REASONS = [
   'subscription_update',
   'subscription_cancel',
   'upcoming',
+  // A one-time quote's invoice (Stripe's name); a recurring quote's first
+  // invoice is its subscription's `subscription_create`.
+  'quote_accept',
 ] as const;
 export type InvoiceBillingReason = (typeof INVOICE_BILLING_REASONS)[number];
 

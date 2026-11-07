@@ -1,11 +1,11 @@
 /**
- * The billing engine's two state machines (ADR 0018 §4) — which status may
+ * The billing engine's state machines (ADR 0018 §4) — which status may
  * follow which. Pure tables; the writes that enforce them are
- * `transitionSubscription` and `transitionInvoice`, each a compare-and-swap on
+ * `transitionSubscription`, `transitionInvoice` and `transitionQuote`, each a compare-and-swap on
  * the source status, so a table entry is a permission and the CAS is what
  * makes two racing writers agree on who won.
  */
-import type { InvoiceStatus, SubscriptionStatus } from '@peable.to/shared-types';
+import type { InvoiceStatus, QuoteStatus, SubscriptionStatus } from '@peable.to/shared-types';
 
 const SUBSCRIPTION_ALLOWED: Record<SubscriptionStatus, readonly SubscriptionStatus[]> = {
   incomplete: ['active', 'incomplete_expired', 'canceled'],
@@ -45,3 +45,14 @@ export function invoiceMayMove(from: InvoiceStatus, to: InvoiceStatus): boolean 
 
 /** Statuses an invoice can still be paid from. */
 export const PAYABLE_INVOICE_STATUSES: readonly InvoiceStatus[] = ['open', 'uncollectible'];
+
+const QUOTE_ALLOWED: Record<QuoteStatus, readonly QuoteStatus[]> = {
+  draft: ['open', 'canceled'],
+  open: ['accepted', 'canceled'],
+  accepted: [],
+  canceled: [],
+};
+
+export function quoteMayMove(from: QuoteStatus, to: QuoteStatus): boolean {
+  return from === to || QUOTE_ALLOWED[from].includes(to);
+}

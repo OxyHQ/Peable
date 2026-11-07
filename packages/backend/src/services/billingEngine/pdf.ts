@@ -42,6 +42,17 @@ function escapePdfText(text: string): string {
 }
 
 export interface PdfInvoice {
+  /**
+   * What the document is — `INVOICE` (the default) or `QUOTE` — with the
+   * labels of its number and its date line (`Invoice number` / `Due`).
+   */
+  readonly kind?: {
+    readonly title: string;
+    readonly numberLabel: string;
+    readonly dueLabel: string;
+  };
+  /** A line under the title (a quote's `header`). */
+  readonly header?: string | null;
   readonly merchantName: string;
   readonly number: string;
   readonly status: string;
@@ -55,8 +66,9 @@ export interface PdfInvoice {
   readonly discount: string;
   readonly tax: string;
   readonly total: string;
-  readonly amountPaid: string;
-  readonly amountDue: string;
+  /** `null`: not shown (a quote asks for nothing yet). */
+  readonly amountPaid: string | null;
+  readonly amountDue: string | null;
   readonly footer: string | null;
 }
 
@@ -85,14 +97,23 @@ export function renderInvoicePdf(invoice: PdfInvoice): Uint8Array {
     }
   };
 
+  const kind = invoice.kind ?? {
+    title: 'INVOICE',
+    numberLabel: 'Invoice number',
+    dueLabel: 'Due',
+  };
   text(40, 20, invoice.merchantName, true);
-  right(555, 20, 'INVOICE', true);
+  right(555, 20, kind.title, true);
   down(28);
-  text(40, 10, `Invoice number: ${invoice.number}`);
+  if (invoice.header) {
+    text(40, 12, invoice.header.slice(0, 70), true);
+    down(18);
+  }
+  text(40, 10, `${kind.numberLabel}: ${invoice.number}`);
   right(555, 10, `Status: ${invoice.status}`);
   down(14);
   text(40, 10, `Date of issue: ${invoice.issued}`);
-  if (invoice.due) right(555, 10, `Due: ${invoice.due}`);
+  if (invoice.due) right(555, 10, `${kind.dueLabel}: ${invoice.due}`);
   down(24);
   text(40, 10, 'Bill to', true);
   down(14);
@@ -128,8 +149,8 @@ export function renderInvoicePdf(invoice: PdfInvoice): Uint8Array {
   if (invoice.discount !== formatAmount('0', invoice.currency)) total('Discount', invoice.discount);
   total('Tax', invoice.tax);
   total('Total', invoice.total, true);
-  total('Amount paid', invoice.amountPaid);
-  total('Amount due', invoice.amountDue, true);
+  if (invoice.amountPaid !== null) total('Amount paid', invoice.amountPaid);
+  if (invoice.amountDue !== null) total('Amount due', invoice.amountDue, true);
   if (invoice.footer) {
     down(20);
     text(40, 9, invoice.footer);

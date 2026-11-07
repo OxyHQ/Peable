@@ -1,5 +1,32 @@
 # Changelog
 
+## 6.3.0 — quotes
+
+Requires `@peable.to/contracts` 6.2.0 and `@peable.to/shared-types` 6.2.0 (ADR 0018 §5).
+
+Added:
+
+- `peable.quotes` — Stripe's Quotes on Orbit's native billing engine:
+  `create`, `retrieve`, `update`, `list`, `finalizeQuote`, `accept`, `cancel`,
+  `listLineItems` and `pdf` over `/v1/quotes`. A quote (`qt_…`) prices catalog
+  Prices (one-time and recurring, one currency, one interval) for one
+  customer, with at most one discount and Peable Tax. `draft` → `open`
+  (`finalize`: numbered `QT-<prefix>-0001`, tax computed and frozen — failing
+  closed, the quote stays a draft with `automatic_tax.status`) → `accepted`
+  (one-time lines become an invoice with `billing_reason: 'quote_accept'`;
+  recurring lines a subscription whose first invoice also carries the one-time
+  lines; `invoice` / `subscription` link them) or `canceled` (by the merchant,
+  or when an open quote reaches `expires_at`). Its lines are Stripe's `item`
+  (`CheckoutLineItem`).
+- Types `Quote`, `QuoteStatus`, `CreateQuoteParams`, `UpdateQuoteParams`,
+  `FinalizeQuoteParams`, `QuoteActionParams`, `QuoteListParams`,
+  `QuoteLineItemListParams`, and `QUOTE_STATUSES` / `QUOTE_LIMITS` in contracts
+  and shared-types.
+- Webhook events `quote.created`, `quote.finalized`, `quote.accepted` and
+  `quote.canceled`, each carrying the Quote.
+- `quote_accept` in `INVOICE_BILLING_REASONS`; error codes `quote_not_editable`,
+  `quote_unexpected_state` and `quote_expired`.
+
 ## 6.0.0 — a recipient's FairCoin addresses are never reused, and its wallet watches exactly them
 
 Requires `@peable.to/contracts` 6.0.0 and `@peable.to/shared-types` 6.0.0 (ADR 0021 D9, replaced 2026-11-06).

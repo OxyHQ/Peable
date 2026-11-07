@@ -143,6 +143,7 @@ describe('navModel', () => {
     expect(products?.rows[1]?.children?.map((row) => row.key)).toEqual([
       'subscriptions',
       'invoices',
+      'quotes',
       'billing-settings',
     ]);
     expect(model.footer.map((row) => row.key)).toEqual(['developers', 'settings']);

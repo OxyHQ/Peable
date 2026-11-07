@@ -1,0 +1,749 @@
+---
+title: "Quotes"
+description: "The Quotes endpoints of the Peable API."
+order: 936
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Quotes
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/quotes`](#create-a-quote) | Create a quote |
+| [`GET /v1/quotes`](#list-quotes) | List quotes |
+| [`GET /v1/quotes/{id}`](#retrieve-a-quote) | Retrieve a quote |
+| [`POST /v1/quotes/{id}`](#update-a-quote) | Update a quote |
+| [`POST /v1/quotes/{id}/accept`](#accept-an-open-quote) | Accept an open quote |
+| [`POST /v1/quotes/{id}/cancel`](#cancel-a-quote) | Cancel a quote |
+| [`POST /v1/quotes/{id}/finalize`](#finalize-a-draft-quote) | Finalize a draft quote |
+| [`GET /v1/quotes/{id}/line_items`](#list-a-quotes-line-items) | List a quote's line items |
+| [`GET /v1/quotes/{id}/pdf`](#download-a-quotes-pdf) | Download a quote's PDF |
+
+## Create a quote
+
+`POST /v1/quotes`
+
+A draft for one customer, priced from catalog Prices with the catalog's own pricing. Its tax is computed when it finalizes.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.quotes.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer` **required** | string | 1–255 characters. |
+| `line_items` **required** | array of object | Each price once, in one currency; every recurring price on one interval. Replaces every line on an update. At most 20 items. At least 1 item. |
+| `line_items[][price]` **required** | string | An active, licensed catalog Price (`price_…`), one-time or recurring. 1–255 characters. |
+| `line_items[][quantity]` | integer | Default 1. Between 1 and 1000000. |
+| `collection_method` | string | Default `charge_automatically`; a FairCoin (`FAIR`) quote is always `send_invoice`. |
+| `invoice_settings` | object |  |
+| `invoice_settings[days_until_due]` | integer | Between 0 and 365. |
+| `subscription_data` | object |  |
+| `subscription_data[description]` | string | 1–500 characters. |
+| `subscription_data[trial_period_days]` | integer | Between 1 and 730. |
+| `subscription_data[metadata]` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `discounts` | array of object | At most one: a coupon or a promotion code. At most 20 items. |
+| `discounts[][coupon]` | string | 1–255 characters. |
+| `discounts[][promotion_code]` | string | 1–255 characters. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `expires_at` | integer | Default: 30 days from now (the customer's test clock time when it has one). Between 0 and 253402300799. |
+| `header` | string | 1–50 characters. |
+| `description` | string | 1–1500 characters. |
+| `footer` | string | 1–500 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Quote](/reference/objects/quote).
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List quotes
+
+`GET /v1/quotes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.quotes.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` | query | string | 1–255 characters. |
+| `status` | query | string | One of `draft`, `open`, `accepted`, `canceled`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Quote](/reference/objects/quote) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Quote](/reference/objects/quote) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "qt_0193b8f2c1a87d3e9f4a",
+      "object": "quote",
+      "livemode": false,
+      "number": "QT-ACME-0001",
+      "status": "open",
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "currency": "EUR",
+      "collection_method": "send_invoice",
+      "invoice_settings": {
+        "days_until_due": 30
+      },
+      "subscription_data": {
+        "description": null,
+        "trial_period_days": null,
+        "metadata": {}
+      },
+      "discount": null,
+      "automatic_tax": {
+        "enabled": false,
+        "status": null,
+        "tax_calculation": null
+      },
+      "amount_subtotal": "120000",
+      "amount_total": "120000",
+      "total_details": {
+        "amount_discount": "0",
+        "amount_shipping": "0",
+        "amount_tax": "0"
+      },
+      "expires_at": 1796342400,
+      "header": "Annual support",
+      "description": null,
+      "footer": null,
+      "invoice": null,
+      "subscription": null,
+      "status_transitions": {
+        "finalized_at": 1793750400,
+        "accepted_at": null,
+        "canceled_at": null
+      },
+      "test_clock": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/quotes"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `data.subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a quote
+
+`GET /v1/quotes/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.quotes.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Quote](/reference/objects/quote).
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a quote
+
+`POST /v1/quotes/{id}`
+
+Drafts only, except `metadata`. `line_items` replaces every line; a field sent as `""` is cleared; `metadata` is a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.quotes.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `line_items` | array of object | Each price once, in one currency; every recurring price on one interval. Replaces every line on an update. At most 20 items. At least 1 item. |
+| `line_items[][price]` **required** | string | An active, licensed catalog Price (`price_…`), one-time or recurring. 1–255 characters. |
+| `line_items[][quantity]` | integer | Default 1. Between 1 and 1000000. |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `invoice_settings` | object |  |
+| `invoice_settings[days_until_due]` | integer | Between 0 and 365. |
+| `subscription_data` | object |  |
+| `subscription_data[description]` | string | 1–500 characters. |
+| `subscription_data[trial_period_days]` | integer | Between 1 and 730. |
+| `subscription_data[metadata]` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `discounts` | array of object \| `""` | At most 20 items. |
+| `discounts[][coupon]` | string | 1–255 characters. |
+| `discounts[][promotion_code]` | string | 1–255 characters. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `expires_at` | integer | Between 0 and 253402300799. |
+| `header` | string \| `""` | 1–50 characters. |
+| `description` | string \| `""` | 1–1500 characters. |
+| `footer` | string \| `""` | 1–500 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Quote](/reference/objects/quote).
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Accept an open quote
+
+`POST /v1/quotes/{id}/accept`
+
+The customer said yes. One-time lines become an invoice; recurring lines a subscription whose first invoice also carries the one-time lines. The invoice is finalized (tax before finalize) and collected as the engine collects any other: charged when `charge_automatically` and the customer has a card, otherwise paid on its hosted page — where FairCoin is always offered.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.quotes.accept()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Quote](/reference/objects/quote).
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a quote
+
+`POST /v1/quotes/{id}/cancel`
+
+A draft or an open quote; an accepted one cannot be cancelled.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.quotes.cancel()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Quote](/reference/objects/quote).
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Finalize a draft quote
+
+`POST /v1/quotes/{id}/finalize`
+
+It gets its number, its discount and its Peable Tax. Tax fails closed: a quote whose tax cannot be computed stays a draft (`automatic_tax.status` says why).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.quotes.finalizeQuote()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expires_at` | integer | A new expiry, set as it finalizes. Between 0 and 253402300799. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Quote](/reference/objects/quote).
+
+```json
+{
+  "id": "qt_0193b8f2c1a87d3e9f4a",
+  "object": "quote",
+  "livemode": false,
+  "number": "QT-ACME-0001",
+  "status": "open",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "collection_method": "send_invoice",
+  "invoice_settings": {
+    "days_until_due": 30
+  },
+  "subscription_data": {
+    "description": null,
+    "trial_period_days": null,
+    "metadata": {}
+  },
+  "discount": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "amount_subtotal": "120000",
+  "amount_total": "120000",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_shipping": "0",
+    "amount_tax": "0"
+  },
+  "expires_at": 1796342400,
+  "header": "Annual support",
+  "description": null,
+  "footer": null,
+  "invoice": null,
+  "subscription": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "accepted_at": null,
+    "canceled_at": null
+  },
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a quote's line items
+
+`GET /v1/quotes/{id}/line_items`
+
+In their order (at most twenty); the cursor is a line's own `li_…`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.quotes.listLineItems()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [CheckoutLineItem](/reference/objects/checkout-line-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [CheckoutLineItem](/reference/objects/checkout-line-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "li_0193b8f2c1a87d3e9f4a",
+      "object": "item",
+      "description": "Pro plan",
+      "price": "price_0193b8f2c1a87d3e9f4b",
+      "product": "prod_0193b8f2c1a87d3e9f4c",
+      "images": [],
+      "quantity": 1,
+      "adjustable_quantity": null,
+      "currency": "EUR",
+      "unit_amount": "1999",
+      "amount_subtotal": "1999",
+      "amount_discount": "0",
+      "amount_tax": "0",
+      "amount_total": "1999"
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/quotes/{id}/line_items"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.price` → [Price](/reference/objects/price)
+- `data.product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Download a quote's PDF
+
+`GET /v1/quotes/{id}/pdf`
+
+A draft renders marked as a draft, without a number.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.quotes.pdf()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The quote (`qt_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+The bytes, as `application/pdf`.
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -43,6 +43,7 @@ import {
   INVOICE_LINE_TYPES,
   INVOICE_STATUSES,
   PAUSE_COLLECTION_BEHAVIORS,
+  QUOTE_STATUSES,
   SIGNED_BASE_UNIT_STRING_PATTERN,
   SUBSCRIPTION_CANCELLATION_REASONS,
   SUBSCRIPTION_STATUSES,
@@ -85,6 +86,12 @@ export const billingSettings = pgTable(
     invoiceAction: text().notNull().default('mark_uncollectible'),
     emailInvoiceFinalized: boolean().notNull().default(true),
     emailPaymentFailed: boolean().notNull().default(true),
+    /**
+     * The merchant's next QUOTE number (`QT-<prefix>-0001`), claimed by one
+     * upsert (`claimQuoteNumber`, the receipt counter's pattern) in the
+     * finalize transaction.
+     */
+    nextQuoteNumber: integer().notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -94,6 +101,7 @@ export const billingSettings = pgTable(
       sql.raw(`invoice_prefix ~ '${BILLING_SETTINGS_LIMITS.invoicePrefixPattern}'`),
     ),
     check('billing_settings_next_invoice_number_check', sql.raw('next_invoice_number >= 1')),
+    check('billing_settings_next_quote_number_check', sql.raw('next_quote_number >= 1')),
     check(
       'billing_settings_days_until_due_check',
       sql.raw(`default_days_until_due between 0 and ${BILLING_SETTINGS_LIMITS.daysUntilDueMax}`),
@@ -796,6 +804,206 @@ export const creditNoteLines = pgTable(
     check(
       'credit_note_lines_amounts_check',
       sql.raw(`${amountCheck('amount')} and ${amountCheck('tax_amount')}`),
+    ),
+  ],
+);
+
+/**
+ * A quote (`qt_…`, ADR 0018 §5): catalog Prices priced for one customer,
+ * `draft` → `open` → `accepted` | `canceled`. Its status is written only by
+ * `transitionQuote` (a CAS on the status read); totals are written from
+ * `pricing.ts` + `invoiceMath.ts` when its lines move, and frozen with Peable
+ * Tax when it finalizes. Accepting makes native billing objects (`invoice_id`,
+ * `subscription_id`) in the same transaction as the move to `accepted`.
+ */
+export const quotes = pgTable(
+  'quotes',
+  {
+    id: generatedId(),
+    publicId: text().notNull(),
+    merchantId: text().notNull(),
+    customerId: text().notNull(),
+    /** The customer's test clock when the quote was created (test mode only). */
+    testClockId: text(),
+    status: text().notNull().default('draft'),
+    number: text(),
+    currency: text().notNull(),
+    collectionMethod: text().notNull(),
+    daysUntilDue: integer(),
+    subscriptionDescription: text(),
+    trialPeriodDays: integer(),
+    subscriptionMetadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
+    discountCouponId: text(),
+    discountPromotionCodeId: text(),
+    automaticTax: boolean().notNull().default(false),
+    automaticTaxStatus: text(),
+    taxCalculationId: text(),
+    amountSubtotal: text().notNull().default('0'),
+    amountDiscount: text().notNull().default('0'),
+    /** NULL on a draft with automatic tax: the tax is computed at finalize. */
+    amountTax: text(),
+    amountTotal: text().notNull().default('0'),
+    expiresAt: timestamptz().notNull(),
+    header: text(),
+    description: text(),
+    footer: text(),
+    invoiceId: text(),
+    subscriptionId: text(),
+    finalizedAt: timestamptz(),
+    acceptedAt: timestamptz(),
+    canceledAt: timestamptz(),
+    metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table): PgTableExtraConfigValue[] => [
+    unique('quotes_public_id_key').on(table.publicId),
+    uniqueIndex('quotes_merchant_number_key')
+      .on(table.merchantId, table.number)
+      .where(sql`${table.number} is not null`),
+    foreignKey({
+      name: 'quotes_merchant_fkey',
+      columns: [table.merchantId],
+      foreignColumns: [merchants.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'quotes_customer_fkey',
+      columns: [table.customerId, table.merchantId],
+      foreignColumns: [customers.id, customers.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'quotes_test_clock_fkey',
+      columns: [table.testClockId, table.merchantId],
+      foreignColumns: [testClocks.id, testClocks.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'quotes_discount_coupon_fkey',
+      columns: [table.discountCouponId, table.merchantId],
+      foreignColumns: [coupons.id, coupons.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'quotes_discount_promotion_code_fkey',
+      columns: [table.discountPromotionCodeId, table.merchantId],
+      foreignColumns: [promotionCodes.id, promotionCodes.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'quotes_invoice_fkey',
+      columns: [table.invoiceId, table.merchantId],
+      foreignColumns: [invoices.id, invoices.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'quotes_subscription_fkey',
+      columns: [table.subscriptionId, table.merchantId],
+      foreignColumns: [subscriptions.id, subscriptions.merchantId],
+    }).onDelete('restrict'),
+    index('quotes_merchant_id_id_idx').on(table.merchantId, table.id),
+    index('quotes_customer_id_id_idx').on(table.customerId, table.id),
+    /** The expiry sweep: open quotes by the instant they lapse. */
+    index('quotes_open_expires_at_idx').on(table.expiresAt).where(sql`${table.status} = 'open'`),
+    check('quotes_status_check', sql.raw(`status in (${inList(QUOTE_STATUSES)})`)),
+    check('quotes_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
+    check(
+      'quotes_collection_method_check',
+      sql.raw(`collection_method in (${inList(COLLECTION_METHODS)})`),
+    ),
+    check(
+      'quotes_faircoin_sends_check',
+      sql.raw(`currency <> 'FAIR' or collection_method = 'send_invoice'`),
+    ),
+    check(
+      'quotes_amounts_check',
+      sql.raw(
+        [
+          amountCheck('amount_subtotal'),
+          amountCheck('amount_discount'),
+          `(amount_tax is null or ${amountCheck('amount_tax')})`,
+          amountCheck('amount_total'),
+        ].join(' and '),
+      ),
+    ),
+    /** A number and a finalization instant exist exactly from `open` on (a cancelled draft has neither). */
+    check(
+      'quotes_finalized_check',
+      sql.raw(
+        `(number is null) = (finalized_at is null) and (status <> 'open' or number is not null) and (status <> 'accepted' or number is not null)`,
+      ),
+    ),
+    check(
+      'quotes_status_transitions_check',
+      sql.raw(
+        `(status = 'accepted') = (accepted_at is not null) and (status = 'canceled') = (canceled_at is not null) and (status = 'accepted' or (invoice_id is null and subscription_id is null)) and (status <> 'accepted' or invoice_id is not null)`,
+      ),
+    ),
+    check(
+      'quotes_automatic_tax_check',
+      sql.raw(
+        `(automatic_tax_status is null or automatic_tax_status in (${inList(AUTOMATIC_TAX_STATUSES)})) and (automatic_tax or (automatic_tax_status is null and tax_calculation_id is null)) and (status = 'draft' or status = 'canceled' or not automatic_tax or automatic_tax_status = 'complete') and (status = 'draft' or status = 'canceled' or amount_tax is not null)`,
+      ),
+    ),
+    check(
+      'quotes_days_until_due_check',
+      sql.raw(
+        `days_until_due is null or (collection_method = 'send_invoice' and days_until_due between 0 and ${BILLING_SETTINGS_LIMITS.daysUntilDueMax})`,
+      ),
+    ),
+    check(
+      'quotes_trial_period_days_check',
+      sql.raw('trial_period_days is null or trial_period_days between 1 and 730'),
+    ),
+    check(
+      'quotes_text_check',
+      sql.raw(
+        '(header is null or char_length(header) between 1 and 50) and (footer is null or char_length(footer) between 1 and 500) and (description is null or char_length(description) between 1 and 1500) and (subscription_description is null or char_length(subscription_description) between 1 and 500)',
+      ),
+    ),
+    check(
+      'quotes_metadata_check',
+      sql`jsonb_typeof(${table.metadata}) = 'object' and jsonb_typeof(${table.subscriptionMetadata}) = 'object'`,
+    ),
+  ],
+);
+
+/**
+ * One line of a quote (`li_…`, Stripe's `item`): a catalog Price and a
+ * quantity, in the quote's order. The amounts are the catalog's pricing
+ * (`amount_subtotal`), the quote's discount and, once finalized, its tax —
+ * every line is rewritten whole when the draft's lines change.
+ */
+export const quoteLineItems = pgTable(
+  'quote_line_items',
+  {
+    id: generatedId(),
+    publicId: text().notNull(),
+    quoteId: text()
+      .notNull()
+      .references(() => quotes.id, { onDelete: 'cascade' }),
+    merchantId: text().notNull(),
+    position: integer().notNull(),
+    priceId: text().notNull(),
+    description: text().notNull(),
+    quantity: integer().notNull(),
+    currency: text().notNull(),
+    amountSubtotal: text().notNull(),
+    amountDiscount: text().notNull().default('0'),
+    amountTax: text().notNull().default('0'),
+    amountTotal: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('quote_line_items_public_id_key').on(table.publicId),
+    unique('quote_line_items_quote_position_key').on(table.quoteId, table.position),
+    foreignKey({
+      name: 'quote_line_items_price_fkey',
+      columns: [table.priceId, table.merchantId],
+      foreignColumns: [prices.id, prices.merchantId],
+    }).onDelete('restrict'),
+    check('quote_line_items_quantity_check', sql.raw('quantity between 1 and 1000000')),
+    check('quote_line_items_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
+    check(
+      'quote_line_items_amounts_check',
+      sql.raw(
+        `${amountCheck('amount_subtotal')} and ${amountCheck('amount_discount')} and ${amountCheck('amount_tax')} and ${amountCheck('amount_total')}`,
+      ),
     ),
   ],
 );

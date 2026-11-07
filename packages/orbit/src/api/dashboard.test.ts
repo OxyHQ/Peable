@@ -711,6 +711,41 @@ describe('the billing engine (ADR 0018)', () => {
     ]);
   });
 
+  it('lists, writes and acts on quotes, and downloads their PDF as a blob', async () => {
+    answer = list;
+    await api.quotes.list(live, { status: 'open', customer: 'cus_9' });
+    await api.quotes.lineItems(live, 'qt_1');
+    answer = () => ({ id: 'qt_1' });
+    await api.quotes.retrieve(live, 'qt_1');
+    await api.quotes.create(live, { customer: 'cus_9', line_items: [{ price: 'price_1' }] });
+    await api.quotes.update(live, 'qt_1', { header: '' });
+    for (const action of ['finalize', 'accept', 'cancel'] as const) {
+      await api.quotes.act(live, 'qt_1', action);
+    }
+    await api.quotes.pdf(live, 'qt_1');
+    const base = '/v1/dashboard/applications/app_live/quotes';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', `${base}?environment=production&status=open&customer=cus_9`, undefined],
+      [
+        'GET',
+        `${base}/qt_1/line_items?environment=production&limit=100&expand%5B%5D=data.price`,
+        undefined,
+      ],
+      ['GET', `${base}/qt_1?environment=production`, undefined],
+      [
+        'POST',
+        `${base}?environment=production`,
+        { customer: 'cus_9', line_items: [{ price: 'price_1' }] },
+      ],
+      ['POST', `${base}/qt_1?environment=production`, { header: '' }],
+      ['POST', `${base}/qt_1/finalize?environment=production`, {}],
+      ['POST', `${base}/qt_1/accept?environment=production`, {}],
+      ['POST', `${base}/qt_1/cancel?environment=production`, {}],
+      ['GET', `${base}/qt_1/pdf?environment=production`, undefined],
+    ]);
+    expect(calls.at(-1)?.options).toEqual({ responseType: 'blob' });
+  });
+
   it('reads and updates billing settings', async () => {
     answer = () => ({ object: 'billing_settings' });
     await api.billingSettings.retrieve(scope);

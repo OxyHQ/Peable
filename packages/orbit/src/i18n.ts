@@ -19,6 +19,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { MONEY_EN, MONEY_ES } from './money/strings';
+import { QUOTES_EN, QUOTES_ES } from './quotes/strings';
 import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
@@ -33,6 +34,7 @@ export const FALLBACK_LOCALE = 'en';
 
 const en: Record<string, string> = {
   ...MONEY_EN,
+  ...QUOTES_EN,
   ...REPORTS_EN,
   ...SEARCH_EN,
   ...ORBIT_EN,
@@ -851,6 +853,7 @@ const en: Record<string, string> = {
   'invoice.reason.subscription_update': 'Subscription changed',
   'invoice.reason.subscription_cancel': 'Final invoice',
   'invoice.reason.upcoming': 'Upcoming (preview)',
+  'invoice.reason.quote_accept': 'Accepted quote',
   'invoice.action.finalize': 'Finalize',
   'invoice.action.send': 'Email to customer',
   'invoice.action.void': 'Void',
@@ -1051,6 +1054,7 @@ const en: Record<string, string> = {
 
 const es: Record<string, string> = {
   ...MONEY_ES,
+  ...QUOTES_ES,
   ...REPORTS_ES,
   ...SEARCH_ES,
   ...ORBIT_ES,
@@ -2002,6 +2006,7 @@ const es: Record<string, string> = {
   'invoice.reason.subscription_update': 'Suscripción cambiada',
   'invoice.reason.subscription_cancel': 'Factura final',
   'invoice.reason.upcoming': 'Próxima (vista previa)',
+  'invoice.reason.quote_accept': 'Presupuesto aceptado',
   'invoice.action.finalize': 'Finalizar',
   'invoice.action.send': 'Enviar al cliente por correo',
   'invoice.action.void': 'Anular',

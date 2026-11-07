@@ -372,6 +372,10 @@ export const WEBHOOK_EVENT_SCOPES = {
   'billing_portal.configuration.created': 'merchant',
   'billing_portal.configuration.updated': 'merchant',
   'billing_portal.session.created': 'merchant',
+  'quote.created': 'merchant',
+  'quote.finalized': 'merchant',
+  'quote.accepted': 'merchant',
+  'quote.canceled': 'merchant',
   // Peable Tax business compliance (ADR 0020): about the merchant's own
   // assessments and review queue.
   'tax.assessment.created': 'merchant',
@@ -497,6 +501,7 @@ export {
   METER_AGGREGATIONS,
   METER_STATUSES,
   PAUSE_COLLECTION_BEHAVIORS,
+  QUOTE_STATUSES,
   SUBSCRIPTION_CANCELLATION_REASONS,
   SUBSCRIPTION_STATUSES,
   TEST_CLOCK_STATUSES,

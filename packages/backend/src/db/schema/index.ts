@@ -70,6 +70,8 @@ export {
   invoiceLineItems,
   invoices,
   productFeatures,
+  quoteLineItems,
+  quotes,
   subscriptionItems,
   subscriptions,
 } from './billingEngine';

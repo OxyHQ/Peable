@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-111 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+114 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -378,6 +378,18 @@ The purchase is below the promotion code minimum amount.
 ### `promotion_code_taken`
 
 Another active promotion code already uses this `code`.
+
+### `quote_expired`
+
+The quote expired.
+
+### `quote_not_editable`
+
+Only a draft quote can be edited.
+
+### `quote_unexpected_state`
+
+The quote's status does not allow this.
 
 ### `rail_mismatch`
 

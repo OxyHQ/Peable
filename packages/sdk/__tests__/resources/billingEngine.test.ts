@@ -13,6 +13,7 @@ import {
   METER,
   PORTAL_CONFIGURATION,
   PORTAL_SESSION,
+  QUOTE,
   SUBSCRIPTION,
   TEST_CLOCK,
 } from '../support/billingFixtures';
@@ -58,6 +59,7 @@ describe('Peable wires the billing engine', () => {
     expect(typeof peable.invoices).toBe('object');
     expect(typeof peable.invoiceItems).toBe('object');
     expect(typeof peable.creditNotes).toBe('object');
+    expect(typeof peable.quotes).toBe('object');
     expect(typeof peable.customerBalanceTransactions).toBe('object');
     expect(typeof peable.testHelpers).toBe('object');
     expect(typeof peable.testHelpers.testClocks).toBe('object');
@@ -225,6 +227,45 @@ describe('credit notes and balances', () => {
     expect(body(gateway)).toEqual({ amount: '-500', currency: 'EUR' });
     await balance.retrieve('cus_1', 'cbtxn_1');
     expect(route(gateway)).toEqual(['GET', '/v1/customers/cus_1/balance_transactions/cbtxn_1']);
+  });
+});
+
+describe('quotes', () => {
+  test('create, update, finalize, accept, cancel, list and the line items', async () => {
+    const { client, gateway } = harness(QUOTE);
+    const quotes = resources(client).quotes;
+    await quotes.create({
+      customer: 'cus_1',
+      line_items: [{ price: 'price_1', quantity: 2 }],
+      discounts: [{ coupon: 'coupon_1' }],
+      subscription_data: { trial_period_days: 14 },
+    });
+    expect(route(gateway)).toEqual(['POST', '/v1/quotes']);
+    expect(body(gateway)).toEqual({
+      customer: 'cus_1',
+      line_items: [{ price: 'price_1', quantity: 2 }],
+      discounts: [{ coupon: 'coupon_1' }],
+      subscription_data: { trial_period_days: 14 },
+    });
+    await quotes.update('qt_1', { header: 'Annual support' });
+    expect(route(gateway)).toEqual(['POST', '/v1/quotes/qt_1']);
+    await quotes.finalizeQuote('qt_1', { expires_at: 1800000000 });
+    expect(route(gateway)).toEqual(['POST', '/v1/quotes/qt_1/finalize']);
+    await quotes.accept('qt_1');
+    expect(route(gateway)).toEqual(['POST', '/v1/quotes/qt_1/accept']);
+    await quotes.cancel('qt_1');
+    expect(route(gateway)).toEqual(['POST', '/v1/quotes/qt_1/cancel']);
+    await quotes.retrieve('qt_1', { expand: ['invoice'] });
+    expect(route(gateway)).toEqual(['GET', '/v1/quotes/qt_1?expand[]=invoice']);
+  });
+
+  test('the list and the line items are pages', async () => {
+    const { client, gateway } = harness(list([QUOTE]));
+    const quotes = resources(client).quotes;
+    await quotes.list({ customer: 'cus_1', status: 'open' });
+    expect(route(gateway)).toEqual(['GET', '/v1/quotes?customer=cus_1&status=open']);
+    await quotes.listLineItems('qt_1', { limit: 5 });
+    expect(route(gateway)).toEqual(['GET', '/v1/quotes/qt_1/line_items?limit=5']);
   });
 });
 

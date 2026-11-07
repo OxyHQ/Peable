@@ -1842,6 +1842,110 @@ export interface CreditNotesResource {
 }
 
 /**
+ * Quotes: `peable.quotes`.
+ */
+export interface QuotesResource {
+  /**
+   * Create a quote.
+   *
+   * A draft for one customer, priced from catalog Prices with the catalog's own pricing. Its tax is computed when it finalizes.
+   *
+   * `POST /v1/quotes`
+   */
+  create(
+    params: BodyOf<Op<'createQuote'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createQuote'>>>;
+  /**
+   * List quotes.
+   *
+   * `GET /v1/quotes`
+   */
+  list(
+    params?: QueryOf<Op<'listQuotes'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listQuotes'>>;
+  /**
+   * Retrieve a quote.
+   *
+   * `GET /v1/quotes/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveQuote'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveQuote'>>>;
+  /**
+   * Update a quote.
+   *
+   * Drafts only, except `metadata`. `line_items` replaces every line; a field sent as `""` is cleared; `metadata` is a patch.
+   *
+   * `POST /v1/quotes/{id}`
+   */
+  update(
+    id: string,
+    params?: BodyOf<Op<'updateQuote'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'updateQuote'>>>;
+  /**
+   * Finalize a draft quote.
+   *
+   * It gets its number, its discount and its Peable Tax. Tax fails closed: a quote whose tax cannot be computed stays a draft (`automatic_tax.status` says why).
+   *
+   * `POST /v1/quotes/{id}/finalize`
+   */
+  finalizeQuote(
+    id: string,
+    params?: BodyOf<Op<'finalizeQuote'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'finalizeQuote'>>>;
+  /**
+   * Accept an open quote.
+   *
+   * The customer said yes. One-time lines become an invoice; recurring lines a subscription whose first invoice also carries the one-time lines. The invoice is finalized (tax before finalize) and collected as the engine collects any other: charged when `charge_automatically` and the customer has a card, otherwise paid on its hosted page — where FairCoin is always offered.
+   *
+   * `POST /v1/quotes/{id}/accept`
+   */
+  accept(
+    id: string,
+    params?: BodyOf<Op<'acceptQuote'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'acceptQuote'>>>;
+  /**
+   * Cancel a quote.
+   *
+   * A draft or an open quote; an accepted one cannot be cancelled.
+   *
+   * `POST /v1/quotes/{id}/cancel`
+   */
+  cancel(
+    id: string,
+    params?: BodyOf<Op<'cancelQuote'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'cancelQuote'>>>;
+  /**
+   * List a quote's line items.
+   *
+   * In their order (at most twenty); the cursor is a line's own `li_…`.
+   *
+   * `GET /v1/quotes/{id}/line_items`
+   */
+  listLineItems(
+    id: string,
+    params?: QueryOf<Op<'listQuoteLineItems'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listQuoteLineItems'>>;
+  /**
+   * Download a quote's PDF.
+   *
+   * A draft renders marked as a draft, without a number.
+   *
+   * `GET /v1/quotes/{id}/pdf`
+   */
+  pdf(id: string, options?: RequestOptions): Promise<DownloadedBytes>;
+}
+
+/**
  * Customer balance: `peable.customerBalanceTransactions`.
  */
 export interface CustomerBalanceTransactionsResource {
@@ -2948,6 +3052,7 @@ export interface GeneratedResources {
   readonly invoices: InvoicesResource;
   readonly invoiceItems: InvoiceItemsResource;
   readonly creditNotes: CreditNotesResource;
+  readonly quotes: QuotesResource;
   readonly customerBalanceTransactions: CustomerBalanceTransactionsResource;
   readonly billingPortal: BillingPortalResource;
   readonly connectedAccounts: ConnectedAccountsResource;
@@ -4666,6 +4771,106 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     account: false,
   },
   {
+    sdk: 'quotes.create',
+    operationId: 'createQuote',
+    method: 'POST',
+    path: '/v1/quotes',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'quotes.list',
+    operationId: 'listQuotes',
+    method: 'GET',
+    path: '/v1/quotes',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'quotes.retrieve',
+    operationId: 'retrieveQuote',
+    method: 'GET',
+    path: '/v1/quotes/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'quotes.update',
+    operationId: 'updateQuote',
+    method: 'POST',
+    path: '/v1/quotes/{id}',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'quotes.finalizeQuote',
+    operationId: 'finalizeQuote',
+    method: 'POST',
+    path: '/v1/quotes/{id}/finalize',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'quotes.accept',
+    operationId: 'acceptQuote',
+    method: 'POST',
+    path: '/v1/quotes/{id}/accept',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'quotes.cancel',
+    operationId: 'cancelQuote',
+    method: 'POST',
+    path: '/v1/quotes/{id}/cancel',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'quotes.listLineItems',
+    operationId: 'listQuoteLineItems',
+    method: 'GET',
+    path: '/v1/quotes/{id}/line_items',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'quotes.pdf',
+    operationId: 'retrieveQuotePdf',
+    method: 'GET',
+    path: '/v1/quotes/{id}/pdf',
+    pathParams: ['id'],
+    input: 'none',
+    encoding: 'json',
+    kind: 'binary',
+    account: false,
+    accept: 'application/pdf',
+  },
+  {
     sdk: 'customerBalanceTransactions.create',
     operationId: 'createCustomerBalanceTransaction',
     method: 'POST',
@@ -5655,6 +5860,7 @@ export class GeneratedClient implements GeneratedResources {
   readonly invoices: GeneratedResources['invoices'];
   readonly invoiceItems: GeneratedResources['invoiceItems'];
   readonly creditNotes: GeneratedResources['creditNotes'];
+  readonly quotes: GeneratedResources['quotes'];
   readonly customerBalanceTransactions: GeneratedResources['customerBalanceTransactions'];
   readonly billingPortal: GeneratedResources['billingPortal'];
   readonly connectedAccounts: GeneratedResources['connectedAccounts'];
@@ -5701,6 +5907,7 @@ export class GeneratedClient implements GeneratedResources {
     this.invoices = tree.invoices;
     this.invoiceItems = tree.invoiceItems;
     this.creditNotes = tree.creditNotes;
+    this.quotes = tree.quotes;
     this.customerBalanceTransactions = tree.customerBalanceTransactions;
     this.billingPortal = tree.billingPortal;
     this.connectedAccounts = tree.connectedAccounts;

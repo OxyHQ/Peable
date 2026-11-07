@@ -18,6 +18,10 @@ import type {
   Invoice,
   InvoiceStatus,
   ProductFeature,
+  Quote,
+  QuoteStatus,
+  CreateQuoteParams,
+  UpdateQuoteParams,
   Subscription,
   SubscriptionStatus,
   UpdateBillingSettingsParams,
@@ -207,6 +211,14 @@ export interface InvoiceListParams extends PageParams {
   subscription?: string;
   status?: InvoiceStatus;
 }
+
+export interface QuoteListParams extends PageParams {
+  customer?: string;
+  status?: QuoteStatus;
+}
+
+/** What a quote's actions are: each a `POST …/quotes/:id/<action>`. */
+export type QuoteAction = 'finalize' | 'accept' | 'cancel';
 
 export interface FeatureListParams extends PageParams {
   /** `true` archived only, `false` active only, absent for both. */
@@ -575,6 +587,39 @@ export function createDashboardApi(transport: OrbitTransport) {
           dashboardPath(scope, `/invoices/${id(invoiceId)}/${action}`),
           { body: {} },
         ),
+    },
+
+    /** Quotes (`qt_…`, ADR 0018 §5): a draft, finalized with its tax, accepted into billing. */
+    quotes: {
+      list: (scope: DashboardScope, params: QuoteListParams = {}) =>
+        list<Quote>(dashboardPath(scope, '/quotes', { ...params })),
+      retrieve: (scope: DashboardScope, quoteId: string) =>
+        get<Quote>(dashboardPath(scope, `/quotes/${id(quoteId)}`)),
+      create: (scope: DashboardScope, body: CreateQuoteParams) =>
+        transport.request<Quote>('POST', dashboardPath(scope, '/quotes'), { body }),
+      /** A draft's fields (`line_items` replaces every line); `metadata` on any quote. */
+      update: (scope: DashboardScope, quoteId: string, body: UpdateQuoteParams) =>
+        transport.request<Quote>('POST', dashboardPath(scope, `/quotes/${id(quoteId)}`), {
+          body,
+        }),
+      /** `finalize` (number + tax, fails closed), `accept` (makes the invoice or subscription) or `cancel`. */
+      act: (scope: DashboardScope, quoteId: string, action: QuoteAction) =>
+        transport.request<Quote>('POST', dashboardPath(scope, `/quotes/${id(quoteId)}/${action}`), {
+          body: {},
+        }),
+      /** Every line (at most twenty, one page), each with its Price expanded. */
+      lineItems: (scope: DashboardScope, quoteId: string) =>
+        list<CheckoutLineItem>(
+          dashboardPath(scope, `/quotes/${id(quoteId)}/line_items`, {
+            limit: 100,
+            expand: ['data.price'],
+          }),
+        ),
+      /** The quote as a PDF, rendered by the gateway. */
+      pdf: (scope: DashboardScope, quoteId: string) =>
+        transport.request<Blob>('GET', dashboardPath(scope, `/quotes/${id(quoteId)}/pdf`), {
+          responseType: 'blob',
+        }),
     },
 
     /** Numbering and dunning (ADR 0018 §6). Every field has a default; the row exists on first read. */

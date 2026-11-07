@@ -987,6 +987,29 @@ otherwise undo:
   `prices_recurring_check`, `events_type_check`,
   `webhook_endpoints_enabled_events_check`) re-added `NOT VALID` by hand;
   `0066` (`post`) validates them.
+- **Quotes (`quotes`, `quote_line_items`, ADR 0018 §5).** `status` is written
+  only by `setQuoteStatus` (CAS) through `transitionQuote`. The CHECKs pin
+  what a status implies: a `number` and `finalized_at` exist together
+  (`quotes_finalized_check`; an `open` or `accepted` quote has them, a
+  cancelled DRAFT does not), `accepted_at` ⇔ `accepted` and `canceled_at` ⇔
+  `canceled`, `invoice_id`/`subscription_id` only on an accepted quote and
+  `invoice_id` always on one (a recurring quote links its subscription's FIRST
+  invoice), `amount_tax` NULL only on a draft (or a cancelled draft) with
+  automatic tax, and `FAIR` ⇒ `send_invoice`. Every reference is composite with
+  `merchant_id`, so a quote cannot name another merchant's customer, coupon,
+  promotion code, invoice or subscription. Lines are rewritten WHOLE when a
+  draft's lines change (new `li_…` ids), which is what lets finalize prove the
+  draft it priced is the draft it freezes (a digest of the lines' public ids,
+  prices and quantities). `quote_line_items.price_id` is a catalog price,
+  never a snapshot: a price never changes what it charges. The quote counter is
+  `billing_settings.next_quote_number`, claimed by ONE upsert
+  (`claimQuoteNumber`, which also creates the settings row) in the finalize
+  transaction. Expiry has no `next_action_at`: the scheduler reads
+  `quotes_open_expires_at_idx` (partial on `open`) and judges "due" on each
+  row's own clock. Migrations `0115` (`pre`; `billing_settings_next_quote_number_check`,
+  `events_type_check`, `invoices_billing_reason_check` (`quote_accept`) and
+  `webhook_endpoints_enabled_events_check` re-added `NOT VALID` by hand) and
+  `0116` (`post`, validates them).
 
 ## Tax business compliance (ADR 0020)
 

@@ -74,6 +74,7 @@ import {
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb, type Transaction } from '../../db/postgres';
 import { newId } from '../../lib/ids';
+import { orderedId } from '../../db/billingEngine/columns';
 import { renderInvoice, renderSubscription } from '../../lib/serializeBilling';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { attemptInvoicePayment, payerIntentForInvoice, railOf } from './collect';
@@ -353,6 +354,25 @@ export interface CreateSubscriptionInput {
     readonly couponId: string;
     readonly promotionCodeId: string | null;
   };
+  /**
+   * One-time catalog prices billed once, on the FIRST invoice (Stripe's
+   * `add_invoice_items`), each an invoice item of the subscription. Not
+   * reachable from the API: an accepted quote's one-time lines (ADR 0018 §5).
+   */
+  readonly addInvoiceItems?: readonly { readonly price: PriceRow; readonly quantity: number }[];
+  /**
+   * Work in the create's OWN transaction: `start` before anything is written,
+   * `end` once the first invoice is finalized. Not reachable from the API: an
+   * accepted quote locks itself in `start` and moves to `accepted` in `end`, so
+   * the quote and what it made commit — or roll back — together.
+   */
+  readonly inTransaction?: {
+    readonly start?: (tx: Transaction) => Promise<void>;
+    readonly end: (
+      tx: Transaction,
+      created: { readonly subscription: SubscriptionRow; readonly invoice: InvoiceRow },
+    ) => Promise<void>;
+  };
 }
 
 /** A checkout's discount as the engine holds one: its window from `now`, no redemption. */
@@ -540,10 +560,49 @@ export async function createSubscription(
     db,
     items.map((item) => item.price.id),
   );
-  const draftLines = periodLines(catalog, subscriptionId, provisionalItems, period, {
-    trial: trialEnd !== null,
-    stub,
-  });
+  const oneTime = input.addInvoiceItems ?? [];
+  for (const [i, item] of oneTime.entries()) {
+    const param = `add_invoice_items[${i}][price]`;
+    if (!item.price.active) throw invalid('this price is archived', param);
+    if (item.price.type !== 'one_time')
+      throw invalid('an added invoice item is a one-time price', param);
+    if (item.price.currency !== currency) {
+      throw invalid("an added invoice item is in the subscription's currency", param);
+    }
+  }
+  const oneTimeCatalog = await loadCatalog(
+    db,
+    oneTime.map((item) => item.price.id),
+  );
+  const draftLines: DraftLine[] = [
+    ...periodLines(catalog, subscriptionId, provisionalItems, period, {
+      trial: trialEnd !== null,
+      stub,
+    }),
+    ...oneTime.map((item, i): DraftLine => {
+      const name = productOfPrice(oneTimeCatalog, item.price.id)?.name ?? 'item';
+      return {
+        id: orderedId(),
+        publicId: newId('il'),
+        type: 'invoiceitem',
+        subscriptionId,
+        subscriptionItemId: null,
+        invoiceItemId: `pending-ii-${i}`,
+        priceId: item.price.id,
+        quantity: item.quantity,
+        amount: itemPeriodAmount(item.price, item.quantity),
+        currency,
+        description: `${item.quantity} × ${name}`,
+        discountable: true,
+        periodStart: period.start,
+        periodEnd: period.start,
+        proration: false,
+        creditsLineId: null,
+        metered: false,
+        metadata: {},
+      };
+    }),
+  ];
   // The discount, validated (and redeemed again, under lock, in the transaction).
   const request = discountRequest({
     coupon: input.coupon,
@@ -585,6 +644,7 @@ export async function createSubscription(
   });
 
   const created = await db.transaction(async (tx) => {
+    await input.inTransaction?.start?.(tx);
     if (!(await claimCustomerCurrency(tx, customer.id, currency))) {
       throw new BillingEngineError(
         'customer_currency_mismatch',
@@ -690,9 +750,46 @@ export async function createSubscription(
       nextActionAt: null,
     });
     if (!invoice) throw new Error('a new subscription already had a first invoice');
+    // The one-time prices, as invoice items already on this invoice.
+    const itemIds = new Map<string, string>();
+    for (const line of lines) {
+      if (line.type !== 'invoiceitem' || line.invoiceItemId === null || line.priceId === null) {
+        continue;
+      }
+      const price = priceOf(oneTimeCatalog, line.priceId);
+      const item = await insertInvoiceItem(tx, {
+        publicId: newId('ii'),
+        merchantId: merchant.id,
+        customerId: customer.id,
+        invoiceId: invoice.id,
+        subscriptionId: subscription.id,
+        subscriptionItemId: null,
+        priceId: price.id,
+        quantity: line.quantity ?? 1,
+        unitAmount: price.billingScheme === 'per_unit' ? price.unitAmount : null,
+        amount: line.amount.toString(),
+        currency,
+        description: line.description,
+        discountable: true,
+        periodStart: line.periodStart,
+        periodEnd: line.periodEnd,
+        proration: false,
+        creditsLineId: null,
+        metadata: {},
+      });
+      itemIds.set(line.invoiceItemId, item.id);
+    }
     await insertLines(
       tx,
-      lines.map((line) => toInsertLine(line, invoice.id, merchant.id)),
+      lines.map((line) =>
+        toInsertLine(
+          line.invoiceItemId === null
+            ? line
+            : { ...line, invoiceItemId: itemIds.get(line.invoiceItemId) ?? line.invoiceItemId },
+          invoice.id,
+          merchant.id,
+        ),
+      ),
     );
     const linked = await writeSubscription(tx, subscription.id, {
       latestInvoiceId: invoice.id,
@@ -709,6 +806,7 @@ export async function createSubscription(
     await recordBillingEvent(tx, merchant.id, 'invoice.created', await renderInvoice(tx, invoice));
     const outcome = await commitFinalization(tx, invoice, prepared, now, { autoAdvance: false });
     await refreshEntitlementSummary(tx, merchant.id, customer.id);
+    await input.inTransaction?.end(tx, { subscription, invoice: outcome.invoice });
     return { subscription, invoice: outcome.invoice, paymentBehavior };
   });
   kickWebhookOutbox();
