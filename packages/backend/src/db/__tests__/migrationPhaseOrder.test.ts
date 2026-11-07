@@ -166,6 +166,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the quotes' `0115`–`0116` merged.
   '0114_faircoin_never_recycled':
     'released with #265; its post phase applied by the d4d869d2 deploy (run 42209537139)',
+  // The quotes' validate half shipped with #289, whose deploy of 24f5c08e
+  // (Deploy to AWS run 42345432605, 2026-11-07) ran its post phase
+  // successfully before the report schedule migrations `0117`–`0118` merged.
+  '0116_quotes_validate':
+    'released with #289; its post phase applied by the 24f5c08e deploy (run 42345432605)',
 };
 
 interface Migration {

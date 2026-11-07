@@ -506,7 +506,7 @@ export async function updateReportScheduleCore(
       409,
       'invalid_request_error',
       'the report schedule changed while it was being updated; read it and try again',
-      'report_schedule_unexpected_state',
+      'resource_conflict',
     );
     return;
   }
@@ -551,7 +551,7 @@ function scheduleAction(action: ScheduleAction) {
         409,
         'invalid_request_error',
         'the report schedule changed while this was asked; read it and try again',
-        'report_schedule_unexpected_state',
+        'resource_conflict',
       );
       return;
     }
