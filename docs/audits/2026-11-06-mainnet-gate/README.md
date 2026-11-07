@@ -7,14 +7,16 @@ mainnet as soon as both pass, without waiting for (2), the legal opinion, or
 (3), physical-device verification. The waiver itself is recorded in ADR 0002
 ("Owner's mainnet waiver"). This folder is the evidence for (1) and (4).
 
-**Result: the gate is NOT opened.** The canary passed. The security review,
-after three rounds and the fixes below, signs off **conditional on five written
-owner risk acceptances** (listed at the end) that the owner's waiver does not
-cover; no code defect blocks it any more. Until the owner accepts them, the gate
-stays closed: production keeps `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet;
-checked on the running `oxy-peable:248` at the start and `oxy-peable:256` after
-the fixes deployed), so the gateway answers `faircoin_network_closed` for a live
-order's FairCoin option (`identityNetworkOpen`, `services/faircoin/recipient.ts`).
+**Result: the gate is NOT opened.** The owner decided the five round-3 risks
+on 2026-11-06 — *"Fix F5, F1 and D9; accept F9"* (ADR 0002, "Owner's decision
+on the round-3 risks") — and they were fixed and F9 accepted. Three further
+review rounds (4–6) and their fixes followed; the canary passed on every final
+code. The review does not sign off without conditions: R6 findings still to
+verify (see "Round 7") and risks that only the owner can accept, listed word
+for word at the end. Production keeps `PEABLE_SOCIAL_PAY_NETWORK` unset
+(testnet; checked on the running `oxy-peable:264` on 2026-11-06), so a live
+order's FairCoin option answers `faircoin_network_closed`
+(`identityNetworkOpen`, `services/faircoin/recipient.ts`).
 
 ## (1) Security review
 
@@ -80,6 +82,88 @@ above the ceiling hides `@username`; the closed-gate retire path can cancel a
 payment that was broadcast but not reported; the recycling query lacks an index
 filter) plus an Explorer timeout and stale AGENTS.md lines go to a follow-up PR.
 
+### The owner's decision on round 3 (2026-11-06)
+
+*"Fix F5, F1 and D9; accept F9."* Fixed: F5 by the iOS keychain access-group
+split (OxyHQ/oxy#2186, ADR 0062; Peable#268); F1 by keeping replaced keys for
+spending (oxy#2187, ADR 0061 D7 amended; Peable#266); both D9 residuals by the
+sparse watch set — addresses are never reused and there is no ceiling
+(Peable#265, ADR 0021 D9 replaced). F9 accepted in writing (ADR 0002).
+
+### Round 4 (Peable `0a829eb8`, oxy `a5db32590`): sign-off with conditions
+
+Verified: no address can be handed to two payments or to a payment and an
+`@username` sender; a retired key can only spend; an added previous phrase must
+be this account's; the keychain migration cannot lose a key. Findings (one
+blocking):
+
+| ID | Sev | Finding | Fix |
+|---|---|---|---|
+| R4-1 | high (blocks) | A previous key's index 0 (the default Receive address) never reached the wallet on a new install | Peable#269 |
+| R4-2 | medium | Dust made every funded address active; the Bloom set could pass its bound again (F4) | #269: 0.001 FAIR floor, at most 1,000 funded addresses in the filter |
+| R4-3 | medium | One Oxy account dusting each address it gets burns a recipient's daily `@username` budget | #269: database-backed 5 per (sender, recipient) per day, half the budget kept for new senders |
+| R4-4 | medium | The retired ring was device-only and wiped on "start over" | oxy#2190: carried in the encrypted identity backup |
+| R4-5 | medium | Rotations before oxy migration 0235 are not in the key history | Not fixed (see round 6) |
+| R4-6/7 | medium | Conflicting/planted shared-group items kept or adopted by the migration | oxy#2190: one-shot migration, marker-proven adoption |
+| R4-8 | low-med | A cached BIP39 seed left in the shared group | #269 |
+| R4-9…14, I-2 | low | Sync snapshot, Explorer timeouts, IPv6 limiter keying, batched moves, group spellings, `.dev` groups, gateway rows re-derived | #269, #270, oxy#2190 |
+
+### Round 5 (Peable `b6f5eebd`, oxy `224198844`): refused
+
+| ID | Sev | Finding | Fix |
+|---|---|---|---|
+| R5-1 | high (blocks) | The wallet took its own identity public key from the shared group any Oxy app can write, and showed its index-0 address before the key check | oxy#2192 (`getIdentityPublicKeyForMoney`); Peable#274: the wallet opens only a key the account vouches for, and nothing is receivable until the gateway confirms `#key-1` |
+| R5-2 | high (blocks) | On a shared phone the next person could move the previous person's retired-key coins | oxy#2192: ring bound to its owner; Peable#274: one wallet per account (`oxy-user-<id>`), every candidate key history-checked |
+| R5-3…R5-7, R5-9 | medium/low | Shared copies dropped on reinstall, another app's group allowed, dev builds moving production secrets, backup losing retired keys, unproven organization pairs, prompts | oxy#2193 (app-preset 6.4.0), oxy#2200 (core 7.36.0, Commons 1.10.0); Peable#279 |
+| R5-8, R4-13 rest | low | Re-derivation cost, move plan changing at tap | Peable#274 |
+
+### Round 6 (Peable `e0a2a987`, oxy `7d0914237`): sign-off with conditions
+
+R5-1 and R5-2 verified fixed. New:
+
+| ID | Sev | Finding |
+|---|---|---|
+| R6-1 | med-high (blocks) | After a rotation, Receive and Settings could offer the REPLACED key's HD address (address rows carried no key) |
+| R6-2 | medium | The account that proves the legacy shared wallet database keeps the other account's rows |
+| R6-3 | medium (blocks if a Commons 1.6–1.9 build ran on a phone) | A v1 migration record is never revisited |
+| R6-4 | medium | A fresh Peable install adopts `fairwallet_*` items planted in the shared group |
+| R6-5 | medium (blocks if production shows coins under a pre-0235 key) | Keys replaced before migration 0235 can no longer be claimed |
+| R6-6 | medium | One failed ownership proof closes the legacy wallet for good |
+| R6-7…R6-16 | low | Namespace-move race, backup kept across old-client rotations, owed-backup flag, key binding without history, fixed move fee, ring fallback, locked keychain read as absent, unbounded planted entries, signed-binary entitlement check, prompting device-session read |
+
+Fixed in Peable#280 (R6-1 per-key address rows and one receive gate for
+Receive and Settings; R6-2 only the proving account's rows survive; R6-4
+adoption only with sandbox evidence of an earlier install; R6-6, R6-7, R6-11)
+and #281 (packages), and oxy#2209 (R6-13, R6-16; core 7.38.0) and oxy#2211
+(R6-3 v2 sweep; R6-5 `POST /identity/key-history/claim` and a backfill script;
+R6-8 superseded backups; R6-9, R6-10, R6-12, R6-14, R6-15; core 7.39.0,
+Commons 1.11.0).
+
+### Round 7 (Peable `732e8a0e`, oxy `ccbd110f2`): sign-off with conditions
+
+R6-1, R6-2, R6-3, R6-5 (in code), R6-9…R6-14 and R6-16 verified fixed; R6-4,
+R6-6, R6-7, R6-8, R6-15 partly. New:
+
+| ID | Sev | Finding |
+|---|---|---|
+| R7-1 | high (blocks) | `POST`/`DELETE /identity/backup` accepted any session bearer (no first-party gate) and an unbounded `version`: a third-party token could delete the only off-device copy of retired keys, or lock out every legitimate re-seal |
+| R7-2 | medium (blocks) | A superseded backup could be overwritten without its retired keys being kept |
+| R7-3 | medium (blocks) | After the upgrade, a used HD address behind 20 or more unused ones was never bound to the open key (its coin shown stranded) |
+| R7-4…R7-12 | low/low-med | "Unavailable" read as "not this key"; global quarantine cap; the legacy move's narrow derivation; unencrypted-restore evidence and PIN adoption; offline open blocked by an unmoved legacy wallet; init not single-flight; owed-backup slot; unbounded organization ids; stale picked address |
+
+Conditions besides code: a production dry-run and run of the R6-5 backfill
+(counting pre-0235 keys no signed record proves), and two release facts —
+whether Peable wallet 1.2–1.4 reached iOS users, and whether live third-party
+OAuth clients or application-token hosts exist (R7-1's exposure).
+
+Fixed in oxy#2212 (R7-1: both routes behind `requireFirstPartyDeviceAccess`,
+`version` capped at 2), oxy#2213 (`f70b9c438`: R7-2 — a superseded backup is
+replaced only by an upload naming it, and a rotation keeps the carried keys in
+the ring first or does not rotate; R7-4, R7-5, R7-10, R7-11, the claim race)
+and Peable#282 (`416620bd`: R7-3 — a public-only probe tree covers any gap;
+R7-4, R7-6, R7-7, R7-8, R7-9, R7-12). A scoped re-check on those commits found
+R7-1, R7-2 and R7-3 fixed and no new blocker.
+
 ## (4) Testnet canary: passed
 
 **The public FairCoin testnet has no chain to pay on.** On 2026-11-06
@@ -128,6 +212,42 @@ The same canary also passed on `9e0e1853` (before any fix, 03:54–03:57) and on
 `89942340` (after #253–#255, 06:03–06:04); the recorded run is the one on the
 final code. Full records: `canary-gateway.json`, `canary-wallet.json`.
 
+### Reruns after the owner's decision (2026-11-06)
+
+A fresh private testnet from the same released `faircoind` v3.0.6 (sha256
+`f8bdc4e3…5e758d43` of `faircoin-v3.0.6-linux-x86_64.tar.gz`, genesis
+`00000232cb13…a576e6`), new throwaway recipient keys and node credentials,
+destroyed after the last run. The wallet half now watches exactly the set the
+gateway syncs (`GET /v1/social/me/receive_addresses`, recorded as
+`receiveAddresses`), not a window.
+
+| Peable | Covers | Tip | Result |
+|---|---|---|---|
+| `0a829eb8` | sparse watch set (#265), previous keys (#266), wallet keychain split (#268) | 57 → 65 | passed |
+| `b6f5eebd` | round-4 fixes (#269, #270) | 65 → 73 | passed |
+| `e0a2a987` | round-5 fixes (#274, #279) | 73 → 81 | passed |
+| `732e8a0e` | round-6 fixes (#280, #281; oxy#2209, #2211) | 81 → 89 | passed |
+
+The final run, on `732e8a0e` (UTC, 2026-11-06), recorded in
+`canary-gateway-final.json` and `canary-wallet-final.json` (the `e0a2a987` run
+is kept as `canary-*-round6.json`):
+
+| When | Step | Evidence |
+|---|---|---|
+| 23:42:31 | social `@canaryperson`: index 1 reserved, payer pays | `TQE69GkXWWbofrGHXhQBAJgDFZitKYu6KW`, `0d6680b208e53d7a651a30634e26a0dfdb19252c258be35cfef48f4e5ed09792` |
+| 23:42:33 | EUR 12.50 session (person-owned), FairCoin at the live quote, index 2 on the same cursor; payer pays | `pi_edd0cd0995f331406f1c1ee8`, `TCLEC5eJxSbc9nM1UcwwAsfrWUaK7Xixbd`, `f8ca0de9dd77b8e1d63621cd0cd1f53d3baf350192757ba6244c584bf32a56b4` |
+| 23:42:40 | watcher: `succeeded` at 2 confirmations; session `complete` | tip 85 |
+| 23:42:40 | 15 FAIR session (organization-owned), organization cursor index 1; payer pays | `pi_e3a6111b8209be19accba8d9`, `TWqfRRqMMyLXBZNDD7ZRXr2nGehmnhSZG1`, `a8565f504bcf9c78bb6f096e133d4bc90f2e62d802e262246bd5a1bd4dd8b1b3` |
+| 23:42:54 | watcher: `succeeded`; session `complete`; receive sets synced | tip 87 |
+| 23:42:57 | person's wallet: key `match`, watches exactly {0, 1, 2}, finds both coins, spends them | `0d3a6d278a6b4e5b82f6878c5e7bcabe2bb6cf8e440d975e65a85f846bf05585`, tip 88 |
+| 23:43:07 | organization's wallet (`{ accountId }`): key `match`, watches {0, 1}, spends its coin | `ed18c53f679b6d827fd87efa59867f2bc303905b2b801eeb201b20321908350c`, tip 89 |
+
+The same addresses recur across the three reruns because each run starts from
+an empty gateway database with the same throwaway keys; each run's wallet
+spent that run's coins before the next run began. The canary does not
+exercise spending under a retired key (unit-tested in Peable#266/#269/#274 with
+every input's signature checked) or the iOS keychain (device-only).
+
 What the canary does not prove: the production deployment's path to
 `explorer.fairco.in` on testnet (there is no testnet there to read), the DID
 read of a real Oxy account, and real device key storage.
@@ -145,63 +265,75 @@ their variables, so CI never runs them.
 
 ## What the owner must still do
 
-1. **Accept, in writing, the five risks round 3 names** (or have them fixed
-   first). Each is one sentence the owner would be signing:
-   1. F5 — "On iOS, any Oxy app can read the personal and organization identity
-      private keys and recovery phrases that control mainnet FairCoin receive,
-      and I accept that for mainnet money." (Alternative: ship the keychain
-      split in `oxy/docs/identity/ios-keychain-access-groups.md`.)
-   2. F1 — "After a personal key rotation, Peable has no way to spend coins
-      received under the previous phrase; funds not moved before rotating are
-      recoverable only outside Peable."
-   3. F9 — "One third-party Explorer, on a chain with negligible stake weight,
-      alone decides whether a payment settled or was reorganised, and a rewind
-      never revokes fulfilment already granted."
-   4. ADR 0021 D9 (late payer) — "A payer who pays a cancelled quote more than
-      about an hour late, after its address was recycled, pays the new holder's
-      order, and that holder may claim the transaction as their own payment;
-      the coins remain the recipient's."
-   5. D9 tree exhaustion — "Each recipient, including Oxy's own organization for
-      all first-party products, has a lifetime budget of 1,979 FairCoin
-      addresses that were actually used. An attacker can burn it for well under
-      1 FAIR (or free with Oxy accounts, or during an Explorer outage), after
-      which FairCoin is permanently unavailable for that recipient until a
-      sparse watch set ships; cards are unaffected."
+The review (rounds 4–7) signs off with no code condition left. What remains is
+the owner's alone. F9 is already accepted (ADR 0002). **The gate stays closed
+until the owner does all of the following.**
 
-   **Update (2026-11-06, later): items 4 and 5 are fixed, not accepted.** The
-   owner chose to fix them ("Fix F5, F1 and D9"): addresses are never recycled,
-   the tree has no ceiling, and each recipient's wallet watches exactly the
-   addresses the gateway handed out (`GET /v1/social/me/receive_addresses`),
-   with abuse bounded by a daily per-recipient rate and per-payer limits (ADR
-   0021 D9, replaced; ADR 0002's amendment "a sparse watch set replaces the
-   bounded tree"). Items 1–3 still need the owner's acceptance or their own
-   fixes. The canary records the synced set (`receiveAddresses` in the gateway
-   evidence) and the wallet half watches exactly it; it has not been re-run on
-   this change.
-
-   **Update (2026-11-06, later still): item 2 (F1) is fixed in code, not
-   accepted.** The owner chose to fix it: Commons keeps the replaced key (and
-   accepts a previous phrase), and the Peable wallet finds every previous key
-   from the keys recorded on the account's addresses, spends from the ones
-   this device reaches (HD tree and social-receive addresses, each input
-   signed by its own key), counts them in the balance on their own line, and
-   offers a prominent one-tap "move to my current key"; keys it cannot reach
-   stay excluded (F8) with the path to add them in Commons (ADR 0002
-   "previous keys stay spendable"; oxy ADR 0061 D7 as amended). It has not
-   been re-reviewed, run on the canary or verified on a device, so it does
-   not change the gate: items 1 and 3 still need the owner's acceptance, and
-   the gate stays closed.
-2. **Before opening**, a read-only production check that no mainnet
-   `social_receive_cursors` row exists at or above the ceiling (mainnet minting
-   was never open, so none should).
-3. **Opening** (once accepted), the supported way: register a new `oxy-peable`
-   revision from the RUNNING one with only `PEABLE_SOCIAL_PAY_NETWORK=mainnet`
-   added, `update-service`, wait for a steady state and `/health` 200; mirror
-   the variable in `oxy-infra` `terraform-uswest2/app-peable.tf`; flip
+1. **Accept, in writing, each risk below** — the exact sentences the review
+   puts to the owner (round 7, final). Each is a property of the design as
+   built, not a defect the code can remove:
+   1. "Coins under a replaced identity key are spendable from Peable on a new
+      phone only through the encrypted identity backup or that key's recovery
+      phrase; a key replaced before 2026-11-06 (oxy migration 0235) is
+      spendable again only once Oxy's own signed records prove it was this
+      account's, through the backfill or Commons' claim, and a key no such
+      record proves stays unspendable from Peable."
+   2. "A payment to a Peable address more than a week old may take up to 30
+      days after the address was last checked to appear in the recipient's
+      wallet, a payment under 0.001 FAIR to such an address may never appear,
+      and finding either depends on the one Explorer we already trust (F9)."
+   3. "Identity keys and recovery phrases created on iOS before the keychain
+      split were readable by every Oxy iOS app, and stay readable on any phone
+      until Peable wallet 1.5.0 and Commons 1.12.0 are installed and launched
+      there; we neither force nor require those identities to rotate."
+      (The review's text names Commons 1.11.0; 1.12.0 carries R7-2's Commons
+      side, as the review notes.)
+   4. "On iOS the Peable wallet holds the personal root key, so the wallet and
+      any update shipped through its OTA channel (signed with the shared Oxy
+      update key) can rotate a person's identity, not only spend from it."
+   5. "An attacker controlling about 300 Oxy accounts can refuse new @username
+      senders to one person for a day at a time, and anyone opening 500 unpaid
+      FairCoin checkouts a day from enough networks can make FairCoin
+      unavailable for one merchant at a time; card payments are unaffected."
+   6. "Rotating an identity key uploads a new encrypted backup of that
+      identity, including its retired keys, even for a person who had deleted
+      their backup."
+   7. *Only if Peable wallet 1.2–1.4 reached iOS users:* "On an iPhone where
+      Peable wallet 1.2, 1.3 or 1.4 ran, a wallet another Oxy app planted in
+      the shared keychain group may be in Peable, and it receives payments only
+      after the person confirms it as theirs."
+   8. "When two accounts shared a phone's old wallet database, the account that
+      proves it keeps the other account's contacts, recent recipients, address
+      labels and Pocket names, and a database nobody proves stays on the phone
+      unopened until someone removes it in Settings."
+2. **Answer two release facts:** did Peable wallet 1.2–1.4 reach iOS users
+   (decides sentence 7), and which third-party OAuth clients or
+   application-token hosts are live (R7-1's past exposure; the route is gated
+   now).
+3. **Production, before opening:** dry-run, then `--apply`, oxy's
+   `packages/api/scripts/backfill-personal-key-retirements.ts`, and record how
+   many retired keys no signed record proves (sentence 1). No read-only path to
+   either production database exists from an agent's machine (RDS is private,
+   ECS exec is off), so this is the owner's step.
+4. **iOS builds, in this order** (no iOS pipeline exists; entitlements are
+   native, an OTA cannot ship them): Peable wallet 1.5.0, then Commons 1.12.0;
+   run `bunx oxy-check-keychain-entitlements <bundle id> <.xcarchive|.ipa>` on
+   each archive before upload. Until they are installed and launched on a
+   phone, that phone keeps the pre-split exposure (sentence 3).
+5. **Re-run the canary on the commit that opens** (the last run is on
+   `732e8a0e`; Peable#282 changed the wallet after it), then **open**, the
+   supported way: register a new `oxy-peable` revision from the RUNNING one
+   with only `PEABLE_SOCIAL_PAY_NETWORK=mainnet` added, `update-service`, wait
+   for a steady state and `/health` 200; mirror the variable in `oxy-infra`
+   `terraform-uswest2/app-peable.tf`; flip
    `packages/frontend/src/pay/social-network.ts` `SOCIAL_PAY_NETWORK` to
    `mainnet` (web deploy + OTA) so the wallet agrees; then check, read-only,
    that a live order's FairCoin option no longer answers
    `faircoin_network_closed` (for the `oxy`-owned merchants it will answer
-   `faircoin_wallet_missing` until an owner creates the organization's wallet in
-   Commons).
+   `faircoin_wallet_missing` until an owner creates the organization's wallet
+   in Commons). The tree has no ceiling any more, so round 3's "no mainnet
+   cursor at or above the ceiling" check no longer applies.
 
+Still waived, not done (ADR 0002): the legal opinion and physical-device
+verification. Every keychain, migration and rotation path above is unit-tested
+only; the review lists what only a device can prove.
