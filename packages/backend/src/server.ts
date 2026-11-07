@@ -53,6 +53,8 @@ import { startReportScheduler, stopReportScheduler } from './services/reporting/
 import { createTestHelpersRouter } from './routes/testHelpers';
 import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
 import { createBillingEngineRouter, createPublicBillingRouter } from './routes/billingEngine';
+import { createCatalogApiRouter } from './routes/catalogRoutes';
+import { RADAR_ROUTES } from './routes/radar';
 import { configureBillingEngine } from './services/billingEngine/runtime';
 import { billingEngineCheckoutFulfiller } from './services/billingEngine/checkoutFulfiller';
 import { registerSubscriptionCheckoutFulfiller } from './services/checkout/subscriptionFulfiller';
@@ -103,6 +105,7 @@ import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper'
 import { startRecipientKeySweeper, stopRecipientKeySweeper } from './services/faircoin/keyBinding';
 import { startIdempotencySweeper, stopIdempotencySweeper } from './services/idempotencySweeper';
 import { startEventSweeper, stopEventSweeper } from './services/eventSweeper';
+import { startJudgeSweeper, stopJudgeSweeper } from './services/radar/judgeSweeper';
 import { startRequestLogSweeper, stopRequestLogSweeper } from './services/requestLogSweeper';
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
@@ -363,6 +366,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   registerSubscriptionCheckoutFulfiller(billingEngineCheckoutFulfiller);
   app.use(createBillingEngineRouter({ requireMerchant }));
   app.use(createPublicBillingRouter({ publicRateLimit }));
+  // Risk rules and reviews (ADR 0022).
+  app.use(createCatalogApiRouter(RADAR_ROUTES, { requireMerchant }));
   // The whole public API's OpenAPI 3.1 document, generated from the contracts
   // once per process (ADR 0014 D5); `docs/openapi.json` is the committed copy.
   const openApiDocument = buildOpenApiDocument();
@@ -458,6 +463,7 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
     stopRecipientKeySweeper();
     stopIdempotencySweeper();
     stopEventSweeper();
+    stopJudgeSweeper();
     stopRequestLogSweeper();
     stopMoneyReconciliation();
     stopSessionExpirySweeper();
@@ -497,6 +503,7 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
   startRecipientKeySweeper();
   startIdempotencySweeper();
   startEventSweeper();
+  startJudgeSweeper();
   startRequestLogSweeper();
   startMoneyReconciliation();
   startSessionExpirySweeper();

@@ -47,6 +47,7 @@ export function intentFixture(
     customer: null,
     payment_method: null,
     latest_charge: null,
+    review: null,
     next_action:
       status === 'requires_action' && faircoin !== null
         ? {

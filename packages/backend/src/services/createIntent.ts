@@ -38,6 +38,7 @@ import {
 import type { PaymentProvider, ProviderClientAction } from './providers/provider';
 import { ensureProviderCustomer } from './customers/providerCustomer';
 import { applyProviderPaymentResult } from './intentReconciliation';
+import { gateBeforeAuthorization } from './radar/gates';
 import { recordIntentCreated } from './intentTransition';
 import { selectCardProvider, selectStoredProvider } from './providers/environmentGuard';
 import { faircoinRecipientOf, planFaircoinAddress } from './faircoin/recipient';
@@ -1042,19 +1043,37 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
     // re-calling with the same idempotency key. The reverse leaves a real
     // charge with no row, which nothing can find.
     if (cardProvider) {
+      // A confirm in the create is judged by the merchant's risk rules BEFORE
+      // the provider is asked (ADR 0022 D3). A block declines the attempt on
+      // the row and the payment is created unconfirmed and without the card,
+      // so the provider's object agrees: it still needs a payment method.
+      const blocked =
+        input.confirm === true &&
+        paymentMethod !== null &&
+        (
+          await gateBeforeAuthorization(
+            intent,
+            { card: paymentMethod.card },
+            // No provider payment exists yet: the row is declined, and the
+            // provider's payment is created without the card.
+            { record: true, point: 'server_confirm', providerUnattached: true },
+          )
+        ).kind !== 'proceed';
       const clientAction = await attachProviderPayment(db, intent, cardProvider, {
         ...(customerObjectId !== undefined ? { customerObjectId } : {}),
-        ...(paymentMethod !== null
+        ...(paymentMethod !== null && !blocked
           ? { paymentMethodObjectId: paymentMethod.providerObjectId }
           : {}),
-        ...(input.confirm === true ? { confirm: true } : {}),
-        ...(input.offSession === true ? { offSession: true } : {}),
-        ...(input.returnUrl !== undefined ? { returnUrl: input.returnUrl } : {}),
+        ...(input.confirm === true && !blocked ? { confirm: true } : {}),
+        ...(input.offSession === true && !blocked ? { offSession: true } : {}),
+        ...(input.returnUrl !== undefined && !blocked ? { returnUrl: input.returnUrl } : {}),
       });
       // A confirmation moved the row; answer with where it stands now.
       const current =
         input.confirm === true ? ((await findIntentById(db, intent.id)) ?? intent) : intent;
-      return { intent: current, reused: false, clientAction };
+      // A blocked attempt hands out no credential: the payer cannot confirm
+      // around the merchant's rule at the provider.
+      return { intent: current, reused: false, ...(blocked ? {} : { clientAction }) };
     }
     return { intent, reused: false };
   }

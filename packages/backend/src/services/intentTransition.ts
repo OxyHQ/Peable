@@ -39,6 +39,7 @@ import { enqueuePaymentReceipt, enqueueRefundNotice } from './email/outbox';
 import { recordEvent } from './events';
 import { kickWebhookOutbox } from './webhookOutbox';
 import { onInvoicePaymentTransition } from './billingEngine/collect';
+import { closeReviewIn } from './radar/reviewEvents';
 
 type IntentEventType = Extract<WebhookEventType, `payment_intent.${string}`>;
 
@@ -121,6 +122,11 @@ export async function transitionIntentIn(
   // ADR 0015 §5: a FairCoin payment that succeeded (or was rewound by a reorg)
   // is recorded for the merchant's books in the same transaction.
   if (row.rail === 'faircoin') await recordFaircoinLedger(tx, row, change.from);
+  // A card payment that ended closes its open review in this transaction
+  // (ADR 0022 D5): there is nothing left to approve or refuse.
+  if (row.rail === 'card' && row.status === 'canceled' && change.from !== 'canceled') {
+    await closeReviewIn(tx, row, 'canceled');
+  }
   const moved = change.from !== change.status;
   const failedAttempt = change.lastPaymentError !== undefined;
   if (moved || failedAttempt) {
@@ -246,6 +252,8 @@ export async function recordDisputeEvent(
     | 'charge.dispute.funds_reinstated',
   previousAttributes?: Record<string, unknown>,
 ): Promise<void> {
+  // A dispute closes the payment's open review (ADR 0022 D5), Stripe's rule.
+  if (type === 'charge.dispute.created') await closeReviewIn(tx, row, 'disputed');
   // An event is STORED: the dispute it carries must never hold evidence.
   const { evidence: _evidence, ...stored } = dispute;
   await recordEvent(tx, {

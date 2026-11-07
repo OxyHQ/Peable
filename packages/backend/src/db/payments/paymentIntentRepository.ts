@@ -108,6 +108,8 @@ export interface PaymentIntentRow {
   readonly paymentMethodPublicId: string | null;
   /** The `ch_…` of the authorization that succeeded, when there is one. Card only. */
   readonly latestChargePublicId: string | null;
+  /** The payment's review (`prv_…`), when a risk rule opened one (ADR 0022). */
+  readonly reviewPublicId: string | null;
   /** Card only: what the payer may pay with, fixed at creation. `null` on the chain. */
   readonly paymentMethodTypes: CardRailPaymentMethodType[] | null;
   /** INTERNAL id of the configuration it offers, and its public `pmc_…`. Card only. */
@@ -215,6 +217,10 @@ const INTENT_COLUMNS = {
   // over `charges` or `refunds` would bind to THAT table's own `id`.
   latestChargePublicId: sql<string | null>`${sql.raw(
     '(select ch.public_id from charges ch where ch.payment_intent_id = "payment_intents"."id")',
+  )}`,
+  // The payment's review (ADR 0022): one per payment, `reviews_payment_intent_id_key`.
+  reviewPublicId: sql<string | null>`${sql.raw(
+    '(select rv.public_id from reviews rv where rv.payment_intent_id = "payment_intents"."id")',
   )}`,
   paymentMethodTypes: paymentIntents.paymentMethodTypes,
   paymentMethodConfigurationId: paymentIntents.paymentMethodConfigurationId,

@@ -17,10 +17,12 @@ import { RiCalendarScheduleLine } from '@oxy.so/bloom/icons/RiCalendarScheduleLi
 import { RiCoinsLine } from '@oxy.so/bloom/icons/RiCoinsLine';
 import { RiDashboardLine } from '@oxy.so/bloom/icons/RiDashboardLine';
 import { RiDraftLine } from '@oxy.so/bloom/icons/RiDraftLine';
+import { RiEyeLine } from '@oxy.so/bloom/icons/RiEyeLine';
 import { RiFolder3Line } from '@oxy.so/bloom/icons/RiFolder3Line';
 import { RiHistoryLine } from '@oxy.so/bloom/icons/RiHistoryLine';
 import { RiQuestionLine } from '@oxy.so/bloom/icons/RiQuestionLine';
 import { RiShieldCheckLine } from '@oxy.so/bloom/icons/RiShieldCheckLine';
+import { RiShieldLine } from '@oxy.so/bloom/icons/RiShieldLine';
 import { RiCommunityLine } from '@oxy.so/bloom/icons/RiCommunityLine';
 import { RiEqualizerLine } from '@oxy.so/bloom/icons/RiEqualizerLine';
 import { RiFileList3Line } from '@oxy.so/bloom/icons/RiFileList3Line';
@@ -49,6 +51,8 @@ export const ORBIT_ICONS: Record<OrbitDestinationKey | OrbitNavGroupKey, OrbitGl
   customers: RiGroupLine,
   products: RiBox3Line,
   disputes: RiAlarmWarningLine,
+  radar: RiShieldLine,
+  reviews: RiEyeLine,
   links: RiLinksLine,
   subscriptions: RiRepeatLine,
   invoices: RiFileList3Line,

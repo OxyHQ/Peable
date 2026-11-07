@@ -98,6 +98,8 @@ const WEBHOOK_EVENT_TYPES = {
   'identity.verification_session.requires_input': true,
   'identity.verification_session.canceled': true,
   'identity.verification_session.redacted': true,
+  'review.opened': true,
+  'review.closed': true,
   'connected_account.updated': true,
   'account.updated': true,
   'application_fee.created': true,

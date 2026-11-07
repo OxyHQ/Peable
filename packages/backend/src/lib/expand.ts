@@ -1,4 +1,6 @@
 import type { Response } from 'express';
+import { findReviewsForMerchantByPublicIds } from '../db/radar/radarRepository';
+import { toReviewDTO } from './serializeRadar';
 import { findAccountsByPublicIds } from '../db/accounts/connectedAccountRepository';
 import { findIntentsForMerchantByPublicIds } from '../db/payments/paymentIntentRepository';
 import { findChargesForMerchantByPublicIds } from '../db/payments/chargeRepository';
@@ -112,6 +114,9 @@ export type ExpandableType =
   | 'invoiceitem'
   | 'credit_note'
   | 'quote'
+  | 'radar.rule'
+  | 'radar.evaluation'
+  | 'review'
   | 'customer_balance_transaction'
   | 'test_helpers.test_clock'
   | 'billing.meter'
@@ -141,7 +146,8 @@ type TargetType =
   | 'reporting.report_run'
   | 'reporting.report_schedule'
   | 'identity.verification_session'
-  | 'identity.verification_report';
+  | 'identity.verification_report'
+  | 'review';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -151,11 +157,13 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
     customer: 'customer',
     payment_method: 'payment_method',
     latest_charge: 'charge',
+    review: 'review',
   },
   charge: {
     payment_intent: 'payment_intent',
     customer: 'customer',
     payment_method: 'payment_method',
+    review: 'review',
   },
   customer: {},
   payment_method: { customer: 'customer' },
@@ -219,6 +227,10 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   invoiceitem: { customer: 'customer', invoice: 'invoice', subscription: 'subscription' },
   credit_note: { invoice: 'invoice', customer: 'customer' },
   quote: { customer: 'customer', invoice: 'invoice', subscription: 'subscription' },
+  // Risk rules (ADR 0022).
+  'radar.rule': {},
+  'radar.evaluation': { payment_intent: 'payment_intent' },
+  review: { payment_intent: 'payment_intent', charge: 'charge' },
   customer_balance_transaction: { customer: 'customer', invoice: 'invoice' },
   'test_helpers.test_clock': {},
   'billing.meter': {},
@@ -352,6 +364,13 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findVerificationReportsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toVerificationReportDTO(row),
+      ]),
+    ),
+  review: async (merchantId, ids) =>
+    new Map(
+      (await findReviewsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toReviewDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

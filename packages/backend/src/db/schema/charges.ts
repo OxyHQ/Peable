@@ -10,6 +10,10 @@ import { BASE_UNIT_STRING_PATTERN, CURRENCY_CODES } from './valueSets';
 export interface StoredChargeOutcome {
   readonly networkStatus: string | null;
   readonly riskLevel: string | null;
+  /** 0–100, when the provider scored it; absent on a snapshot read before ADR 0022. */
+  readonly riskScore?: number | null;
+  /** The provider's reason code (`highest_risk_level`, …); absent before ADR 0022. */
+  readonly reason?: string | null;
   readonly type: string | null;
 }
 
@@ -48,6 +52,16 @@ export const charges = pgTable(
     billingDetails: jsonb().$type<BillingDetails>(),
     /** When the provider snapshot above was last read. */
     syncedAt: timestamptz(),
+    /**
+     * When the merchant's risk rules judged this charge after authorization
+     * (ADR 0022 D3) — the once-per-charge CLAIM, set by one guarded UPDATE.
+     */
+    radarEvaluatedAt: timestamptz(),
+    /**
+     * When the judge sweep last tried this unjudged charge: its backoff and its
+     * order, so a charge that keeps failing goes to the back of the queue.
+     */
+    radarJudgeAttemptedAt: timestamptz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -81,5 +95,9 @@ export const charges = pgTable(
     ),
     /** Every charge search and list walks `merchant_id = … order by id desc` (`db/search`). */
     index('charges_merchant_id_id_idx').on(table.merchantId, table.id),
+    /** The judge sweep's queue (ADR 0022 D3): only the unjudged charges. */
+    index('charges_radar_unjudged_idx')
+      .on(table.radarJudgeAttemptedAt, table.createdAt)
+      .where(sql`${table.radarEvaluatedAt} is null`),
   ],
 );

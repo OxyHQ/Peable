@@ -65,8 +65,9 @@ describe('closed value sets', () => {
     // + Orbit money's nine (ADR 0015) + checkout's four and payment links'
     // two (Orbit Phase 3) + reporting's report run pair (Phase 8) + the billing
     // engine's 34 (ADR 0018) + business compliance's three (ADR 0020) + the
-    // quotes' four (ADR 0018 §5) + identity verification's six (ADR 0023).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(103);
+    // quotes' four (ADR 0018 §5) + identity verification's six (ADR 0023) + the
+    // review pair (ADR 0022).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(105);
     for (const retired of [
       'billing.observation.updated',
       'payment_intent.settled',
@@ -115,6 +116,9 @@ describe('closed value sets', () => {
         'refund.created',
         'refund.updated',
         'refund.failed',
+        // A review is about one card payment (ADR 0022).
+        'review.opened',
+        'review.closed',
       ].sort(),
     );
   });

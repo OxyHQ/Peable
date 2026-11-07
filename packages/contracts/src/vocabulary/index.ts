@@ -14,6 +14,7 @@ export * from './money';
 export * from './tax';
 export * from './subscriptions';
 export * from './quotes';
+export * from './radar';
 export * from './reporting';
 export * from './payments';
 export * from './version';

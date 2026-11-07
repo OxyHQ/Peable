@@ -63,6 +63,7 @@ import {
 } from './branding';
 import type { CheckoutDeps } from '../services/checkout/sessionService';
 import { BILLING_ENGINE_ROUTES, DASHBOARD_CUSTOMER_ROUTES } from './billingEngine';
+import { mountRadarDashboardRoutes, RADAR_ROUTES } from './radar';
 import {
   answerConnectedAccountList,
   createConnectedAccountCore,
@@ -427,6 +428,15 @@ export function createDashboardRouter(deps: {
   );
   // The native billing engine (ADR 0018), and the customers its screens read.
   mountCatalogDashboardRoutes(router, BILLING_ENGINE_ROUTES, {
+    base,
+    requireOxyUser,
+    gate,
+    write: 'money',
+  });
+  // Risk rules and reviews (ADR 0022): the editor's read-only routes first,
+  // then the shared ones; every write decides which money is accepted.
+  mountRadarDashboardRoutes(router, { base, requireOxyUser, gate });
+  mountCatalogDashboardRoutes(router, RADAR_ROUTES, {
     base,
     requireOxyUser,
     gate,

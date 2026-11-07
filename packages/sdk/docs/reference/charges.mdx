@@ -68,11 +68,15 @@ A list (`object: "list"`) whose `data` holds [Charge](/reference/objects/charge)
       "captured": true,
       "refunded": false,
       "disputed": false,
+      "review": null,
       "outcome": {
         "network_status": "approved_by_network",
         "risk_level": "normal",
         "type": "authorized",
-        "seller_message": "Payment complete."
+        "seller_message": "Payment complete.",
+        "risk_score": 12,
+        "reason": null,
+        "rule": null
       },
       "billing_details": null,
       "payment_method_details": {
@@ -106,6 +110,7 @@ A list (`object: "list"`) whose `data` holds [Charge](/reference/objects/charge)
 - `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
 - `data.customer` → [Customer](/reference/objects/customer)
 - `data.payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `data.review` → [Review](/reference/objects/review)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
@@ -146,11 +151,15 @@ Returns [Charge](/reference/objects/charge).
   "captured": true,
   "refunded": false,
   "disputed": false,
+  "review": null,
   "outcome": {
     "network_status": "approved_by_network",
     "risk_level": "normal",
     "type": "authorized",
-    "seller_message": "Payment complete."
+    "seller_message": "Payment complete.",
+    "risk_score": 12,
+    "reason": null,
+    "rule": null
   },
   "billing_details": null,
   "payment_method_details": {
@@ -180,6 +189,7 @@ Returns [Charge](/reference/objects/charge).
 - `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
 - `customer` → [Customer](/reference/objects/customer)
 - `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `review` → [Review](/reference/objects/review)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
 
@@ -236,11 +246,15 @@ A search result (`object: "search_result"`) whose `data` holds [Charge](/referen
       "captured": true,
       "refunded": false,
       "disputed": false,
+      "review": null,
       "outcome": {
         "network_status": "approved_by_network",
         "risk_level": "normal",
         "type": "authorized",
-        "seller_message": "Payment complete."
+        "seller_message": "Payment complete.",
+        "risk_score": 12,
+        "reason": null,
+        "rule": null
       },
       "billing_details": null,
       "payment_method_details": {
@@ -275,5 +289,6 @@ A search result (`object: "search_result"`) whose `data` holds [Charge](/referen
 - `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
 - `data.customer` → [Customer](/reference/objects/customer)
 - `data.payment_method` → [PaymentMethod](/reference/objects/payment-method)
+- `data.review` → [Review](/reference/objects/review)
 
 Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

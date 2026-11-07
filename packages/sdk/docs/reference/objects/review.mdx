@@ -1,0 +1,74 @@
+---
+title: "Review"
+description: "The review object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Review
+
+Object type: `review`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"review"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `open` | boolean |  |
+| `reason` | string | Why it is open (`rule`), or, once closed, why it closed. One of `rule`, `approved`, `refunded`, `refunded_as_fraud`, `canceled`, `disputed`. |
+| `opened_reason` | string | One of `rule`. |
+| `closed_reason` | string \| null | One of `approved`, `refunded`, `refunded_as_fraud`, `canceled`, `disputed`. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) | `pi_…`, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `charge` | string \| [Charge](/reference/objects/charge) \| null | `ch_…`, or the Charge with `expand[]=charge`. Expandable. |
+| `rule` | [RadarRuleReference](/reference/objects/radar-rule-reference) \| null | The rule that opened it, as it was. |
+| `created` | integer | Unix seconds. |
+| `closed_at` | integer \| null | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `charge` → [Charge](/reference/objects/charge)
+
+## Example
+
+```json
+{
+  "id": "prv_0193b8f2c1a87d3e9f4a",
+  "object": "review",
+  "livemode": false,
+  "open": true,
+  "reason": "rule",
+  "opened_reason": "rule",
+  "closed_reason": null,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "rule": {
+    "id": "rule_0193b8f2c1a87d3e9f4a",
+    "action": "review",
+    "predicate": ":risk_level: = 'elevated'",
+    "version": 2
+  },
+  "created": 1793750400,
+  "closed_at": null
+}
+```
+
+## Returned by
+
+- [`GET /v1/reviews`](/reference/reviews#list-reviews) — List reviews
+- [`GET /v1/reviews/{id}`](/reference/reviews#retrieve-a-review) — Retrieve a review
+- [`POST /v1/reviews/{id}/approve`](/reference/reviews#approve-a-review) — Approve a review
+- [`POST /v1/reviews/{id}/refuse`](/reference/reviews#refuse-a-review) — Refuse a review
+
+## Events
+
+- [`review.closed`](/reference/webhook-events#reviewclosed)
+- [`review.opened`](/reference/webhook-events#reviewopened)
+
+## Used in
+
+[Charge](/reference/objects/charge) · [Event](/reference/objects/event) · [PaymentIntent](/reference/objects/payment-intent)

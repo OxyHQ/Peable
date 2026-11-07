@@ -7,6 +7,7 @@ import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http
 import { requestIdOf } from '../lib/requestId';
 import { BillingEngineError } from '../services/billingEngine/errors';
 import { StaleTransitionError } from '../services/billingEngine/transitions';
+import { RadarError } from '../services/radar/errors';
 import { idempotent } from '../lib/idempotency';
 import type { QuerySurface } from '../lib/list';
 import { requestContextMiddleware } from '../lib/requestContext';
@@ -57,6 +58,17 @@ export function sendCatalogError(res: Response, error: unknown): void {
         request_id: requestIdOf(res) ?? null,
       },
     });
+    return;
+  }
+  if (error instanceof RadarError) {
+    sendError(
+      res,
+      error.status,
+      error.status >= 500 ? 'api_error' : 'invalid_request_error',
+      error.message,
+      error.code ?? undefined,
+      error.param,
+    );
     return;
   }
   if (error instanceof StaleTransitionError) {

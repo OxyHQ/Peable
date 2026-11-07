@@ -12,6 +12,7 @@ import {
 } from '../../common/primitives';
 import { defineRoute } from '../../route';
 import { billingDetailsSchema, cardDetailsSchema } from '../core/paymentMethods';
+import { radarRuleReferenceSchema } from './radar';
 
 /**
  * Charges (`ch_…`) — the read-only record of the money a CARD PaymentIntent
@@ -34,6 +35,19 @@ export const chargeOutcomeSchema = defineComponent(
       seller_message: nullableString.describe(
         "Peable's own one-line explanation for the merchant — never the provider's prose.",
       ),
+      risk_score: z
+        .number()
+        .int()
+        .nullable()
+        .describe("The provider's risk score, 0–100, when it scored the payment."),
+      reason: nullableString.describe(
+        "`rule` when one of your risk rules decided (`rule`), otherwise the provider's reason code.",
+      ),
+      rule: radarRuleReferenceSchema
+        .nullable()
+        .describe(
+          'Your risk rule that reviewed or blocked this charge after authorization (ADR 0022).',
+        ),
     })
     .strict(),
 );
@@ -72,6 +86,7 @@ export const chargeSchema = defineObject(
         .boolean()
         .describe('All of it came back — by refunds, or by releasing an uncaptured authorization.'),
       disputed: z.boolean(),
+      review: expandable('review', '`prv_…` while a review exists, or the Review.').nullable(),
       outcome: chargeOutcomeSchema.nullable(),
       billing_details: billingDetailsSchema
         .nullable()
@@ -116,11 +131,15 @@ export const chargeSchema = defineObject(
         captured: true,
         refunded: false,
         disputed: false,
+        review: null,
         outcome: {
           network_status: 'approved_by_network',
           risk_level: 'normal',
           type: 'authorized',
           seller_message: 'Payment complete.',
+          risk_score: 12,
+          reason: null,
+          rule: null,
         },
         billing_details: null,
         payment_method_details: {

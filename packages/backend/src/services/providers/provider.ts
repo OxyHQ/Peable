@@ -1024,6 +1024,8 @@ export interface ProviderChargeSnapshot {
   readonly outcome: {
     readonly networkStatus: string | null;
     readonly riskLevel: string | null;
+    readonly riskScore: number | null;
+    readonly reason: string | null;
     readonly type: string | null;
   } | null;
   readonly paymentMethodDetails: { readonly type: 'card'; readonly card: CardDetails } | null;

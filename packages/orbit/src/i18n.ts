@@ -21,6 +21,7 @@ import { useSyncExternalStore } from 'react';
 import { IDENTITY_EN, IDENTITY_ES } from './identity/strings';
 import { MONEY_EN, MONEY_ES } from './money/strings';
 import { QUOTES_EN, QUOTES_ES } from './quotes/strings';
+import { RADAR_EN, RADAR_ES } from './radar/strings';
 import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
@@ -37,6 +38,7 @@ const en: Record<string, string> = {
   ...IDENTITY_EN,
   ...MONEY_EN,
   ...QUOTES_EN,
+  ...RADAR_EN,
   ...REPORTS_EN,
   ...SEARCH_EN,
   ...ORBIT_EN,
@@ -1058,6 +1060,7 @@ const es: Record<string, string> = {
   ...IDENTITY_ES,
   ...MONEY_ES,
   ...QUOTES_ES,
+  ...RADAR_ES,
   ...REPORTS_ES,
   ...SEARCH_ES,
   ...ORBIT_ES,

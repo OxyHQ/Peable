@@ -1,0 +1,203 @@
+---
+title: "Risk rules and reviews"
+description: "Allow, block or review card payments with your own rules, and work the review queue."
+order: 7.5
+---
+
+# Risk rules and reviews
+
+Risk rules are Stripe Radar's rules, kept by Orbit: you write
+`block if :card_country: not in ('ES', 'FR')` or
+`review if :risk_level: = 'elevated'`, and Peable judges every **card**
+payment against them. A matching `review` rule queues the payment for a
+person; the queue is the [Review](/reference/reviews) object.
+
+FairCoin payments never consult a rule, and a checkout whose card a rule
+declined still offers FairCoin ([FairCoin on every order](/faircoin)).
+
+## Write a rule
+
+```ts
+const rule = await peable.radar.rules.create({
+  action: 'block',
+  predicate: ":currency: = 'EUR' and :amount: > 100000 and :card_country: not in ('ES', 'FR')",
+  description: 'Large euro payments from cards issued outside our markets',
+});
+// rule.id = 'rule_…', rule.version = 1
+```
+
+A predicate that does not parse is refused with `400 parameter_invalid`,
+`param: 'predicate'`, and the position of the problem:
+
+```
+predicate: unknown fact :ip_country: (at position 17)
+```
+
+`peable.radar.rules.update` changes `action`, `predicate`, `description` or
+`enabled`. A new action or predicate is a new `version`; every decision names
+the version that made it. You can hold up to 50 rules per mode (test and live
+are separate rule sets).
+
+### The language
+
+```
+predicate  := or
+or         := and ( "or" and )*
+and        := not ( "and" not )*
+not        := "not" not | primary
+primary    := "(" predicate ")" | "is_missing" "(" fact ")" | comparison
+comparison := fact op literal
+            | fact [ "not" ] "in" "(" literal ( "," literal )* ")"
+            | fact [ "not" ] "like" string        -- % any run, _ one character
+fact       := ":" name ":"
+op         := "=" | "!=" | "<" | "<=" | ">" | ">="
+literal    := 'string' | integer                   -- integers in base units
+```
+
+- Strings compare **case-insensitively**; `<`, `>` and friends are for integers.
+- Integers are exact: an amount is in the currency's base units (`2500` is
+  25.00 EUR), never a decimal.
+- At most 1,000 characters, 25 conditions, 8 levels of nesting and 50 values in
+  a list.
+
+### The facts
+
+| Fact | Type | Known |
+|---|---|---|
+| `:amount:`, `:currency:` | integer (base units), string | always |
+| `:card_country:`, `:card_brand:`, `:card_funding:` | string | a saved card at a server confirm; every card after authorization |
+| `:customer:` | string (`cus_…`) | when the payment names a customer |
+| `:email:` | string | the customer's email, else the payment's `receipt_email` |
+| `:payments_per_customer_hourly:` / `_daily` / `_weekly` | integer | with a customer |
+| `:amount_per_customer_hourly:` / `_daily` / `_weekly` | integer, base units | with a customer |
+| `:payments_per_email_hourly:` / `_daily` / `_weekly` | integer | with an email |
+| `:amount_per_email_hourly:` / `_daily` / `_weekly` | integer, base units | with an email |
+| `:risk_level:` | `normal`, `elevated`, `highest`, `not_assessed` | after authorization |
+| `:risk_score:` | integer 0–100 | after authorization |
+
+Velocity counts your **other** card payments created in the last hour, 24 hours
+or 7 days for the same customer — or for every customer of yours with the same
+email — and sums only those in **this payment's currency**. There is no
+converted amount (`amount_in_eur`): write the currency into the rule.
+
+**An unknown fact never makes a rule match.** Before the payer has entered a
+card, `:card_country:` is unknown, so `:card_country: = 'US'` and
+`:card_country: != 'US'` are both not true. `is_missing(:fact:)` asks whether a
+fact is absent — `is_missing(:customer:)` on a payment without a customer — but
+a fact that cannot be known yet is unknown even to it: before a card is entered
+`is_missing(:card_country:)` is not true, and before authorization neither is
+`is_missing(:risk_level:)`.
+
+`:customer:` compares exactly; every other string compares case-insensitively.
+In a `like` pattern, `\%` and `\_` match the characters themselves.
+
+## When rules run
+
+When several rules match, **`allow` beats `block` beats `review`**; among rules
+of the winning action the oldest is reported.
+
+**Before authorization** rules run when Peable is about to let the provider
+authorize:
+
+- a server-side confirm with a saved card (`paymentIntents.confirm`, a create
+  with `confirm: true`, an invoice's automatic collection), with that card's
+  facts — a blocked create with `confirm` answers `402` like a blocked confirm;
+- handing out the payer's confirmation credential — the `client_action` a
+  create answers with, and `POST /v1/payment_intents/:id/client_action`, which
+  the hosted checkout, Elements and the in-app sheet call — before any card was
+  entered, so only rules over the amount, the customer and velocity can match
+  there. A blocked create answers `201` with the declined payment and no
+  `client_action`.
+
+A `block` declines the attempt exactly as a declined card:
+
+```json
+{
+  "error": {
+    "type": "card_error",
+    "code": "card_declined",
+    "decline_code": "blocked_by_rule",
+    "message": "The payment was declined.",
+    "payment_intent": { "status": "requires_payment_method", "last_payment_error": { "...": "..." } }
+  }
+}
+```
+
+The payment stays payable and `payment_intent.payment_failed` is sent (once:
+asking again under the same rule records nothing new). A payment that already
+carries a saved card (created with `payment_method`, `requires_confirmation`)
+is judged with that card; a block answers the same `402` and hands out no
+credential, but leaves the payment as it is — the card stays attached at the
+provider, and nothing confirms it until you confirm it again with another card
+or the rule no longer blocks. A payer in
+`requires_action` — 3DS in progress at the provider — is never declined
+before authorization; the challenge is judged after. A new
+`paymentIntents.confirm` (or invoice retry) with a card from there is judged
+with that card, and a block answers `402` leaving the payment as it is.
+
+**Your payers never see your rules.** What a payer reads — the client-secret
+read, the realtime updates, the hosted checkout, the `402` of
+`client_action` — says only `card_declined`, with no `decline_code` and no
+`review`. Your server's reads keep `blocked_by_rule` and the review.
+
+**After authorization** every rule runs once more, with every fact, the first
+time Peable reads the charge:
+
+| Decision | Held authorization (`capture_method: manual`) | Captured payment |
+|---|---|---|
+| `block` | the authorization is released (`canceled`, `fraudulent`) | a review is opened — captured money is never refunded without you |
+| `review` | a review is opened and **capture waits for it** | a review is opened |
+
+A rule over card facts or `:risk_level:` can therefore only stop an
+**automatically captured** payment that the payer confirmed in their browser by
+opening a review. Use `capture_method: 'manual'` when such a rule must stop the
+money before it moves.
+
+## Explaining a decision
+
+Every decision a rule made is recorded with the rule's id, version and
+predicate as they were, and the values of the facts that rule names:
+
+```ts
+const { data } = await peable.radar.evaluations.list({ payment_intent: 'pi_…' });
+// [{ phase: 'pre_authorization', decision: 'block',
+//    rule: { id: 'rule_…', version: 1, action: 'block', predicate: '…' },
+//    facts: { amount: '250000', card_country: 'US', currency: 'EUR' } }]
+```
+
+A decision after authorization also shows on the charge:
+`outcome.rule`, `outcome.reason: 'rule'` and `outcome.type` `manual_review` or
+`blocked`. `outcome.risk_score` is the provider's score.
+
+## Reviews
+
+```ts
+const { data: queue } = await peable.reviews.list({ open: true });
+await peable.reviews.approve('prv_…');          // capture may proceed
+await peable.reviews.refuse('prv_…', { reason: 'fraudulent' });
+```
+
+- **Approve** closes it `approved`.
+- **Refuse** releases an uncaptured authorization (`closed_reason: 'canceled'`)
+  or refunds a captured payment in full (`refunded`, or `refunded_as_fraud`
+  with `reason: 'fraudulent'`).
+- A refusal whose refund is still pending keeps the review open — and not
+  approvable — until the refund succeeds (it closes) or fails (it is open
+  again).
+- A review also closes on its own when the payment is cancelled (`canceled`),
+  refunded — by any succeeded refund, partial ones included, as on Stripe
+  (`refunded`) — or disputed (`disputed`).
+
+`PaymentIntent.review` and `Charge.review` name the payment's review. The
+events are `review.opened` and `review.closed`, each carrying the Review.
+
+Approving or refusing a closed review answers `409 review_not_open`; a review
+someone is refusing right now (or whose refusal's refund is pending) answers
+`409 resource_conflict`.
+
+## In Orbit
+
+**Risk rules** lists your rules, validates a predicate as you type and tests
+it against your recent card payments before you save it. **Reviews** is the
+queue, with Approve and Refuse. Writing rules and working the queue need the
+`billing:manage` permission — they decide which money you accept.

@@ -45,6 +45,19 @@ export interface ChargeRow {
   readonly applicationFeeAmount: string | null;
   readonly applicationFeePublicId: string | null;
   readonly balanceTransactionPublicId: string | null;
+  /** The payment's review (`prv_…`), when a risk rule opened one (ADR 0022). */
+  readonly reviewPublicId: string | null;
+  /** The risk rule that decided after authorization, as it was (ADR 0022 D4). */
+  readonly radarRule: {
+    readonly id: string;
+    readonly action: 'allow' | 'block' | 'review';
+    readonly predicate: string;
+    readonly version: number;
+  } | null;
+  /** When the post-authorization rules claimed this charge; `null` before. */
+  readonly radarEvaluatedAt: Date | null;
+  /** When the provider snapshot was last read; `null`: never. */
+  readonly syncedAt: Date | null;
   readonly createdAt: Date;
 }
 
@@ -91,6 +104,14 @@ const CHARGE_COLUMNS = {
   balanceTransactionPublicId: sql<string | null>`${sql.raw(
     `(select b.public_id from balance_transactions b where b.source_type = 'charge' and b.source_id = "charges"."public_id" order by b.occurred_at limit 1)`,
   )}`,
+  reviewPublicId: sql<string | null>`${sql.raw(
+    `(select rv.public_id from reviews rv where rv.payment_intent_id = ${INTENT_OF})`,
+  )}`,
+  radarRule: sql<ChargeRow['radarRule']>`${sql.raw(
+    `(select jsonb_build_object('id', e.rule_id, 'action', e.decision, 'predicate', e.rule_predicate, 'version', e.rule_version) from radar_evaluations e where e.payment_intent_id = ${INTENT_OF} and e.phase = 'post_authorization' order by e.id desc limit 1)`,
+  )}`,
+  radarEvaluatedAt: charges.radarEvaluatedAt,
+  syncedAt: charges.syncedAt,
   createdAt: charges.createdAt,
 } as const;
 
@@ -229,4 +250,64 @@ export async function countChargesForMerchant(
 ): Promise<number> {
   const [row] = await db.select({ n: count() }).from(charges).where(chargeListWhere(params));
   return row?.n ?? 0;
+}
+
+/**
+ * The post-authorization risk evaluation's CLAIM (ADR 0022 D3): once per
+ * charge, and only once the provider snapshot it judges has been read. `true`
+ * for the one caller that set it, in the caller's transaction.
+ */
+export async function claimChargeRadarEvaluation(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(charges)
+    .set({ radarEvaluatedAt: sql`date_trunc('milliseconds', now())` })
+    .where(
+      and(
+        eq(charges.paymentIntentId, paymentIntentId),
+        sql`${charges.radarEvaluatedAt} is null`,
+        sql`${charges.syncedAt} is not null`,
+      ),
+    )
+    .returning({ id: charges.id });
+  return rows.length === 1;
+}
+
+/** How long the judge sweep waits before trying a charge again. */
+export const JUDGE_RETRY_BACKOFF = "interval '5 minutes'";
+
+/**
+ * Claim the next charges the post-authorization rules have not judged
+ * (ADR 0022 D3): a judgment that threw, or a snapshot never read. Older than a
+ * minute (the ordinary path judges at once), younger than a day, whose payment
+ * is still held or captured, not tried in the last five minutes — the least
+ * recently tried first, so a charge that keeps failing never starves the rest.
+ * One statement: `for update skip locked` and the attempt stamp, so two tasks
+ * never take the same charge. Walks `charges_radar_unjudged_idx`.
+ */
+export async function claimUnjudgedCharges(
+  db: DatabaseOrTransaction,
+  limit: number,
+): Promise<{ paymentIntentId: string }[]> {
+  const rows = await db.execute<{ payment_intent_id: string }>(sql`
+    update charges set radar_judge_attempted_at = now()
+    where id in (
+      select c.id from charges c
+      where c.radar_evaluated_at is null
+        and (c.radar_judge_attempted_at is null or c.radar_judge_attempted_at < now() - ${sql.raw(JUDGE_RETRY_BACKOFF)})
+        and c.created_at < now() - interval '1 minute'
+        and c.created_at > now() - interval '1 day'
+        and exists (
+          select 1 from payment_intents p
+          where p.id = c.payment_intent_id and p.status in ('requires_capture', 'succeeded')
+        )
+      order by c.radar_judge_attempted_at asc nulls first, c.created_at asc
+      limit ${limit}
+      for update skip locked
+    )
+    returning payment_intent_id
+  `);
+  return [...rows].map((row) => ({ paymentIntentId: row.payment_intent_id }));
 }

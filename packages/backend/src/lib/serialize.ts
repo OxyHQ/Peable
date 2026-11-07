@@ -20,7 +20,12 @@ import type {
   WebhookEndpointWithSecret,
   WebhookEvent,
 } from '@peable.to/shared-types';
-import { UNITS_PER_COIN, canExpire, normalizeDisputeReason } from '@peable.to/shared-types';
+import {
+  RADAR_BLOCK_DECLINE_CODE,
+  UNITS_PER_COIN,
+  canExpire,
+  normalizeDisputeReason,
+} from '@peable.to/shared-types';
 import type { ContributionDetails } from '@peable.to/contracts/contributions';
 import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
@@ -115,6 +120,7 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     customer: row.customerPublicId,
     payment_method: row.paymentMethodPublicId,
     latest_charge: card ? row.latestChargePublicId : null,
+    review: card ? row.reviewPublicId : null,
     next_action: nextActionFor(row),
     last_payment_error: row.lastPaymentError,
     cancellation_reason: row.cancellationReason,
@@ -161,6 +167,44 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
   };
 }
 
+/**
+ * The outcome type a post-authorization risk rule gives a charge (ADR 0022
+ * D4): `manual_review` when it reviewed, `blocked` when it blocked; `null`
+ * when no rule decided, or an `allow` did — the provider's word stands then.
+ */
+function radarOutcomeType(row: ChargeRow): 'manual_review' | 'blocked' | null {
+  if (row.radarRule === null || row.radarRule.action === 'allow') return null;
+  // A block that could not release the authorization (it was captured, or the
+  // cancellation lost) opened a review instead.
+  if (row.radarRule.action === 'review' || row.reviewPublicId !== null) return 'manual_review';
+  return 'blocked';
+}
+
+/**
+ * The PaymentIntent a PAYER sees (client-secret reads, the payer and Oxy
+ * sockets, the hosted checkout's session view, a payer's 402): the merchant's
+ * risk rules stay the merchant's (ADR 0022). A rule's decline reads as a plain
+ * card decline, with no `decline_code`, and the review is not named — a payer
+ * probing a merchant's rules learns nothing from the answer.
+ */
+export function toPayerPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
+  const dto = toPaymentIntentDTO(row);
+  const error = dto.last_payment_error;
+  return {
+    ...dto,
+    review: null,
+    last_payment_error:
+      error?.decline_code === RADAR_BLOCK_DECLINE_CODE
+        ? {
+            type: 'card_error',
+            code: 'card_declined',
+            decline_code: null,
+            message: 'The card was declined.',
+          }
+        : error,
+  };
+}
+
 /** Peable's own one-line explanation of an outcome — never the provider's prose. */
 function sellerMessageFor(type: string | null): string | null {
   switch (type) {
@@ -203,14 +247,28 @@ export function toChargeDTO(row: ChargeRow): Charge {
     captured,
     refunded: released || (captured && BigInt(row.amountRefunded) >= BigInt(row.amountCaptured)),
     disputed: row.disputed,
+    review: row.reviewPublicId,
     outcome:
       row.outcome === null
         ? null
         : {
             network_status: row.outcome.networkStatus,
             risk_level: row.outcome.riskLevel,
-            type: row.outcome.type,
-            seller_message: sellerMessageFor(row.outcome.type),
+            // A risk rule that decided after authorization is the outcome's
+            // explanation (ADR 0022 D4): a review, or a released authorization.
+            type: radarOutcomeType(row) ?? row.outcome.type,
+            seller_message: sellerMessageFor(radarOutcomeType(row) ?? row.outcome.type),
+            risk_score: row.outcome.riskScore ?? null,
+            reason: radarOutcomeType(row) !== null ? 'rule' : (row.outcome.reason ?? null),
+            rule:
+              radarOutcomeType(row) !== null && row.radarRule !== null
+                ? {
+                    id: row.radarRule.id,
+                    action: row.radarRule.action,
+                    predicate: row.radarRule.predicate,
+                    version: row.radarRule.version,
+                  }
+                : null,
           },
     billing_details: row.billingDetails,
     payment_method_details: row.paymentMethodDetails,

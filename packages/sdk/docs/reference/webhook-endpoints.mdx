@@ -1,7 +1,7 @@
 ---
 title: "Webhook endpoints"
 description: "The Webhook endpoints endpoints of the Peable API."
-order: 951
+order: 953
 generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 ---
 
@@ -39,7 +39,7 @@ The answer is the ONLY one that shows `secret`. A retry with the same `Idempoten
 | Field | Type | Description |
 | --- | --- | --- |
 | `url` **required** | string | An `https` URL (a test-mode endpoint may also use `http`), ports 80/443 only. |
-| `enabled_events` **required** | array of string | At most 103 items. At least 1 item. |
+| `enabled_events` **required** | array of string | At most 105 items. At least 1 item. |
 | `description` | string | 1–5000 characters. |
 | `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
 
@@ -202,7 +202,7 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 | Field | Type | Description |
 | --- | --- | --- |
 | `url` | string | An `https` URL (a test-mode endpoint may also use `http`), ports 80/443 only. |
-| `enabled_events` | array of string | At most 103 items. At least 1 item. |
+| `enabled_events` | array of string | At most 105 items. At least 1 item. |
 | `disabled` | boolean | `true` stops deliveries; `false` re-enables an endpoint, whatever disabled it. |
 | `description` | string | `""` clears it. At most 5000 characters. |
 | `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |

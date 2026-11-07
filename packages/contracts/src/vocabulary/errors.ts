@@ -142,6 +142,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   quote_not_editable: 'Only a draft quote can be edited.',
   quote_unexpected_state: "The quote's status does not allow this.",
   quote_expired: 'The quote expired.',
+  review_not_open: 'Review closed.',
+  rule_limit_reached: 'Too many risk rules.',
   invoice_payment_intent_requires_action:
     "The invoice's payment needs the customer to act (a card challenge).",
   subscription_unexpected_state:

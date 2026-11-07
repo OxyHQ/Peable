@@ -304,6 +304,10 @@ export const paymentIntentSchema = defineObject(
         'charge',
         '`ch_…`, or the Charge with `expand[]=latest_charge`. Card only.',
       ).nullable(),
+      review: expandable(
+        'review',
+        '`prv_…` once a risk rule queued this payment for review (ADR 0022), or the Review. Card only.',
+      ).nullable(),
       next_action: paymentIntentNextActionSchema.nullable(),
       last_payment_error: paymentErrorSchema.nullable(),
       cancellation_reason: z.enum(PAYMENT_INTENT_CANCELLATION_REASONS).nullable(),
@@ -366,6 +370,7 @@ export const paymentIntentSchema = defineObject(
         customer: null,
         payment_method: null,
         latest_charge: null,
+        review: null,
         next_action: {
           type: 'faircoin_payment',
           faircoin_payment: {
