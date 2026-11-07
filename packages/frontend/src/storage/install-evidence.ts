@@ -1,36 +1,34 @@
 /**
  * This app's own evidence that it ran on this phone before (security review
- * round 6, R6-4): the wallet ids whose SQLite database (`db-name.ts`) the app
- * sandbox held when this build FIRST looked — recorded once, in the sandbox,
- * and never recomputed, so a database this build creates later (for a wallet
- * id another app planted in the shared keychain group, say) never becomes
- * evidence. Nothing here is read from or written to a keychain group: no
- * other app can write this app's sandbox.
+ * round 6, R6-4; bound to the phone in round 7, R7-7): the wallet ids whose
+ * SQLite database (`db-name.ts`) the app sandbox held when this build FIRST
+ * looked — recorded once, in the sandbox, and never recomputed, so a database
+ * this build creates later (for a wallet id another app planted in the shared
+ * keychain group, say) never becomes evidence. No other app can write this
+ * app's sandbox. The record counts only while the nonce it carries is in the
+ * wallet's own keychain group, written "this device only", so a sandbox
+ * restored onto another phone is no evidence there (`install-evidence-rules.ts`).
  *
- * Any failure answers "no evidence", which takes nothing from the shared
- * group: the safe side of the keychain move (`keychain-groups.ts`).
+ * A sandbox failure answers "no evidence", which takes nothing from the
+ * shared group: the safe side of the keychain move (`keychain-groups.ts`).
  */
+import { bytesToHex } from '@fairco.in/core';
 import { Directory, File, Paths } from 'expo-file-system';
 import { defaultDatabaseDirectory } from 'expo-sqlite';
+import {
+  decideInstallEvidence,
+  type EvidenceBinding,
+  type EvidenceSandbox,
+} from './install-evidence-rules';
 import { type InstallEvidence, walletIdOfDatabaseFile } from './wallet-keys';
 
-const EVIDENCE_FILE = 'peable-install-evidence-v1.json';
+/** The bound record (round 7). */
+const EVIDENCE_FILE = 'peable-install-evidence-v2.json';
+/** Round 6's record, bound to nothing: never evidence (R7-7). */
+const UNBOUND_EVIDENCE_FILE = 'peable-install-evidence-v1.json';
 
 function fileUri(path: string): string {
   return path.startsWith('file:') ? path : `file://${path}`;
-}
-
-/** Parse a recorded evidence file; `null` when it does not parse (then: no evidence). */
-export function parseInstallEvidence(raw: string): InstallEvidence | null {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    const ids = (parsed as { walletIds?: unknown }).walletIds;
-    if (!Array.isArray(ids)) return null;
-    return { walletIds: new Set(ids.filter((id): id is string => typeof id === 'string')) };
-  } catch {
-    return null;
-  }
 }
 
 /** The wallet ids the sandbox's database files name. */
@@ -43,27 +41,36 @@ export function walletIdsOfDatabaseFiles(names: readonly string[]): Set<string> 
   return ids;
 }
 
-export async function readInstallEvidence(): Promise<InstallEvidence> {
-  const none: InstallEvidence = { walletIds: new Set() };
-  try {
+const sandbox: EvidenceSandbox = {
+  readRecord: async () => {
     const record = new File(Paths.document, EVIDENCE_FILE);
-    if (record.exists) return parseInstallEvidence(await record.text()) ?? none;
+    return record.exists ? record.text() : null;
+  },
+  hasUnboundRecord: async () => new File(Paths.document, UNBOUND_EVIDENCE_FILE).exists,
+  databaseFileNames: async () => {
     const directory =
       typeof defaultDatabaseDirectory === 'string'
         ? new Directory(fileUri(defaultDatabaseDirectory))
         : null;
-    const names =
-      directory?.exists === true
-        ? directory
-            .list()
-            .filter((entry): entry is File => entry instanceof File)
-            .map((entry) => entry.name)
-        : [];
-    const walletIds = walletIdsOfDatabaseFiles(names);
+    return directory?.exists === true
+      ? directory
+          .list()
+          .filter((entry): entry is File => entry instanceof File)
+          .map((entry) => entry.name)
+      : [];
+  },
+  writeRecord: async (text) => {
+    const record = new File(Paths.document, EVIDENCE_FILE);
     record.create();
-    record.write(JSON.stringify({ walletIds: [...walletIds] }));
-    return { walletIds };
-  } catch {
-    return none;
-  }
+    record.write(text);
+  },
+};
+
+function newNonce(): string {
+  return bytesToHex(globalThis.crypto.getRandomValues(new Uint8Array(32)));
+}
+
+/** The evidence, bound to this phone through `binding` (the keychain move supplies it). */
+export function readInstallEvidence(binding: EvidenceBinding): Promise<InstallEvidence> {
+  return decideInstallEvidence(sandbox, binding, walletIdsOfDatabaseFiles, newNonce);
 }

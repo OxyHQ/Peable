@@ -17,6 +17,7 @@ import {
   type InstallEvidence,
   KEYCHAIN_ADOPTED_WALLETS,
   KEYCHAIN_MOVE_MARKER,
+  KEYCHAIN_RECHECK_MARKER,
   keychainMoveKeys,
   SECRET_PREFIXES,
   walletSecretKeys,
@@ -104,6 +105,7 @@ function policyOf(
         }
       : null,
     evidence: async () => evidence,
+    deviceOnly: {},
   };
 }
 
@@ -136,7 +138,9 @@ describe('the one-shot move out of the shared group', () => {
     const kv = createGroupedKeychainAdapter(k.store, peable, policyOf(k));
     await kv.getItem('fairwallet_currency');
     const neverFromShared = (key: string) =>
-      key.startsWith(SECRET_PREFIXES.seed) || key === 'fairwallet_mnemonic';
+      key.startsWith(SECRET_PREFIXES.seed) ||
+      key === 'fairwallet_mnemonic' ||
+      key === 'fairwallet_pin';
     for (const [key, value] of Object.entries(entries)) {
       if (neverFromShared(key)) {
         expect(k.items.has(`${WALLET}|${key}`)).toBe(false);
@@ -303,6 +307,81 @@ describe('nothing is taken from the shared group without proof of an earlier ins
   });
 });
 
+describe('round 7: bound evidence, no PIN, a recheck of 1.2–1.4 adoptions (R7-7)', () => {
+  test('the PIN record is never taken from the shared group, even with evidence', async () => {
+    const k = preSplit({
+      fairwallet_wallets_index: INDEX,
+      fairwallet_mnemonic_w1: 'words',
+      fairwallet_pin: 'planted pin record',
+      fairwallet_pin_attempts: '9',
+    });
+    const kv = createGroupedKeychainAdapter(k.store, peable, policyOf(k));
+    expect(await kv.getItem('fairwallet_pin')).toBeNull();
+    expect(await kv.getItem('fairwallet_pin_attempts')).toBeNull();
+    expect(await kv.getItem('fairwallet_mnemonic_w1')).toBe('words');
+    expect(k.items.get(`${SHARED}|fairwallet_pin`)).toBe('planted pin record');
+  });
+
+  test('evidence that cannot be read now: nothing from the shared group, and no marker', async () => {
+    const k = preSplit({ fairwallet_wallets_index: INDEX, fairwallet_mnemonic_w1: 'words' });
+    const locked: SharedGroupPolicy = {
+      ...policyOf(k),
+      evidence: async () => {
+        throw new Error('errSecInteractionNotAllowed');
+      },
+    };
+    const kv = createGroupedKeychainAdapter(k.store, peable, locked);
+    expect(await kv.getItem('fairwallet_mnemonic_w1')).toBeNull();
+    expect(k.items.has(`${WALLET}|${KEYCHAIN_MOVE_MARKER}`)).toBe(false);
+    // The next launch, with the keychain readable, takes it.
+    const next = createGroupedKeychainAdapter(k.store, peable, policyOf(k));
+    expect(await next.getItem('fairwallet_mnemonic_w1')).toBe('words');
+    expect(k.items.get(`${WALLET}|${KEYCHAIN_MOVE_MARKER}`)).toBe('1');
+  });
+
+  test('the evidence is bound through a device-only nonce in the wallet group', async () => {
+    const k = preSplit({ fairwallet_wallets_index: INDEX });
+    const readBack: string[] = [];
+    const policy: SharedGroupPolicy = {
+      ...policyOf(k),
+      deviceOnly: { keychainAccessible: 'this-device-only' },
+      evidence: async (binding) => {
+        await binding.write('nonce-1');
+        readBack.push((await binding.read()) ?? '');
+        return PRE_SPLIT_INSTALL;
+      },
+    };
+    await createGroupedKeychainAdapter(k.store, peable, policy).getItem('fairwallet_currency');
+    expect(readBack).toEqual(['nonce-1']);
+    expect(k.items.get(`${WALLET}|peable_install_evidence_v2`)).toBe('nonce-1');
+    const set = k.calls.find((c) => c.op === 'set' && c.key === 'peable_install_evidence_v2');
+    expect(set?.options as object).toEqual({
+      keychainAccessible: 'this-device-only',
+      accessGroup: WALLET,
+    });
+  });
+
+  test('wallets a 1.2–1.4 build moved are listed as adopted once, then never again', async () => {
+    // As a 1.4 build left it: everything in the wallet group, its marker, no list.
+    const k = keychain();
+    const index = JSON.stringify([{ id: 'w1' }, { id: 'w2' }, { id: 'w3' }]);
+    k.items.set(`${WALLET}|${KEYCHAIN_MOVE_MARKER}`, '1');
+    k.items.set(`${WALLET}|fairwallet_wallets_index`, index);
+    k.items.set(`${WALLET}|fairwallet_mnemonic_w1`, 'words');
+    k.items.set(`${WALLET}|fairwallet_xpub_w2`, 'xpub');
+    // w3 has no phrase or xpub here (nothing spendable to adopt).
+    const kv = createGroupedKeychainAdapter(k.store, peable, policyOf(k));
+    expect(JSON.parse((await kv.getItem(KEYCHAIN_ADOPTED_WALLETS)) ?? '[]')).toEqual(['w1', 'w2']);
+    expect(k.items.get(`${WALLET}|${KEYCHAIN_RECHECK_MARKER}`)).toBe('1');
+    expect(sharedReads(k)).toEqual([]);
+
+    // The person confirms w1; the next launch does not list it again.
+    await kv.setItem(KEYCHAIN_ADOPTED_WALLETS, JSON.stringify(['w2']));
+    const next = createGroupedKeychainAdapter(k.store, peable, policyOf(k));
+    expect(JSON.parse((await next.getItem(KEYCHAIN_ADOPTED_WALLETS)) ?? '[]')).toEqual(['w2']);
+  });
+});
+
 describe('after the marker', () => {
   test('the shared group is never read again, and a planted item is ignored (R4-7)', async () => {
     const k = preSplit({ fairwallet_wallets_index: INDEX });
@@ -387,7 +466,8 @@ describe("a native build with the app's own group (core 7.31+, ADR 0062 D6)", ()
     const kv = createGroupedKeychainAdapter(k.store, withApp, policyOf(k));
     expect(await kv.getItem('fairwallet_pin')).toBe('newer');
     expect(k.items.has(`${WALLET}|fairwallet_pin`)).toBe(false);
-    expect(k.items.has(`${SHARED}|fairwallet_pin`)).toBe(false);
+    // The shared PIN record is never taken (R7-7): it stays where it is.
+    expect(k.items.get(`${SHARED}|fairwallet_pin`)).toBe('older');
     expect(await kv.getItem('fairwallet_wallets_index')).toBe(INDEX);
   });
 

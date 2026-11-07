@@ -54,6 +54,9 @@ export const PREFERENCE_KEYS = [
   'fairwallet_pin_attempts',
 ] as const;
 
+/** The PIN attempt count (`pin-attempts.ts`), never adopted with or without the PIN (R7-7). */
+const PIN_ATTEMPTS_KEY = 'fairwallet_pin_attempts';
+
 /** Per-wallet preferences other modules keep: `<prefix><walletId>`. */
 export const PREFERENCE_PREFIXES = [
   'fairwallet_pockets_',
@@ -78,6 +81,25 @@ export const IDENTITY_WALLET_ID = 'oxy-identity';
  * it, or the next launch would adopt from the shared group again.
  */
 export const KEYCHAIN_MOVE_MARKER = 'peable_keychain_split_v1';
+
+/**
+ * Written beside {@link KEYCHAIN_MOVE_MARKER} once the wallets a 1.2–1.4
+ * build may have adopted from the shared group without recording it are
+ * listed in {@link KEYCHAIN_ADOPTED_WALLETS} (R7-7): those builds took phrases
+ * and xpubs from there with no proof, and nothing re-checked them. Same rules
+ * as the move marker: written and read only in the wallet's own group, never
+ * deleted, not a wallet key.
+ */
+export const KEYCHAIN_RECHECK_MARKER = 'peable_keychain_split_v2';
+
+/**
+ * The nonce that binds this app's install evidence to THIS phone (R7-7): a
+ * keychain item in the wallet's own group written "this device only", so it
+ * never reaches another phone through a backup — encrypted or not — while
+ * the evidence file in the sandbox does. Not a wallet key: never adopted,
+ * never cleared by `clearAll`.
+ */
+export const INSTALL_EVIDENCE_NONCE = 'peable_install_evidence_v2';
 
 /**
  * Where the one-time move of the pre-round-5 shared identity wallet
@@ -115,7 +137,9 @@ export function parseAdoptedWallets(raw: string | null): string[] {
  * Evidence that THIS app ran before on this phone, from its own sandbox and
  * never from a keychain group (R6-4): the wallet ids whose SQLite file the
  * sandbox held when this build first looked (`fairwallet.db` is the id-less
- * wallet, `''`). Another app cannot write here.
+ * wallet, `''`). Another app cannot write here. It counts only while the
+ * nonce it was recorded with is still in the wallet's own group, "this device
+ * only" ({@link INSTALL_EVIDENCE_NONCE}, R7-7).
  */
 export interface InstallEvidence {
   readonly walletIds: ReadonlySet<string>;
@@ -151,7 +175,10 @@ function walletIdOfKey(key: string): string | null {
  * - the wallet index: only its entries whose wallet has evidence;
  * - the active-wallet pointer and every per-wallet key: only for a wallet
  *   with evidence;
- * - the PIN record and the other single keys: only with some evidence.
+ * - the PIN record and the PIN attempt count: never (R7-7) — a planted PIN
+ *   would be the lock on a phrase this app then adopts; the person sets a
+ *   new one;
+ * - the other single keys: only with some evidence.
  */
 export function adoptableFromShared(
   key: string,
@@ -161,6 +188,7 @@ export function adoptableFromShared(
   const ids = evidence.walletIds;
   if (ids.size === 0) return null;
   if (key === SECRET_KEYS.legacyMnemonic || key.startsWith(SECRET_PREFIXES.seed)) return null;
+  if (key === SECRET_KEYS.pin || key === PIN_ATTEMPTS_KEY) return null;
   if (key === SECRET_KEYS.walletsIndex) {
     try {
       const parsed: unknown = JSON.parse(value);

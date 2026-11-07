@@ -91,7 +91,10 @@ describe('what the keychain move may take from the shared group (R6-4)', () => {
     expect(adoptableFromShared('fairwallet_mnemonic_evil', 'words', evidence)).toBeNull();
     expect(adoptableFromShared('fairwallet_active_wallet', 'w1', evidence)).toBe('w1');
     expect(adoptableFromShared('fairwallet_active_wallet', 'evil', evidence)).toBeNull();
-    expect(adoptableFromShared('fairwallet_pin', 'pin', evidence)).toBe('pin');
+    // The PIN record and its attempt count: never (R7-7).
+    expect(adoptableFromShared('fairwallet_pin', 'pin', evidence)).toBeNull();
+    expect(adoptableFromShared('fairwallet_pin_attempts', '3', evidence)).toBeNull();
+    expect(adoptableFromShared('fairwallet_currency', 'EUR', evidence)).toBe('EUR');
   });
 
   test('the index keeps only wallets with evidence', () => {

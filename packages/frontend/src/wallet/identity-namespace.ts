@@ -40,13 +40,22 @@
  *   copying over it;
  * - every move runs in the wallet's init queue, one at a time.
  *
+ * Round 7 (R7-6): each candidate tree is derived generously before judging
+ * what stays — past the highest stored index of EITHER chain and every
+ * previous-key tree's cursor by {@link LEGACY_WINDOW_MARGIN}, then walked over
+ * every stored row and coin address with the gap (as
+ * `advanceTreeOverKnownAddresses` does) — so a change address past index 9,
+ * or a previous key's coin beyond its first window, is the owner's and stays.
+ * Multisig watch rows whose redeem script names one of the owner's keys stay
+ * too.
+ *
  * Preferences (Pockets, the active Pocket, notification subscription) follow
  * the proving account; it keeps its own where it already has them. Contacts
  * and recent recipients name nobody's keys and move with the file.
  *
  * Pure decisions here; the moves themselves are `wallet-store.ts`'s.
  */
-import { canonicalKey, canonicalKeySet } from './previous-keys';
+import { advanceTreeOverKnownAddresses, canonicalKey, canonicalKeySet } from './previous-keys';
 
 /**
  * The kv-store item recording the move: `{ "boundTo": id }`, `{ "empty": true }`
@@ -185,4 +194,59 @@ export function highestStoredIndices(rows: readonly { index_num: number; is_chan
     else external = Math.max(external, row.index_num);
   }
   return { external, change };
+}
+
+/** How far past everything a legacy Pocket stores each candidate tree is derived (R7-6). */
+export const LEGACY_WINDOW_MARGIN = 50;
+
+/**
+ * The cursors a candidate tree of `key` is restored to before judging a
+ * legacy Pocket (R7-6): past the highest stored index of either chain (the
+ * rows of every key are mixed, so either chain's highest bounds both) and
+ * `key`'s own previous-key tree cursors on any network, plus
+ * {@link LEGACY_WINDOW_MARGIN}. The caller then walks the gap over every
+ * stored row and coin address.
+ */
+export function legacyTreeReach(
+  facts: {
+    readonly rows: readonly { index_num: number; is_change: number }[];
+    readonly trees: readonly { public_key: string; external_next: number; change_next: number }[];
+  },
+  key: string,
+): { externalNext: number; changeNext: number } {
+  const { external, change } = highestStoredIndices(facts.rows);
+  let highest = Math.max(external, change);
+  const canonical = canonicalKey(key);
+  for (const tree of facts.trees) {
+    if (canonical === null || canonicalKey(tree.public_key) !== canonical) continue;
+    highest = Math.max(highest, tree.external_next - 1, tree.change_next - 1);
+  }
+  const reach = highest + 1 + LEGACY_WINDOW_MARGIN;
+  return { externalNext: reach, changeNext: reach };
+}
+
+/**
+ * Derive a candidate tree of `key` over a legacy Pocket (R7-6): to
+ * {@link legacyTreeReach}, then over every stored row and coin address with
+ * the gap, so whatever of the Pocket that tree made is in its window.
+ */
+export function reachLegacyPocket(
+  tree: {
+    restoreCursors(externalNext: number, changeNext: number): void;
+    ownsAddress(address: string): boolean;
+    markAddressUsed(address: string): boolean;
+  },
+  facts: {
+    readonly rows: readonly { address: string; index_num: number; is_change: number }[];
+    readonly coinAddresses: readonly string[];
+    readonly trees: readonly { public_key: string; external_next: number; change_next: number }[];
+  },
+  key: string,
+): void {
+  const reach = legacyTreeReach(facts, key);
+  tree.restoreCursors(reach.externalNext, reach.changeNext);
+  advanceTreeOverKnownAddresses(tree, [
+    ...facts.rows.map((row) => row.address),
+    ...facts.coinAddresses,
+  ]);
 }

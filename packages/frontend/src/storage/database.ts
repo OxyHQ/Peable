@@ -420,6 +420,23 @@ export interface LegacyOwnerFilter {
   keepsKey(key: string): boolean;
   /** Whether one of the owner's keys derives this keyless social-receive row. */
   derivesSocialRow(address: string, index: number): boolean;
+  /**
+   * Whether a multisig watch row's redeem script (hex) names one of the
+   * owner's keys as a cosigner (R7-6): an HD key of a tree the owner holds,
+   * or an identity key the owner has had.
+   */
+  namesOwnerKey(redeemScriptHex: string): boolean;
+}
+
+/**
+ * What a legacy Pocket stores that the owner's trees must reach (R7-6): every
+ * row's index, every coin's address, every multisig redeem script and every
+ * previous-key tree's cursors.
+ */
+export interface LegacyPocketFacts {
+  readonly rows: readonly AddressRow[];
+  readonly coinAddresses: readonly string[];
+  readonly trees: readonly PreviousKeyTreeRow[];
 }
 
 /**
@@ -705,8 +722,11 @@ export class Database {
    * - coins at an address kept above (or that a tree derives), and the
    *   transactions that created or spent one; their notes and labels.
    *
-   * Everything else goes: multisig watch addresses (nothing here proves whose
-   * they were), other coins, other history. Nothing on chain moves — a rescan
+   * - multisig watch addresses whose redeem script names one of the owner's
+   *   keys (R7-6), and the coins at them.
+   *
+   * Everything else goes: other multisig watch addresses, other coins, other
+   * history. Nothing on chain moves — a rescan
    * finds the owner's coins again — and the gateway pull starts over (the full
    * set is read again for the session's account, `INSERT OR IGNORE`).
    * Contacts and recent recipients name nobody's keys and stay.
@@ -724,9 +744,15 @@ export class Database {
     const coinAddresses = await this.db.getAllAsync<{ address: string }>(
       'SELECT DISTINCT address FROM utxos',
     );
-    const watchRows = await this.db.getAllAsync<{ address: string }>(
-      'SELECT address FROM watch_addresses',
+    const watchRows = await this.db.getAllAsync<{ address: string; redeem_script: string }>(
+      'SELECT address, redeem_script FROM watch_addresses',
     );
+    const keptWatch = new Set<string>();
+    const droppedWatch: string[] = [];
+    for (const row of watchRows) {
+      if (owner.namesOwnerKey(row.redeem_script)) keptWatch.add(row.address);
+      else droppedWatch.push(row.address);
+    }
 
     const keptSocial = new Set<string>();
     const droppedSocial: string[] = [];
@@ -741,12 +767,12 @@ export class Database {
     const droppedHd = hdRows.map((row) => row.address).filter((a) => !owner.ownsHdAddress(a));
     const droppedCoins = coinAddresses
       .map((row) => row.address)
-      .filter((a) => !keptSocial.has(a) && !owner.ownsHdAddress(a));
+      .filter((a) => !keptSocial.has(a) && !keptWatch.has(a) && !owner.ownsHdAddress(a));
     const droppedAddresses = new Set([
       ...droppedSocial,
       ...droppedHd,
       ...droppedCoins,
-      ...watchRows.map((row) => row.address),
+      ...droppedWatch,
     ]);
 
     await this.db.withTransactionAsync(async () => {
@@ -761,7 +787,9 @@ export class Database {
       for (const address of droppedHd) {
         await this.db.runAsync('DELETE FROM addresses WHERE address = ?', address);
       }
-      await this.db.runAsync('DELETE FROM watch_addresses');
+      for (const address of droppedWatch) {
+        await this.db.runAsync('DELETE FROM watch_addresses WHERE address = ?', address);
+      }
       for (const address of droppedCoins) {
         await this.db.runAsync('DELETE FROM utxos WHERE address = ?', address);
       }
@@ -785,6 +813,18 @@ export class Database {
         "DELETE FROM schema_meta WHERE key IN ('social_receive_sync_cursor', 'social_receive_full_sync_after', 'social_receive_full_sync_at', 'identity_wallet_key')",
       );
     });
+  }
+
+  /** {@link LegacyPocketFacts} of this (legacy) database. */
+  async legacyPocketFacts(): Promise<LegacyPocketFacts> {
+    const rows = await this.getAddresses();
+    const coins = await this.db.getAllAsync<{ address: string }>(
+      'SELECT DISTINCT address FROM utxos',
+    );
+    const trees = await this.db.getAllAsync<PreviousKeyTreeRow>(
+      'SELECT * FROM previous_key_trees ORDER BY public_key, network',
+    );
+    return { rows, coinAddresses: coins.map((row) => row.address), trees };
   }
 
   /**
@@ -1344,6 +1384,27 @@ export class Database {
       }
     });
     return mine.length;
+  }
+
+  /**
+   * The highest index of each chain among the rows not yet bound to a key
+   * (`-1` when a chain has none): how far a probe of the open tree must
+   * derive to judge every one of them (R7-3), whatever gap of unused rows
+   * lies below.
+   */
+  async getHighestUnboundIndices(): Promise<{ external: number; change: number }> {
+    const rows = await this.db.getAllAsync<{ is_change: number; max_index: number | null }>(
+      `SELECT is_change, MAX(index_num) AS max_index FROM addresses
+        WHERE identity_public_key IS NULL GROUP BY is_change`,
+    );
+    let external = -1;
+    let change = -1;
+    for (const row of rows) {
+      if (row.max_index === null) continue;
+      if (row.is_change) change = row.max_index;
+      else external = row.max_index;
+    }
+    return { external, change };
   }
 
   async markAddressUsed(address: string): Promise<void> {

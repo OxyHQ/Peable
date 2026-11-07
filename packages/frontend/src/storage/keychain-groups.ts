@@ -51,8 +51,9 @@
  * (`InstallEvidence`, `kv-store.ts`). Then (`wallet-keys.ts`'s
  * `adoptableFromShared`): no evidence, nothing; a cached seed or the
  * pre-multi-wallet phrase, never; the index, the active-wallet pointer and
- * every per-wallet key only for a wallet with evidence; the PIN record and the
- * other single keys only with some evidence. Every shared-group read goes
+ * every per-wallet key only for a wallet with evidence; the PIN record and
+ * its attempt count never (R7-7); the other single keys only with some
+ * evidence. Every shared-group read goes
  * through the injected non-prompting reader ({@link nonPromptingSharedRead}
  * over `@oxy.so/core`'s `readSharedWithoutInteraction`, i.e. `OxyIdentity`'s
  * `readKeychainItemWithoutInteraction`), so an item planted with
@@ -61,6 +62,17 @@
  * wallet whose phrase or xpub WAS taken from the shared group is listed in
  * {@link KEYCHAIN_ADOPTED_WALLETS}, and offers nothing to receive into until
  * the person confirms it is theirs. What is not taken stays where it is.
+ *
+ * Round 7 (R7-7): the evidence counts only while the nonce it was recorded
+ * with is in the wallet's own group, written "this device only"
+ * (`install-evidence-rules.ts`) — a sandbox restored from a backup onto
+ * another phone is no evidence there. Evidence that cannot be read now (a
+ * locked keychain) leaves the move without a marker, to ask again. The PIN
+ * record is never taken from the shared group (`adoptableFromShared`). And
+ * once, every wallet whose phrase or xpub is in the wallet's own group when
+ * the move marker already exists is listed as adopted
+ * ({@link KEYCHAIN_RECHECK_MARKER}): 1.2–1.4 builds adopted from the shared
+ * group without proof or record.
  *
  * What this still cannot prove: on a phone that ran a pre-split build, an
  * item another Oxy app wrote over that build's own copy before the move
@@ -94,15 +106,19 @@
 import type { KeychainAccess } from '@oxy.so/core/crypto';
 import { keychainAccessGroupValue, ownKeychainItemPlan } from '@oxy.so/core/crypto';
 import type { KeychainStoreLike, readSharedWithoutInteraction } from '@oxy.so/core/session';
+import type { EvidenceBinding } from './install-evidence-rules';
 import {
   adoptableFromShared,
+  INSTALL_EVIDENCE_NONCE,
   type InstallEvidence,
   isWalletKey,
   KEYCHAIN_ADOPTED_WALLETS,
   KEYCHAIN_MOVE_MARKER,
+  KEYCHAIN_RECHECK_MARKER,
   keychainMoveKeys,
   parseAdoptedWallets,
   SECRET_KEYS,
+  SECRET_PREFIXES,
   walletIdsOfIndex,
   walletOfAdoptedSecret,
 } from './wallet-keys';
@@ -129,8 +145,19 @@ export interface SharedGroupPolicy {
   readonly readWithoutInteraction:
     | ((key: string, accessGroup: string) => Promise<string | null>)
     | null;
-  /** This app's own evidence of an earlier install on this phone (never a keychain read). */
-  readonly evidence: () => Promise<InstallEvidence>;
+  /**
+   * This app's own evidence of an earlier install on this phone, from its
+   * sandbox, counted only while `binding` — a nonce in the wallet's own group,
+   * "this device only" — agrees (R7-7). Throws when the binding cannot be
+   * read or written.
+   */
+  readonly evidence: (binding: EvidenceBinding) => Promise<InstallEvidence>;
+  /**
+   * The write options that keep an item on THIS phone (iOS:
+   * `keychainAccessible: AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`): never in a
+   * backup restored elsewhere.
+   */
+  readonly deviceOnly: object;
 }
 
 /**
@@ -179,6 +206,12 @@ interface Context {
   sources: string[];
   policy: SharedGroupPolicy;
   evidence: InstallEvidence;
+  /**
+   * The evidence could not be read now (a locked keychain): the shared group
+   * is not a source, and the move writes no marker, so the next launch asks
+   * again rather than close it for good.
+   */
+  retry: boolean;
 }
 
 /**
@@ -318,6 +351,59 @@ async function hasMarker(store: KeychainStore, group: string): Promise<boolean> 
   return (await store.getItemAsync(KEYCHAIN_MOVE_MARKER, { accessGroup: group })) !== null;
 }
 
+/** The evidence's nonce item (R7-7): in `own`, written "this device only". */
+function evidenceBinding(
+  store: KeychainStore,
+  groups: Groups,
+  policy: SharedGroupPolicy,
+): EvidenceBinding {
+  return {
+    read: () => store.getItemAsync(INSTALL_EVIDENCE_NONCE, { accessGroup: groups.own }),
+    write: (nonce) =>
+      store.setItemAsync(INSTALL_EVIDENCE_NONCE, nonce, {
+        ...policy.deviceOnly,
+        accessGroup: groups.own,
+      }),
+  };
+}
+
+/**
+ * Once (R7-7): every wallet whose phrase or xpub the wallet's own group holds
+ * when the move marker already exists without {@link KEYCHAIN_RECHECK_MARKER}
+ * is listed as adopted. A 1.2–1.4 build moved phrases out of the shared group
+ * with no proof and recorded nothing; which wallets it took cannot be told
+ * apart now, so each asks the person once more, on the Receive sheet. Then
+ * the recheck marker. A failure leaves no marker: asked again next launch.
+ */
+async function recheckAdoptedOnce(store: KeychainStore, groups: Groups): Promise<void> {
+  const own = { accessGroup: groups.own };
+  try {
+    if ((await store.getItemAsync(KEYCHAIN_RECHECK_MARKER, own)) !== null) return;
+    const active = await store.getItemAsync(SECRET_KEYS.activeWallet, own);
+    const ids = new Set([
+      ...walletIdsOfIndex(await store.getItemAsync(SECRET_KEYS.walletsIndex, own)),
+      ...(active ? [active] : []),
+    ]);
+    const context: Context = {
+      store,
+      groups,
+      sources: [],
+      policy: { readWithoutInteraction: null, evidence: async () => NO_EVIDENCE, deviceOnly: {} },
+      evidence: NO_EVIDENCE,
+      retry: false,
+    };
+    for (const id of ids) {
+      for (const prefix of [SECRET_PREFIXES.mnemonic, SECRET_PREFIXES.xpub]) {
+        if ((await store.getItemAsync(`${prefix}${id}`, own)) === null) continue;
+        if (!(await recordAdopted(context, id))) return;
+      }
+    }
+    await store.setItemAsync(KEYCHAIN_RECHECK_MARKER, '1', own);
+  } catch {
+    // No recheck marker: the next launch lists them again (idempotent).
+  }
+}
+
 /**
  * Where the wallet's items may still come from, in order: the earlier group,
  * and the shared group unless the earlier group's marker says the move out of
@@ -330,18 +416,25 @@ async function contextOf(
   groups: Groups,
   policy: SharedGroupPolicy,
 ): Promise<Context> {
-  const base: Context = { store, groups, sources: [], policy, evidence: NO_EVIDENCE };
+  const base: Context = {
+    store,
+    groups,
+    sources: [],
+    policy,
+    evidence: NO_EVIDENCE,
+    retry: false,
+  };
   const earlier = groups.earlier ? [groups.earlier] : [];
   const sharedOpen =
     groups.shared !== null &&
     policy.readWithoutInteraction !== null &&
     !(groups.earlier && (await hasMarker(store, groups.earlier)));
   if (!sharedOpen || !groups.shared) return { ...base, sources: earlier };
-  let evidence: InstallEvidence = NO_EVIDENCE;
+  let evidence: InstallEvidence;
   try {
-    evidence = await policy.evidence();
+    evidence = await policy.evidence(evidenceBinding(store, groups, policy));
   } catch {
-    evidence = NO_EVIDENCE;
+    return { ...base, sources: earlier, retry: true };
   }
   if (evidence.walletIds.size === 0) return { ...base, sources: earlier };
   return { ...base, sources: [...earlier, groups.shared], evidence };
@@ -360,9 +453,10 @@ async function moveOnce(
   policy: SharedGroupPolicy,
 ): Promise<{ moved: boolean; context: Context }> {
   if (await hasMarker(store, groups.own)) {
+    await recheckAdoptedOnce(store, groups);
     return {
       moved: true,
-      context: { store, groups, sources: [], policy, evidence: NO_EVIDENCE },
+      context: { store, groups, sources: [], policy, evidence: NO_EVIDENCE, retry: false },
     };
   }
   const context = await contextOf(store, groups, policy);
@@ -376,10 +470,11 @@ async function moveOnce(
     for (const key of keychainMoveKeys(ids)) {
       if (!(await moveKey(context, key))) complete = false;
     }
-    if (!complete) return { moved: false, context };
+    if (!complete || context.retry) return { moved: false, context };
     await store.setItemAsync(KEYCHAIN_MOVE_MARKER, '1', { accessGroup: groups.own });
     const moved =
       (await store.getItemAsync(KEYCHAIN_MOVE_MARKER, { accessGroup: groups.own })) === '1';
+    if (moved) await recheckAdoptedOnce(store, groups);
     return { moved, context };
   } catch {
     return { moved: false, context };
