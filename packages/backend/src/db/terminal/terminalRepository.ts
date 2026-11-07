@@ -593,6 +593,9 @@ export async function releaseReaderAction(
   startedAt: Date,
   previous: TerminalReaderActionRow | null,
 ): Promise<void> {
+  // A claim only succeeds over an action that was NOT in progress; restoring
+  // one that was would resurrect an attempt to be settled again.
+  if (previous?.status === 'in_progress') previous = null;
   await db
     .update(terminalReaders)
     .set({

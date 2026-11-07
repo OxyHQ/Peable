@@ -68,6 +68,7 @@ import { requestContextMiddleware } from '../lib/requestContext';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { refuseLivemode } from '../lib/liveStream';
 import { expireIntentNow } from '../services/expirySweeper';
+import { assertLiveMoneyAllowed, ThirdPartyLiveGateError } from '../services/money/chargeRouting';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import { createIntent, IntentParameterError, RailUnavailableError } from '../services/createIntent';
@@ -588,6 +589,14 @@ export async function collectOnReaderCore(
   }
   const row = await loadReader(req, res, merchant);
   if (!row) return;
+  // The live gate BEFORE the payment exists: a gated merchant must not get a
+  // live PaymentIntent created at the provider and then a refusal.
+  try {
+    assertLiveMoneyAllowed(merchant, 'Terminal');
+  } catch (error) {
+    sendTerminalError(res, error);
+    return;
+  }
   let intent: Awaited<ReturnType<typeof createIntent>>['intent'];
   try {
     ({ intent } = await createIntent({
@@ -625,7 +634,11 @@ export async function collectOnReaderCore(
     // leave an orphan nobody will collect — through the card rail's own
     // cancellation, which reports what is true (it may not cancel if the
     // provider took it after all; it then stays, and expires on its own).
-    if (error instanceof TerminalStateError || error instanceof TerminalUnavailableError) {
+    if (
+      error instanceof TerminalStateError ||
+      error instanceof TerminalUnavailableError ||
+      error instanceof ThirdPartyLiveGateError
+    ) {
       await expireIntentNow(intent).catch(() => undefined);
     }
     sendTerminalError(res, error);

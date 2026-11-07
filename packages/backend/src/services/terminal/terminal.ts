@@ -509,6 +509,10 @@ export async function processPaymentIntent(
 
   const db = getDb();
   const claimInput = { paymentIntentId: intent.id, enableCustomerCancellation };
+  // What the claim replaces, read right before it: a refusal gives the reader
+  // back exactly this — never an earlier read (which could resurrect an
+  // attempt the provider has since settled, and settle it twice).
+  let before = (await findTerminalReaderById(db, row.id))?.action ?? null;
   let claimed = await claimReaderAction(db, row.id, claimInput);
   if (claimed === 'intent_busy') {
     throw new TerminalStateError(
@@ -518,7 +522,7 @@ export async function processPaymentIntent(
   }
   if (!claimed) {
     // Orbit still thinks it busy: ask the provider whether that is still true.
-    await reconcileReader(row);
+    before = (await reconcileReader(row)).action;
     claimed = await claimReaderAction(db, row.id, claimInput);
     if (claimed === 'intent_busy') {
       throw new TerminalStateError(
@@ -551,7 +555,7 @@ export async function processPaymentIntent(
     // the claim stays, so the reader is not shown idle (or deleted) mid-tap,
     // and the provider's own read settles it once the claim is stale.
     if (isDefinitiveRefusal(error)) {
-      await releaseReaderAction(db, row.id, claim.startedAt, row.action);
+      await releaseReaderAction(db, row.id, claim.startedAt, before);
     }
     throw error;
   }

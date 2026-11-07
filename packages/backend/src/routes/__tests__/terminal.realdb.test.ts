@@ -492,6 +492,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
         }),
     });
     app.use(dashboard);
+    // The same surface for the live merchant (an application that is not an Oxy product).
+    const liveDashboard = express.Router();
+    mountTerminalDashboardRoutes(liveDashboard, {
+      base: '/v1/dashboard/live/:applicationId',
+      requireOxyUser: (_req, _res, nextHandler) => nextHandler(),
+      gate: (_action, core) =>
+        wrap(async (req, res) => {
+          await core(req, res, live, {} as never);
+        }),
+    });
+    app.use(liveDashboard);
     app.use(
       (error: Error, _req: express.Request, res: express.Response, _n: express.NextFunction) => {
         res.status(500).json({ error: { type: 'api_error', message: error.message } });
@@ -1210,5 +1221,67 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
       for (const ruleRow of rules)
         await gatewayDb().delete(radarRules).where(eq(radarRules.id, ruleRow.id));
     }
+  });
+
+  test('a refused claim gives the reader back as it stood at the claim, never a stale read: one event per attempt', async () => {
+    const location = await newLocation();
+    const reader = await newReader(location.id);
+    const first = await cardPresentIntent('3200');
+    await call('POST', `/v1/terminal/readers/${reader.id}/process_payment_intent`, {
+      payment_intent: first.id,
+    });
+    const stale = must(await findTerminalReaderForMerchant(gatewayDb(), reader.id, merchantId));
+    expect(stale.action?.status).toBe('in_progress');
+    // The provider finished attempt A; its webhook has not been drained.
+    tap(await providerReaderIdOf(reader.id, merchantId));
+    const before = (await eventTypes(merchantId, 'terminal.')).length;
+    // Collecting B: Orbit's claim fails, the reconcile settles A (one event),
+    // B is claimed and the provider refuses it definitively.
+    const second = await cardPresentIntent('3201');
+    processFailure = new ProviderError({
+      provider: 'stripe',
+      stage: 'terminal',
+      message: 'refused',
+      retryable: false,
+    });
+    const refused = await call('POST', `/v1/terminal/readers/${reader.id}/process_payment_intent`, {
+      payment_intent: second.id,
+    });
+    expect(refused.status).toBe(400);
+    const after = must(await findTerminalReaderForMerchant(gatewayDb(), reader.id, merchantId));
+    expect(after.action?.status).toBe('succeeded');
+    expect(after.action?.paymentIntentPublicId).toBe(first.id);
+    // A later read and the late webhook settle nothing again.
+    await call('GET', `/v1/terminal/readers/${reader.id}`);
+    await deliver('terminal.reader.action_succeeded', {
+      'terminal.reader': await providerReaderIdOf(reader.id, merchantId),
+    });
+    expect((await eventTypes(merchantId, 'terminal.')).slice(before)).toEqual([
+      'terminal.reader.action_succeeded',
+    ]);
+  });
+
+  test("Orbit's collect for a gated live merchant creates no payment at all", async () => {
+    config.orbit.thirdPartyLivePayments = true;
+    credential = { appId: 'app_terminal', environment: 'production' };
+    const location = await call('POST', '/v1/terminal/locations', {
+      display_name: 'Live counter',
+      address: ADDRESS,
+    });
+    const reader = await call('POST', '/v1/terminal/readers', {
+      registration_code: 'lime-tangerine-plum',
+      location: location.body.id,
+    });
+    expect(reader.status).toBe(201);
+    config.orbit.thirdPartyLivePayments = false;
+    calls.length = 0;
+    const gated = await call(
+      'POST',
+      `/v1/dashboard/live/app_terminal/terminal/readers/${reader.body.id}/collect`,
+      { amount: '1500', currency: 'USD' },
+    );
+    expect(gated.status).toBe(403);
+    expect(gated.body.error.code).toBe('live_payments_gated');
+    expect(calls).toEqual([]);
   });
 });
