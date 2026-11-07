@@ -263,77 +263,100 @@ with the usual `TEST_DATABASE_URL`/`DATABASE_URL`) and the wallet half
 bun test src/wallet/__canary__/` in `packages/frontend`). Both skip without
 their variables, so CI never runs them.
 
-## What the owner must still do
+## The owner's decisions (2026-11-07)
 
-The review (rounds 4–7) signs off with no code condition left. What remains is
-the owner's alone. F9 is already accepted (ADR 0002). **The gate stays closed
-until the owner does all of the following.**
+The owner answered the round-7 sentences on 2026-11-07 (recorded word for word
+in ADR 0002, "Owner's decision on the review's final risks"):
 
-1. **Accept, in writing, each risk below** — the exact sentences the review
-   puts to the owner (round 7, final). Each is a property of the design as
-   built, not a defect the code can remove:
-   1. "Coins under a replaced identity key are spendable from Peable on a new
-      phone only through the encrypted identity backup or that key's recovery
-      phrase; a key replaced before 2026-11-06 (oxy migration 0235) is
-      spendable again only once Oxy's own signed records prove it was this
-      account's, through the backfill or Commons' claim, and a key no such
-      record proves stays unspendable from Peable."
-   2. "A payment to a Peable address more than a week old may take up to 30
-      days after the address was last checked to appear in the recipient's
-      wallet, a payment under 0.001 FAIR to such an address may never appear,
-      and finding either depends on the one Explorer we already trust (F9)."
-   3. "Identity keys and recovery phrases created on iOS before the keychain
-      split were readable by every Oxy iOS app, and stay readable on any phone
-      until Peable wallet 1.5.0 and Commons 1.12.0 are installed and launched
-      there; we neither force nor require those identities to rotate."
-      (The review's text names Commons 1.11.0; 1.12.0 carries R7-2's Commons
-      side, as the review notes.)
-   4. "On iOS the Peable wallet holds the personal root key, so the wallet and
-      any update shipped through its OTA channel (signed with the shared Oxy
-      update key) can rotate a person's identity, not only spend from it."
-   5. "An attacker controlling about 300 Oxy accounts can refuse new @username
-      senders to one person for a day at a time, and anyone opening 500 unpaid
-      FairCoin checkouts a day from enough networks can make FairCoin
-      unavailable for one merchant at a time; card payments are unaffected."
-   6. "Rotating an identity key uploads a new encrypted backup of that
-      identity, including its retired keys, even for a person who had deleted
-      their backup."
-   7. *Only if Peable wallet 1.2–1.4 reached iOS users:* "On an iPhone where
-      Peable wallet 1.2, 1.3 or 1.4 ran, a wallet another Oxy app planted in
-      the shared keychain group may be in Peable, and it receives payments only
-      after the person confirms it as theirs."
-   8. "When two accounts shared a phone's old wallet database, the account that
-      proves it keeps the other account's contacts, recent recipients, address
-      labels and Pocket names, and a database nobody proves stays on the phone
-      unopened until someone removes it in Settings."
-2. **Answer two release facts:** did Peable wallet 1.2–1.4 reach iOS users
-   (decides sentence 7), and which third-party OAuth clients or
-   application-token hosts are live (R7-1's past exposure; the route is gated
-   now).
-3. **Production, before opening:** dry-run, then `--apply`, oxy's
-   `packages/api/scripts/backfill-personal-key-retirements.ts`, and record how
-   many retired keys no signed record proves (sentence 1). No read-only path to
-   either production database exists from an agent's machine (RDS is private,
-   ECS exec is off), so this is the owner's step.
-4. **iOS builds, in this order** (no iOS pipeline exists; entitlements are
-   native, an OTA cannot ship them): Peable wallet 1.5.0, then Commons 1.12.0;
-   run `bunx oxy-check-keychain-entitlements <bundle id> <.xcarchive|.ipa>` on
-   each archive before upload. Until they are installed and launched on a
-   phone, that phone keeps the pre-split exposure (sentence 3).
-5. **Re-run the canary on the commit that opens** (the last run is on
-   `732e8a0e`; Peable#282 changed the wallet after it), then **open**, the
-   supported way: register a new `oxy-peable` revision from the RUNNING one
-   with only `PEABLE_SOCIAL_PAY_NETWORK=mainnet` added, `update-service`, wait
-   for a steady state and `/health` 200; mirror the variable in `oxy-infra`
-   `terraform-uswest2/app-peable.tf`; flip
-   `packages/frontend/src/pay/social-network.ts` `SOCIAL_PAY_NETWORK` to
-   `mainnet` (web deploy + OTA) so the wallet agrees; then check, read-only,
-   that a live order's FairCoin option no longer answers
-   `faircoin_network_closed` (for the `oxy`-owned merchants it will answer
-   `faircoin_wallet_missing` until an owner creates the organization's wallet
-   in Commons). The tree has no ceiling any more, so round 3's "no mainnet
-   cursor at or above the ceiling" check no longer applies.
+- **Accepted, word for word:** sentences 1, 2, 3, 4, 5 and 8 below. For
+  sentence 3, the build that completes the split is Commons **1.12.0**.
+- **Rejected and fixed:** sentence 6. A person who deleted their identity
+  backup never gets one re-uploaded silently: the deletion is recorded and
+  every upload for an account with no backup on record needs the person's
+  explicit opt-in, server-side, for every client (OxyHQ/oxy#2214, #2216; ADR
+  0061 D7 point 11). Without a backup, previous keys are recoverable off the
+  phone only with their recovery phrases, and Commons says so before a
+  rotation.
+- **Does not apply:** sentence 7 — Peable wallet 1.2–1.4 never reached an
+  iPhone.
 
-Still waived, not done (ADR 0002): the legal opinion and physical-device
-verification. Every keychain, migration and rotation path above is unit-tested
-only; the review lists what only a device can prove.
+The sentences as the review wrote them:
+
+1. "Coins under a replaced identity key are spendable from Peable on a new
+   phone only through the encrypted identity backup or that key's recovery
+   phrase; a key replaced before 2026-11-06 (oxy migration 0235) is spendable
+   again only once Oxy's own signed records prove it was this account's,
+   through the backfill or Commons' claim, and a key no such record proves
+   stays unspendable from Peable." — **accepted**
+2. "A payment to a Peable address more than a week old may take up to 30 days
+   after the address was last checked to appear in the recipient's wallet, a
+   payment under 0.001 FAIR to such an address may never appear, and finding
+   either depends on the one Explorer we already trust (F9)." — **accepted**
+3. "Identity keys and recovery phrases created on iOS before the keychain split
+   were readable by every Oxy iOS app, and stay readable on any phone until
+   Peable wallet 1.5.0 and Commons 1.11.0 are installed and launched there; we
+   neither force nor require those identities to rotate." — **accepted**
+   (complete with Commons 1.12.0)
+4. "On iOS the Peable wallet holds the personal root key, so the wallet and any
+   update shipped through its OTA channel (signed with the shared Oxy update
+   key) can rotate a person's identity, not only spend from it." —
+   **accepted**
+5. "An attacker controlling about 300 Oxy accounts can refuse new @username
+   senders to one person for a day at a time, and anyone opening 500 unpaid
+   FairCoin checkouts a day from enough networks can make FairCoin unavailable
+   for one merchant at a time; card payments are unaffected." — **accepted**
+6. "Rotating an identity key uploads a new encrypted backup of that identity,
+   including its retired keys, even for a person who had deleted their
+   backup." — **rejected, fixed** (above)
+7. "On an iPhone where Peable wallet 1.2, 1.3 or 1.4 ran, a wallet another Oxy
+   app planted in the shared keychain group may be in Peable, and it receives
+   payments only after the person confirms it as theirs." — **does not apply**
+8. "When two accounts shared a phone's old wallet database, the account that
+   proves it keeps the other account's contacts, recent recipients, address
+   labels and Pocket names, and a database nobody proves stays on the phone
+   unopened until someone removes it in Settings." — **accepted**
+
+### A hole found answering the owner's OAuth question, fixed
+
+Asked which non-first-party callers could reach `POST`/`DELETE
+/identity/backup` before oxy#2212: third-party OAuth sessions (any account can
+register a third-party application in Console; the person approves one
+consent), and — still after #2212 — a third-party application's device/QR
+sign-in, whose session carried no application and so passed the first-party
+gate. Fixed at the root in OxyHQ/oxy#2215: device/QR sign-in is for official
+Oxy applications only (third parties use OAuth, as the integration guide
+already said), every approval and the claim re-check the registry,
+`POST /accounts/:id/switch` is behind the first-party gate, and every backup
+write is audited. The scoped re-check found the path closed for new sign-ins.
+
+### Production steps run (2026-11-07)
+
+One-off ECS tasks from the live `oxy-api` task definition and image, only the
+command overridden; no task definition registered or kept. Output is counts
+only.
+
+| Script | Image | Result |
+|---|---|---|
+| `backfill-personal-key-retirements.ts` (dry run) | `f70b9c438` (`oxy-oxy-api:1283`) | 0 candidates, 0 proven, 0 inserted |
+| same, `--apply` | same | 0 candidates, 0 proven, 0 inserted |
+| `revoke-third-party-device-signins.ts` (dry run) | `7818b599b` (`oxy-oxy-api:1286`) | 8 non-official applications; 0 device sign-ins claimed by any (auth sessions 0, sign-in records 0); 0 devices, sessions, secrets, accounts — nothing to revoke |
+| read-only count (inline, same image): sessions with no application whose name ends in " App", and `device_added` entries likewise, classified against the registry's labels | `7818b599b` | sessions: 49 official labels, 0 non-official, 0 unmatched; `device_added`: 259 official, 0 non-official, 168 unmatched — only "Inbox App", "Oxy Pay App" (former names of first-party apps; Oxy Pay is Peable before its rename), "Oxy_session App", "android App", "web App" (Oxy's own platform labels), none on a live session |
+
+So no replaced personal root is provable from Oxy's records (sentence 1
+covers such keys), and no third-party application holds a device/QR session:
+the script's `ambiguousLabels` was 0, and the wider count (which also catches a
+renamed or deleted application) found no session under any label that is not
+an official application's. The review's last condition is cleared with no
+sentence for the owner.
+
+## Opening
+
+Every condition the review set is now met or decided by the owner, the canary
+passed on the opening code, and the gate opens the supported way (step below);
+the opening itself is recorded in the next section once done.
+
+Remaining owner steps that do not gate opening: the iOS builds (Peable wallet
+1.5.0, then Commons 1.14.0, which carries everything above; run
+`bunx oxy-check-keychain-entitlements <bundle id> <.xcarchive|.ipa>` on each
+archive before upload), and the waived legal opinion and device verification
+(ADR 0002) — still not done.
