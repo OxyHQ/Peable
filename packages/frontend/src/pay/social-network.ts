@@ -19,18 +19,16 @@
  * not decide product: a network selector can be layered on top whenever the
  * restriction below is lifted, and lifting it is a one-line change here.
  *
- * ## Why testnet
+ * ## Why mainnet (2026-11-07)
  *
- * Rotating the Oxy identity key desyncs the shared key slot, so a payer can
- * send to addresses the recipient can neither see nor spend — silent, permanent
- * loss. Testnet only until that is fixed upstream.
- *
- * The fix and what remains are written down in
- * `docs/adr/0002-social-receive-is-bound-to-one-identity-key.md`. Flipping this
- * constant is the LAST step of that list, not the first: the deployment gates
- * social pay too (`PEABLE_SOCIAL_PAY_NETWORK`), so a client that flips alone
- * only earns a 403.
+ * It was testnet while a key rotation could strand coins where the recipient's
+ * wallet neither looked nor could sign (ADR 0002). Mainnet opened on
+ * 2026-11-07, after the security review (rounds 1–7) and the testnet canary
+ * passed and the owner decided every remaining risk in writing — the record is
+ * `docs/audits/2026-11-06-mainnet-gate/` and ADR 0002 ("Opening"). The
+ * deployment gates social pay too (`PEABLE_SOCIAL_PAY_NETWORK`); both say
+ * `mainnet`.
  */
 import type { NetworkType } from '@fairco.in/core';
 
-export const SOCIAL_PAY_NETWORK: NetworkType = 'testnet';
+export const SOCIAL_PAY_NETWORK: NetworkType = 'mainnet';

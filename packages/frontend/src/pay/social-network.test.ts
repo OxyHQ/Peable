@@ -56,7 +56,7 @@ function source(relativePath: string): string {
 test('the constant is the network social payments actually run on', () => {
   // Pinned as a VALUE too, so lifting the mainnet restriction is a deliberate
   // edit here rather than something that happens to compile.
-  expect(SOCIAL_PAY_NETWORK).toBe('testnet');
+  expect(SOCIAL_PAY_NETWORK).toBe('mainnet');
 });
 
 test('the pay gate reads the constant rather than a literal', () => {

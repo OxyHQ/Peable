@@ -325,7 +325,6 @@ function PayAction({
               size="lg"
             />
           ) : null}
-          <TestnetNote />
         </View>
       );
 
@@ -336,7 +335,6 @@ function PayAction({
             {t('profile.signIn.description', { username })}
           </Text>
           <Button title={t('pay.signIn')} onPress={onSignIn} variant="primary" size="lg" />
-          <TestnetNote />
         </View>
       );
 
@@ -350,11 +348,11 @@ function PayAction({
         </View>
       );
 
-    case 'mainnet-blocked':
+    case 'wrong-network':
       return (
         <View className="bg-surface rounded-2xl p-4">
           <Text className="text-foreground text-sm text-center leading-5">
-            {t('profile.mainnetBlocked', { username })}
+            {t('profile.wrongNetwork', { username })}
           </Text>
         </View>
       );
@@ -370,23 +368,7 @@ function PayAction({
             loading={reserving}
             disabled={reserving}
           />
-          <TestnetNote />
         </View>
       );
   }
-}
-
-/**
- * Says out loud that pay-by-@username is testnet-only. Rendered under every
- * branch that suggests a payment is possible, because the limit belongs to the
- * feature rather than to any one platform: finding F-1 (an Oxy identity key
- * rotation desyncs the shared key slot, so a payer sends to addresses the
- * recipient can neither see nor spend) blocks it from mainnet.
- */
-function TestnetNote() {
-  return (
-    <Text className="text-muted-foreground text-xs text-center mt-4 leading-4">
-      {t('profile.testnetOnly')}
-    </Text>
-  );
 }

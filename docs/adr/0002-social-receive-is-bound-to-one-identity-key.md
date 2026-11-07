@@ -808,3 +808,15 @@ session under any label that is not an official application's).
 F9 stays accepted (2026-11-06, above). With these decisions every condition the
 security review set is met or decided; opening follows the audit record's
 "Opening" step.
+
+## Opening (2026-11-07)
+
+Mainnet identity receive opened on 2026-11-07, per the owner's "Do everything
+and open it" (2026-11-06), once the security review's every condition was met
+or decided by the owner (above) and the testnet canary passed on the opening
+code. The deployment says `PEABLE_SOCIAL_PAY_NETWORK=mainnet` (task definition
+`oxy-peable:285`, mirrored in oxy-infra `terraform-uswest2/app-peable.tf`) and
+the wallet's `SOCIAL_PAY_NETWORK` is `mainnet`. The evidence and the steps are
+in `docs/audits/2026-11-06-mainnet-gate/` ("Opened"). To close it again, unset
+the variable the same way: the retire path above cancels open, unpaid mainnet
+identity payments with `faircoin_network_closed`.
