@@ -763,6 +763,10 @@ export const CUSTOMER_EMAIL_KINDS = [
   // and a failed automatic payment (dunning).
   'invoice',
   'invoice_payment_failed',
+  // A scheduled report run's outcome, to the schedule's recipients: a link to
+  // the run in Orbit, never the file.
+  'report_run_succeeded',
+  'report_run_failed',
 ] as const;
 export type CustomerEmailKind = (typeof CUSTOMER_EMAIL_KINDS)[number];
 

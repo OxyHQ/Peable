@@ -15,6 +15,10 @@ import { findInvoicesByPublicIds } from '../db/billingEngine/invoiceRepository';
 import { findSubscriptionsByPublicIds } from '../db/billingEngine/subscriptionRepository';
 import { renderInvoices, renderSubscriptions } from './serializeBilling';
 import { getDb } from '../db/postgres';
+import { findFilesByIds } from '../db/files/fileRepository';
+import { findReportRunsByPublicIds } from '../db/reporting/reportRunRepository';
+import { findReportSchedulesByPublicIds } from '../db/reporting/reportScheduleRepository';
+import { toReportRunDTO, toReportScheduleDTO } from './serializeReporting';
 import { sendError } from './http';
 import {
   toChargeDTO,
@@ -96,6 +100,7 @@ export type ExpandableType =
   | 'reconciliation_mismatch'
   | 'item'
   | 'reporting.report_run'
+  | 'reporting.report_schedule'
   | 'subscription'
   | 'subscription_item'
   | 'invoice'
@@ -125,7 +130,9 @@ type TargetType =
   | 'invoice'
   | 'subscription'
   | 'refund'
-  | 'dispute';
+  | 'dispute'
+  | 'reporting.report_run'
+  | 'reporting.report_schedule';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -184,8 +191,9 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   reconciliation_mismatch: {},
   // A checkout session's or payment link's line (`object: 'item'`).
   item: { price: 'price', product: 'product' },
-  // The result File is embedded, as on Stripe; nothing on a run expands.
-  'reporting.report_run': {},
+  // The result File is embedded, as on Stripe; a scheduled run names its schedule.
+  'reporting.report_run': { report_schedule: 'reporting.report_schedule' },
+  'reporting.report_schedule': { last_run: 'reporting.report_run' },
   // The billing engine (ADR 0018).
   subscription: {
     customer: 'customer',
@@ -296,6 +304,29 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findDisputesForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toDisputeDTO(row, row.paymentIntentPublicId),
+      ]),
+    ),
+  'reporting.report_run': async (merchantId, ids) => {
+    const rows = await findReportRunsByPublicIds(getDb(), merchantId, ids);
+    const fileIds = rows.map((row) => row.resultFileId).filter((id): id is string => id !== null);
+    const files = new Map(
+      (await findFilesByIds(getDb(), merchantId, fileIds)).map((file) => [file.id, file]),
+    );
+    return new Map(
+      rows.map((row) => [
+        row.publicId,
+        toReportRunDTO(
+          row,
+          row.resultFileId === null ? null : (files.get(row.resultFileId) ?? null),
+        ),
+      ]),
+    );
+  },
+  'reporting.report_schedule': async (merchantId, ids) =>
+    new Map(
+      (await findReportSchedulesByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toReportScheduleDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

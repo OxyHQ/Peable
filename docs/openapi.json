@@ -31483,6 +31483,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "report_schedule",
+            "description": "Only the runs this schedule (`frs_…`) fired.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
             "in": "header",
             "name": "Peable-Version",
             "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
@@ -31647,6 +31657,1078 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReportRun"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reporting/report_schedules": {
+      "post": {
+        "operationId": "createReportSchedule",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "Create a report schedule",
+        "description": "A report run at local midnight in `timezone` every day, week or month, each over the time since the previous occurrence. `next_run_at` is the first occurrence after now; nothing is backfilled.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "reporting.reportSchedules.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "report_type": {
+                    "type": "string",
+                    "enum": [
+                      "payments.itemized.1",
+                      "balance.summary.1",
+                      "balance_transactions.itemized.1",
+                      "payouts.itemized.1",
+                      "refunds.itemized.1",
+                      "disputes.itemized.1"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "columns": {
+                        "minItems": 1,
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "description": "Columns of the report type's layout, each once."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "enum": [
+                          "FAIR",
+                          "EUR",
+                          "USD",
+                          "GBP",
+                          "CHF",
+                          "SEK",
+                          "NOK",
+                          "DKK",
+                          "PLN",
+                          "CZK",
+                          "CAD",
+                          "AUD",
+                          "JPY"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "schedule": {
+                    "type": "object",
+                    "properties": {
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "daily",
+                          "weekly",
+                          "monthly"
+                        ]
+                      },
+                      "weekly_anchor": {
+                        "type": "string",
+                        "enum": [
+                          "monday",
+                          "tuesday",
+                          "wednesday",
+                          "thursday",
+                          "friday",
+                          "saturday",
+                          "sunday"
+                        ],
+                        "description": "Required for `weekly`, refused otherwise."
+                      },
+                      "monthly_anchor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 31,
+                        "description": "Required for `monthly`, refused otherwise; a shorter month fires on its last day."
+                      }
+                    },
+                    "required": [
+                      "interval"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "An IANA time zone (`Europe/Madrid`); `UTC` when absent."
+                  },
+                  "recipients": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 254,
+                      "format": "email",
+                      "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    },
+                    "description": "At most 10 addresses, each once. They receive a link to the run in Orbit, never the file."
+                  },
+                  "locale": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "es"
+                    ],
+                    "description": "`en` when absent."
+                  }
+                },
+                "required": [
+                  "report_type",
+                  "schedule"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSchedule"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listReportSchedules",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "List report schedules",
+        "description": "Newest first; a canceled schedule is listed too.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "reporting.reportSchedules.list",
+        "x-peable-expandable": "reporting.report_schedule",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "canceled"
+              ]
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReportSchedule"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reporting/report_schedules/{id}": {
+      "get": {
+        "operationId": "retrieveReportSchedule",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "Retrieve a report schedule",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "reporting.reportSchedules.retrieve",
+        "x-peable-expandable": "reporting.report_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The report schedule (`frs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSchedule"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "updateReportSchedule",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "Update a report schedule",
+        "description": "A new `schedule` or `timezone` moves an active schedule to its first occurrence after now. A canceled schedule cannot change (409 `report_schedule_unexpected_state`).",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "reporting.reportSchedules.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The report schedule (`frs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "report_type": {
+                    "type": "string",
+                    "enum": [
+                      "payments.itemized.1",
+                      "balance.summary.1",
+                      "balance_transactions.itemized.1",
+                      "payouts.itemized.1",
+                      "refunds.itemized.1",
+                      "disputes.itemized.1"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "columns": {
+                        "minItems": 1,
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "description": "Columns of the report type's layout, each once."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "enum": [
+                          "FAIR",
+                          "EUR",
+                          "USD",
+                          "GBP",
+                          "CHF",
+                          "SEK",
+                          "NOK",
+                          "DKK",
+                          "PLN",
+                          "CZK",
+                          "CAD",
+                          "AUD",
+                          "JPY"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "schedule": {
+                    "type": "object",
+                    "properties": {
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "daily",
+                          "weekly",
+                          "monthly"
+                        ]
+                      },
+                      "weekly_anchor": {
+                        "type": "string",
+                        "enum": [
+                          "monday",
+                          "tuesday",
+                          "wednesday",
+                          "thursday",
+                          "friday",
+                          "saturday",
+                          "sunday"
+                        ],
+                        "description": "Required for `weekly`, refused otherwise."
+                      },
+                      "monthly_anchor": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 31,
+                        "description": "Required for `monthly`, refused otherwise; a shorter month fires on its last day."
+                      }
+                    },
+                    "required": [
+                      "interval"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "An IANA time zone (`Europe/Madrid`); `UTC` when absent."
+                  },
+                  "recipients": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 254,
+                      "format": "email",
+                      "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                    },
+                    "description": "At most 10 addresses, each once. They receive a link to the run in Orbit, never the file."
+                  },
+                  "locale": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "es"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSchedule"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reporting/report_schedules/{id}/cancel": {
+      "post": {
+        "operationId": "cancelReportSchedule",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "Cancel a report schedule",
+        "description": "For good: it never fires again, and a run it fires no longer emails anyone. Its runs and their files stay.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "reporting.reportSchedules.cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The report schedule (`frs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSchedule"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reporting/report_schedules/{id}/pause": {
+      "post": {
+        "operationId": "pauseReportSchedule",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "Pause a report schedule",
+        "description": "Nothing fires until it is resumed. Pausing a paused schedule answers it as it is.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "reporting.reportSchedules.pause",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The report schedule (`frs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSchedule"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reporting/report_schedules/{id}/resume": {
+      "post": {
+        "operationId": "resumeReportSchedule",
+        "tags": [
+          "Reporting"
+        ],
+        "summary": "Resume a paused report schedule",
+        "description": "It fires again from its first occurrence after now; the occurrences it missed while paused are not run.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "reporting.reportSchedules.resume",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The report schedule (`frs_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSchedule"
                 }
               }
             }
@@ -59190,7 +60272,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 114 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 115 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -65282,6 +66364,25 @@
                 "type": "null"
               }
             ]
+          },
+          "report_schedule": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ReportSchedule"
+                  }
+                ],
+                "x-peable-expandable": "reporting.report_schedule",
+                "description": "The schedule that fired this run (`frs_…`); `null` for a run asked for directly."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -65294,7 +66395,8 @@
           "status",
           "error",
           "result",
-          "succeeded_at"
+          "succeeded_at",
+          "report_schedule"
         ],
         "additionalProperties": false,
         "examples": [
@@ -65311,7 +66413,8 @@
             "status": "pending",
             "error": null,
             "result": null,
-            "succeeded_at": null
+            "succeeded_at": null,
+            "report_schedule": null
           }
         ]
       },
@@ -65360,6 +66463,240 @@
         "required": [
           "interval_start",
           "interval_end"
+        ],
+        "additionalProperties": false
+      },
+      "ReportSchedule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "reporting.report_schedule"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "`true` in live mode, `false` in test mode."
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Unix seconds."
+          },
+          "report_type": {
+            "type": "string",
+            "enum": [
+              "payments.itemized.1",
+              "balance.summary.1",
+              "balance_transactions.itemized.1",
+              "payouts.itemized.1",
+              "refunds.itemized.1",
+              "disputes.itemized.1"
+            ]
+          },
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "currency": {
+                "type": "string",
+                "enum": [
+                  "FAIR",
+                  "EUR",
+                  "USD",
+                  "GBP",
+                  "CHF",
+                  "SEK",
+                  "NOK",
+                  "DKK",
+                  "PLN",
+                  "CZK",
+                  "CAD",
+                  "AUD",
+                  "JPY"
+                ],
+                "description": "Uppercase ISO 4217 code, or `FAIR`."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Every run's `parameters` but the interval, which each occurrence sets: the time since the previous occurrence."
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/ReportScheduleCadence"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The IANA time zone whose midnight each occurrence is (`Europe/Madrid`)."
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Who is emailed when a run of this schedule succeeds or fails."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es"
+            ],
+            "description": "The language of those emails."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "canceled"
+            ]
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Unix seconds."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The next occurrence while `active`; `null` while paused or canceled."
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ReportRun"
+                  }
+                ],
+                "x-peable-expandable": "reporting.report_run",
+                "description": "The newest run this schedule fired."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canceled_at": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Unix seconds."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "created",
+          "report_type",
+          "parameters",
+          "schedule",
+          "timezone",
+          "recipients",
+          "locale",
+          "status",
+          "next_run_at",
+          "last_run",
+          "canceled_at"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "frs_0193b8f34d1e4a6b8c27",
+            "object": "reporting.report_schedule",
+            "livemode": false,
+            "created": 1793750400,
+            "report_type": "balance.summary.1",
+            "parameters": {},
+            "schedule": {
+              "interval": "monthly",
+              "weekly_anchor": null,
+              "monthly_anchor": 1
+            },
+            "timezone": "Europe/Madrid",
+            "recipients": [
+              "finance@example.com"
+            ],
+            "locale": "en",
+            "status": "active",
+            "next_run_at": 1796079600,
+            "last_run": null,
+            "canceled_at": null
+          }
+        ]
+      },
+      "ReportScheduleCadence": {
+        "type": "object",
+        "properties": {
+          "interval": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "weekly_anchor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday",
+                  "saturday",
+                  "sunday"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day a `weekly` schedule fires; `null` otherwise."
+          },
+          "monthly_anchor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The day of the month a `monthly` schedule fires (1–31; a shorter month fires on its last day); `null` otherwise."
+          }
+        },
+        "required": [
+          "interval",
+          "weekly_anchor",
+          "monthly_anchor"
         ],
         "additionalProperties": false
       },

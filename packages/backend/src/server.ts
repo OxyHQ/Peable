@@ -48,6 +48,7 @@ import { createRequestLogsRouter } from './routes/requestLogs';
 import { createSearchRouter } from './routes/search';
 import { createReportingRouter } from './routes/reporting';
 import { startReportRunWorker, stopReportRunWorker } from './services/reporting/reportRunWorker';
+import { startReportScheduler, stopReportScheduler } from './services/reporting/reportScheduler';
 import { createTestHelpersRouter } from './routes/testHelpers';
 import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
 import { createBillingEngineRouter, createPublicBillingRouter } from './routes/billingEngine';
@@ -460,6 +461,7 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
     stopSessionExpirySweeper();
     stopCustomerEmailDispatcher();
     stopReportRunWorker();
+    stopReportScheduler();
     stopBillingEngine();
     stopProviderEventDrain();
     stopAccountSync();
@@ -502,6 +504,8 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
   configureMailer(mailerFromEnv());
   startCustomerEmailDispatcher();
   startReportRunWorker();
+  // Report schedules fire ordinary runs into the worker's queue: leased, per process.
+  startReportScheduler();
   // The billing engine's scheduler (ADR 0018 §5): leased, per process.
   startBillingEngine();
   // Started unconditionally, including where the card rail is off: a deployment

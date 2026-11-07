@@ -80,8 +80,9 @@ export function newId(
     | 'fee'
     | 'fr'
     | 'recon'
-    // Reporting: a report run (Stripe's `frr_`).
-    | 'frr',
+    // Reporting: a report run (Stripe's `frr_`) and a report schedule.
+    | 'frr'
+    | 'frs',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

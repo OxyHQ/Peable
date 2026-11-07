@@ -799,6 +799,35 @@ indexes the search walks. Decisions a reader would otherwise undo:
 - **Migrations `0062`–`0064`.** `0062` re-adds every widened CHECK on an
   existing table `NOT VALID` by hand and `0064` (post) validates them.
 
+### Report schedules (`0117`–`0118`)
+
+- **One run per occurrence is a unique index, not a read.**
+  `report_runs_schedule_occurrence_key (report_schedule_id, scheduled_for)`:
+  the scheduler's lease keeps two tasks off one schedule, and this keeps a
+  claimer whose lease lapsed from inserting a second run if it ever reaches
+  the insert. `(report_schedule_id is null) = (scheduled_for is null)`; a
+  direct run has neither, and NULLs never collide in the index.
+- **A run names its schedule within its merchant**: `(report_schedule_id,
+  merchant_id) → report_schedules (id, merchant_id)`, the composite rule of the
+  result file.
+- **`next_run_at` exists exactly while `active`**
+  (`report_schedules_next_run_agrees_check`): a paused or canceled schedule
+  cannot be due, so no claim predicate has to remember the status twice;
+  canceled ⇔ `canceled_at`; only an active schedule holds a lease.
+- **The anchor CHECK is the interval's**: weekly ⇔ `weekly_anchor`, monthly ⇔
+  `monthly_anchor` (1–31; the calendar clamps to a shorter month, so 31 is
+  legal and fires on the 30th or the 28th/29th).
+- **The time zone is checked by the API, not a CHECK**: Postgres has no zone
+  list a CHECK could read without a function call; the column is bounded to 64
+  characters and `isKnownTimeZone` (`scheduleCalendar.ts`) refuses the rest.
+- **The last run is not stored.** It is the newest run naming the schedule (a
+  scalar subquery over the occurrence index), so no second writer can leave it
+  stale.
+- **`customer_emails.report_run_id`** names the run a `report_run_succeeded` /
+  `report_run_failed` email is about (the subject CHECK, widened `NOT VALID`
+  with the kind CHECK and the foreign key in `0117`, validated in `0118`). One
+  row per recipient, deduplicated by `<kind>:<run>:<recipient, lower-cased>`.
+
 ## Orbit money (ADR 0015)
 
 `fee_schedules`, `application_fees`, `application_fee_refunds`, `payouts`,

@@ -9,7 +9,7 @@
  *  - {@link deferReportRun} — keeps the claim but lets it lapse later, so a
  *    run whose attempt failed for a passing reason waits before the next.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { CurrencyCode, ReportRunStatus, ReportTypeId } from '@peable.to/shared-types';
 import { uuidv7 } from '@oxy.so/db';
 import { reportRuns } from '../schema';
@@ -33,6 +33,10 @@ export interface ReportRunRow {
   readonly resultFileId: string | null;
   readonly succeededAt: Date | null;
   readonly attempts: number;
+  /** INTERNAL id of the schedule that fired it, and the occurrence it fired for. */
+  readonly reportScheduleId: string | null;
+  readonly reportSchedulePublicId: string | null;
+  readonly scheduledFor: Date | null;
   readonly createdAt: Date;
 }
 
@@ -56,6 +60,12 @@ const COLUMNS = {
   resultFileId: reportRuns.resultFileId,
   succeededAt: reportRuns.succeededAt,
   attempts: reportRuns.attempts,
+  reportScheduleId: reportRuns.reportScheduleId,
+  // A scalar subquery so RETURNING can carry it (see `merchantLivemodeOf`).
+  reportSchedulePublicId: sql<
+    string | null
+  >`(select s.public_id from report_schedules s where s.id = report_runs.report_schedule_id)`,
+  scheduledFor: reportRuns.scheduledFor,
   createdAt: reportRuns.createdAt,
 } as const;
 
@@ -72,12 +82,18 @@ export interface InsertReportRunParams {
   readonly intervalEnd: Date;
   readonly columns: readonly string[] | null;
   readonly currency: CurrencyCode | null;
+  /** The schedule firing it and the occurrence — a direct request has neither. */
+  readonly schedule?: { readonly id: string; readonly occurrence: Date } | undefined;
 }
 
+/**
+ * Insert a pending run. A SCHEDULED run is unique per (schedule, occurrence):
+ * an occurrence that already fired answers `null` and inserts nothing.
+ */
 export async function insertReportRun(
   db: DatabaseOrTransaction,
   params: InsertReportRunParams,
-): Promise<ReportRunRow> {
+): Promise<ReportRunRow | null> {
   const [row] = await db
     .insert(reportRuns)
     .values({
@@ -89,10 +105,37 @@ export async function insertReportRun(
       intervalEnd: params.intervalEnd,
       columns: params.columns === null ? null : [...params.columns],
       currency: params.currency,
+      reportScheduleId: params.schedule?.id ?? null,
+      scheduledFor: params.schedule?.occurrence ?? null,
     })
+    .onConflictDoNothing()
     .returning(COLUMNS);
-  if (!row) throw new Error('insertReportRun: no row returned');
-  return toRow(row);
+  return row ? toRow(row) : null;
+}
+
+/** By primary key — an owed email's `report_run_id`. */
+export async function findReportRunById(
+  db: DatabaseOrTransaction,
+  id: string,
+): Promise<ReportRunRow | null> {
+  const [row] = await db.select(COLUMNS).from(reportRuns).where(eq(reportRuns.id, id));
+  return row ? toRow(row) : null;
+}
+
+/** By `frr_…`, many at once, inside the merchant (`expand[]`). */
+export async function findReportRunsByPublicIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicIds: readonly string[],
+): Promise<ReportRunRow[]> {
+  if (publicIds.length === 0) return [];
+  const rows = await db
+    .select(COLUMNS)
+    .from(reportRuns)
+    .where(
+      and(eq(reportRuns.merchantId, merchantId), inArray(reportRuns.publicId, [...publicIds])),
+    );
+  return rows.map(toRow);
 }
 
 /** By `frr_…`, scoped to the merchant: another merchant's run is "not found". */
@@ -114,6 +157,8 @@ export async function listReportRunsForMerchant(
   params: {
     readonly merchantId: string;
     readonly reportType?: ReportTypeId | undefined;
+    /** `frs_…`: only the runs that schedule fired (none for an unknown id). */
+    readonly reportSchedule?: string | undefined;
     readonly page: KeysetPage;
   },
 ): Promise<{ data: ReportRunRow[]; hasMore: boolean }> {
@@ -125,6 +170,12 @@ export async function listReportRunsForMerchant(
       and(
         eq(reportRuns.merchantId, params.merchantId),
         params.reportType === undefined ? undefined : eq(reportRuns.reportType, params.reportType),
+        params.reportSchedule === undefined
+          ? undefined
+          : eq(
+              reportRuns.reportScheduleId,
+              sql`(select s.id from report_schedules s where s.public_id = ${params.reportSchedule} and s.merchant_id = ${params.merchantId})`,
+            ),
         walk.where,
       ),
     )

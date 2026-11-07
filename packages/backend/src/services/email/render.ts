@@ -14,6 +14,8 @@
 import {
   type CheckoutLocale,
   CHECKOUT_LOCALES,
+  REPORT_TYPE_LAYOUTS,
+  type ReportScheduleLocale,
   checkoutLocaleDirection,
   type CurrencyCode,
   decimalsFor,
@@ -36,6 +38,9 @@ import type { OutboundEmail } from './mailer';
 import type { OwedEmailRow } from './outbox';
 import { findInvoiceById, listLines } from '../../db/billingEngine/invoiceRepository';
 import { hostedInvoiceUrl } from '../../lib/serializeBilling';
+import { findReportRunById } from '../../db/reporting/reportRunRepository';
+import { findReportScheduleById } from '../../db/reporting/reportScheduleRepository';
+import { config } from '../../config';
 
 export type Strings = {
   receiptSubject: (merchant: string) => string;
@@ -713,6 +718,109 @@ function lineViews(lines: readonly CheckoutLineItemRow[], locale: string) {
 }
 
 /**
+ * A scheduled report's email, in the schedule's language (Orbit's two). It is
+ * written to the merchant's own people, not a customer: it names the report,
+ * the period and the account, and links Orbit's Reports screen — never the
+ * file, which is private and read only by a signed-in member.
+ */
+type ReportEmailStrings = {
+  readySubject: (report: string, period: string) => string;
+  failedSubject: (report: string) => string;
+  ready: string;
+  failed: string;
+  report: string;
+  period: string;
+  account: string;
+  live: string;
+  test: string;
+  readyNote: (merchant: string) => string;
+  failedNote: (reason: string) => string;
+  open: string;
+};
+
+export const REPORT_EMAIL_STRINGS: Readonly<Record<ReportScheduleLocale, ReportEmailStrings>> = {
+  en: {
+    readySubject: (r, p) => `Your scheduled report is ready: ${r}, ${p}`,
+    failedSubject: (r) => `Your scheduled report could not be produced: ${r}`,
+    ready: 'Scheduled report ready',
+    failed: 'Scheduled report failed',
+    report: 'Report',
+    period: 'Period',
+    account: 'Account',
+    live: 'Live',
+    test: 'Test',
+    readyNote: (m) =>
+      `For your security the file is not attached. Sign in to Orbit as a member of ${m} to download it from Reports.`,
+    failedNote: (reason) =>
+      `It could not be produced: ${reason}. You can run the same period again from Reports in Orbit.`,
+    open: 'Open Reports in Orbit',
+  },
+  es: {
+    readySubject: (r, p) => `Tu informe programado está listo: ${r}, ${p}`,
+    failedSubject: (r) => `No se pudo generar tu informe programado: ${r}`,
+    ready: 'Informe programado listo',
+    failed: 'Informe programado fallido',
+    report: 'Informe',
+    period: 'Periodo',
+    account: 'Cuenta',
+    live: 'Real',
+    test: 'Prueba',
+    readyNote: (m) =>
+      `Por seguridad, el archivo no va adjunto. Inicia sesión en Orbit como miembro de ${m} para descargarlo desde Informes.`,
+    failedNote: (reason) =>
+      `No se pudo generar: ${reason}. Puedes generar el mismo periodo de nuevo desde Informes en Orbit.`,
+    open: 'Abrir Informes en Orbit',
+  },
+};
+
+/** `1 Nov 2026 – 30 Nov 2026`: the run's days in the schedule's zone, the last one inclusive. */
+export function reportPeriodLabel(
+  start: Date,
+  end: Date,
+  timeZone: string,
+  locale: ReportScheduleLocale,
+): string {
+  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone });
+  const first = day.format(start);
+  const last = day.format(new Date(end.getTime() - 1));
+  return first === last ? first : `${first} – ${last}`;
+}
+
+async function renderReportRunEmail(
+  db: Database,
+  row: OwedEmailRow,
+  brand: { name: string; logo: string | null; primary: string },
+  livemode: boolean,
+): Promise<OutboundEmail | null> {
+  const run = row.reportRunId ? await findReportRunById(db, row.reportRunId) : null;
+  const schedule = run?.reportScheduleId
+    ? await findReportScheduleById(db, run.reportScheduleId)
+    : null;
+  if (!run || !schedule) return null;
+  const locale = schedule.locale;
+  const t = REPORT_EMAIL_STRINGS[locale];
+  const report = REPORT_TYPE_LAYOUTS[run.reportType].name;
+  const period = reportPeriodLabel(run.intervalStart, run.intervalEnd, schedule.timezone, locale);
+  const failed = row.kind === 'report_run_failed';
+  return toEmail(
+    row,
+    {
+      subject: failed ? t.failedSubject(report) : t.readySubject(report, period),
+      heading: failed ? t.failed : t.ready,
+      lines: [],
+      rows: [
+        [t.report, run.currency ? `${report} · ${run.currency}` : report],
+        [t.period, period],
+        [t.account, `${brand.name} (${livemode ? t.live : t.test})`],
+      ],
+      note: failed ? t.failedNote(run.error ?? '—') : t.readyNote(brand.name),
+      action: { label: t.open, url: `${config.orbitBaseUrl}/reports` },
+    },
+    { ...brand, replyTo: null, questions: '', locale },
+  );
+}
+
+/**
  * Render an owed email, or `null` when what it names is gone (it is then
  * marked failed — there is nothing true left to send).
  */
@@ -728,6 +836,18 @@ export async function renderOwedEmail(
   ]);
   const branding = toCheckoutBranding(merchant, brandingRow);
   const name = merchant.displayName ?? 'Peable merchant';
+  if (row.kind === 'report_run_succeeded' || row.kind === 'report_run_failed') {
+    return renderReportRunEmail(
+      db,
+      row,
+      {
+        name,
+        logo: branding.logo_url ?? branding.icon_url,
+        primary: branding.primary_color,
+      },
+      merchant.livemode,
+    );
+  }
   const intent = row.paymentIntentId ? await findIntentById(db, row.paymentIntentId) : null;
   const session = row.checkoutSessionId
     ? await findSessionById(db, row.checkoutSessionId)

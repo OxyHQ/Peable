@@ -26,6 +26,10 @@ import type { Request, RequestHandler, Response } from 'express';
 import {
   type CurrencyCode,
   createReportRunParams,
+  createReportScheduleParams,
+  listReportSchedulesQuery,
+  reportScheduleActionParams,
+  updateReportScheduleParams,
   downloadReportQuery,
   emptyQuery,
   expandOnlyQuery,
@@ -41,10 +45,19 @@ import { findFilesByIds } from '../db/files/fileRepository';
 import { earliestReportData } from '../db/reporting/reportData';
 import {
   findReportRunForMerchant,
-  insertReportRun,
   listReportRunsForMerchant,
   type ReportRunRow,
 } from '../db/reporting/reportRunRepository';
+import {
+  cancelReportSchedule,
+  findReportScheduleForMerchant,
+  insertReportSchedule,
+  listReportSchedulesForMerchant,
+  pauseReportSchedule,
+  type ReportScheduleRow,
+  resumeReportSchedule,
+  updateReportSchedule,
+} from '../db/reporting/reportScheduleRepository';
 import {
   requireAuthenticated,
   sendError,
@@ -57,7 +70,7 @@ import { newId } from '../lib/ids';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { answerList, completeList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
-import { toReportRunDTO } from '../lib/serializeReporting';
+import { toReportRunDTO, toReportScheduleDTO } from '../lib/serializeReporting';
 import { toUnix } from '../lib/time';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { AccountMissingError } from '../services/accounts/merchantAccount';
@@ -65,10 +78,18 @@ import {
   downloadFilename,
   ledgerScopeForReport,
   openReport,
+  reportColumnsProblem,
   ReportLedgerMissingError,
   type ReportRequest,
   streamReport,
 } from '../services/reporting/reports';
+import { enqueueReportRun } from '../services/reporting/reportRuns';
+import {
+  firstOccurrenceAfter,
+  type ScheduleInput,
+  scheduleFields,
+  scheduleInputOf,
+} from '../services/reporting/reportSchedules';
 import { kickReportRunWorker } from '../services/reporting/reportRunWorker';
 import { resolveMerchant } from './paymentIntents';
 import type { DashboardGate } from './dashboardAccess';
@@ -83,6 +104,7 @@ const LAYOUTS_UPDATED = Date.UTC(2026, 10, 3) / 1000;
 const downloadQuery = surfaceQuery(downloadReportQuery);
 const listRunsQuery = surfaceQuery(listReportRunsQuery);
 const retrieveQuery = surfaceQuery(expandOnlyQuery);
+const listSchedulesQuery = surfaceQuery(listReportSchedulesQuery);
 const reportTypesQuery = surfaceQuery(emptyQuery);
 
 function paramId(req: Request, res: Response): string | null {
@@ -193,20 +215,9 @@ async function admitReportRequest(
       'interval_end',
     );
   }
-  const layout = REPORT_TYPE_LAYOUTS[reportType];
-  if (parameters.columns !== undefined) {
-    const unknown = parameters.columns.find((column) => !layout.columns.includes(column));
-    if (unknown !== undefined) {
-      return refuse(
-        `${reportType} has no column '${unknown}'; it has ${layout.columns.join(', ')}`,
-        'columns',
-      );
-    }
-    if (new Set(parameters.columns).size !== parameters.columns.length) {
-      return refuse('a column is named twice', 'columns');
-    }
-  }
-  if (layout.ledger && (await ledgerScopeForReport(merchant)) === null) {
+  const columnsProblem = reportColumnsProblem(reportType, parameters.columns);
+  if (columnsProblem !== null) return refuse(columnsProblem, 'columns');
+  if (REPORT_TYPE_LAYOUTS[reportType].ledger && (await ledgerScopeForReport(merchant)) === null) {
     sendMoneyRefusal(res, new AccountMissingError());
     return null;
   }
@@ -277,15 +288,8 @@ export async function createReportRun(
   const { report_type: reportType, parameters } = parsed.data;
   const request = await admitReportRequest(res, merchant, reportType, parameters, 'parameters');
   if (!request) return;
-  const row = await insertReportRun(getDb(), {
-    publicId: newId('frr'),
-    merchantId: merchant.id,
-    reportType,
-    intervalStart: request.intervalStart,
-    intervalEnd: request.intervalEnd,
-    columns: request.columns === null ? null : [...request.columns],
-    currency: request.currency,
-  });
+  const row = await enqueueReportRun(getDb(), merchant.id, request);
+  if (!row) throw new Error('createReportRun: a direct run was not inserted');
   kickReportRunWorker();
   res.status(200).json(toReportRunDTO(row, null));
 }
@@ -331,6 +335,7 @@ export async function answerReportRunList(
       const result = await listReportRunsForMerchant(db, {
         merchantId: merchant.id,
         reportType: query.report_type,
+        reportSchedule: query.report_schedule,
         page,
       });
       // Serialized here, in one read of `files`, not one per run.
@@ -339,6 +344,224 @@ export async function answerReportRunList(
     serialize: (dto) => dto,
   });
 }
+
+// ---- Report schedules ---------------------------------------------------------------
+
+/** The schedule the path names, or the 404 answered. */
+async function scheduleOf(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<ReportScheduleRow | null> {
+  const id = paramId(req, res);
+  if (!id) return null;
+  const row = await findReportScheduleForMerchant(getDb(), merchant.id, id);
+  if (!row) {
+    sendError(
+      res,
+      404,
+      'invalid_request_error',
+      'report schedule not found',
+      'resource_missing',
+      'id',
+    );
+  }
+  return row;
+}
+
+function refuseCanceled(res: Response): void {
+  sendError(
+    res,
+    409,
+    'invalid_request_error',
+    'a canceled report schedule never changes; create a new one',
+    'report_schedule_unexpected_state',
+  );
+}
+
+/**
+ * The checks a create and an update share: the schedule's own rule
+ * (`scheduleFields`), then — for a ledger report — an account to read, as a
+ * run asks. Answers the refusal and returns `null`, or the fields.
+ */
+async function admitSchedule(res: Response, merchant: MerchantRow, input: ScheduleInput) {
+  const checked = scheduleFields(input);
+  if (!checked.ok) {
+    const { code, message, param } = checked.refusal;
+    sendError(res, 400, 'invalid_request_error', message, code, param);
+    return null;
+  }
+  if (
+    REPORT_TYPE_LAYOUTS[checked.fields.reportType].ledger &&
+    (await ledgerScopeForReport(merchant)) === null
+  ) {
+    sendMoneyRefusal(res, new AccountMissingError());
+    return null;
+  }
+  return checked.fields;
+}
+
+/** `POST /v1/reporting/report_schedules`. */
+export async function createReportSchedule(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const parsed = createReportScheduleParams.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const fields = await admitSchedule(res, merchant, parsed.data);
+  if (!fields) return;
+  const row = await insertReportSchedule(getDb(), {
+    ...fields,
+    publicId: newId('frs'),
+    merchantId: merchant.id,
+    nextRunAt: firstOccurrenceAfter(fields, new Date()),
+  });
+  res.status(200).json(toReportScheduleDTO(row));
+}
+
+export async function retrieveReportSchedule(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+): Promise<void> {
+  const query = parseQuery(req, res, retrieveQuery[surface]);
+  if (!query) return;
+  const expand = parseExpand(res, 'reporting.report_schedule', query.expand, { list: false });
+  if (!expand) return;
+  const row = await scheduleOf(req, res, merchant);
+  if (!row) return;
+  const dto = toReportScheduleDTO(row);
+  await expandObjects([dto], 'reporting.report_schedule', expand, merchant.id);
+  res.status(200).json(dto);
+}
+
+export async function answerReportScheduleList(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+): Promise<void> {
+  const query = parseQuery(req, res, listSchedulesQuery[surface]);
+  if (!query) return;
+  const db = getDb();
+  await answerList(req, res, {
+    query,
+    type: 'reporting.report_schedule',
+    merchantId: merchant.id,
+    cursor: async (publicId) =>
+      (await findReportScheduleForMerchant(db, merchant.id, publicId))?.id ?? null,
+    fetch: (page) =>
+      listReportSchedulesForMerchant(db, { merchantId: merchant.id, status: query.status, page }),
+    serialize: toReportScheduleDTO,
+  });
+}
+
+/**
+ * `POST /v1/reporting/report_schedules/:id`: each field sent replaces the
+ * stored one; a new cadence or zone moves an active schedule to its first
+ * occurrence after now.
+ */
+export async function updateReportScheduleCore(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const parsed = updateReportScheduleParams.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const row = await scheduleOf(req, res, merchant);
+  if (!row) return;
+  if (row.status === 'canceled') {
+    refuseCanceled(res);
+    return;
+  }
+  const base = scheduleInputOf(row);
+  const update = parsed.data;
+  const fields = await admitSchedule(res, merchant, {
+    report_type: update.report_type ?? base.report_type,
+    parameters: update.parameters ?? base.parameters,
+    schedule: update.schedule ?? base.schedule,
+    timezone: update.timezone ?? base.timezone,
+    recipients: update.recipients ?? base.recipients,
+    locale: update.locale ?? base.locale,
+  });
+  if (!fields) return;
+  const moved = update.schedule !== undefined || update.timezone !== undefined;
+  const updated = await updateReportSchedule(
+    getDb(),
+    row,
+    fields,
+    moved ? firstOccurrenceAfter(fields, new Date()) : null,
+  );
+  if (!updated) {
+    sendError(
+      res,
+      409,
+      'invalid_request_error',
+      'the report schedule changed while it was being updated; read it and try again',
+      'resource_conflict',
+    );
+    return;
+  }
+  res.status(200).json(toReportScheduleDTO(updated));
+}
+
+type ScheduleAction = 'pause' | 'resume' | 'cancel';
+
+/**
+ * `POST …/pause|resume|cancel`. Asking for the status a schedule already has
+ * answers it as it is; anything the status machine refuses (resuming or
+ * pausing a canceled schedule) is 409.
+ */
+function scheduleAction(action: ScheduleAction) {
+  return async (req: Request, res: Response, merchant: MerchantRow): Promise<void> => {
+    const parsed = reportScheduleActionParams.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendValidationError(res, parsed.error);
+      return;
+    }
+    const row = await scheduleOf(req, res, merchant);
+    if (!row) return;
+    const already = { pause: 'paused', resume: 'active', cancel: 'canceled' }[action];
+    if (row.status === already) {
+      res.status(200).json(toReportScheduleDTO(row));
+      return;
+    }
+    if (row.status === 'canceled') {
+      refuseCanceled(res);
+      return;
+    }
+    const db = getDb();
+    const moved =
+      action === 'pause'
+        ? await pauseReportSchedule(db, row.id)
+        : action === 'resume'
+          ? await resumeReportSchedule(db, row.id, firstOccurrenceAfter(row, new Date()))
+          : await cancelReportSchedule(db, row.id);
+    if (!moved) {
+      sendError(
+        res,
+        409,
+        'invalid_request_error',
+        'the report schedule changed while this was asked; read it and try again',
+        'resource_conflict',
+      );
+      return;
+    }
+    res.status(200).json(toReportScheduleDTO(moved));
+  };
+}
+
+export const pauseReportScheduleCore = scheduleAction('pause');
+export const resumeReportScheduleCore = scheduleAction('resume');
+export const cancelReportScheduleCore = scheduleAction('cancel');
 
 type Core = (
   req: Request,
@@ -368,6 +591,37 @@ export function createReportingRouter(deps: { requireMerchant: RequestHandler })
   );
   router.get('/v1/reporting/report_runs', ...read, api(answerReportRunList));
   router.get('/v1/reporting/report_runs/:id', ...read, api(retrieveReportRun));
+  // A schedule is standing configuration that mails people on the merchant's
+  // behalf, so writing one takes `payments:write`; reading it, `payments:read`.
+  const write = [deps.requireMerchant, requireAuthenticated, requireScope('payments:write')];
+  const writeCore = (core: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>) =>
+    api((req, res, merchant) => core(req, res, merchant));
+  router.post(
+    '/v1/reporting/report_schedules',
+    ...write,
+    idempotent,
+    writeCore(createReportSchedule),
+  );
+  router.get('/v1/reporting/report_schedules', ...read, api(answerReportScheduleList));
+  router.get('/v1/reporting/report_schedules/:id', ...read, api(retrieveReportSchedule));
+  router.post(
+    '/v1/reporting/report_schedules/:id',
+    ...write,
+    idempotent,
+    writeCore(updateReportScheduleCore),
+  );
+  for (const [action, core] of [
+    ['pause', pauseReportScheduleCore],
+    ['resume', resumeReportScheduleCore],
+    ['cancel', cancelReportScheduleCore],
+  ] as const) {
+    router.post(
+      `/v1/reporting/report_schedules/:id/${action}`,
+      ...write,
+      idempotent,
+      writeCore(core),
+    );
+  }
   return router;
 }
 
@@ -399,4 +653,45 @@ export function mountReportingDashboardRoutes(
   );
   router.get(`${base}/reporting/report_runs`, requireOxyUser, dashboard(answerReportRunList));
   router.get(`${base}/reporting/report_runs/:id`, requireOxyUser, dashboard(retrieveReportRun));
+  // A schedule is `configure`, not `read`: it is standing configuration of the
+  // application that keeps producing runs and mails addresses outside Oxy's
+  // membership in the merchant's name. Reading schedules is `read`.
+  const configure = (core: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>) =>
+    gate('configure', (req, res, merchant) =>
+      runIdempotent(req, res, merchant.id, () => core(req, res, merchant)),
+    );
+  router.post(
+    `${base}/reporting/report_schedules`,
+    requireOxyUser,
+    requestContextMiddleware,
+    configure(createReportSchedule),
+  );
+  router.get(
+    `${base}/reporting/report_schedules`,
+    requireOxyUser,
+    dashboard(answerReportScheduleList),
+  );
+  router.get(
+    `${base}/reporting/report_schedules/:id`,
+    requireOxyUser,
+    dashboard(retrieveReportSchedule),
+  );
+  router.post(
+    `${base}/reporting/report_schedules/:id`,
+    requireOxyUser,
+    requestContextMiddleware,
+    configure(updateReportScheduleCore),
+  );
+  for (const [action, core] of [
+    ['pause', pauseReportScheduleCore],
+    ['resume', resumeReportScheduleCore],
+    ['cancel', cancelReportScheduleCore],
+  ] as const) {
+    router.post(
+      `${base}/reporting/report_schedules/:id/${action}`,
+      requireOxyUser,
+      requestContextMiddleware,
+      configure(core),
+    );
+  }
 }

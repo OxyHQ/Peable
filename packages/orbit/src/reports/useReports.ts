@@ -10,6 +10,7 @@ export const reportKeys = {
   all: (scope: DashboardScope) => ['orbit', scope.applicationId, scope.environment, 'reporting'],
   types: (scope: DashboardScope) => [...reportKeys.all(scope), 'report_types'],
   runs: (scope: DashboardScope) => [...reportKeys.all(scope), 'report_runs'],
+  schedules: (scope: DashboardScope) => [...reportKeys.all(scope), 'report_schedules'],
 };
 
 /** How many runs the screen shows: the newest page, which is what a merchant is waiting on. */
@@ -22,15 +23,33 @@ export function useReportTypes(scope: DashboardScope) {
   });
 }
 
-/** The newest runs, refreshed every few seconds while one is still being produced. */
-export function useReportRuns(scope: DashboardScope) {
+/**
+ * The newest runs — every run, or one schedule's (`frs_…`) — refreshed every
+ * few seconds while one is still being produced.
+ */
+export function useReportRuns(scope: DashboardScope, reportSchedule: string | null = null) {
   return useQuery({
-    queryKey: reportKeys.runs(scope),
-    queryFn: () => dashboardApi.reporting.list(scope, { limit: REPORT_RUNS_PAGE }),
+    queryKey: [...reportKeys.runs(scope), reportSchedule ?? 'all'],
+    queryFn: () =>
+      dashboardApi.reporting.list(scope, {
+        limit: REPORT_RUNS_PAGE,
+        ...(reportSchedule ? { report_schedule: reportSchedule } : {}),
+      }),
     refetchInterval: (query) => {
       const page = query.state.data as ListPage<ReportRun> | undefined;
       return page && hasPendingRuns(page.data) ? REPORT_POLL_MS : false;
     },
+  });
+}
+
+/** How many schedules the screen shows: a merchant keeps a handful. */
+export const REPORT_SCHEDULES_PAGE = 100;
+
+/** The merchant's report schedules, canceled ones included (their runs stay). */
+export function useReportSchedules(scope: DashboardScope) {
+  return useQuery({
+    queryKey: reportKeys.schedules(scope),
+    queryFn: () => dashboardApi.reporting.schedules.list(scope, { limit: REPORT_SCHEDULES_PAGE }),
   });
 }
 

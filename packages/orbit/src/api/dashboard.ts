@@ -31,6 +31,10 @@ import type {
   CreatePriceParams,
   CreateProductParams,
   CreateReportRunParams,
+  CreateReportScheduleParams,
+  ReportSchedule,
+  ReportScheduleStatus,
+  UpdateReportScheduleParams,
   Charge,
   ReportRun,
   ReportType,
@@ -274,6 +278,12 @@ export interface PayoutListParams extends PageParams {
 
 export interface ReportRunListParams extends PageParams {
   report_type?: ReportTypeId;
+  /** `frs_…`: only the runs that schedule fired. */
+  report_schedule?: string;
+}
+
+export interface ReportScheduleListParams extends PageParams {
+  status?: ReportScheduleStatus;
 }
 
 /** The object each searchable resource's hits are. */
@@ -749,6 +759,52 @@ export function createDashboardApi(transport: OrbitTransport) {
           body,
           ...(idempotencyKey ? { idempotencyKey } : {}),
         }),
+      /**
+       * Report schedules (`frs_…`): a run at local midnight on a cadence, its
+       * recipients emailed a link to it. Writes are `configure`; each keeps the
+       * `Idempotency-Key` its form chose across retries.
+       */
+      schedules: {
+        list: (scope: DashboardScope, params: ReportScheduleListParams = {}) =>
+          list<ReportSchedule>(dashboardPath(scope, '/reporting/report_schedules', { ...params })),
+        retrieve: (scope: DashboardScope, scheduleId: string) =>
+          get<ReportSchedule>(
+            dashboardPath(scope, `/reporting/report_schedules/${id(scheduleId)}`),
+          ),
+        create: (
+          scope: DashboardScope,
+          body: CreateReportScheduleParams,
+          idempotencyKey?: string,
+        ) =>
+          transport.request<ReportSchedule>(
+            'POST',
+            dashboardPath(scope, '/reporting/report_schedules'),
+            { body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+          ),
+        update: (
+          scope: DashboardScope,
+          scheduleId: string,
+          body: UpdateReportScheduleParams,
+          idempotencyKey?: string,
+        ) =>
+          transport.request<ReportSchedule>(
+            'POST',
+            dashboardPath(scope, `/reporting/report_schedules/${id(scheduleId)}`),
+            { body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+          ),
+        /** `pause`, `resume` or `cancel` — each answers the schedule as it now is. */
+        act: (
+          scope: DashboardScope,
+          scheduleId: string,
+          action: 'pause' | 'resume' | 'cancel',
+          idempotencyKey?: string,
+        ) =>
+          transport.request<ReportSchedule>(
+            'POST',
+            dashboardPath(scope, `/reporting/report_schedules/${id(scheduleId)}/${action}`),
+            { body: {}, ...(idempotencyKey ? { idempotencyKey } : {}) },
+          ),
+      },
     },
 
     /** Which methods payers are offered (`pmc_…`); exactly one is the default. */
