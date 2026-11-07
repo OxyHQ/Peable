@@ -587,4 +587,8 @@ On 2026-11-06 the owner also decided the round-3 risks: F5, F1 and D9 fixed,
 F9 (D10's single Explorer; a rewind never revokes fulfilment) accepted in
 writing — the exact sentence is in ADR 0002 ("Owner's decision on the round-3
 risks").
+On 2026-11-07 the owner accepted the review's final risk sentences 1–5 and 8
+word for word, rejected sentence 6 (fixed: a deleted identity backup is never
+re-uploaded silently, OxyHQ/oxy#2214 and #2216) and confirmed sentence 7 does
+not apply — ADR 0002, "Owner's decision on the review's final risks".
 

@@ -740,3 +740,71 @@ name that need the owner's own decision are listed, as the sentences the owner
 would sign, in the audit record ("What the owner must still do"). Until then
 production leaves `PEABLE_SOCIAL_PAY_NETWORK` unset (testnet) and the wallet's
 `SOCIAL_PAY_NETWORK` stays `testnet`.
+
+## Owner's decision on the review's final risks (2026-11-07)
+
+**Who and when.** The product owner (Nate I.), explicitly, on 2026-11-07,
+answering the eight sentences the security review's final round (round 7)
+put to the owner (`docs/audits/2026-11-06-mainnet-gate/`, "What the owner must
+still do").
+
+**Accepted, word for word as the review wrote them:**
+
+1. "Coins under a replaced identity key are spendable from Peable on a new
+   phone only through the encrypted identity backup or that key's recovery
+   phrase; a key replaced before 2026-11-06 (oxy migration 0235) is spendable
+   again only once Oxy's own signed records prove it was this account's,
+   through the backfill or Commons' claim, and a key no such record proves
+   stays unspendable from Peable."
+2. "A payment to a Peable address more than a week old may take up to 30 days
+   after the address was last checked to appear in the recipient's wallet, a
+   payment under 0.001 FAIR to such an address may never appear, and finding
+   either depends on the one Explorer we already trust (F9)."
+3. "Identity keys and recovery phrases created on iOS before the keychain split
+   were readable by every Oxy iOS app, and stay readable on any phone until
+   Peable wallet 1.5.0 and Commons 1.11.0 are installed and launched there; we
+   neither force nor require those identities to rotate." (The build that
+   completes the split is Commons 1.12.0, as the audit README records.)
+4. "On iOS the Peable wallet holds the personal root key, so the wallet and any
+   update shipped through its OTA channel (signed with the shared Oxy update
+   key) can rotate a person's identity, not only spend from it."
+5. "An attacker controlling about 300 Oxy accounts can refuse new @username
+   senders to one person for a day at a time, and anyone opening 500 unpaid
+   FairCoin checkouts a day from enough networks can make FairCoin unavailable
+   for one merchant at a time; card payments are unaffected."
+8. "When two accounts shared a phone's old wallet database, the account that
+   proves it keeps the other account's contacts, recent recipients, address
+   labels and Pocket names, and a database nobody proves stays on the phone
+   unopened until someone removes it in Settings."
+
+**Rejected and fixed — sentence 6** ("Rotating an identity key uploads a new
+encrypted backup of that identity, including its retired keys, even for a
+person who had deleted their backup."). The owner's rule: if the person
+deleted their identity backup, rotating must not re-upload one silently — ask,
+or respect the deletion; their retired keys are then recoverable only through
+their recovery phrase, and the UI says so. Built in OxyHQ/oxy#2214 (a deletion
+is recorded on the account and every later upload without the person's
+explicit opt-in is refused; the rotation flow says, before the swap, that
+without a backup the previous key is recoverable off the phone only with its
+phrase, and offers "Create an encrypted backup") and #2216 (the server refuses
+ANY upload for an account with no backup on record — never made, deleted, or
+deleted before that record existed — unless it carries the person's opt-in, so
+no client, old or new, can upload silently; core refuses to rotate without an
+explicit choice when no backup is on record). oxy ADR 0061 D7 point 11.
+
+**Does not apply — sentence 7.** Peable wallet 1.2–1.4 never reached an iPhone
+(no TestFlight, no App Store), so no wallet adopted from the shared keychain
+group by those builds exists.
+
+**Done in production on 2026-11-07** (one-off ECS tasks from the live
+`oxy-api` image, command overridden only; no task definition kept):
+oxy's `backfill-personal-key-retirements.ts` — dry run and `--apply`: 0
+candidates, 0 proven, 0 inserted (no verified self-issued record proves any
+replaced personal root). oxy's `revoke-third-party-device-signins.ts` dry run:
+8 non-official applications, 0 device sign-ins any of them claimed, 0
+sessions, devices or secrets to revoke (`--apply` would write nothing); a wider read-only count found no unbound
+session under any label that is not an official application's).
+
+F9 stays accepted (2026-11-06, above). With these decisions every condition the
+security review set is met or decided; opening follows the audit record's
+"Opening" step.
