@@ -33,7 +33,10 @@ Added:
 - Events `terminal.reader.action_succeeded | terminal.reader.action_failed`.
 - Error codes `terminal_unavailable` (503: Terminal is not enabled in this
   mode), `terminal_reader_busy`, `terminal_reader_offline`,
-  `terminal_location_in_use` (409).
+  `terminal_location_in_use` (409). In live mode, Terminal for a merchant that
+  is not an Oxy product answers 403 `live_payments_gated` until the platform
+  opens it. A payment is collected by one reader at a time (409
+  `payment_intent_unexpected_state`).
 - Types `TerminalLocation`, `TerminalReader`, `TerminalConnectionToken` and
   their params, and the vocabulary `TERMINAL_*` in contracts and shared-types.
 

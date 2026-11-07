@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, updatedAt } from '@oxy.so/db';
 import type { Address } from '@peable.to/shared-types';
@@ -122,6 +123,10 @@ export const terminalReaders = pgTable(
     index('terminal_readers_merchant_id_idx').on(table.merchantId),
     index('terminal_readers_location_id_idx').on(table.locationId),
     index('terminal_readers_action_payment_intent_id_idx').on(table.actionPaymentIntentId),
+    /** One reader at a time collects a payment: a second claim of it is refused. */
+    uniqueIndex('terminal_readers_collecting_intent_key')
+      .on(table.actionPaymentIntentId)
+      .where(sql`${table.actionStatus} = 'in_progress'`),
     foreignKey({
       name: 'terminal_readers_merchant_id_fkey',
       columns: [table.merchantId],

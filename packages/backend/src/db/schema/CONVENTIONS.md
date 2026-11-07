@@ -1214,7 +1214,12 @@ otherwise undo:
   moves on the card rail's own path.
 - **`card_present` widened `payment_intents_payment_method_types_check`** (it
   is rendered from `CARD_RAIL_PAYMENT_METHOD_TYPES`).
-- **Migrations `0121`–`0123`.** `0121` the two tables and the widened
+- **One reader collects a payment at a time**
+  (`terminal_readers_collecting_intent_key`, unique on
+  `action_payment_intent_id` WHERE `action_status = 'in_progress'`): a claim of
+  the same payment on a second reader is a unique violation, answered 409.
+- **Migrations `0126`–`0129`.** `0126` the two tables and the widened
   `events_type_check` / `webhook_endpoints_enabled_events_check` `NOT VALID`;
-  `0122` the `payment_intents` CHECK alone (a hot table) `NOT VALID`; `0123`
-  (post) validates all three.
+  `0127` the foreign key onto the hot `payment_intents`, alone, `NOT VALID`;
+  `0128` the `payment_intents` CHECK alone, `NOT VALID`; `0129` (post)
+  validates all four.

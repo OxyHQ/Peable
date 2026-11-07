@@ -32,6 +32,8 @@ const calls: string[] = [];
 let counter = 0;
 const next = () => String(++counter);
 let terminalEnabled = true;
+/** The next processTerminalPayment answers with this error (once). */
+let processFailure: Error | null = null;
 
 interface FakePayment extends ProviderPaymentResult {
   readonly amount: string;
@@ -196,6 +198,11 @@ function fakeProviderFor(mode: ProviderMode) {
     }) => {
       record(`processTerminalPayment:${request.idempotencyKey}`);
       guard();
+      if (processFailure) {
+        const failure = processFailure;
+        processFailure = null;
+        throw failure;
+      }
       const reader = readerOf(request.readerObjectId);
       if (reader.action?.status === 'in_progress') {
         throw new ProviderError({
@@ -314,11 +321,16 @@ const { insertProviderEvent, findProviderEventById } = await import(
 const { processProviderEvent } = await import('../../services/providers/eventProcessor');
 const { findTerminalReaderForMerchant } = await import('../../db/terminal/terminalRepository');
 const { reconcileReader } = await import('../../services/terminal/terminal');
+const { createRule } = await import('../../services/radar/rules');
+const { gatesBeforeAuthorization, holdBeforeCapture, isCardPresent } = await import(
+  '../../services/radar/gates'
+);
+const { findIntentForMerchant } = await import('../../db/payments/paymentIntentRepository');
 const { applyAccountSnapshot, insertMerchantAccount } = await import(
   '../../db/accounts/connectedAccountRepository'
 );
 const { createCheckoutSessionParams } = await import('@peable.to/contracts');
-const { events, terminalReaders } = await import('../../db/schema');
+const { events, radarEvaluations, radarRules, terminalReaders } = await import('../../db/schema');
 const { eq } = await import('drizzle-orm');
 const { wrap } = await import('../../lib/http');
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
@@ -441,6 +453,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
   useGatewayDatabase();
 
   let merchantId = '';
+  let merchantRow: Awaited<ReturnType<typeof seedMerchant>>;
   let liveMerchantId = '';
 
   beforeAll(async () => {
@@ -451,6 +464,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
     });
     const merchant = await seedMerchant({ oxyAppId: 'app_terminal', environment: 'development' });
     merchantId = merchant.id;
+    merchantRow = merchant;
     const live = await seedMerchant({
       oxyAppId: 'app_terminal',
       environment: 'production',
@@ -491,6 +505,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
     calls.length = 0;
     credential = { appId: 'app_terminal', environment: 'development' };
     terminalEnabled = true;
+    processFailure = null;
     config.orbit.thirdPartyLivePayments = false;
   });
 
@@ -877,7 +892,19 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
     expect(calls).toEqual([]);
   });
 
+  test('the live gate: a live merchant that is not an Oxy product registers and collects nothing until the flag opens', async () => {
+    credential = { appId: 'app_terminal', environment: 'production' };
+    const gated = await call('POST', '/v1/terminal/locations', {
+      display_name: 'Live shop',
+      address: ADDRESS,
+    });
+    expect(gated.status).toBe(403);
+    expect(gated.body.error.code).toBe('live_payments_gated');
+    expect(calls).toEqual([]);
+  });
+
   test('mode isolation: a live merchant acts through the live key only; no Terminal is 503; simulated codes and the test helper are refused in live', async () => {
+    config.orbit.thirdPartyLivePayments = true;
     credential = { appId: 'app_terminal', environment: 'production' };
     const location = await call('POST', '/v1/terminal/locations', {
       display_name: 'Live shop',
@@ -1038,5 +1065,150 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Terminal (ADR 0024)', () => {
     expect(
       (await call('GET', `/v1/payment_intents/${collected.body.payment_intent.id}`)).body.status,
     ).toBe('succeeded');
+  });
+
+  test('a reader that no longer shows the collection: the payment decides — authorized is a succeeded attempt, never action_failed', async () => {
+    const location = await newLocation();
+    const reader = await newReader(location.id);
+    const intent = await cardPresentIntent('2600');
+    await call('POST', `/v1/terminal/readers/${reader.id}/process_payment_intent`, {
+      payment_intent: intent.id,
+    });
+    const providerReader = await providerReaderIdOf(reader.id, merchantId);
+    // The provider authorized the payment, and the reader moved on (reset).
+    const pi = must([...payments.values()].find((p) => p.amount === '2600')).providerObjectId;
+    payments.set(pi, { ...paymentOf(pi), status: 'succeeded', chargeObjectId: 'ch_2600' });
+    readers.set(providerReader, { ...readerOf(providerReader), action: null });
+    const before = await eventTypes(merchantId, 'terminal.');
+    const read = await call('GET', `/v1/terminal/readers/${reader.id}`);
+    expect(read.body.action.status).toBe('succeeded');
+    const after = await eventTypes(merchantId, 'terminal.');
+    expect(after.slice(before.length)).toEqual(['terminal.reader.action_succeeded']);
+    expect((await call('GET', `/v1/payment_intents/${intent.id}`)).body.status).toBe('succeeded');
+  });
+
+  test('an unknown answer keeps the claim: the reader is not shown idle or deleted mid-tap; a definitive refusal gives it back', async () => {
+    const location = await newLocation();
+    const reader = await newReader(location.id);
+    const intent = await cardPresentIntent('2700');
+    processFailure = new ProviderError({
+      provider: 'stripe',
+      stage: 'terminal',
+      message: 'timed out',
+      retryable: true,
+    });
+    const timedOut = await call(
+      'POST',
+      `/v1/terminal/readers/${reader.id}/process_payment_intent`,
+      {
+        payment_intent: intent.id,
+      },
+    );
+    expect(timedOut.status).toBe(502);
+    const row = must(await findTerminalReaderForMerchant(gatewayDb(), reader.id, merchantId));
+    expect(row.action?.status).toBe('in_progress');
+    const deleting = await call('DELETE', `/v1/terminal/readers/${reader.id}`);
+    expect(deleting.status).toBe(409);
+    expect(deleting.body.error.code).toBe('terminal_reader_busy');
+
+    const other = await newReader(location.id, 'Side counter');
+    processFailure = new ProviderError({
+      provider: 'stripe',
+      stage: 'terminal',
+      message: 'refused',
+      retryable: false,
+    });
+    const second = await cardPresentIntent('2701');
+    const refused = await call('POST', `/v1/terminal/readers/${other.id}/process_payment_intent`, {
+      payment_intent: second.id,
+    });
+    expect(refused.status).toBe(400);
+    const released = must(await findTerminalReaderForMerchant(gatewayDb(), other.id, merchantId));
+    expect(released.action).toBeNull();
+  });
+
+  test('one payment is collected by one reader at a time', async () => {
+    const location = await newLocation();
+    const first = await newReader(location.id);
+    const second = await newReader(location.id, 'Side counter');
+    const intent = await cardPresentIntent('2800');
+    const collecting = await call(
+      'POST',
+      `/v1/terminal/readers/${first.id}/process_payment_intent`,
+      {
+        payment_intent: intent.id,
+      },
+    );
+    expect(collecting.status).toBe(200);
+    calls.length = 0;
+    const twice = await call('POST', `/v1/terminal/readers/${second.id}/process_payment_intent`, {
+      payment_intent: intent.id,
+    });
+    expect(twice.status).toBe(409);
+    expect(twice.body.error.code).toBe('payment_intent_unexpected_state');
+    expect(calls.some((c) => c.includes('processTerminalPayment'))).toBe(false);
+    await call('POST', `/v1/terminal/readers/${first.id}/cancel_action`, {});
+  });
+
+  test("Orbit's collect on a busy reader cancels the payment it created", async () => {
+    const location = await newLocation();
+    const reader = await newReader(location.id);
+    const blocker = await cardPresentIntent('2900');
+    await call('POST', `/v1/terminal/readers/${reader.id}/process_payment_intent`, {
+      payment_intent: blocker.id,
+    });
+    const busy = await call(
+      'POST',
+      `/v1/dashboard/applications/app_terminal/terminal/readers/${reader.id}/collect`,
+      { amount: '2950', currency: 'USD' },
+    );
+    expect(busy.status).toBe(409);
+    expect(busy.body.error.code).toBe('terminal_reader_busy');
+    const orphan = must([...payments.values()].find((p) => p.amount === '2950'));
+    expect(orphan.status).toBe('canceled');
+    await call('POST', `/v1/terminal/readers/${reader.id}/cancel_action`, {});
+  });
+
+  test('risk rules do not evaluate a card_present payment (ADR 0024 D8)', async () => {
+    await createRule(merchantRow, { action: 'block', predicate: ':amount: > 1' });
+    try {
+      const intent = await cardPresentIntent('3100');
+      // The credential point would block an online card payment of this amount.
+      const action = await call('POST', `/v1/payment_intents/${intent.id}/client_action`, {});
+      expect(action.status).toBe(200);
+      const location = await newLocation();
+      const reader = await newReader(location.id);
+      await call('POST', `/v1/terminal/readers/${reader.id}/process_payment_intent`, {
+        payment_intent: intent.id,
+      });
+      await call(
+        'POST',
+        `/v1/test_helpers/terminal/readers/${reader.id}/present_payment_method`,
+        {},
+      );
+      const paid = await call('GET', `/v1/payment_intents/${intent.id}`);
+      expect(paid.body.status).toBe('succeeded');
+      expect(paid.body.review ?? null).toBeNull();
+      const intentRow = must(await findIntentForMerchant(gatewayDb(), intent.id, merchantId));
+      expect(isCardPresent(intentRow)).toBe(true);
+      expect(
+        gatesBeforeAuthorization({ ...intentRow, status: 'requires_payment_method' }, 'credential'),
+      ).toBe(false);
+      expect((await holdBeforeCapture({ ...intentRow, status: 'requires_capture' })).kind).toBe(
+        'clear',
+      );
+      const judged = await gatewayDb()
+        .select({ id: radarEvaluations.id })
+        .from(radarEvaluations)
+        .where(eq(radarEvaluations.paymentIntentId, intentRow.id));
+      expect(judged).toEqual([]);
+    } finally {
+      const rules = await gatewayDb()
+        .select()
+        .from(radarRules)
+        .where(eq(radarRules.merchantId, merchantId));
+      for (const ruleRow of rules)
+        await gatewayDb().delete(radarRules).where(eq(radarRules.id, ruleRow.id));
+    }
   });
 });

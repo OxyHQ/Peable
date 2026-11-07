@@ -83,9 +83,13 @@ on the row moves by compare-and-swap only (`db/terminal/terminalRepository.ts`):
    refused while the row is already `in_progress` (409
    `terminal_reader_busy`, after asking the provider whether that is still
    true);
-2. the provider is asked under `tmrpi:<reader>:<claim time>` — a refusal
-   **releases** the claim back to what it was (busy and offline readers are
-   409 `terminal_reader_busy` / `terminal_reader_offline`);
+2. the provider is asked under `tmrpi:<reader>:<claim time>` — a DEFINITIVE
+   refusal (busy, offline, any 4xx, Terminal unavailable) **releases** the
+   claim back to what it was (busy and offline readers are 409
+   `terminal_reader_busy` / `terminal_reader_offline`); an unknown answer (a
+   timeout, a 5xx) KEEPS it — the reader may be asking for the card, so it is
+   not shown idle and cannot be deleted, and the stale-claim rule below lets
+   the provider's read settle it;
 3. **acknowledge** — the provider took it (`action_acknowledged_at`);
 4. **settle** — `succeeded` or `failed` with the provider's failure CODE, once,
    guarded on the claim still being that attempt `in_progress`, with
@@ -100,7 +104,14 @@ reader), a retrieve, a collection, a cancel and the simulated tap. It settles
 only an acknowledged attempt (or a claim older than a minute, so a request
 that crashed between the claim and the provider cannot hold a reader forever),
 never moves an action backwards, and treats a provider reader that is no
-longer collecting that payment as a failed attempt without a code. The
+longer collecting that payment (reset, deleted, replaced) as an ended attempt
+whose outcome is the PAYMENT's: the PaymentIntent is read first, and one the
+provider authorized or captured settles the attempt `succeeded` — never
+`action_failed`, on which an integration would retry and charge twice; one
+that cannot be read leaves the attempt in progress for a later read. One
+payment is collected by one reader at a time
+(`terminal_readers_collecting_intent_key`; a second claim is 409
+`payment_intent_unexpected_state`). The
 failure message on the wire is Orbit's sentence for the code
 (`TERMINAL_ACTION_FAILURE_MESSAGES`), never the provider's prose.
 
@@ -160,10 +171,20 @@ is in front of the merchant and the collection is the merchant's own act.
 Merchant risk rules are therefore **not evaluated** for `card_present`
 PaymentIntents — neither before authorization (a collection is not a payer
 credential nor a server confirm) nor after (no review is opened, nothing is
-held before capture). This is a deliberate gap, not an oversight: rules for
-in-person payments would need their own signals and are not built.
+held before capture). It is explicit in code (`isCardPresent` in
+`services/radar/gates.ts`, checked by `gatesBeforeAuthorization`, the
+post-authorization judgment — which still claims the charge, so the judge
+sweep does not keep it — and `holdBeforeCapture`), never a side effect of the
+charge snapshot lacking a `card`. This is a deliberate gap, not an oversight:
+rules for in-person payments would need their own signals and are not built.
 
-### D9 — Who may do it
+### D9 — Who may do it, and the live gate
+
+Creating a location, registering a reader, minting a connection token and
+collecting a payment on a reader pass the live money gate
+(`assertLiveMoneyAllowed`, ADR 0015): a live merchant that is not an Oxy
+product is refused 403 `live_payments_gated` until
+`ORBIT_THIRD_PARTY_LIVE_PAYMENTS` opens it. Test mode is never gated.
 
 The merchant API: reads `payments:read`, writes `payments:write`, every POST
 idempotent but the connection token. Orbit: reads are `read`; registering
@@ -171,7 +192,10 @@ locations and readers, collecting a payment, canceling a reader's action and
 the simulated tap are `money` (`billing:manage`) — registering hardware that
 takes cards, and taking one, is money work. Orbit's "collect a payment" is a
 dashboard-only route that creates the `card_present` PaymentIntent through
-`createIntent` and hands it to the reader in one request.
+`createIntent` and hands it to the reader in one request; when the reader
+refuses it (busy, offline, Terminal unavailable), the payment it just created
+is ended through the card rail's own cancellation (`expireIntentNow`) rather
+than left for nobody to collect.
 
 ## Consequences
 

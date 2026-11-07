@@ -21,7 +21,7 @@
  *   transaction. The drain, a retrieve, a collection, a cancel and the
  *   simulated tap all go through it.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Address, ProcessPaymentIntentParams } from '@peable.to/shared-types';
 import { SIMULATED_READER_REGISTRATION_PREFIX } from '@peable.to/shared-types';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
@@ -51,6 +51,7 @@ import { recordEvent } from '../events';
 import { reconcileIntentWithProvider } from '../intentReconciliation';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { selectCardProvider, selectStoredProvider } from '../providers/environmentGuard';
+import { assertLiveMoneyAllowed } from '../money/chargeRouting';
 import {
   isTerminalProvider,
   ProviderError,
@@ -176,6 +177,7 @@ export async function createLocation(
     readonly metadata: Record<string, string>;
   },
 ): Promise<TerminalLocationRow> {
+  assertLiveMoneyAllowed(merchant, 'Terminal');
   const provider = newOperationProvider(merchant);
   const mode = providerModeOf(merchant.livemode);
   const publicId = newId('tml');
@@ -278,6 +280,7 @@ export async function registerReader(
       'registration_code',
     );
   }
+  assertLiveMoneyAllowed(merchant, 'Terminal');
   const provider = newOperationProvider(merchant);
   const publicId = newId('tmr');
   const registered = await atProvider(providerModeOf(merchant.livemode), () =>
@@ -393,12 +396,23 @@ export async function reconcileReader(
     seen.paymentObjectId === intent.providerObjectId;
   if (aboutThis && seen.status === 'in_progress') return current;
   // Settled by the provider — or no longer this collection at all (the reader
-  // was reset, deleted, or another action replaced it): either way the attempt
-  // ended, and how is what the provider says, or "unknown" (no code).
-  const outcome =
-    aboutThis && seen.status === 'succeeded'
-      ? ({ status: 'succeeded' } as const)
-      : ({ status: 'failed', failureCode: aboutThis ? seen.failureCode : null } as const);
+  // was reset, deleted, or another action replaced it). The reader's word is
+  // not the payment's: before telling the merchant the attempt FAILED (on
+  // which an integration retries), the PaymentIntent is read — one that was
+  // authorized or paid is a succeeded attempt, whatever the reader shows now.
+  let outcome:
+    | { readonly status: 'succeeded' }
+    | { readonly status: 'failed'; readonly failureCode: string | null };
+  if (aboutThis && seen.status === 'succeeded') {
+    outcome = { status: 'succeeded' };
+  } else {
+    const paid = await paymentWasTaken(intent);
+    if (paid === null && !aboutThis) return current; // unknown: a later read decides
+    outcome =
+      paid === true
+        ? { status: 'succeeded' }
+        : { status: 'failed', failureCode: aboutThis ? seen.failureCode : null };
+  }
 
   const settled = await db.transaction(async (tx) => {
     const moved = await settleReaderAction(tx, current.id, action.startedAt, outcome);
@@ -425,15 +439,52 @@ export async function reconcileReader(
 }
 
 /**
+ * Whether the provider authorized or captured the payment: `null` when it
+ * cannot be read (or there is nothing to read).
+ */
+async function paymentWasTaken(intent: PaymentIntentRow | null): Promise<boolean | null> {
+  if (intent === null || !intent.provider || !intent.providerObjectId) return null;
+  if (intent.status === 'succeeded' || intent.status === 'requires_capture') return true;
+  const provider = selectStoredProvider(intent.provider, intent.livemode);
+  if (!provider) return null;
+  try {
+    const status = (await provider.getStatus(intent.providerObjectId)).status;
+    return status === 'succeeded' || status === 'requires_capture' || status === 'processing';
+  } catch {
+    return null;
+  }
+}
+
+/** A refusal that leaves the reader exactly as it was: the provider never took the collection. */
+function isDefinitiveRefusal(error: unknown): boolean {
+  return (
+    error instanceof TerminalStateError ||
+    error instanceof TerminalUnavailableError ||
+    (error instanceof ProviderError && !error.retryable)
+  );
+}
+
+/**
  * Collect a `card_present` PaymentIntent on the reader: claim the reader
  * (CAS), hand the provider the collection under a key derived from the claim,
  * then apply what the provider answered. A refusal gives the claim back.
  */
 export async function processPaymentIntent(
+  merchant: MerchantRow,
   row: TerminalReaderRow,
   intent: PaymentIntentRow,
   config: ProcessPaymentIntentParams['process_config'],
 ): Promise<TerminalReaderRow> {
+  if (row.merchantId !== merchant.id || intent.merchantId !== merchant.id) {
+    throw new TerminalParameterError(
+      'no such payment intent',
+      'payment_intent',
+      'resource_missing',
+    );
+  }
+  // Taking a card is a live money path: gated like a destination charge
+  // (ADR 0015) for a merchant that is not an Oxy product.
+  assertLiveMoneyAllowed(merchant, 'Terminal');
   if (intent.rail !== 'card' || intent.paymentMethodTypes?.join() !== 'card_present') {
     throw new TerminalParameterError(
       "a reader collects a PaymentIntent created with payment_method_types ['card_present']",
@@ -459,10 +510,22 @@ export async function processPaymentIntent(
   const db = getDb();
   const claimInput = { paymentIntentId: intent.id, enableCustomerCancellation };
   let claimed = await claimReaderAction(db, row.id, claimInput);
+  if (claimed === 'intent_busy') {
+    throw new TerminalStateError(
+      'another reader is already collecting this PaymentIntent: cancel that collection first',
+      'payment_intent_unexpected_state',
+    );
+  }
   if (!claimed) {
     // Orbit still thinks it busy: ask the provider whether that is still true.
     await reconcileReader(row);
     claimed = await claimReaderAction(db, row.id, claimInput);
+    if (claimed === 'intent_busy') {
+      throw new TerminalStateError(
+        'another reader is already collecting this PaymentIntent: cancel that collection first',
+        'payment_intent_unexpected_state',
+      );
+    }
   }
   const claim = claimed?.action;
   if (!claimed || !claim) {
@@ -483,9 +546,13 @@ export async function processPaymentIntent(
       }),
     );
   } catch (error) {
-    // Refused or unreachable: the reader is as it was. Should the provider
-    // have taken it after all, its own read settles the attempt later.
-    await releaseReaderAction(db, row.id, claim.startedAt, row.action);
+    // A definitive refusal leaves the reader as it was: the claim is given
+    // back. Anything else (a timeout, a 5xx) may have reached the reader —
+    // the claim stays, so the reader is not shown idle (or deleted) mid-tap,
+    // and the provider's own read settles it once the claim is stale.
+    if (isDefinitiveRefusal(error)) {
+      await releaseReaderAction(db, row.id, claim.startedAt, row.action);
+    }
     throw error;
   }
   const acknowledged = (await acknowledgeReaderAction(db, row.id, claim.startedAt)) ?? claimed;
@@ -497,7 +564,8 @@ export async function cancelReaderAction(row: TerminalReaderRow): Promise<Termin
   const answered = await atProvider(providerModeOf(row.livemode), () =>
     provider.cancelTerminalReaderAction({
       readerObjectId: row.providerObjectId,
-      idempotencyKey: `tmrca:${row.publicId}:${row.action?.startedAt.getTime() ?? 'none'}`,
+      // A fresh key per request: a replayed answer would be a stale reader read.
+      idempotencyKey: `tmrca:${row.publicId}:${randomUUID()}`,
     }),
   );
   return reconcileReader(row, answered);
@@ -510,7 +578,7 @@ export async function presentPaymentMethod(row: TerminalReaderRow): Promise<Term
   const answered = await atProvider(providerModeOf(row.livemode), () =>
     provider.presentTerminalPaymentMethod({
       readerObjectId: row.providerObjectId,
-      idempotencyKey: `tmrpm:${row.publicId}:${row.action?.startedAt.getTime() ?? 'none'}`,
+      idempotencyKey: `tmrpm:${row.publicId}:${randomUUID()}`,
     }),
   );
   return reconcileReader(row, answered);
@@ -532,6 +600,7 @@ export async function createConnectionToken(
   if (location.merchantId !== merchant.id) {
     throw new TerminalParameterError('no such location', 'location', 'resource_missing');
   }
+  assertLiveMoneyAllowed(merchant, 'Terminal');
   const provider = newOperationProvider(merchant);
   return atProvider(providerModeOf(merchant.livemode), () =>
     provider.createTerminalConnectionToken({ locationObjectId: location.providerObjectId }),

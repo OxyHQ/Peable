@@ -1056,7 +1056,11 @@ writes the PaymentIntent: the intent moves on `payment_intent.*` events and
 `reconcileIntentWithProvider`. Connection tokens are passed through, never
 stored or replayed, and ALWAYS limited to one of the merchant's locations
 (readers share the platform account; an unscoped token reaches every
-merchant's readers). Merchant risk rules do not evaluate `card_present`. A mode
+merchant's readers). Merchant risk rules do not evaluate `card_present` (`isCardPresent` in
+`radar/gates.ts`). A reader that no longer shows a collection settles it from
+the PAYMENT's status, never `action_failed` for money the provider took; only a
+definitive refusal releases a claim; one payment, one collecting reader. Live
+Terminal objects and collections pass `assertLiveMoneyAllowed`. A mode
 without a key or an account without Terminal is 503 `terminal_unavailable`.
 Orbit: reads `read`, writes (and the collect / simulated tap) `money`.
 

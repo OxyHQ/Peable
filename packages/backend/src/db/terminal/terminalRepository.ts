@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
-import { uuidv7 } from '@oxy.so/db';
+import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import type {
   Address,
   TerminalReaderActionStatus,
@@ -405,18 +405,6 @@ export async function findTerminalReaderByProviderObject(
   return row ? toReaderRow(row as RawReader) : null;
 }
 
-/** The readers collecting (or that last collected) this PaymentIntent. */
-export async function findTerminalReadersForIntent(
-  db: DatabaseOrTransaction,
-  paymentIntentId: string,
-): Promise<TerminalReaderRow[]> {
-  const rows = await db
-    .select(READER_COLUMNS)
-    .from(terminalReaders)
-    .where(eq(terminalReaders.actionPaymentIntentId, paymentIntentId));
-  return rows.map((row) => toReaderRow(row as RawReader));
-}
-
 export async function listTerminalReadersForMerchant(
   db: DatabaseOrTransaction,
   params: {
@@ -534,6 +522,21 @@ export async function refreshTerminalReaderDevice(
  * action is still `in_progress`, whichever payment it is for.
  */
 export async function claimReaderAction(
+  db: DatabaseOrTransaction,
+  id: string,
+  action: { readonly paymentIntentId: string; readonly enableCustomerCancellation: boolean },
+): Promise<TerminalReaderRow | 'intent_busy' | null> {
+  try {
+    return await claim(db, id, action);
+  } catch (error) {
+    // Another reader is already collecting this payment
+    // (`terminal_readers_collecting_intent_key`).
+    if (isUniqueViolation(error, 'terminal_readers_collecting_intent_key')) return 'intent_busy';
+    throw error;
+  }
+}
+
+async function claim(
   db: DatabaseOrTransaction,
   id: string,
   action: { readonly paymentIntentId: string; readonly enableCustomerCancellation: boolean },

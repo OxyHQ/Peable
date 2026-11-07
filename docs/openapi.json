@@ -165,6 +165,9 @@
       "name": "Tax compliance"
     },
     {
+      "name": "Terminal"
+    },
+    {
       "name": "Test clocks"
     },
     {
@@ -19977,7 +19980,7 @@
                   },
                   "payment_method_types": {
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 6,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -19987,10 +19990,11 @@
                         "sepa_debit",
                         "ideal",
                         "bancontact",
-                        "eps"
+                        "eps",
+                        "card_present"
                       ]
                     },
-                    "description": "`[\"faircoin\"]` on the chain rail; on the card rail any of the card-rail types the provider offers in `currency`, instead of a configuration."
+                    "description": "`[\"faircoin\"]` on the chain rail; on the card rail any of the card-rail types the provider offers in `currency`, instead of a configuration — or `[\"card_present\"]` alone, collected by a Terminal reader (`POST /v1/terminal/readers/{id}/process_payment_intent`)."
                   },
                   "payment_method_configuration": {
                     "type": "string",
@@ -43863,6 +43867,1756 @@
         }
       }
     },
+    "/v1/terminal/connection_tokens": {
+      "post": {
+        "operationId": "createTerminalConnectionToken",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Create a connection token",
+        "description": "A fresh token on every call, limited to one of your locations (unlike Stripe, `location` is required), answered with `Cache-Control: no-store` and never stored or replayed (no `Idempotency-Key` replay: a token is a credential, and minting two moves nothing). 503 `terminal_unavailable` when Terminal is not enabled in this mode.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.connectionTokens.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "description": "The location (`tml_…`) whose readers the token may reach. Required: readers live on one provider account shared by every merchant, and a token without a location would reach all of them."
+                  }
+                },
+                "required": [
+                  "location"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalConnectionToken"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/terminal/locations": {
+      "post": {
+        "operationId": "createTerminalLocation",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Create a location",
+        "description": "Created at the provider first. 503 `terminal_unavailable` when Terminal is not enabled in this mode.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.locations.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "line2": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "postal_code": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$"
+                      }
+                    },
+                    "required": [
+                      "country"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Where the readers are. The provider may require more of the address in some countries."
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  }
+                },
+                "required": [
+                  "display_name",
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalLocation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listTerminalLocations",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "List locations",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "terminal.locations.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TerminalLocation"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/terminal/locations/{id}": {
+      "get": {
+        "operationId": "retrieveTerminalLocation",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Retrieve a location",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "terminal.locations.retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The location (`tml_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalLocation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "updateTerminalLocation",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Update a location",
+        "description": "The name and address are sent to the provider; metadata stays in Orbit.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.locations.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The location (`tml_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "line2": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "postal_code": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$"
+                      }
+                    },
+                    "required": [
+                      "country"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalLocation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTerminalLocation",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Delete a location",
+        "description": "Refused with 409 `terminal_location_in_use` while readers are registered to it: delete them first.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.locations.del",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The location (`tml_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedTerminalLocation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/terminal/readers": {
+      "post": {
+        "operationId": "createTerminalReader",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Register a reader",
+        "description": "Registers the reader showing `registration_code` to a location, at the provider first. Simulated codes are refused in live mode. 503 `terminal_unavailable` when Terminal is not enabled in this mode.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.readers.create",
+        "x-peable-expandable": "terminal.reader",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "registration_code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "The code the reader shows. In test mode a simulated code (`simulated-wpe`, `simulated-s700`) registers a simulated reader."
+                  },
+                  "location": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "description": "The location (`tml_…`) to register it to."
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Defaults to the provider’s name for the device."
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "required": [
+                  "registration_code",
+                  "location"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalReader"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listTerminalReaders",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "List readers",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "terminal.readers.list",
+        "x-peable-expandable": "terminal.reader",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          },
+          {
+            "in": "query",
+            "name": "starting_after",
+            "description": "The id of the LAST object of the previous page: the next page is older.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the FIRST object of the current page: the page returned is newer.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "location",
+            "description": "Only readers at this location (`tml_…`).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "online",
+                "offline"
+              ]
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TerminalReader"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "Whether another page exists in the direction this one was read."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "The path that was listed."
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data",
+                    "has_more",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/terminal/readers/{id}": {
+      "get": {
+        "operationId": "retrieveTerminalReader",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Retrieve a reader",
+        "description": "Reconciled with the provider: its `status`, `last_seen_at` and the outcome of an action in progress.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:read",
+        "x-peable-sdk": "terminal.readers.retrieve",
+        "x-peable-expandable": "terminal.reader",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The reader (`tmr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expand[]",
+            "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "maxItems": 20
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalReader"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "updateTerminalReader",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Update a reader",
+        "description": "The label is sent to the provider; metadata stays in Orbit.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.readers.update",
+        "x-peable-expandable": "terminal.reader",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The reader (`tmr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "At most 50 keys; keys ≤ 40 characters, values ≤ 500."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalReader"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTerminalReader",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Delete a reader",
+        "description": "Unregisters it at the provider. Refused with 409 `terminal_reader_busy` while it is collecting a payment.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.readers.del",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The reader (`tmr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedTerminalReader"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/terminal/readers/{id}/cancel_action": {
+      "post": {
+        "operationId": "cancelTerminalReaderAction",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Cancel the reader’s action",
+        "description": "Stops a collection in progress. The PaymentIntent is not canceled: it stays payable, on this reader or another.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.readers.cancelAction",
+        "x-peable-expandable": "terminal.reader",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The reader (`tmr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalReader"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/terminal/readers/{id}/process_payment_intent": {
+      "post": {
+        "operationId": "processTerminalReaderPaymentIntent",
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Collect a PaymentIntent on a reader",
+        "description": "The reader asks the cardholder to tap, insert or swipe. Answers the reader with its action `in_progress`; the outcome arrives as `terminal.reader.action_succeeded` or `…action_failed`, and the PaymentIntent moves through its own events. A declined card leaves it `requires_payment_method` with `last_payment_error`, collectable again. 409 `terminal_reader_busy` or `terminal_reader_offline` when the reader cannot take it.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "terminal.readers.processPaymentIntent",
+        "x-peable-expandable": "terminal.reader",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The reader (`tmr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payment_intent": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "description": "A `card_present` PaymentIntent (`pi_…`) of this merchant that is still waiting for a payment method."
+                  },
+                  "process_config": {
+                    "type": "object",
+                    "properties": {
+                      "enable_customer_cancellation": {
+                        "type": "boolean"
+                      },
+                      "skip_tipping": {
+                        "type": "boolean",
+                        "const": true,
+                        "description": "Orbit offers no on-reader tipping: only `true` is accepted."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "required": [
+                  "payment_intent"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalReader"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/test_helpers/checkout_sessions/{id}/expire": {
       "post": {
         "operationId": "expireCheckoutSessionTestHelper",
@@ -44066,6 +45820,135 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaymentIntent"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The error envelope; the HTTP status and `error.type` identify the failure.",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/test_helpers/terminal/readers/{id}/present_payment_method": {
+      "post": {
+        "operationId": "presentTerminalReaderPaymentMethod",
+        "tags": [
+          "Test helpers"
+        ],
+        "summary": "Present a card to a simulated reader",
+        "description": "Taps a test card on a simulated reader collecting a PaymentIntent. The outcome follows the same path as a real one: the provider decides it, and its events move the reader and the PaymentIntent. A live credential is refused with 403 `test_mode_only`.",
+        "security": [
+          {
+            "oxyServiceToken": []
+          }
+        ],
+        "x-peable-scope": "payments:write",
+        "x-peable-sdk": "testHelpers.terminal.readers.presentPaymentMethod",
+        "x-peable-expandable": "terminal.reader",
+        "x-peable-test-mode-only": true,
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The reader (`tmr_…`).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "description": "Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "in": "header",
+            "name": "Peable-Version",
+            "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2026-11-03"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "card_present",
+                    "description": "A test card tapped on a simulated reader. To simulate a decline, collect an amount ending in `01` (`call_issuer`) or `05` (`generic_decline`), as on the provider."
+                  },
+                  "expand": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "description": "Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Peable-Version": {
+                "description": "The date of the wire this answer is spelled in.",
+                "schema": {
+                  "type": "string",
+                  "example": "2026-11-03"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalReader"
                 }
               }
             }
@@ -45782,7 +47665,7 @@
                   },
                   "enabled_events": {
                     "minItems": 1,
-                    "maxItems": 105,
+                    "maxItems": 107,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -45891,7 +47774,9 @@
                         "identity.verification_session.verified",
                         "identity.verification_session.requires_input",
                         "identity.verification_session.canceled",
-                        "identity.verification_session.redacted"
+                        "identity.verification_session.redacted",
+                        "terminal.reader.action_succeeded",
+                        "terminal.reader.action_failed"
                       ]
                     }
                   },
@@ -46328,7 +48213,7 @@
                   },
                   "enabled_events": {
                     "minItems": 1,
-                    "maxItems": 105,
+                    "maxItems": 107,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -46437,7 +48322,9 @@
                         "identity.verification_session.verified",
                         "identity.verification_session.requires_input",
                         "identity.verification_session.canceled",
-                        "identity.verification_session.redacted"
+                        "identity.verification_session.redacted",
+                        "terminal.reader.action_succeeded",
+                        "terminal.reader.action_failed"
                       ]
                     }
                   },
@@ -57033,6 +58920,210 @@
         }
       }
     },
+    "terminal.reader.action_failed": {
+      "post": {
+        "operationId": "webhook_terminal_reader_action_failed",
+        "summary": "terminal.reader.action_failed",
+        "description": "A reader action failed (`action.failure_code`); the PaymentIntent stays payable.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "terminal.reader.action_failed"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/TerminalReader"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
+    "terminal.reader.action_succeeded": {
+      "post": {
+        "operationId": "webhook_terminal_reader_action_succeeded",
+        "summary": "terminal.reader.action_succeeded",
+        "description": "A reader finished its action: the PaymentIntent it collected moves on its own events.",
+        "tags": [
+          "Webhook events"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Peable-Signature",
+            "required": true,
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.<raw body>\">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "`evt_…`."
+                  },
+                  "object": {
+                    "type": "string",
+                    "const": "event"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "terminal.reader.action_succeeded"
+                  },
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Unix seconds."
+                  },
+                  "livemode": {
+                    "type": "boolean",
+                    "description": "The mode of the merchant it was sent to, and of the object it carries (ADR 0017)."
+                  },
+                  "api_version": {
+                    "type": "string",
+                    "description": "The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on."
+                  },
+                  "account": {
+                    "type": "string",
+                    "description": "The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise."
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "object": {
+                        "$ref": "#/components/schemas/TerminalReader"
+                      },
+                      "previous_attributes": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {},
+                        "description": "The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object."
+                      }
+                    },
+                    "required": [
+                      "object"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "request": {
+                    "$ref": "#/components/schemas/EventRequest"
+                  }
+                },
+                "required": [
+                  "id",
+                  "object",
+                  "type",
+                  "created",
+                  "livemode",
+                  "api_version",
+                  "data",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Acknowledged. Anything else is retried."
+          }
+        }
+      }
+    },
     "test_helpers.test_clock.advancing": {
       "post": {
         "operationId": "webhook_test_helpers_test_clock_advancing",
@@ -63157,6 +65248,50 @@
         ],
         "additionalProperties": false
       },
+      "DeletedTerminalLocation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "terminal.location"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "deleted"
+        ],
+        "additionalProperties": false
+      },
+      "DeletedTerminalReader": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "terminal.reader"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "deleted"
+        ],
+        "additionalProperties": false
+      },
       "DeletedTestClock": {
         "type": "object",
         "properties": {
@@ -63863,7 +65998,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 119 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 123 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -64035,6 +66170,8 @@
               "identity.verification_session.requires_input",
               "identity.verification_session.canceled",
               "identity.verification_session.redacted",
+              "terminal.reader.action_succeeded",
+              "terminal.reader.action_failed",
               "webhook_endpoint.test"
             ]
           },
@@ -64159,6 +66296,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/VerificationSession"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TerminalReader"
                   },
                   {
                     "$ref": "#/components/schemas/WebhookEndpoint"
@@ -65822,10 +67962,11 @@
                 "sepa_debit",
                 "ideal",
                 "bancontact",
-                "eps"
+                "eps",
+                "card_present"
               ]
             },
-            "description": "What the payer may pay with: `[\"faircoin\"]` on the chain; on the card rail the types named at creation, or those the configuration offers in this currency."
+            "description": "What the payer may pay with: `[\"faircoin\"]` on the chain; on the card rail the types named at creation (`[\"card_present\"]` for a Terminal reader), or those the configuration offers in this currency."
           },
           "payment_method_configuration_details": {
             "anyOf": [
@@ -75055,6 +77196,303 @@
         ],
         "additionalProperties": false
       },
+      "TerminalConnectionToken": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "terminal.connection_token"
+          },
+          "secret": {
+            "type": "string",
+            "description": "The provider's short-lived secret for its Terminal SDK. Never stored by Orbit."
+          },
+          "location": {
+            "type": "string",
+            "description": "The location (`tml_…`) the token is limited to."
+          }
+        },
+        "required": [
+          "object",
+          "secret",
+          "location"
+        ],
+        "additionalProperties": false
+      },
+      "TerminalLocation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "terminal.location"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "`true` in live mode, `false` in test mode."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "The name the location is shown with."
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address",
+            "description": "Where the location is; `country` is always set."
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500."
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "display_name",
+          "address",
+          "metadata"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "tml_0193b8f2c1a87d3e9f4a",
+            "object": "terminal.location",
+            "livemode": false,
+            "display_name": "Valencia Street shop",
+            "address": {
+              "line1": "1272 Valencia Street",
+              "line2": null,
+              "city": "San Francisco",
+              "state": "CA",
+              "postal_code": "94110",
+              "country": "US"
+            },
+            "metadata": {}
+          }
+        ]
+      },
+      "TerminalProcessConfig": {
+        "type": "object",
+        "properties": {
+          "enable_customer_cancellation": {
+            "type": "boolean",
+            "description": "The cardholder may cancel the collection on the reader."
+          },
+          "skip_tipping": {
+            "type": "boolean",
+            "const": true,
+            "description": "Always `true`: Orbit offers no on-reader tipping."
+          }
+        },
+        "required": [
+          "enable_customer_cancellation",
+          "skip_tipping"
+        ],
+        "additionalProperties": false
+      },
+      "TerminalReader": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "terminal.reader"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "`true` in live mode, `false` in test mode."
+          },
+          "label": {
+            "type": "string",
+            "description": "Your name for the reader."
+          },
+          "device_type": {
+            "type": "string",
+            "description": "The provider's device type (`stripe_s700`, `bbpos_wisepos_e`, `simulated_wisepos_e`, …)."
+          },
+          "serial_number": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "online",
+                  "offline"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the provider last saw it online; refreshed on a retrieve."
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Unix seconds."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the provider last heard from it."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TerminalLocation"
+                  }
+                ],
+                "x-peable-expandable": "terminal.location",
+                "description": "The location (`tml_…`) it is registered to, or the TerminalLocation with `expand[]=location`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TerminalReaderAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The PaymentIntent collection it is doing, or last did; `null` before the first."
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500."
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "label",
+          "device_type",
+          "serial_number",
+          "status",
+          "last_seen_at",
+          "location",
+          "action",
+          "metadata"
+        ],
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "tmr_0193b8f2c1a87d3e9f4b",
+            "object": "terminal.reader",
+            "livemode": false,
+            "label": "Front counter",
+            "device_type": "simulated_wisepos_e",
+            "serial_number": "259cd19c-b902-4730-96a1-09183be6e7f7",
+            "status": "online",
+            "last_seen_at": 1793750400,
+            "location": "tml_0193b8f2c1a87d3e9f4a",
+            "action": {
+              "type": "process_payment_intent",
+              "status": "in_progress",
+              "failure_code": null,
+              "failure_message": null,
+              "process_payment_intent": {
+                "payment_intent": "pi_0193b8f2c1a87d3e9f4c",
+                "process_config": {
+                  "enable_customer_cancellation": false,
+                  "skip_tipping": true
+                }
+              }
+            },
+            "metadata": {}
+          }
+        ]
+      },
+      "TerminalReaderAction": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "process_payment_intent"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "failure_code": {
+            "description": "The provider's code for a failed action (`card_declined`, `customer_canceled`, …); `null` unless `failed`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure_message": {
+            "description": "Orbit's own sentence for `failure_code` (never the provider's prose); `null` unless `failed`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "process_payment_intent": {
+            "type": "object",
+            "properties": {
+              "payment_intent": {
+                "type": "string",
+                "description": "The PaymentIntent being collected (`pi_…`)."
+              },
+              "process_config": {
+                "$ref": "#/components/schemas/TerminalProcessConfig"
+              }
+            },
+            "required": [
+              "payment_intent",
+              "process_config"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "type",
+          "status",
+          "failure_code",
+          "failure_message",
+          "process_payment_intent"
+        ],
+        "additionalProperties": false
+      },
       "TestClock": {
         "type": "object",
         "properties": {
@@ -76102,6 +78540,8 @@
               "identity.verification_session.requires_input",
               "identity.verification_session.canceled",
               "identity.verification_session.redacted",
+              "terminal.reader.action_succeeded",
+              "terminal.reader.action_failed",
               "webhook_endpoint.test"
             ]
           },
@@ -76318,7 +78758,9 @@
                 "identity.verification_session.verified",
                 "identity.verification_session.requires_input",
                 "identity.verification_session.canceled",
-                "identity.verification_session.redacted"
+                "identity.verification_session.redacted",
+                "terminal.reader.action_succeeded",
+                "terminal.reader.action_failed"
               ]
             },
             "description": "The event types sent to it; `*` is every type, including ones added later."
@@ -76540,7 +78982,9 @@
                 "identity.verification_session.verified",
                 "identity.verification_session.requires_input",
                 "identity.verification_session.canceled",
-                "identity.verification_session.redacted"
+                "identity.verification_session.redacted",
+                "terminal.reader.action_succeeded",
+                "terminal.reader.action_failed"
               ]
             },
             "description": "The event types sent to it; `*` is every type, including ones added later."

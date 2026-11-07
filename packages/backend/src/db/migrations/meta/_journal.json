@@ -883,6 +883,34 @@
       "when": 1794038738826,
       "tag": "0125_risk_rules_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1794041525270,
+      "tag": "0126_terminal",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1794041526677,
+      "tag": "0127_terminal_readers_payment_intent_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1794041528157,
+      "tag": "0128_payment_intents_card_present",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1794041529619,
+      "tag": "0129_terminal_validate",
+      "breakpoints": true
     }
   ]
 }

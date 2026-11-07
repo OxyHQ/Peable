@@ -55,13 +55,11 @@ import {
   updateLocation,
   updateReader,
 } from '../services/terminal/terminal';
-import { ProviderError } from '../services/providers/provider';
 import { toTerminalLocationDTO, toTerminalReaderDTO } from '../lib/serializeTerminal';
 import {
   requireAuthenticated,
   requireScope,
   sendError,
-  sendProviderError,
   sendValidationError,
   wrap,
 } from '../lib/http';
@@ -69,6 +67,7 @@ import { idempotent, runIdempotent } from '../lib/idempotency';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { refuseLivemode } from '../lib/liveStream';
+import { expireIntentNow } from '../services/expirySweeper';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import { createIntent, IntentParameterError, RailUnavailableError } from '../services/createIntent';
@@ -113,10 +112,8 @@ function sendTerminalError(res: Response, error: unknown): void {
     sendError(res, 400, 'invalid_request_error', error.message, error.code, error.param);
     return;
   }
-  if (error instanceof ProviderError) {
-    sendProviderError(res, error);
-    return;
-  }
+  // The live gate (ADR 0015) and other money refusals, in their one envelope.
+  if (sendMoneyRefusal(res, error)) return;
   throw error;
 }
 
@@ -466,7 +463,7 @@ export async function processPaymentIntentCore(
     return;
   }
   try {
-    const updated = await processPaymentIntent(row, intent, parsed.data.process_config);
+    const updated = await processPaymentIntent(merchant, row, intent, parsed.data.process_config);
     await answerReader(res, merchant, updated, parsed.data.expand);
   } catch (error) {
     sendTerminalError(res, error);
@@ -618,12 +615,19 @@ export async function collectOnReaderCore(
   // Re-read: the create links the provider payment after writing the row.
   intent = (await findIntentById(getDb(), intent.id)) ?? intent;
   try {
-    const reader = await processPaymentIntent(row, intent, undefined);
+    const reader = await processPaymentIntent(merchant, row, intent, undefined);
     res.status(200).json({
       reader: toTerminalReaderDTO(reader),
       payment_intent: toPaymentIntentDTO(intent),
     });
   } catch (error) {
+    // The reader refused the payment this request created: end it rather than
+    // leave an orphan nobody will collect — through the card rail's own
+    // cancellation, which reports what is true (it may not cancel if the
+    // provider took it after all; it then stays, and expires on its own).
+    if (error instanceof TerminalStateError || error instanceof TerminalUnavailableError) {
+      await expireIntentNow(intent).catch(() => undefined);
+    }
     sendTerminalError(res, error);
   }
 }

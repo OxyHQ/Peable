@@ -181,6 +181,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before the risk rules' `0121`–`0123` merged.
   '0120_identity_verification_validate':
     'released with #291; its post phase applied by the a20b4915 deploy (run 42351839315)',
+  // The risk rules' validate half shipped with #290, whose deploy of 4102fb31
+  // (Deploy to AWS run 42357716951, 2026-11-07) ran its post phase
+  // successfully before Terminal's `0126`–`0129` merged.
+  '0125_risk_rules_validate':
+    'released with #290; its post phase applied by the 4102fb31 deploy (run 42357716951)',
 };
 
 interface Migration {
