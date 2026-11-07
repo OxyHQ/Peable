@@ -1,0 +1,92 @@
+---
+title: "VerificationSession"
+description: "The identity.verification_session object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# VerificationSession
+
+Object type: `identity.verification_session`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"identity.verification_session"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `type` | string | One of `document`, `id_number`. |
+| `status` | string | One of `requires_input`, `processing`, `verified`, `canceled`. |
+| `options` | [VerificationOptions](/reference/objects/verification-options) |  |
+| `client_secret` | string \| null | The provider's short-lived secret for its in-page verification modal. Only on a create or retrieve while `requires_input`; never stored by Orbit, never on a list or an event. |
+| `url` | string \| null | The provider-hosted page that verifies the person (single use, 48 hours). Only on a create or retrieve while `requires_input`; never stored by Orbit, never on a list or an event. |
+| `return_url` | string \| null | Where the hosted page sends the person when done. |
+| `client_reference_id` | string \| null | Your own reference for the person. |
+| `last_error` | [VerificationError](/reference/objects/verification-error) \| null | Why the last attempt failed, while `requires_input`. |
+| `last_verification_report` | string \| [VerificationReport](/reference/objects/verification-report) \| null | The newest report (`vr_…`), or the VerificationReport with `expand[]=last_verification_report`. Expandable. |
+| `redaction` | object \| null | `null` until the session is redacted. |
+| `redaction.status` | string | One of `processing`, `redacted`. |
+| `verified_outputs` | [VerifiedOutputs](/reference/objects/verified-outputs) \| null | Only with `expand[]=verified_outputs` on a retrieve: read live from the provider, `null` until `verified` or once redacted. |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `last_verification_report` → [VerificationReport](/reference/objects/verification-report)
+
+## Example
+
+```json
+{
+  "id": "vs_0193b8f2c1a87d3e9f4a",
+  "object": "identity.verification_session",
+  "livemode": false,
+  "type": "document",
+  "status": "requires_input",
+  "options": {
+    "document": {
+      "allowed_types": [
+        "passport",
+        "id_card"
+      ],
+      "require_id_number": null,
+      "require_live_capture": true,
+      "require_matching_selfie": true
+    }
+  },
+  "client_secret": null,
+  "url": null,
+  "return_url": "https://example.com/verified",
+  "client_reference_id": "user_42",
+  "last_error": null,
+  "last_verification_report": null,
+  "redaction": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/identity/verification_sessions`](/reference/identity#create-a-verification-session) — Create a verification session
+- [`GET /v1/identity/verification_sessions`](/reference/identity#list-verification-sessions) — List verification sessions
+- [`GET /v1/identity/verification_sessions/{id}`](/reference/identity#retrieve-a-verification-session) — Retrieve a verification session
+- [`POST /v1/identity/verification_sessions/{id}`](/reference/identity#update-a-verification-session) — Update a verification session
+- [`POST /v1/identity/verification_sessions/{id}/cancel`](/reference/identity#cancel-a-verification-session) — Cancel a verification session
+- [`POST /v1/identity/verification_sessions/{id}/redact`](/reference/identity#redact-a-verification-session) — Redact a verification session
+
+## Events
+
+- [`identity.verification_session.canceled`](/reference/webhook-events#identityverification_sessioncanceled)
+- [`identity.verification_session.created`](/reference/webhook-events#identityverification_sessioncreated)
+- [`identity.verification_session.processing`](/reference/webhook-events#identityverification_sessionprocessing)
+- [`identity.verification_session.redacted`](/reference/webhook-events#identityverification_sessionredacted)
+- [`identity.verification_session.requires_input`](/reference/webhook-events#identityverification_sessionrequires_input)
+- [`identity.verification_session.verified`](/reference/webhook-events#identityverification_sessionverified)
+
+## Used in
+
+[Event](/reference/objects/event) · [VerificationReport](/reference/objects/verification-report)

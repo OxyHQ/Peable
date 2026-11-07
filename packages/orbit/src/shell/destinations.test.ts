@@ -146,6 +146,12 @@ describe('navModel', () => {
       'quotes',
       'billing-settings',
     ]);
+    // The merchant's own account and compliance: identity verification beside it (ADR 0023).
+    expect(model.sections[1]?.rows.map((row) => row.key)).toEqual([
+      'account',
+      'identity',
+      'branding',
+    ]);
     expect(model.footer.map((row) => row.key)).toEqual(['developers', 'settings']);
   });
 

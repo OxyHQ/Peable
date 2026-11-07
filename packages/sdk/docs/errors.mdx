@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-115 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+117 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -194,6 +194,10 @@ The `Idempotency-Key` was used with a different request, or its first request is
 ### `idempotency_key_invalid`
 
 The `Idempotency-Key` header is not a valid key.
+
+### `identity_unavailable`
+
+Identity verification is off in this mode.
 
 ### `in_progress`
 
@@ -490,6 +494,10 @@ Too many live streams are open for this merchant.
 ### `url_invalid`
 
 The URL is not an allowed https URL.
+
+### `verification_session_unexpected_state`
+
+The session's status does not allow this.
 
 ### `webhook_endpoint_disabled`
 

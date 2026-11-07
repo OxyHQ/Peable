@@ -746,6 +746,35 @@ describe('the billing engine (ADR 0018)', () => {
     expect(calls.at(-1)?.options).toEqual({ responseType: 'blob' });
   });
 
+  it('lists, creates and acts on verification sessions, and reads their reports', async () => {
+    answer = list;
+    await api.identity.sessions.list(live, { status: 'verified' });
+    await api.identity.reports.list(live, 'vs_1');
+    answer = () => ({ id: 'vs_1' });
+    await api.identity.sessions.retrieve(live, 'vs_1');
+    await api.identity.sessions.create(live, { type: 'document' });
+    await api.identity.sessions.update(live, 'vs_1', { type: 'id_number' });
+    for (const action of ['cancel', 'redact'] as const) {
+      await api.identity.sessions.act(live, 'vs_1', action);
+    }
+    await api.identity.reports.retrieve(live, 'vr_1');
+    const base = '/v1/dashboard/applications/app_live/identity';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', `${base}/verification_sessions?environment=production&status=verified`, undefined],
+      [
+        'GET',
+        `${base}/verification_reports?environment=production&verification_session=vs_1&limit=100`,
+        undefined,
+      ],
+      ['GET', `${base}/verification_sessions/vs_1?environment=production`, undefined],
+      ['POST', `${base}/verification_sessions?environment=production`, { type: 'document' }],
+      ['POST', `${base}/verification_sessions/vs_1?environment=production`, { type: 'id_number' }],
+      ['POST', `${base}/verification_sessions/vs_1/cancel?environment=production`, {}],
+      ['POST', `${base}/verification_sessions/vs_1/redact?environment=production`, {}],
+      ['GET', `${base}/verification_reports/vr_1?environment=production`, undefined],
+    ]);
+  });
+
   it('reads and updates billing settings', async () => {
     answer = () => ({ object: 'billing_settings' });
     await api.billingSettings.retrieve(scope);

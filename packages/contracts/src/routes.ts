@@ -4,6 +4,7 @@ import { checkoutRoutes } from './resources/checkout';
 import { connectRoutes } from './resources/connect';
 import { coreRoutes } from './resources/core';
 import { eventsRoutes } from './resources/events';
+import { identityRoutes } from './resources/identity';
 import { paymentsRoutes } from './resources/payments';
 import { taxRoutes } from './resources/tax';
 import type { RouteContract } from './route';
@@ -22,6 +23,7 @@ export type AnyRoute =
   | (typeof billingEngineRoutes)[number]
   | (typeof connectRoutes)[number]
   | (typeof taxRoutes)[number]
+  | (typeof identityRoutes)[number]
   | (typeof eventsRoutes)[number];
 
 // Annotated, not inferred: the inferred tuple of every route is larger than the
@@ -34,6 +36,7 @@ export const routes: readonly AnyRoute[] = [
   ...billingEngineRoutes,
   ...connectRoutes,
   ...taxRoutes,
+  ...identityRoutes,
   ...eventsRoutes,
 ] satisfies readonly RouteContract[];
 

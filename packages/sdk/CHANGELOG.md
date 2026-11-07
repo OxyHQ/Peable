@@ -1,5 +1,39 @@
 # Changelog
 
+## 6.5.0 — identity verification
+
+Requires `@peable.to/contracts` 6.4.0 and `@peable.to/shared-types` 6.4.0 (ADR 0023).
+
+Added:
+
+- `identity.verificationSessions.create | list | retrieve | update | cancel | redact`
+  (`/v1/identity/verification_sessions`): Stripe's `identity.verification_session`
+  (`vs_…`) over the provider's hosted flow — `type` `document` (options
+  `allowed_types`, `require_live_capture`, `require_matching_selfie`,
+  `require_id_number`) or `id_number`; statuses `requires_input`, `processing`,
+  `verified`, `canceled`; `last_error` (`code`, and Peable's own `reason`);
+  `return_url`, `client_reference_id`, metadata; `redaction`. `url` and
+  `client_secret` are on the create answer and a retrieve while
+  `requires_input` only — never stored, listed or sent in an event.
+  `expand[]=verified_outputs` (plus `verified_outputs.dob`,
+  `verified_outputs.id_number`) on a retrieve reads the person's verified data
+  live from the provider; Peable never stores it. `redact` erases what was
+  collected at the provider and the session's metadata and
+  `client_reference_id` (also in its stored events).
+- `identity.verificationReports.list | retrieve`
+  (`/v1/identity/verification_reports`, `vr_…`): each attempt's check outcomes
+  (`document`, `id_number`, `selfie`: `verified` / `unverified` and an error) —
+  never the person's data or images. `VerificationSession.last_verification_report`
+  and `VerificationReport.verification_session` are expandable.
+- Events `identity.verification_session.created | processing | verified |
+  requires_input | canceled | redacted`.
+- Error codes `identity_unavailable` (503: identity verification is not
+  enabled in this mode) and `verification_session_unexpected_state` (409).
+- Types `VerificationSession`, `VerificationReport`,
+  `CreateVerificationSessionParams`, `UpdateVerificationSessionParams`,
+  `ListVerificationSessionsParams`, `ListVerificationReportsParams` and the
+  vocabulary `VERIFICATION_*` in contracts and shared-types.
+
 ## 6.4.0 — recurring report schedules
 
 Requires `@peable.to/contracts` 6.3.0 and `@peable.to/shared-types` 6.3.0.

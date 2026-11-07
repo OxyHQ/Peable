@@ -216,3 +216,36 @@ export async function listEventsForMerchant(
     .limit(walk.limit);
   return walk.finish(rows.map(toEventRow));
 }
+
+/**
+ * Erase what a verification session's stored snapshots say about the person
+ * the merchant pointed at (ADR 0023): `metadata` and `client_reference_id` on
+ * every `identity.verification_session.*` event of that session.
+ *
+ * The one write to an event after its insert, and deliberately narrow: a
+ * redaction is irreversible erasure the merchant asked for, and an event is
+ * replayed byte for byte at every attempt (`toEventDTO`), so a snapshot left
+ * as it was would keep re-sending what the redaction erased for 30 days.
+ * Nothing else about the event changes — its type, id and delivery history
+ * stay the record.
+ */
+export async function redactVerificationSessionEvents(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  sessionPublicId: string,
+): Promise<number> {
+  const rows = await db
+    .update(events)
+    .set({
+      dataObject: sql`${events.dataObject} || '{"metadata":{},"client_reference_id":null}'::jsonb`,
+    })
+    .where(
+      and(
+        eq(events.merchantId, merchantId),
+        like(events.type, 'identity.verification_session.%'),
+        sql`${events.dataObject}->>'id' = ${sessionPublicId}`,
+      ),
+    )
+    .returning({ id: events.id });
+  return rows.length;
+}

@@ -49,6 +49,13 @@ import type {
   SetupIntentCancellationReason,
   SetupIntentStatus,
   SetupIntentUsage,
+  VerificationCheckStatus,
+  VerificationDocumentType,
+  VerificationErrorCode,
+  VerificationIdNumberType,
+  VerificationRedactionStatus,
+  VerificationSessionStatus,
+  VerificationSessionType,
 } from '@peable.to/shared-types';
 
 /** The providers this gateway can route a fiat payment through. */
@@ -103,7 +110,9 @@ export type ProviderStage =
   // Orbit money (ADR 0015): reading balance transactions, payouts and fees —
   // `balance` degrades a mirror read and moves nothing; `payout` instructs one.
   | 'balance'
-  | 'payout';
+  | 'payout'
+  // Identity verification (ADR 0023): a session or a report. Moves no money.
+  | 'identity';
 
 /**
  * A failure from a payment provider.
@@ -1146,5 +1155,142 @@ export function isSetupHoldingProvider(
     typeof candidate.cancelSetup === 'function' &&
     typeof candidate.getPaymentMethod === 'function' &&
     typeof candidate.detachPaymentMethod === 'function'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Identity verification (ADR 0023)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `ProviderError.code` an adapter answers when identity verification is
+ * not enabled on the provider account (or the credential may not use it): the
+ * gateway answers 503 `identity_unavailable`, never the provider's prose.
+ */
+export const IDENTITY_UNAVAILABLE_CODE = 'identity_unavailable';
+
+/** What a document check requires; absent fields are the provider's defaults. */
+export interface ProviderVerificationOptions {
+  readonly document?: {
+    readonly allowedTypes?: readonly VerificationDocumentType[];
+    readonly requireIdNumber?: boolean;
+    readonly requireLiveCapture?: boolean;
+    readonly requireMatchingSelfie?: boolean;
+  };
+}
+
+/** One check's outcome on a report — never what the check read. */
+export interface ProviderVerificationCheck {
+  readonly status: VerificationCheckStatus;
+  /** `null` when verified, or when the provider's code is one Orbit does not know. */
+  readonly errorCode: VerificationErrorCode | null;
+}
+
+/**
+ * A provider report as the gateway may see it: the outcome of each check and
+ * nothing the person submitted. The adapter is the firewall — names, dates,
+ * numbers, addresses and image ids never leave it.
+ */
+export interface ProviderVerificationReport {
+  readonly providerObjectId: string;
+  readonly type: VerificationSessionType;
+  readonly document: ProviderVerificationCheck | null;
+  readonly idNumber: ProviderVerificationCheck | null;
+  readonly selfie: ProviderVerificationCheck | null;
+}
+
+/** A provider verification session, in the gateway's vocabulary. */
+export interface ProviderVerificationSession {
+  readonly providerObjectId: string;
+  readonly status: VerificationSessionStatus;
+  readonly type: VerificationSessionType;
+  /** The last attempt failed: `errorCode` names why when Orbit knows the code. */
+  readonly lastError: { readonly errorCode: VerificationErrorCode | null } | null;
+  /** The person's single-use credentials — handed to the caller, never stored. */
+  readonly clientSecret: string | null;
+  readonly url: string | null;
+  /** The newest report, already reduced to its outcomes. */
+  readonly lastReport: ProviderVerificationReport | null;
+  readonly redaction: VerificationRedactionStatus | null;
+}
+
+/** The person's verified data, read live for one answer and never stored. */
+export interface ProviderVerifiedOutputs {
+  readonly firstName: string | null;
+  readonly lastName: string | null;
+  readonly address: {
+    readonly line1: string | null;
+    readonly line2: string | null;
+    readonly city: string | null;
+    readonly state: string | null;
+    readonly postalCode: string | null;
+    readonly country: string | null;
+  } | null;
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly idNumberType: VerificationIdNumberType | null;
+  /** Only when asked for. */
+  readonly dob?: {
+    readonly day: number | null;
+    readonly month: number | null;
+    readonly year: number | null;
+  } | null;
+  /** Only when asked for. */
+  readonly idNumber?: string | null;
+}
+
+export interface CreateVerificationSessionRequest {
+  /** The public `vs_…` — correlation (provider metadata) and idempotency basis. */
+  readonly verificationSessionId: string;
+  readonly type: VerificationSessionType;
+  readonly options: ProviderVerificationOptions;
+  readonly returnUrl: string | null;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * A provider that verifies people's identity documents (Stripe Identity).
+ * Optional, like every capability: a provider without it answers 503
+ * `identity_unavailable`. Every method throws a `ProviderError` with
+ * {@link IDENTITY_UNAVAILABLE_CODE} when the account cannot use it.
+ */
+export interface IdentityVerifyingProvider extends PaymentProvider {
+  createVerificationSession(
+    request: CreateVerificationSessionRequest,
+  ): Promise<ProviderVerificationSession>;
+  /** Read the provider's view, with its newest report's outcomes. No idempotency key. */
+  getVerificationSession(providerObjectId: string): Promise<ProviderVerificationSession>;
+  updateVerificationSession(request: {
+    readonly providerObjectId: string;
+    readonly type?: VerificationSessionType;
+    readonly options?: ProviderVerificationOptions;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderVerificationSession>;
+  cancelVerificationSession(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderVerificationSession>;
+  redactVerificationSession(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderVerificationSession>;
+  /** The verified data, live; `null` when the provider holds none. */
+  getVerifiedOutputs(
+    providerObjectId: string,
+    include: { readonly dob: boolean; readonly idNumber: boolean },
+  ): Promise<ProviderVerifiedOutputs | null>;
+}
+
+export function isIdentityVerifyingProvider(
+  provider: PaymentProvider,
+): provider is IdentityVerifyingProvider {
+  const candidate = provider as Partial<IdentityVerifyingProvider>;
+  return (
+    typeof candidate.createVerificationSession === 'function' &&
+    typeof candidate.getVerificationSession === 'function' &&
+    typeof candidate.updateVerificationSession === 'function' &&
+    typeof candidate.cancelVerificationSession === 'function' &&
+    typeof candidate.redactVerificationSession === 'function' &&
+    typeof candidate.getVerifiedOutputs === 'function'
   );
 }

@@ -128,6 +128,12 @@ export const WEBHOOK_EVENT_OBJECTS = {
   'tax.assessment.created': 'tax.assessment',
   'tax.review_item.created': 'tax.review_item',
   'tax.review_item.updated': 'tax.review_item',
+  'identity.verification_session.created': 'identity.verification_session',
+  'identity.verification_session.processing': 'identity.verification_session',
+  'identity.verification_session.verified': 'identity.verification_session',
+  'identity.verification_session.requires_input': 'identity.verification_session',
+  'identity.verification_session.canceled': 'identity.verification_session',
+  'identity.verification_session.redacted': 'identity.verification_session',
   'webhook_endpoint.test': 'webhook_endpoint',
 } as const;
 

@@ -18,6 +18,7 @@
  * English only renders, in English, rather than as its name.
  */
 import { useSyncExternalStore } from 'react';
+import { IDENTITY_EN, IDENTITY_ES } from './identity/strings';
 import { MONEY_EN, MONEY_ES } from './money/strings';
 import { QUOTES_EN, QUOTES_ES } from './quotes/strings';
 import { REPORTS_EN, REPORTS_ES } from './reports/strings';
@@ -33,6 +34,7 @@ export const SUPPORTED_LOCALES = ['en', 'es'];
 export const FALLBACK_LOCALE = 'en';
 
 const en: Record<string, string> = {
+  ...IDENTITY_EN,
   ...MONEY_EN,
   ...QUOTES_EN,
   ...REPORTS_EN,
@@ -1053,6 +1055,7 @@ const en: Record<string, string> = {
 };
 
 const es: Record<string, string> = {
+  ...IDENTITY_ES,
   ...MONEY_ES,
   ...QUOTES_ES,
   ...REPORTS_ES,

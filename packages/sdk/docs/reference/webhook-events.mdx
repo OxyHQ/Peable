@@ -1,7 +1,7 @@
 ---
 title: "Webhook events"
 description: "Every webhook event type and its payload."
-order: 951
+order: 952
 generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
 ---
 
@@ -49,6 +49,12 @@ Every event Peable sends to a [webhook endpoint](/webhooks), and records as an e
 | [`customer.subscription.updated`](#customersubscriptionupdated) | A Subscription changed; `previous_attributes` names what moved. |
 | [`customer.updated`](#customerupdated) | A Customer was updated; `previous_attributes` names what moved. |
 | [`entitlements.active_entitlement_summary.updated`](#entitlementsactive_entitlement_summaryupdated) | A customer's active entitlements changed — re-read them, then grant or withdraw access. |
+| [`identity.verification_session.canceled`](#identityverification_sessioncanceled) | A VerificationSession was canceled. |
+| [`identity.verification_session.created`](#identityverification_sessioncreated) | A VerificationSession was created. |
+| [`identity.verification_session.processing`](#identityverification_sessionprocessing) | A VerificationSession was submitted and is being checked. |
+| [`identity.verification_session.redacted`](#identityverification_sessionredacted) | A VerificationSession's collected data was erased at the provider. |
+| [`identity.verification_session.requires_input`](#identityverification_sessionrequires_input) | A VerificationSession attempt failed (`last_error`) and needs the person again. |
+| [`identity.verification_session.verified`](#identityverification_sessionverified) | A VerificationSession was verified: every check passed. |
 | [`invoice.created`](#invoicecreated) | An Invoice was created. |
 | [`invoice.deleted`](#invoicedeleted) | A draft Invoice was deleted. |
 | [`invoice.finalized`](#invoicefinalized) | An Invoice was finalized. |
@@ -1094,6 +1100,162 @@ A customer's active entitlements changed — re-read them, then grant or withdra
 | `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
 | `data` | object |  |
 | `data.object` | [ActiveEntitlementSummary](/reference/objects/active-entitlement-summary) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `identity.verification_session.canceled`
+
+A VerificationSession was canceled.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"identity.verification_session.canceled"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [VerificationSession](/reference/objects/verification-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `identity.verification_session.created`
+
+A VerificationSession was created.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"identity.verification_session.created"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [VerificationSession](/reference/objects/verification-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `identity.verification_session.processing`
+
+A VerificationSession was submitted and is being checked.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"identity.verification_session.processing"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [VerificationSession](/reference/objects/verification-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `identity.verification_session.redacted`
+
+A VerificationSession's collected data was erased at the provider.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"identity.verification_session.redacted"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [VerificationSession](/reference/objects/verification-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `identity.verification_session.requires_input`
+
+A VerificationSession attempt failed (`last_error`) and needs the person again.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"identity.verification_session.requires_input"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [VerificationSession](/reference/objects/verification-session) |  |
+| `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
+| `request` | [EventRequest](/reference/objects/event-request) |  |
+
+## `identity.verification_session.verified`
+
+A VerificationSession was verified: every check passed.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Signature` **required** | header | string | `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, one `v1=` per active secret while a secret is rolling. Verify with `peable.webhooks.constructEvent`. |
+
+**Payload** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `evt_…`. |
+| `object` | `"event"` |  |
+| `type` | `"identity.verification_session.verified"` |  |
+| `created` | integer | Unix seconds. |
+| `livemode` | boolean | The mode of the merchant it was sent to, and of the object it carries (ADR 0017). |
+| `api_version` | string | The wire version the event was rendered with — the `Peable-Version` of the deployment that stored it. An event is a stored snapshot; it is not re-rendered when the wire moves on. |
+| `account` | string | The connected account (`ca_…`) this event is about (ADR 0012 D7). Present on every event for an on-behalf payment and on `connected_account.updated`; absent otherwise. |
+| `data` | object |  |
+| `data.object` | [VerificationSession](/reference/objects/verification-session) |  |
 | `data.previous_attributes` | map of any | The fields of `object` that this change moved, with their values BEFORE it. Absent when the event is not a change of an existing object. |
 | `request` | [EventRequest](/reference/objects/event-request) |  |
 

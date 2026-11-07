@@ -19,6 +19,11 @@ import { findFilesByIds } from '../db/files/fileRepository';
 import { findReportRunsByPublicIds } from '../db/reporting/reportRunRepository';
 import { findReportSchedulesByPublicIds } from '../db/reporting/reportScheduleRepository';
 import { toReportRunDTO, toReportScheduleDTO } from './serializeReporting';
+import {
+  findVerificationReportsForMerchantByPublicIds,
+  findVerificationSessionsForMerchantByPublicIds,
+} from '../db/identity/verificationRepository';
+import { toVerificationReportDTO, toVerificationSessionDTO } from './serializeIdentity';
 import { sendError } from './http';
 import {
   toChargeDTO,
@@ -114,7 +119,9 @@ export type ExpandableType =
   | 'entitlements.active_entitlement'
   | 'product_feature'
   | 'billing_portal.configuration'
-  | 'billing_portal.session';
+  | 'billing_portal.session'
+  | 'identity.verification_session'
+  | 'identity.verification_report';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -132,7 +139,9 @@ type TargetType =
   | 'refund'
   | 'dispute'
   | 'reporting.report_run'
-  | 'reporting.report_schedule';
+  | 'reporting.report_schedule'
+  | 'identity.verification_session'
+  | 'identity.verification_report';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -218,6 +227,9 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   product_feature: {},
   'billing_portal.configuration': {},
   'billing_portal.session': {},
+  // Identity verification (ADR 0023): a session names its newest report, a report its session.
+  'identity.verification_session': { last_verification_report: 'identity.verification_report' },
+  'identity.verification_report': { verification_session: 'identity.verification_session' },
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
@@ -327,6 +339,19 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findReportSchedulesByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toReportScheduleDTO(row),
+      ]),
+    ),
+  'identity.verification_session': async (merchantId, ids) =>
+    new Map(
+      (await findVerificationSessionsForMerchantByPublicIds(getDb(), merchantId, ids)).map(
+        (row) => [row.publicId, toVerificationSessionDTO(row)],
+      ),
+    ),
+  'identity.verification_report': async (merchantId, ids) =>
+    new Map(
+      (await findVerificationReportsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toVerificationReportDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

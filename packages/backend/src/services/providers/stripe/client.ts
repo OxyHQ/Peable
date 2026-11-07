@@ -24,7 +24,12 @@
 import Stripe from 'stripe';
 import { selectStripeApiVersion } from './apiVersion';
 import { config } from '../../../config';
-import { ProviderError, type ProviderMode, type ProviderStage } from '../provider';
+import {
+  IDENTITY_UNAVAILABLE_CODE,
+  ProviderError,
+  type ProviderMode,
+  type ProviderStage,
+} from '../provider';
 
 /**
  * The Stripe API release train this integration is written against.
@@ -687,4 +692,112 @@ export async function constructStripeEvent(
     retryable: false,
     code: 'invalid_signature',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Identity verification (ADR 0023)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a Stripe refusal means "this account cannot use Identity" — not
+ * activated, not approved, or a restricted key without the permission. No
+ * retry changes it, and the merchant cannot fix it: the gateway answers 503
+ * `identity_unavailable`, never Stripe's prose.
+ */
+export function isIdentityUnavailableError(error: unknown): boolean {
+  if (error instanceof Stripe.errors.StripePermissionError) return true;
+  if (!(error instanceof Stripe.errors.StripeInvalidRequestError)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('identity') &&
+    /(not (yet )?(been )?(enabled|activated|available|set up)|activate|onboard|apply for|application)/.test(
+      message,
+    )
+  );
+}
+
+async function identityCall<T>(mode: ProviderMode, fn: (stripe: Stripe) => Promise<T>): Promise<T> {
+  try {
+    return await fn(getStripeClient(mode));
+  } catch (error) {
+    if (isIdentityUnavailableError(error)) {
+      throw new ProviderError({
+        provider: 'stripe',
+        stage: 'identity',
+        message: 'identity verification is not enabled on the provider account',
+        retryable: false,
+        code: IDENTITY_UNAVAILABLE_CODE,
+      });
+    }
+    throw toProviderError(error, 'identity');
+  }
+}
+
+/** The session with its newest report expanded — one read answers both. */
+const VERIFICATION_SESSION_EXPAND = ['last_verification_report'];
+
+export function createStripeVerificationSession(
+  mode: ProviderMode,
+  params: Stripe.Identity.VerificationSessionCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Identity.VerificationSession> {
+  return identityCall(mode, (stripe) =>
+    stripe.identity.verificationSessions.create(
+      { ...params, expand: VERIFICATION_SESSION_EXPAND },
+      { idempotencyKey },
+    ),
+  );
+}
+
+export function retrieveStripeVerificationSession(
+  mode: ProviderMode,
+  id: string,
+  expand: readonly string[] = VERIFICATION_SESSION_EXPAND,
+): Promise<Stripe.Identity.VerificationSession> {
+  return identityCall(mode, (stripe) =>
+    stripe.identity.verificationSessions.retrieve(id, { expand: [...expand] }),
+  );
+}
+
+export function updateStripeVerificationSession(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.Identity.VerificationSessionUpdateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Identity.VerificationSession> {
+  return identityCall(mode, (stripe) =>
+    stripe.identity.verificationSessions.update(
+      id,
+      { ...params, expand: VERIFICATION_SESSION_EXPAND },
+      { idempotencyKey },
+    ),
+  );
+}
+
+export function cancelStripeVerificationSession(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.Identity.VerificationSession> {
+  return identityCall(mode, (stripe) =>
+    stripe.identity.verificationSessions.cancel(
+      id,
+      { expand: VERIFICATION_SESSION_EXPAND },
+      { idempotencyKey },
+    ),
+  );
+}
+
+export function redactStripeVerificationSession(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.Identity.VerificationSession> {
+  return identityCall(mode, (stripe) =>
+    stripe.identity.verificationSessions.redact(
+      id,
+      { expand: VERIFICATION_SESSION_EXPAND },
+      { idempotencyKey },
+    ),
+  );
 }

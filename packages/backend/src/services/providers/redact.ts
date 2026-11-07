@@ -104,6 +104,7 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'peableaccountid',
   'peablecustomerid',
   'peablesetupintentid',
+  'peableverificationsessionid',
   'setupintent',
   'paymentmethod',
 ]);

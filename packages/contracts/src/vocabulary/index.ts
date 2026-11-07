@@ -20,6 +20,7 @@ export * from './version';
 export * from './checkout';
 export * from './files';
 export * from './identity';
+export * from './identityVerification';
 export * from './merchants';
 export * from './paymentMethodConfigurations';
 export * from './realtime';

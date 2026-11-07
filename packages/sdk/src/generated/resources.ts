@@ -2959,6 +2959,113 @@ export interface TaxResource {
 }
 
 /**
+ * Identity: `peable.identity.verificationSessions`.
+ */
+export interface IdentityVerificationSessionsResource {
+  /**
+   * Create a verification session.
+   *
+   * Creates the session at the provider and answers its hosted `url` and `client_secret` — this answer and a retrieve are the only places they appear. 503 `identity_unavailable` when identity verification is not enabled in this mode.
+   *
+   * `POST /v1/identity/verification_sessions`
+   */
+  create(
+    params: BodyOf<Op<'createVerificationSession'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'createVerificationSession'>>>;
+  /**
+   * List verification sessions.
+   *
+   * `GET /v1/identity/verification_sessions`
+   */
+  list(
+    params?: QueryOf<Op<'listVerificationSessions'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listVerificationSessions'>>;
+  /**
+   * Retrieve a verification session.
+   *
+   * Reconciled with the provider while not terminal; carries `url` and `client_secret` while `requires_input`. `expand[]=verified_outputs` reads the verified data live.
+   *
+   * `GET /v1/identity/verification_sessions/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveVerificationSession'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveVerificationSession'>>>;
+  /**
+   * Update a verification session.
+   *
+   * Only while `requires_input`: its `type` and `options` (sent to the provider) and its metadata.
+   *
+   * `POST /v1/identity/verification_sessions/{id}`
+   */
+  update(
+    id: string,
+    params?: BodyOf<Op<'updateVerificationSession'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'updateVerificationSession'>>>;
+  /**
+   * Cancel a verification session.
+   *
+   * Only while `requires_input`; the person can never submit it again.
+   *
+   * `POST /v1/identity/verification_sessions/{id}/cancel`
+   */
+  cancel(
+    id: string,
+    params?: BodyOf<Op<'cancelVerificationSession'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'cancelVerificationSession'>>>;
+  /**
+   * Redact a verification session.
+   *
+   * Erases what was collected: the provider redacts the session and its reports (`redaction.status` `processing`, then `redacted`); Orbit erases the metadata and `client_reference_id` of the session and of its stored events. A `requires_input` session is also canceled. Irreversible; refused while `processing`.
+   *
+   * `POST /v1/identity/verification_sessions/{id}/redact`
+   */
+  redact(
+    id: string,
+    params?: BodyOf<Op<'redactVerificationSession'>>,
+    options?: RequestOptions & IdempotencyOptions,
+  ): Promise<ResponseOf<Op<'redactVerificationSession'>>>;
+}
+
+/**
+ * Identity: `peable.identity.verificationReports`.
+ */
+export interface IdentityVerificationReportsResource {
+  /**
+   * List verification reports.
+   *
+   * `GET /v1/identity/verification_reports`
+   */
+  list(
+    params?: QueryOf<Op<'listVerificationReports'>>,
+    options?: RequestOptions,
+  ): ListPromiseOf<Op<'listVerificationReports'>>;
+  /**
+   * Retrieve a verification report.
+   *
+   * `GET /v1/identity/verification_reports/{id}`
+   */
+  retrieve(
+    id: string,
+    params?: QueryOf<Op<'retrieveVerificationReport'>>,
+    options?: RequestOptions,
+  ): Promise<ResponseOf<Op<'retrieveVerificationReport'>>>;
+}
+
+/**
+ * `peable.identity`.
+ */
+export interface IdentityResource {
+  readonly verificationSessions: IdentityVerificationSessionsResource;
+  readonly verificationReports: IdentityVerificationReportsResource;
+}
+
+/**
  * Events: `peable.events`.
  */
 export interface EventsResource {
@@ -3154,6 +3261,7 @@ export interface GeneratedResources {
   readonly reporting: ReportingResource;
   readonly requestLogs: RequestLogsResource;
   readonly tax: TaxResource;
+  readonly identity: IdentityResource;
   readonly events: EventsResource;
   readonly webhookEndpoints: WebhookEndpointsResource;
   readonly webhookDeliveries: WebhookDeliveriesResource;
@@ -5862,6 +5970,94 @@ export const ROUTE_SPECS: readonly RouteSpec[] = [
     account: false,
   },
   {
+    sdk: 'identity.verificationSessions.create',
+    operationId: 'createVerificationSession',
+    method: 'POST',
+    path: '/v1/identity/verification_sessions',
+    pathParams: [],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationSessions.list',
+    operationId: 'listVerificationSessions',
+    method: 'GET',
+    path: '/v1/identity/verification_sessions',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationSessions.retrieve',
+    operationId: 'retrieveVerificationSession',
+    method: 'GET',
+    path: '/v1/identity/verification_sessions/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationSessions.update',
+    operationId: 'updateVerificationSession',
+    method: 'POST',
+    path: '/v1/identity/verification_sessions/{id}',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationSessions.cancel',
+    operationId: 'cancelVerificationSession',
+    method: 'POST',
+    path: '/v1/identity/verification_sessions/{id}/cancel',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationSessions.redact',
+    operationId: 'redactVerificationSession',
+    method: 'POST',
+    path: '/v1/identity/verification_sessions/{id}/redact',
+    pathParams: ['id'],
+    input: 'body',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationReports.list',
+    operationId: 'listVerificationReports',
+    method: 'GET',
+    path: '/v1/identity/verification_reports',
+    pathParams: [],
+    input: 'query',
+    encoding: 'json',
+    kind: 'list',
+    account: false,
+  },
+  {
+    sdk: 'identity.verificationReports.retrieve',
+    operationId: 'retrieveVerificationReport',
+    method: 'GET',
+    path: '/v1/identity/verification_reports/{id}',
+    pathParams: ['id'],
+    input: 'query',
+    encoding: 'json',
+    kind: 'json',
+    account: false,
+  },
+  {
     sdk: 'events.list',
     operationId: 'listEvents',
     method: 'GET',
@@ -6039,6 +6235,7 @@ export class GeneratedClient implements GeneratedResources {
   readonly reporting: GeneratedResources['reporting'];
   readonly requestLogs: GeneratedResources['requestLogs'];
   readonly tax: GeneratedResources['tax'];
+  readonly identity: GeneratedResources['identity'];
   readonly events: GeneratedResources['events'];
   readonly webhookEndpoints: GeneratedResources['webhookEndpoints'];
   readonly webhookDeliveries: GeneratedResources['webhookDeliveries'];
@@ -6086,6 +6283,7 @@ export class GeneratedClient implements GeneratedResources {
     this.reporting = tree.reporting;
     this.requestLogs = tree.requestLogs;
     this.tax = tree.tax;
+    this.identity = tree.identity;
     this.events = tree.events;
     this.webhookEndpoints = tree.webhookEndpoints;
     this.webhookDeliveries = tree.webhookDeliveries;
