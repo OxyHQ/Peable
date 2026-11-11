@@ -66,7 +66,7 @@
     "@peable.to/sdk": "workspace:*",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@oxy.so/bloom": "18.4.2"
+    "@oxy.so/bloom": "19.5.1"
   },
   "dependencies": {
     "@oxy.so/core": "7.48.0"
