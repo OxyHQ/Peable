@@ -86,5 +86,5 @@ rules, each of which is easy to undo:
   transaction, deduplicated per subject) rendered at send time and handed to
   the INJECTED `Mailer` (`services/email/mailer.ts`); no shared Oxy mail
   client exists, so production registers an adapter over the outbound relay
-  (`~/Oxy/docs/outbound-mail-relay.md`). Receipt numbers are claimed by one
+  (<https://github.com/OxyHQ/oxy-infra/blob/main/docs/outbound-mail-relay.md>, private). Receipt numbers are claimed by one
   upsert (`claimReceiptNumber`), the receive cursor's pattern.
