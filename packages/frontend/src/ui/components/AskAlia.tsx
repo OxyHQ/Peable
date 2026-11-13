@@ -1,7 +1,7 @@
 /**
  * AskAlia — the header button that opens Alia's chat sheet.
  *
- * Alia is the Oxy assistant (`@alia.onl/sdk`). The sheet mounts only for a
+ * Alia is the Oxy assistant, reached through `@gemies/sdk`. The sheet mounts only for a
  * signed-in person, because it talks to Alia on their account; a signed-out
  * press opens the Oxy sign-in instead. `screen` says what the person is
  * looking at, so Alia answers about that and not about wallets in general.
@@ -9,8 +9,8 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable } from 'react-native';
-import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
-import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
+import { GemieChatSheet, type GemieChatSheetRef } from '@gemies/sdk';
+import { GemieAvatarIcon } from '@gemies/sdk/avatar';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useAuth } from '@oxy.so/services/ui/client';
 import { t } from '../../i18n';
@@ -23,7 +23,7 @@ interface AskAliaProps {
 export function AskAlia({ screen }: AskAliaProps) {
   const theme = useTheme();
   const { isAuthenticated, signIn } = useAuth();
-  const chatRef = useRef<AliaChatSheetRef>(null);
+  const chatRef = useRef<GemieChatSheetRef>(null);
 
   const welcomeSuggestions = useMemo(
     () => [
@@ -51,10 +51,10 @@ export function AskAlia({ screen }: AskAliaProps) {
         className="active:opacity-60"
         hitSlop={8}
       >
-        <AliaAvatarIcon width={24} height={24} fill={theme.colors.text} />
+        <GemieAvatarIcon width={24} height={24} fill={theme.colors.text} />
       </Pressable>
       {isAuthenticated && (
-        <AliaChatSheet
+        <GemieChatSheet
           ref={chatRef}
           clientContext={t('alia.clientContext', { screen })}
           welcomeSuggestions={welcomeSuggestions}
