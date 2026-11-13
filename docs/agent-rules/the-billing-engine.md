@@ -47,3 +47,16 @@ rebuild a provider-billed subscription beside it. Invariants:
   accept writes nothing. The discount is validated on the draft and redeemed
   only at acceptance; open quotes expire in the scheduler's pass on the
   customer's clock; numbers are one upsert (`claimQuoteNumber`).
+
+## Opt-in finalization approvals (ADR 0025)
+
+`GET /v1/invoices/:id?include_finalization_revision=true` alone adds
+`finalization_revision`. Rendering, expansions and revision share one consistent
+read. Ordinary responses/events never include this field. A conditional finalize
+passes `expected_finalization_revision`; it must capture and price those same
+inputs, then revalidate inside the final financial transaction before numbering,
+balance application, transition or email outbox. A conflict is 409, with no
+implicit stale-approval retry. Tax preparation can leave neutral evidence and
+calculation records; it must not issue or collect an invoice. Never hold a
+numbering lock across a tax-provider request. Invoice-line writers must recheck
+`draft` after taking the invoice lock, including when they waited for finalize.

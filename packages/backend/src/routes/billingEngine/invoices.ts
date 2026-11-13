@@ -10,6 +10,7 @@ import {
   createInvoiceItemParams,
   createInvoiceParams,
   expandOnlyQuery,
+  retrieveInvoiceQuery,
   finalizeInvoiceParams,
   invoiceActionParams,
   listCreditNotesQuery,
@@ -48,6 +49,8 @@ import {
   listCustomerSubscriptions,
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
+import { expandObjects, parseExpand } from '../../lib/expand';
+import { captureFinalizationInput } from '../../services/billingEngine/finalizationRevision';
 import {
   answerList,
   parseQuery,
@@ -98,6 +101,7 @@ import { answerObject, cleared, idParam, parseBody } from './helpers';
  */
 const listQuery = surfaceQuery(listInvoicesQuery);
 const retrieveQuery = surfaceQuery(expandOnlyQuery);
+const invoiceRetrieveQuery = surfaceQuery(retrieveInvoiceQuery);
 const upcomingSurface = surfaceQuery(upcomingInvoiceQuery);
 
 async function answer(
@@ -138,9 +142,27 @@ async function create(req: Request, res: Response, merchant: MerchantRow) {
 async function retrieve(req: Request, res: Response, merchant: MerchantRow, surface: QuerySurface) {
   const id = idParam(req, res);
   if (!id) return;
-  const query = parseQuery(req, res, retrieveQuery[surface]);
+  const query = parseQuery(req, res, invoiceRetrieveQuery[surface]);
   if (!query) return;
-  await answer(res, merchant, id, query.expand);
+  if (!query.include_finalization_revision) {
+    await answer(res, merchant, id, query.expand);
+    return;
+  }
+  const tree = parseExpand(res, 'invoice', query.expand, { list: false });
+  if (!tree) return;
+  const dto = await getDb().transaction(
+    async (tx) => {
+      const row = await findInvoiceForMerchant(tx, id, merchant.id);
+      if (!row) throw missing('invoice');
+      const revision =
+        row.status === 'draft' ? (await captureFinalizationInput(tx, row.id)).revision : null;
+      const rendered = { ...(await renderInvoice(tx, row)), finalization_revision: revision };
+      await expandObjects([rendered], 'invoice', tree, merchant.id, tx);
+      return rendered;
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  res.status(200).json(dto);
 }
 
 async function update(req: Request, res: Response, merchant: MerchantRow) {
@@ -662,6 +684,9 @@ export const INVOICE_ROUTES: readonly CatalogRoute[] = [
       (m, id, b) =>
         finalizeInvoice(m, id, {
           ...(b.auto_advance !== undefined ? { autoAdvance: b.auto_advance } : {}),
+          ...(b.expected_finalization_revision
+            ? { expectedFinalizationRevision: b.expected_finalization_revision }
+            : {}),
         }),
       finalizeInvoiceParams,
     ),

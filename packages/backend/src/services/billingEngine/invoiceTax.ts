@@ -28,7 +28,7 @@ import { findPaymentMethodById } from '../../db/customers/paymentMethodRepositor
 import { findLinesByIds, type InvoiceLineRow } from '../../db/billingEngine/invoiceRepository';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import type { DatabaseOrTransaction } from '../../db/postgres';
-import { TaxError } from '../tax/taxService';
+import { TaxError, type InvoiceTaxPolicy } from '../tax/taxService';
 import { BillingEngineError } from './errors';
 import { type Catalog, type DraftLine, productOfPrice, priceOf } from './drafting';
 import { billingEngineRuntime } from './runtime';
@@ -75,10 +75,10 @@ function share(value: bigint, part: bigint, whole: bigint): bigint {
   return negative ? -rounded : rounded;
 }
 
-async function locationEvidence(
-  db: DatabaseOrTransaction,
+export function capturedLocationEvidence(
   customer: CustomerRow,
-): Promise<Record<string, unknown>[]> {
+  cardCountry: string | undefined,
+): Record<string, unknown>[] {
   const evidence: Record<string, unknown>[] = [];
   const address = customer.address;
   if (address?.country) {
@@ -94,13 +94,20 @@ async function locationEvidence(
       },
     });
   }
-  if (customer.defaultPaymentMethodId) {
-    const method = await findPaymentMethodById(db, customer.defaultPaymentMethodId);
-    if (method?.card.country) {
-      evidence.push({ type: 'payment_method_country', country: method.card.country });
-    }
-  }
+  if (cardCountry) evidence.push({ type: 'payment_method_country', country: cardCountry });
   return evidence;
+}
+async function locationEvidence(db: DatabaseOrTransaction, customer: CustomerRow) {
+  const method = customer.defaultPaymentMethodId
+    ? await findPaymentMethodById(db, customer.defaultPaymentMethodId)
+    : null;
+  return capturedLocationEvidence(customer, method?.card.country ?? undefined);
+}
+
+export interface CapturedInvoiceTax {
+  readonly policy: InvoiceTaxPolicy | null;
+  readonly credited: readonly InvoiceLineRow[];
+  readonly location: readonly Record<string, unknown>[];
 }
 
 function fromTaxError(error: TaxError): InvoiceTaxError {
@@ -144,6 +151,7 @@ export async function taxInvoiceLines(
     readonly lines: readonly DraftLine[];
     readonly nets: readonly bigint[];
     readonly catalog: Catalog;
+    readonly captured?: CapturedInvoiceTax;
   },
 ): Promise<InvoiceTax> {
   const { lines, nets } = input;
@@ -151,10 +159,12 @@ export async function taxInvoiceLines(
   const result = UNTAXED(lines.length);
 
   // Credits: the credited line's own tax, scaled to the share given back.
-  const credited = await findLinesByIds(
-    db,
-    lines.map((line) => line.creditsLineId).filter((id): id is string => id !== null),
-  );
+  const credited = input.captured
+    ? input.captured.credited
+    : await findLinesByIds(
+        db,
+        lines.map((line) => line.creditsLineId).filter((id): id is string => id !== null),
+      );
   const creditedById = new Map(credited.map((line: InvoiceLineRow) => [line.id, line]));
 
   const charged: number[] = [];
@@ -184,14 +194,16 @@ export async function taxInvoiceLines(
   if (!charged.some((index) => (nets[index] ?? 0n) > 0n)) return result;
 
   const tax = billingEngineRuntime().tax;
-  if (!tax) {
+  if (!tax || (input.captured && !input.captured.policy)) {
     throw new InvoiceTaxError(
       'failed',
       'tax_calculation_unavailable',
       'Peable Tax is not available on this deployment',
     );
   }
-  const evidence = await locationEvidence(db, input.customer);
+  const evidence = input.captured
+    ? input.captured.location
+    : await locationEvidence(db, input.customer);
   if (evidence.length === 0) {
     throw new InvoiceTaxError(
       'requires_location_inputs',
@@ -227,7 +239,10 @@ export async function taxInvoiceLines(
           };
         }),
       },
-      { requireActive: true },
+      {
+        requireActive: true,
+        ...(input.captured?.policy ? { invoicePolicy: input.captured.policy } : {}),
+      },
     );
   } catch (error) {
     if (error instanceof TaxError) throw fromTaxError(error);

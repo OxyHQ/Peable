@@ -64,6 +64,7 @@ Object type: `invoice`.
 | `automatic_tax.tax_calculation` | string \| null | The Peable Tax calculation (`taxcalc_…`) the invoice finalized with. |
 | `hosted_invoice_url` | string \| null | The payer-facing page (anonymous, an unguessable token); `null` while a draft. |
 | `invoice_pdf` | string \| null | The PDF of the same; `null` while a draft. |
+| `finalization_revision` | string \| null | Only returned by retrieve with include_finalization_revision=true. A versioned snapshot of the inputs that finalization will consume; null after finalization. Pass it as expected_finalization_revision to refuse changes before financial effects. Matches `^[0-9a-f]{64}$`. |
 | `last_finalization_error` | object \| null |  |
 | `last_finalization_error.code` | string |  |
 | `last_finalization_error.message` | string |  |
