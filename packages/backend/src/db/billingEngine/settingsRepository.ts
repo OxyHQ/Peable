@@ -150,3 +150,24 @@ export async function takeInvoiceNumber(
 export function formatInvoiceNumber(prefix: string, number: number): string {
   return `${prefix}-${String(number).padStart(4, '0')}`;
 }
+
+/** Effective inputs only: a read does not create defaults or bind a revision to
+ * the next numbering counter, which another invoice legitimately consumes. */
+export async function readFinalizationSettings(
+  db: DatabaseOrTransaction,
+  merchant: { id: string; publicId: string },
+) {
+  const [stored] = await db
+    .select(COLUMNS)
+    .from(billingSettings)
+    .where(eq(billingSettings.merchantId, merchant.id));
+  return {
+    invoicePrefix: stored?.invoicePrefix ?? defaultInvoicePrefix(merchant.publicId),
+    defaultDaysUntilDue: stored?.defaultDaysUntilDue ?? 30,
+    retryScheduleDays: stored?.retryScheduleDays ?? [1, 3, 5, 7],
+    finalAction: stored?.finalAction ?? 'cancel',
+    invoiceAction: stored?.invoiceAction ?? 'mark_uncollectible',
+    emailInvoiceFinalized: stored?.emailInvoiceFinalized ?? true,
+    emailPaymentFailed: stored?.emailPaymentFailed ?? true,
+  };
+}

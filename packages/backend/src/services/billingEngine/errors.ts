@@ -8,6 +8,7 @@ export type BillingEngineErrorCode =
   | 'parameter_missing'
   | 'resource_missing'
   | 'resource_already_exists'
+  | 'invoice_finalization_conflict'
   | 'invoice_not_editable'
   | 'invoice_unexpected_state'
   | 'invoice_no_customer_line_items'

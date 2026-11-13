@@ -137,6 +137,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   payment_cancellation_failed:
     'The payment could not be cancelled at the provider; the Checkout Session stays as it was.',
   invoice_not_editable: 'The invoice is finalized and can no longer be edited.',
+  invoice_finalization_conflict:
+    'The invoice finalization inputs changed; retrieve and review the current revision before finalizing.',
   invoice_unexpected_state: 'The invoice is in a status that does not allow this operation.',
   invoice_no_customer_line_items: 'The invoice has no line items to finalize.',
   quote_not_editable: 'Only a draft quote can be edited.',
