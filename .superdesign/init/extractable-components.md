@@ -1,0 +1,1 @@
+Scope selector and read-only merchant workspace are Orbit-owned composition of Bloom primitives. Bloom remains shared presentation owner.

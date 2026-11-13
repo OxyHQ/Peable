@@ -1,0 +1,1 @@
+All section routes use OrbitApp with persisted scope provider. Actual API reader client.ts; organization/application APIs Oxy. No wallet imports.
