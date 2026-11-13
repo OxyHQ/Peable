@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-123 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+124 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -226,6 +226,10 @@ The tax document is not valid for its declared purpose.
 ### `invalid_tax_request`
 
 The tax request is not valid.
+
+### `invoice_finalization_conflict`
+
+The invoice finalization inputs changed; retrieve and review the current revision before finalizing.
 
 ### `invoice_no_customer_line_items`
 

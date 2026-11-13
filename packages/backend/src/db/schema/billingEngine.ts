@@ -397,6 +397,8 @@ export const invoices = pgTable(
     taxCalculationId: text(),
     /** The lines' fingerprint the tax was calculated for; finalize refuses a draft that moved since. */
     taxedLinesDigest: text(),
+    /** Exact opt-in revision accepted in the finalization transaction; absent on legacy finalizations. */
+    acceptedFinalizationRevision: text(),
     subtotal: text().notNull().default('0'),
     totalDiscount: text().notNull().default('0'),
     tax: text(),

@@ -16476,6 +16476,14 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_finalization_revision",
+            "description": "Include an opaque approval revision captured consistently with this invoice; omitted by default.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "Peable-Version",
             "description": "The wire date the caller was written against. Only `2026-11-03` exists.",
@@ -16906,6 +16914,11 @@
                 "properties": {
                   "auto_advance": {
                     "type": "boolean"
+                  },
+                  "expected_finalization_revision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "The revision returned by opt-in retrieve. Changed inputs return 409 invoice_finalization_conflict before financial effects; review again instead of retrying this approval. auto_advance must match the reviewed draft."
                   },
                   "expand": {
                     "type": "array",
@@ -65998,7 +66011,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 123 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 124 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",
@@ -67081,6 +67094,30 @@
               "string",
               "null"
             ]
+          },
+          "accepted_finalization_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only returned by retrieve with include_finalization_revision=true. The exact revision accepted and stored atomically with finalization; null before finalization or when finalized without a revision. This immutable receipt supports recovery after a lost finalize response; amount equality alone is not proof."
+          },
+          "finalization_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only returned by retrieve with include_finalization_revision=true. A versioned snapshot of the inputs that finalization will consume; null after finalization. Pass it as expected_finalization_revision to refuse changes before financial effects."
           },
           "last_finalization_error": {
             "anyOf": [

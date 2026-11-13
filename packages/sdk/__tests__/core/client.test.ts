@@ -56,6 +56,30 @@ describe('createRestClient', () => {
     expect(requests[0]?.headers.get('Idempotency-Key')).toBeNull();
   });
 
+  test('a stale invoice approval is surfaced without retrying finalize', async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch(() => ({
+      status: 409,
+      json: {
+        error: {
+          type: 'invalid_request_error',
+          code: 'invoice_finalization_conflict',
+          message: 'Review the draft again',
+        },
+      },
+    }));
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL, maxNetworkRetries: 3 }, provider, {
+      fetch: fetchImpl,
+      ...instant,
+    });
+    await expect(
+      client.request('POST', '/v1/invoices/in_1/finalize', {
+        body: { expected_finalization_revision: 'a'.repeat(64) },
+      }),
+    ).rejects.toMatchObject({ code: 'invoice_finalization_conflict', statusCode: 409 });
+    expect(requests).toHaveLength(1);
+  });
+
   test('serializes a JSON body and sets Content-Type', async () => {
     const { fetch: fetchImpl, requests } = createMockFetch(() => ({
       status: 201,

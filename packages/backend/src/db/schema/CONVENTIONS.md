@@ -1223,3 +1223,12 @@ otherwise undo:
   `0127` the foreign key onto the hot `payment_intents`, alone, `NOT VALID`;
   `0128` the `payment_intents` CHECK alone, `NOT VALID`; `0129` (post)
   validates all four.
+
+## Invoice accepted revision (ADR 0025)
+
+`invoices.accepted_finalization_revision` is nullable metadata added by migration
+0130 (no default/backfill). Conditional finalization writes the validated 64-hex
+revision in its financial transaction; legacy finalization leaves NULL. It is
+not an invoice edit field, is excluded from future input fingerprints, and is
+never recomputed after emission. Only opted-in authenticated retrieve serializes
+it, allowing an issuer to reconcile a lost response without guessing from totals.

@@ -16,7 +16,7 @@ import { toCouponDTO, toPriceDTO, toProductDTO } from './serializeCatalog';
 import { findInvoicesByPublicIds } from '../db/billingEngine/invoiceRepository';
 import { findSubscriptionsByPublicIds } from '../db/billingEngine/subscriptionRepository';
 import { renderInvoices, renderSubscriptions } from './serializeBilling';
-import { getDb } from '../db/postgres';
+import { getDb, type DatabaseOrTransaction } from '../db/postgres';
 import { findFilesByIds } from '../db/files/fileRepository';
 import { findReportRunsByPublicIds } from '../db/reporting/reportRunRepository';
 import { findReportSchedulesByPublicIds } from '../db/reporting/reportScheduleRepository';
@@ -252,97 +252,101 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   'terminal.reader': { location: 'terminal.location' },
 };
 
-type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
+type Loader = (
+  merchantId: string,
+  ids: readonly string[],
+  db: DatabaseOrTransaction,
+) => Promise<Map<string, object>>;
 
 const LOADERS: Record<TargetType, Loader> = {
-  payment_intent: async (merchantId, ids) =>
+  payment_intent: async (merchantId, ids, db) =>
     new Map(
-      (await findIntentsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findIntentsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toPaymentIntentDTO(row),
       ]),
     ),
-  charge: async (merchantId, ids) =>
+  charge: async (merchantId, ids, db) =>
     new Map(
-      (await findChargesForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findChargesForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toChargeDTO(row),
       ]),
     ),
-  customer: async (merchantId, ids) =>
+  customer: async (merchantId, ids, db) =>
     new Map(
-      (await findCustomersForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findCustomersForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         row.deletedAt === null ? toCustomerDTO(row) : toDeletedCustomerDTO(row),
       ]),
     ),
-  payment_method: async (merchantId, ids) =>
+  payment_method: async (merchantId, ids, db) =>
     new Map(
-      (await findPaymentMethodsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findPaymentMethodsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toPaymentMethodDTO(row),
       ]),
     ),
-  product: async (merchantId, ids) =>
+  product: async (merchantId, ids, db) =>
     new Map(
-      (await findProductsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findProductsByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toProductDTO(row),
       ]),
     ),
-  price: async (merchantId, ids) =>
+  price: async (merchantId, ids, db) =>
     new Map(
-      (await findPricesByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findPricesByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toPriceDTO(row),
       ]),
     ),
   // Deleted coupons included: a promotion code keeps naming the coupon it
   // redeemed, and the expansion shows it `valid: false` rather than failing.
-  coupon: async (merchantId, ids) =>
+  coupon: async (merchantId, ids, db) =>
     new Map(
-      (await findCouponsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findCouponsByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toCouponDTO(row),
       ]),
     ),
-  setup_intent: async (merchantId, ids) =>
+  setup_intent: async (merchantId, ids, db) =>
     new Map(
-      (await findSetupIntentsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findSetupIntentsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toSetupIntentDTO(row),
       ]),
     ),
-  invoice: async (merchantId, ids) => {
-    const rows = await findInvoicesByPublicIds(getDb(), merchantId, ids);
-    const dtos = await renderInvoices(getDb(), rows);
+  invoice: async (merchantId, ids, db) => {
+    const rows = await findInvoicesByPublicIds(db, merchantId, ids);
+    const dtos = await renderInvoices(db, rows);
     return new Map(dtos.map((dto) => [dto.id, dto]));
   },
-  subscription: async (merchantId, ids) => {
-    const rows = await findSubscriptionsByPublicIds(getDb(), merchantId, ids);
-    const dtos = await renderSubscriptions(getDb(), rows);
+  subscription: async (merchantId, ids, db) => {
+    const rows = await findSubscriptionsByPublicIds(db, merchantId, ids);
+    const dtos = await renderSubscriptions(db, rows);
     return new Map(dtos.map((dto) => [dto.id, dto]));
   },
-  refund: async (merchantId, ids) =>
+  refund: async (merchantId, ids, db) =>
     new Map(
-      (await findRefundsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findRefundsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toRefundDTO(row, row.paymentIntentPublicId),
       ]),
     ),
   // As a list renders it: `evidence` is only ever on the dispute's own read.
-  dispute: async (merchantId, ids) =>
+  dispute: async (merchantId, ids, db) =>
     new Map(
-      (await findDisputesForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findDisputesForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toDisputeDTO(row, row.paymentIntentPublicId),
       ]),
     ),
-  'reporting.report_run': async (merchantId, ids) => {
-    const rows = await findReportRunsByPublicIds(getDb(), merchantId, ids);
+  'reporting.report_run': async (merchantId, ids, db) => {
+    const rows = await findReportRunsByPublicIds(db, merchantId, ids);
     const fileIds = rows.map((row) => row.resultFileId).filter((id): id is string => id !== null);
     const files = new Map(
-      (await findFilesByIds(getDb(), merchantId, fileIds)).map((file) => [file.id, file]),
+      (await findFilesByIds(db, merchantId, fileIds)).map((file) => [file.id, file]),
     );
     return new Map(
       rows.map((row) => [
@@ -354,43 +358,44 @@ const LOADERS: Record<TargetType, Loader> = {
       ]),
     );
   },
-  'reporting.report_schedule': async (merchantId, ids) =>
+  'reporting.report_schedule': async (merchantId, ids, db) =>
     new Map(
-      (await findReportSchedulesByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findReportSchedulesByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toReportScheduleDTO(row),
       ]),
     ),
-  'identity.verification_session': async (merchantId, ids) =>
+  'identity.verification_session': async (merchantId, ids, db) =>
     new Map(
-      (await findVerificationSessionsForMerchantByPublicIds(getDb(), merchantId, ids)).map(
-        (row) => [row.publicId, toVerificationSessionDTO(row)],
-      ),
+      (await findVerificationSessionsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
+        row.publicId,
+        toVerificationSessionDTO(row),
+      ]),
     ),
-  'identity.verification_report': async (merchantId, ids) =>
+  'identity.verification_report': async (merchantId, ids, db) =>
     new Map(
-      (await findVerificationReportsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findVerificationReportsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toVerificationReportDTO(row),
       ]),
     ),
-  review: async (merchantId, ids) =>
+  review: async (merchantId, ids, db) =>
     new Map(
-      (await findReviewsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findReviewsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toReviewDTO(row),
       ]),
     ),
-  'terminal.location': async (merchantId, ids) =>
+  'terminal.location': async (merchantId, ids, db) =>
     new Map(
-      (await findTerminalLocationsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findTerminalLocationsForMerchantByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toTerminalLocationDTO(row),
       ]),
     ),
-  connected_account: async (merchantId, ids) =>
+  connected_account: async (merchantId, ids, db) =>
     new Map(
-      (await findAccountsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+      (await findAccountsByPublicIds(db, merchantId, ids)).map((row) => [
         row.publicId,
         toConnectedAccountDTO(row),
       ]),
@@ -480,6 +485,7 @@ export async function expandObjects(
   type: ExpandableType,
   tree: ExpandTree,
   merchantId: string,
+  db: DatabaseOrTransaction = getDb(),
 ): Promise<void> {
   for (const [field, subtree] of Object.entries(tree)) {
     const target = REGISTRY[type][field];
@@ -488,7 +494,7 @@ export async function expandObjects(
     const ids = [
       ...new Set(holders.map((o) => o[field]).filter((v): v is string => typeof v === 'string')),
     ];
-    const loaded = await LOADERS[target](merchantId, ids);
+    const loaded = await LOADERS[target](merchantId, ids, db);
     const produced: object[] = [];
     for (const holder of holders) {
       const id = holder[field];
@@ -501,7 +507,7 @@ export async function expandObjects(
       produced.push(object);
     }
     if (Object.keys(subtree).length > 0) {
-      await expandObjects(produced, target, subtree, merchantId);
+      await expandObjects(produced, target, subtree, merchantId, db);
     }
   }
 }

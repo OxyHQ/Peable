@@ -2,7 +2,7 @@
   "name": "@peable.to/orbit",
   "version": "0.1.0",
   "private": true,
-  "description": "Orbit by Peable — the merchant dashboard: payments, webhooks, merchant settings, tax and contributions. Expo web first, at orbit.peable.to.",
+  "description": "Orbit by Peable \u2014 the merchant dashboard: payments, webhooks, merchant settings, tax and contributions. Expo web first, at orbit.peable.to.",
   "license": "SEE LICENSE IN LICENSE",
   "main": "expo-router/entry",
   "scripts": {
@@ -22,7 +22,7 @@
     "@oxy.so/contracts": "7.0.0",
     "@oxy.so/core": "7.49.0",
     "@oxy.so/services": "^14.21.0",
-    "@peable.to/contracts": "workspace:6.6.0",
+    "@peable.to/contracts": "workspace:6.7.0",
     "@peable.to/shared-types": "*",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/netinfo": "^12.0.1",
