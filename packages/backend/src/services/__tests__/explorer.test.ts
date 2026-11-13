@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { createServer, type RequestListener } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { config } from '../../config';
 import { parseFairToUnits } from '@fairco.in/core';
 import {
   addressHasTransaction,
@@ -153,12 +156,86 @@ test('verifyPayment: a split payment is paid only when EVERY output is (ADR 0021
   expect(verifyPayment(SPLIT_TX, []).paid).toBe(false);
 });
 
-// One real-network assertion: mainnet has a live, advancing tip (testnet is
-// currently empty). Kept last so the mocked tests' fetch restore runs first.
-test('getTip returns a positive tip from the live mainnet explorer', async () => {
-  const tip = await getTip('mainnet');
-  expect(tip).toBeGreaterThan(0);
-}, 20000);
+/** Exercise the actual fetch/socket/parser boundary without depending on the
+ * availability of a public chain service. Live availability is a separate,
+ * explicitly enabled canary in __tests__/canary/explorerLive.canary.test.ts. */
+async function withLocalExplorer(handler: RequestListener, run: () => Promise<void>) {
+  const server = createServer(handler);
+  const original = config.explorerBaseUrl;
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  config.explorerBaseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    await run();
+  } finally {
+    config.explorerBaseUrl = original;
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+test('getTip uses real HTTP and the selected network to parse the authoritative tip', async () => {
+  const requests: string[] = [];
+  await withLocalExplorer(
+    (req, res) => {
+      requests.push(`${req.method} ${req.url}`);
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          stats: { ...STATS_BODY.stats, blockHeight: req.url?.endsWith('testnet') ? 42 : 67763 },
+        }),
+      );
+    },
+    async () => {
+      expect(await getTip('mainnet')).toBe(67763);
+      expect(await getTip('testnet')).toBe(42);
+    },
+  );
+  expect(requests).toEqual(['GET /api/stats?network=mainnet', 'GET /api/stats?network=testnet']);
+});
+
+test('getTip refuses real HTTP errors and malformed success responses', async () => {
+  let attempt = 0;
+  await withLocalExplorer(
+    (_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = attempt++ === 0 ? 503 : 200;
+      res.end(
+        JSON.stringify(
+          res.statusCode === 503 ? STATS_BODY : { stats: { blockHeight: 'not-a-height' } },
+        ),
+      );
+    },
+    async () => {
+      await expect(getTip('mainnet')).rejects.toThrow('Explorer stats request failed: 503');
+      await expect(getTip('mainnet')).rejects.toThrow();
+    },
+  );
+  expect(attempt).toBe(2);
+});
+
+test.each([false, true])('getTip aborts a real stalled HTTP response (body=%s)', async (body) => {
+  const restore = useExplorerTimeout(100);
+  let reached = false;
+  try {
+    await withLocalExplorer(
+      (_req, res) => {
+        reached = true;
+        if (body) {
+          res.setHeader('content-type', 'application/json');
+          res.write('{"stats":');
+        }
+        // Intentionally never finish headers/body; the client's real AbortSignal
+        // cancels the socket and cleanup closes every connection.
+      },
+      async () => {
+        await expect(getTip('mainnet')).rejects.toThrow();
+      },
+    );
+    expect(reached).toBe(true);
+  } finally {
+    restore();
+  }
+});
 
 /** An address with `count` transactions, served 50 a page as the live Explorer does. */
 function addressWithTransactions(count: number, reported?: number): string[] {

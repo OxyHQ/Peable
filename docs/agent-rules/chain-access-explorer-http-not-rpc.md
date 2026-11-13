@@ -33,3 +33,16 @@ beside it. Those grow without bound and one live address already reports
 6_969_626_939_280_430 — within 1.3x of `Number.MAX_SAFE_INTEGER`, so
 `JSON.parse` rounds them before any code can widen them to a bigint. A balance
 is bounded by the money supply and has ~14x of headroom.
+
+## Client tests and live availability
+
+Normal CI exercises the real HTTP client against a controlled local server:
+network selection, valid/invalid responses, non-success status and stalled
+headers/body with the actual abort signal. A public Explorer outage must not be
+mistaken for a changed client contract. The separate read-only live canary keeps
+the production 10-second request bound and is explicitly enabled with
+`CANARY_EXPLORER_LIVE=1 bun test src/__tests__/canary/explorerLive.canary.test.ts`
+from `packages/backend` in the normal test environment. It asserts a positive
+mainnet tip; an operational timeout remains a failed canary, never a zero tip or
+permission to settle a payment. No retries or larger production deadlines are
+introduced by separating these checks.
