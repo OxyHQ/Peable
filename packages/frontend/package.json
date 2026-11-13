@@ -23,10 +23,10 @@
     "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
   },
   "dependencies": {
-    "@alia.onl/sdk": "22.10.1",
     "@expo/app-integrity": "~58.0.2",
     "@expo/vector-icons": "^15.1.1",
     "@fairco.in/core": "0.5.0",
+    "@gemies/sdk": "1.0.0",
     "@gorhom/bottom-sheet": "^5.2.9",
     "@maplibre/maplibre-react-native": "^11.5.0",
     "@noble/hashes": "1.8.0",

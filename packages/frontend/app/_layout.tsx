@@ -336,7 +336,7 @@ export default function RootLayout() {
               value={(id, variant) => oxyServices.assets.publicUrl(id, variant)}
             >
               <BottomSheetModalProvider>
-                {/* Native Bloom `Portal` (AliaChatSheet's BottomSheet) only
+                {/* Native Bloom `Portal` (GemieChatSheet's BottomSheet) only
                     renders into a PortalProvider + ONE PortalOutlet. The
                     outlet comes after the content it paints over; everything
                     but the outlet sits in OverlayInertBoundary so a modal
