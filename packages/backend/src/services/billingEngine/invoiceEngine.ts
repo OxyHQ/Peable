@@ -170,7 +170,7 @@ export async function commitFinalization(
   invoice: InvoiceRow,
   prepared: PreparedInvoice,
   now: Date,
-  options: { readonly autoAdvance?: boolean } = {},
+  options: { readonly autoAdvance?: boolean; readonly acceptedFinalizationRevision?: string } = {},
 ): Promise<FinalizeOutcome> {
   if (invoice.status !== 'draft') {
     throw new BillingEngineError(
@@ -243,6 +243,7 @@ export async function commitFinalization(
     automaticTaxStatus: invoice.automaticTax ? 'complete' : null,
     taxCalculationId: prepared.tax.calculation?.id ?? null,
     taxedLinesDigest: prepared.digest,
+    acceptedFinalizationRevision: options.acceptedFinalizationRevision ?? null,
     lastFinalizationError: null,
     nextPaymentAttempt:
       invoice.collectionMethod === 'charge_automatically' && amountDue > 0n && autoAdvance
@@ -366,7 +367,10 @@ export async function finalizeStoredInvoice(
           if (current.invoice.status !== 'draft' || current.revision !== captured.revision)
             throw finalizationConflict();
         }
-        return commitFinalization(tx, locked, prepared, now, options);
+        return commitFinalization(tx, locked, prepared, now, {
+          ...options,
+          ...(captured ? { acceptedFinalizationRevision: captured.revision } : {}),
+        });
       },
       captured ? { isolationLevel: 'serializable' } : undefined,
     );

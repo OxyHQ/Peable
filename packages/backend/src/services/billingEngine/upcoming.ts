@@ -260,6 +260,7 @@ export async function upcomingInvoice(
     automaticTaxStatus: null,
     taxCalculationId: null,
     taxedLinesDigest: null,
+    acceptedFinalizationRevision: null,
     subtotal: totals.subtotal.toString(),
     totalDiscount: totals.totalDiscount.toString(),
     tax: totals.tax === null ? null : totals.tax.toString(),
