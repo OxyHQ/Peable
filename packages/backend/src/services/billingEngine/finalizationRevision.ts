@@ -87,6 +87,7 @@ export async function captureFinalizationInput(db: DatabaseOrTransaction, invoic
     nextActionAt: _next,
     taxCalculationId: _calculation,
     taxedLinesDigest: _taxDigest,
+    acceptedFinalizationRevision: _acceptedRevision,
     ...invoiceInput
   } = invoice;
   const policyInput = policy

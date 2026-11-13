@@ -70,6 +70,7 @@ export interface InvoiceRow {
   readonly automaticTaxStatus: AutomaticTaxStatus | null;
   readonly taxCalculationId: string | null;
   readonly taxedLinesDigest: string | null;
+  readonly acceptedFinalizationRevision: string | null;
   readonly subtotal: string;
   readonly totalDiscount: string;
   readonly tax: string | null;
@@ -135,6 +136,7 @@ const COLUMNS = {
   automaticTaxStatus: invoices.automaticTaxStatus,
   taxCalculationId: invoices.taxCalculationId,
   taxedLinesDigest: invoices.taxedLinesDigest,
+  acceptedFinalizationRevision: invoices.acceptedFinalizationRevision,
   subtotal: invoices.subtotal,
   totalDiscount: invoices.totalDiscount,
   tax: invoices.tax,
@@ -296,6 +298,7 @@ export interface InvoicePatch {
   readonly automaticTaxStatus?: AutomaticTaxStatus | null;
   readonly taxCalculationId?: string | null;
   readonly taxedLinesDigest?: string | null;
+  readonly acceptedFinalizationRevision?: string | null;
   readonly subtotal?: string;
   readonly totalDiscount?: string;
   readonly tax?: string | null;

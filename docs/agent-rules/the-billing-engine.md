@@ -60,3 +60,8 @@ implicit stale-approval retry. Tax preparation can leave neutral evidence and
 calculation records; it must not issue or collect an invoice. Never hold a
 numbering lock across a tax-provider request. Invoice-line writers must recheck
 `draft` after taking the invoice lock, including when they waited for finalize.
+
+The opt-in revision retrieve includes `accepted_finalization_revision`, written
+atomically only by conditional finalization. Use it to reconcile a lost response;
+never infer an accepted fiscal revision from an equal invoice total. Legacy
+finalizations retain null, and ordinary wire surfaces omit the proof.

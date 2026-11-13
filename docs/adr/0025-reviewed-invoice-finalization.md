@@ -78,3 +78,21 @@ Kaana must explicitly review those inputs and the deployment of this contract
 before enabling their own finalization operation. An approved revision binds
 inputs, not a promised tax-provider output amount; the issuer still validates
 and reconciles the resulting final invoice under its existing tax rules.
+
+
+## Accepted revision receipt
+
+An opted-in retrieve also returns `accepted_finalization_revision`. It is null
+on drafts and invoices finalized without the precondition. Conditional
+finalization stores the exact accepted revision in the SAME transaction as
+numbering, status, balance application and outbox effects. A refused or rolled
+back attempt cannot leave a receipt. Later retrieve, including after a lost
+finalize response, returns that stored value rather than recomputing a digest
+from mutable tax settings or comparing amounts. A repeated finalize cannot
+replace it. Ordinary retrieve, list, events and mutation responses still omit
+both optional fields.
+
+Migration 0130 adds one nullable column without default or backfill. Existing
+invoices have no manufactured proof. A consumer must retain an unresolved
+operation when the accepted revision is absent or differs; a matching customer
+and total alone do not prove that the reviewed fiscal inputs were used.
