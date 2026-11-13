@@ -194,6 +194,14 @@ export const invoiceSchema = defineObject(
         .nullable()
         .describe('The payer-facing page (anonymous, an unguessable token); `null` while a draft.'),
       invoice_pdf: z.string().nullable().describe('The PDF of the same; `null` while a draft.'),
+      accepted_finalization_revision: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .nullable()
+        .optional()
+        .describe(
+          'Only returned by retrieve with include_finalization_revision=true. The exact revision accepted and stored atomically with finalization; null before finalization or when finalized without a revision. This immutable receipt supports recovery after a lost finalize response; amount equality alone is not proof.',
+        ),
       finalization_revision: z
         .string()
         .regex(/^[0-9a-f]{64}$/)

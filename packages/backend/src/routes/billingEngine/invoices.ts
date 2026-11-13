@@ -156,7 +156,11 @@ async function retrieve(req: Request, res: Response, merchant: MerchantRow, surf
       if (!row) throw missing('invoice');
       const revision =
         row.status === 'draft' ? (await captureFinalizationInput(tx, row.id)).revision : null;
-      const rendered = { ...(await renderInvoice(tx, row)), finalization_revision: revision };
+      const rendered = {
+        ...(await renderInvoice(tx, row)),
+        finalization_revision: revision,
+        accepted_finalization_revision: row.acceptedFinalizationRevision,
+      };
       await expandObjects([rendered], 'invoice', tree, merchant.id, tx);
       return rendered;
     },

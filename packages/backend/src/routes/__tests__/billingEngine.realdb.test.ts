@@ -1757,6 +1757,8 @@ describe('opt-in reviewed invoice finalization', () => {
       starting_balance: '0',
     });
     expect(row.finalization_revision).toBeUndefined();
+    expect(row.accepted_finalization_revision).toBeUndefined();
+    expect((await review(id)).accepted_finalization_revision).toBeNull();
     expect(
       (await eventTypes()).filter(
         (type) => type === 'invoice.finalized' || type === 'invoice.paid',
@@ -1769,6 +1771,7 @@ describe('opt-in reviewed invoice finalization', () => {
     expect((await ok('GET', `/v1/invoices/${invoice.id}`)).finalization_revision).toBeUndefined();
     const reviewed = await review(invoice.id);
     expect(reviewed.finalization_revision).toMatch(/^[a-f0-9]{64}$/);
+    expect(reviewed.accepted_finalization_revision).toBeNull();
     expect(reviewed.customer.id).toBe(payer.id);
     expect((await review(invoice.id)).finalization_revision).toBe(reviewed.finalization_revision);
     const final = await ok('POST', `/v1/invoices/${invoice.id}/finalize`, {
@@ -1781,11 +1784,77 @@ describe('opt-in reviewed invoice finalization', () => {
       auto_advance: false,
     });
     expect(final.finalization_revision).toBeUndefined();
+    expect(final.accepted_finalization_revision).toBeUndefined();
+    expect((await review(invoice.id)).accepted_finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
     expect((await review(invoice.id)).finalization_revision).toBeNull();
     const repeated = await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
       expected_finalization_revision: reviewed.finalization_revision,
     });
     expect(repeated.status).toBe(409);
+    expect((await eventTypes()).filter((type) => type === 'invoice.finalized')).toHaveLength(1);
+  });
+
+  test('accepted revision survives a discarded response and a refused replay without widening ordinary wire', async () => {
+    const { invoice } = await draft();
+    const reviewed = await review(invoice.id);
+    // Discard the finalize response completely: recovery uses only a new authenticated retrieve.
+    await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    const recovered = await review(invoice.id);
+    expect(recovered.status).toBe('open');
+    expect(recovered.accepted_finalization_revision).toBe(reviewed.finalization_revision);
+    expect(recovered.finalization_revision).toBeNull();
+    expect(
+      (
+        await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+          expected_finalization_revision: 'f'.repeat(64),
+        })
+      ).status,
+    ).toBe(409);
+    expect((await review(invoice.id)).accepted_finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
+    expect(
+      (await ok('GET', `/v1/invoices/${invoice.id}`)).accepted_finalization_revision,
+    ).toBeUndefined();
+    const listed = await ok('GET', '/v1/invoices');
+    expect(
+      listed.data.find((row: Json) => row.id === invoice.id).accepted_finalization_revision,
+    ).toBeUndefined();
+    const events = await ok('GET', '/v1/events');
+    expect(events.data.filter((row: Json) => row.type === 'invoice.finalized')).toHaveLength(1);
+    expect(
+      events.data.find((row: Json) => row.type === 'invoice.finalized').data.object
+        .accepted_finalization_revision,
+    ).toBeUndefined();
+  });
+
+  test('legacy finalization does not manufacture an accepted revision', async () => {
+    const { invoice } = await draft();
+    await review(invoice.id);
+    await ok('POST', `/v1/invoices/${invoice.id}/finalize`, {});
+    const final = await review(invoice.id);
+    expect(final.finalization_revision).toBeNull();
+    expect(final.accepted_finalization_revision).toBeNull();
+  });
+
+  test('concurrent conditional finalizers preserve the one committed accepted revision', async () => {
+    const { invoice } = await draft();
+    const reviewed = await review(invoice.id);
+    const results = await Promise.all(
+      [1, 2].map(() =>
+        call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+          expected_finalization_revision: reviewed.finalization_revision,
+        }),
+      ),
+    );
+    expect(results.map((row) => row.status).sort()).toEqual([200, 409]);
+    expect((await review(invoice.id)).accepted_finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
     expect((await eventTypes()).filter((type) => type === 'invoice.finalized')).toHaveLength(1);
   });
 

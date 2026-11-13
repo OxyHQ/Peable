@@ -186,6 +186,10 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // successfully before Terminal's `0126`–`0129` merged.
   '0125_risk_rules_validate':
     'released with #290; its post phase applied by the 4102fb31 deploy (run 42357716951)',
+  // Read-only deploy receipt: source 47e3a186, TD305, post task
+  // 6dd2edefa5ba4f0f90f0a6ba4d707eda completed at 2026-11-13T12:37:54Z.
+  '0129_terminal_validate':
+    'post phase completed by the 47e3a186 deploy (run 43425799605) before 0130',
 };
 
 interface Migration {
