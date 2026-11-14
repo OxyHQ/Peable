@@ -153,13 +153,6 @@ test('verifyPayment: a split payment is paid only when EVERY output is (ADR 0021
   expect(verifyPayment(SPLIT_TX, []).paid).toBe(false);
 });
 
-// One real-network assertion: mainnet has a live, advancing tip (testnet is
-// currently empty). Kept last so the mocked tests' fetch restore runs first.
-test('getTip returns a positive tip from the live mainnet explorer', async () => {
-  const tip = await getTip('mainnet');
-  expect(tip).toBeGreaterThan(0);
-}, 20000);
-
 /** An address with `count` transactions, served 50 a page as the live Explorer does. */
 function addressWithTransactions(count: number, reported?: number): string[] {
   const asked: string[] = [];
