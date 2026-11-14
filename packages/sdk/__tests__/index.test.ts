@@ -48,7 +48,7 @@ describe('Peable', () => {
   });
 });
 
-test('own factory uses canonical shared transport and snapshots requester context', async () => {
+test('own factory uses canonical shared transport and snapshots the account it acts for', async () => {
   const received: Parameters<PeableOxyHost['createServiceClient']>[0][] = [];
   let disposed = 0;
   const oxy: PeableOxyHost = {
@@ -57,7 +57,7 @@ test('own factory uses canonical shared transport and snapshots requester contex
       const fetch = Object.assign(
         async (_input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
           expect(new Headers(init?.headers).has('authorization')).toBe(false);
-          return Response.json({ id: options.requester?.accountId });
+          return Response.json({ id: options.actingFor?.accountId });
         },
         { preconnect: globalThis.fetch.preconnect },
       );
@@ -69,16 +69,20 @@ test('own factory uses canonical shared transport and snapshots requester contex
       };
     },
   };
-  const requester = { accountId: 'A', requesterContext: 'proof-A' };
-  const a = peableForOxyService({ oxy, requester, baseURL: 'https://receiver.test' });
-  requester.accountId = 'B';
-  requester.requesterContext = 'proof-B';
-  const b = peableForOxyService({ oxy, requester });
+  const actingFor: { accountId: string; requesterAccountId?: string } = {
+    accountId: 'A',
+    requesterAccountId: 'person-A',
+  };
+  const a = peableForOxyService({ oxy, actingFor, baseURL: 'https://receiver.test' });
+  actingFor.accountId = 'B';
+  actingFor.requesterAccountId = undefined;
+  const b = peableForOxyService({ oxy, actingFor });
   expect(received[0]).toEqual({
     baseURL: 'https://receiver.test',
     audience: PEABLE_SERVICE_AUDIENCE,
-    requester: { accountId: 'A', requesterContext: 'proof-A' },
+    actingFor: { accountId: 'A', requesterAccountId: 'person-A' },
   });
+  expect(received[1]?.actingFor).toEqual({ accountId: 'B', requesterAccountId: undefined });
   expect((await a.paymentIntents.retrieve('pi_a')).id).toBe('A');
   expect((await b.paymentIntents.retrieve('pi_b')).id).toBe('B');
   a.dispose();

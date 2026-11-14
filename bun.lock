@@ -79,7 +79,7 @@
         "peable": "dist/bin.js",
       },
       "dependencies": {
-        "@peable.to/sdk": "workspace:6.8.0",
+        "@peable.to/sdk": "workspace:7.0.0",
         "@peable.to/shared-types": "workspace:6.7.0",
       },
       "devDependencies": {
@@ -305,7 +305,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "6.8.0",
+      "version": "7.0.0",
       "dependencies": {
         "@peable.to/contracts": "workspace:6.7.0",
         "@peable.to/shared-types": "workspace:6.7.0",

@@ -1,5 +1,22 @@
 # Changelog
 
+## 7.0.0 — Oxy services act for people without permissions (oxy ADR 0066)
+
+Removed (breaking):
+
+- `PeableRequester` and the workload config's `requester: { accountId, token |
+  taskId | requesterContext }`. An Oxy service no longer presents a session,
+  task or requester context to act for a person.
+
+Added:
+
+- `actingFor: { accountId, requesterAccountId? }` on `peableForOxyService` /
+  `new Peable({ oxy })` (type `PeableActingFor`), forwarded to
+  `OxyServer.createServiceClient({ actingFor })`: the account the service acts
+  for, and the person when they operate it rather than own it. Oxy checks the
+  calling service's first-party declaration and the accounts live. Needs
+  `@oxy.so/core` 7.52.0 or later in the host.
+
 ## 6.7.0 — Terminal
 
 Requires `@peable.to/contracts` 6.6.0 and `@peable.to/shared-types` 6.6.0 (ADR 0024).
