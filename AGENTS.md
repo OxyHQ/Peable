@@ -34,6 +34,7 @@ Backend tests need Postgres: `docker compose -f docker-compose.postgres.yml up -
 - Every row has two ids: the public `pi_...` is `public_id`, `id` is the internal key. Use `findIntentByPublicId` for wire ids. Mixing them fails silently. [Postgres](docs/agent-rules/postgres-only-store.md)
 - Every generated migration carries one `-- oxy:deploy-phase=pre|post` marker; apply only with `bun run db:migrate`. Locks stay short (`db:check-locks`).
 - Payer-facing routes stay anonymous: do not add an Oxy auth requirement to them. [Auth](docs/agent-rules/auth.md)
+- First-party never asks people for permissions: this service acts for a person with `actingFor` on what oxy's first-party registry declares (oxy ADR 0066); permissions, scopes and consent are only for third parties.
 - In tests use `must(x)`, not `x!`; Biome warnings fail CI (`biome ci --error-on-warnings .`). Lint and format rules: [lint-and-format](https://github.com/OxyHQ/oxy/blob/main/docs/engineering/lint-and-format.md).
 - `packages/frontend` is FAIRWallet's history: generic wallet fixes go upstream and are taken with `scripts/fairwallet-pick.sh <sha>`, never a bare cherry-pick. [Upstream](docs/agent-rules/frontend-is-fairwallet.md)
 

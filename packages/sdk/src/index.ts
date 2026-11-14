@@ -37,7 +37,7 @@ function createClient(
   const transport = config.oxy?.createServiceClient({
     baseURL: resolved.baseURL,
     audience: PEABLE_SERVICE_AUDIENCE,
-    ...(config.requester ? { requester: { ...config.requester } } : {}),
+    ...(config.actingFor ? { actingFor: { ...config.actingFor } } : {}),
   });
   const tokenProvider = config.oxy
     ? undefined
@@ -78,7 +78,7 @@ export interface FilesNamespace extends FilesResource {
  * delivery locally and is no route.
  */
 export class Peable extends GeneratedClient {
-  /** Release requester-bound shared transport resources after the operation. */
+  /** Release this client's shared transport resources after the operation. */
   readonly dispose: () => void;
   /** Verify a delivery: `constructEvent(rawBody, signatureHeader, secret, tolerance?)`. */
   readonly webhooks: WebhooksResource;
@@ -105,7 +105,7 @@ export type {
   ResolvedPeableConfig,
   PeableWorkloadConfig,
   PeableOxyHost,
-  PeableRequester,
+  PeableActingFor,
 } from './core/config';
 export {
   DEFAULT_GATEWAY_BASE_URL,

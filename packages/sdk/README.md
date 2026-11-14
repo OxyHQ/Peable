@@ -668,9 +668,11 @@ the verified application and environment and enforces all account, rail,
 settlement, idempotency and business rules. The hosted payer checkout stays
 anonymous.
 
-An optional `requester: {accountId, token | taskId | requesterContext}` carries
-verified account context for a person-bound call. Do not supply a user header,
-persist a session bearer, or share a requester-bound client between accounts.
+An optional `actingFor: {accountId, requesterAccountId?}` names the account an
+Oxy service acts for, and the person when they operate it rather than own it
+(oxy ADR 0066): Oxy checks the service's first-party declaration and the
+accounts live, with no session, task or consent. Do not supply a user header,
+persist a session bearer, or share an `actingFor` client between accounts.
 Call `peable.dispose()` when finished with the client.
 
 External customer integrations retain `publicKey` + `secret` or an explicit

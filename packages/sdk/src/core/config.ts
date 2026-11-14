@@ -16,14 +16,15 @@ export interface PeableOxyHost {
   createServiceClient(options: {
     baseURL: string;
     audience: string;
-    requester?: PeableRequester;
+    actingFor?: PeableActingFor;
   }): { fetch: typeof globalThis.fetch; dispose(): void };
 }
-export type PeableRequester = { accountId: string } & (
-  | { token: string; taskId?: never; requesterContext?: never }
-  | { taskId: string; token?: never; requesterContext?: never }
-  | { requesterContext: string; token?: never; taskId?: never }
-);
+/**
+ * The account an Oxy service acts for, and the person when they operate it
+ * rather than own it (oxy ADR 0066). Oxy checks the calling service's
+ * first-party declaration and the accounts live; no session or task is sent.
+ */
+export type PeableActingFor = { accountId: string; requesterAccountId?: string };
 export { PEABLE_SERVICE_AUDIENCE };
 
 /** Default Gateway host (`api.peable.to`) — the SDK never sends a `livemode`
@@ -78,7 +79,7 @@ export interface PeableCredentialConfig extends PeableConfigOptions {
   secret: string;
   tokenProvider?: undefined;
   oxy?: undefined;
-  requester?: undefined;
+  actingFor?: undefined;
 }
 
 /** Authenticate with Oxy service tokens the caller already knows how to obtain. */
@@ -88,14 +89,14 @@ export interface PeableTokenProviderConfig extends PeableConfigOptions {
    * `getToken()` must then return a freshly minted token. */
   tokenProvider: ServiceTokenProvider;
   oxy?: undefined;
-  requester?: undefined;
+  actingFor?: undefined;
   publicKey?: undefined;
   secret?: undefined;
 }
 
 export interface PeableWorkloadConfig extends PeableConfigOptions {
   oxy: PeableOxyHost;
-  requester?: PeableRequester;
+  actingFor?: PeableActingFor;
   publicKey?: undefined;
   secret?: undefined;
   tokenProvider?: undefined;
@@ -120,14 +121,14 @@ export interface ResolvedPeableCredentialConfig extends ResolvedPeableConfigOpti
   secret: string;
   tokenProvider?: undefined;
   oxy?: undefined;
-  requester?: undefined;
+  actingFor?: undefined;
 }
 
 /** `PeableTokenProviderConfig` with every optional field defaulted and normalized. */
 export interface ResolvedPeableTokenProviderConfig extends ResolvedPeableConfigOptions {
   tokenProvider: ServiceTokenProvider;
   oxy?: undefined;
-  requester?: undefined;
+  actingFor?: undefined;
   publicKey?: undefined;
   secret?: undefined;
 }
@@ -250,7 +251,7 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
     return {
       ...options,
       oxy: config.oxy,
-      ...(config.requester ? { requester: { ...config.requester } } : {}),
+      ...(config.actingFor ? { actingFor: { ...config.actingFor } } : {}),
     };
   return config.tokenProvider !== undefined
     ? { ...options, tokenProvider: config.tokenProvider }

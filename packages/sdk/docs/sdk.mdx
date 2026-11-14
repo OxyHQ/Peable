@@ -76,10 +76,11 @@ The factory uses `OxyServer.createServiceClient` with Peable's registered
 audience. Own workloads need no payment scopes or application consent, but the
 gateway still resolves the merchant from the verified application and
 environment and enforces every account, rail, settlement, idempotency and
-business rule. An optional `requester: { accountId, token | taskId |
-requesterContext }` carries verified account context for a person-bound call;
-never supply a user header, persist a session bearer or share a
-requester-bound client between accounts.
+business rule. An optional `actingFor: { accountId, requesterAccountId? }` names
+the account an Oxy service acts for, and the person when they operate it (oxy
+ADR 0066): Oxy checks the service's first-party declaration and the accounts
+live, with no session, task or consent. Never supply a user header, persist a
+session bearer or share an `actingFor` client between accounts.
 
 An external credential on an official app stays external: branding never
 grants own authority, and only this factory bypasses application permission
