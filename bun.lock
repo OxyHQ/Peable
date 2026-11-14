@@ -274,7 +274,7 @@
     },
     "packages/pay": {
       "name": "@peable.to/pay",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@noble/hashes": "1.8.0",
         "@scure/bip32": "1.7.0",
@@ -291,7 +291,7 @@
       },
       "peerDependencies": {
         "@fairco.in/core": ">=0.5.0 <0.6.0",
-        "@oxy.so/bloom": ">=10.4.0 <18.0.0",
+        "@oxy.so/bloom": ">=10.4.0",
         "react": ">=19.0.0 <20.0.0",
         "react-native": ">=0.86.0 <1.0.0",
         "react-native-qrcode-svg": ">=6.3.0 <7.0.0",
