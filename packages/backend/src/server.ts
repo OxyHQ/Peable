@@ -10,11 +10,6 @@ import {
   createConfiguredTaxService,
   reportTaxProviders,
 } from './services/tax/configuredTax';
-import {
-  startEcosystemActivity,
-  stopEcosystemActivity,
-  ecosystemActivityMiddleware,
-} from './ecosystemActivity';
 /**
  * Peable Gateway — backend entry point.
  *
@@ -26,13 +21,15 @@ import {
 import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
-import { oxy } from './oxy';
+import { oxy, workloadCredentials } from './oxy';
 import type { OxyAccess } from './services/oxyAccess';
 import {
   createOxyCors,
   createOxyRateLimit,
   createOxySocketCors,
+  type EcosystemTraffic,
   oxyTrustProxy,
+  startEcosystemTraffic,
 } from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
@@ -140,6 +137,8 @@ const PUBLIC_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const PUBLIC_RATE_LIMIT_MAX = 30;
 
 export interface GatewayDeps {
+  /** The process's ecosystem activity handle (`start` supplies it); absent in a test, where nothing is published. */
+  traffic?: EcosystemTraffic;
   /** Peable Tax. Absent: the tax routes answer `tax_not_enabled`. */
   taxService?: TaxService;
   /**
@@ -234,7 +233,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // Before everything else, so every answer — health probes, CORS refusals,
   // rate-limit 429s, provider-webhook signature failures — names its request.
   app.use(requestIdMiddleware);
-  app.use(ecosystemActivityMiddleware);
+  if (deps.traffic) app.use(deps.traffic.observeHttp);
 
   // Unauthenticated liveness probe for the ALB target-group health check.
   // Mounted first so it is never CORS-blocked or rate-limited, and returns 200
@@ -404,13 +403,13 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   const io = new SocketServer(httpServer, {
     ...createOxySocketCors({ appOrigins: config.allowedOrigins, allowCredentials: false }),
   });
-  initSocket(io, { socketAuth: deps.socketAuth });
+  initSocket(io, { socketAuth: deps.socketAuth, traffic: deps.traffic });
   // The PAYER socket (`PAYER_SOCKET_PATH`) answers any origin without
   // credentials, the rule of the payer HTTP routes: a merchant's own site runs
   // Pay with Peable, and `subscribe`'s client secret is the whole authority.
   // A separate server because Socket.IO's CORS is per server.
   const payerIo = new SocketServer(httpServer, payerSocketOptions());
-  initPayerSocket(payerIo);
+  initPayerSocket(payerIo, deps.traffic);
 
   const watcher = new SettlementWatcher({
     getTransaction: deps.getTransaction ?? getTransaction,
@@ -453,8 +452,12 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
   const taxProviders = configuredTaxProviders();
   const taxService = createConfiguredTaxService(database, taxProviders);
   void reportTaxProviders(taxProviders);
-  const gateway = createGateway({ taxService });
-  startEcosystemActivity(() => gateway.httpServer.listening);
+  const traffic = startEcosystemTraffic({
+    service: 'peable',
+    ready: () => gateway.httpServer.listening,
+    workloadCredentials,
+  });
+  const gateway = createGateway({ taxService, traffic });
   let stopping = false;
   const stop = () => {
     if (stopping) return;
@@ -483,7 +486,7 @@ export async function start(options: { listenHost?: string } = {}): Promise<Gate
     gateway.payerIo.disconnectSockets(true);
     gateway.payerIo.engine.close();
     gateway.io.close(() => {
-      void Promise.allSettled([stopEcosystemActivity(), flushRequestLogs()])
+      void Promise.allSettled([traffic.stop(), flushRequestLogs()])
         .then(async (results) => {
           await disconnectPostgres();
           if (results.some((result) => result.status === 'rejected'))

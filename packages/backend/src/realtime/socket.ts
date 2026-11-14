@@ -1,9 +1,8 @@
-import { observeEcosystemSocket } from '../ecosystemActivity';
 import type { IncomingMessage } from 'node:http';
 import type { Server, ServerOptions, Socket } from 'socket.io';
 import { PAYER_SOCKET_PATH } from '@peable.to/contracts/vocabulary';
 import { oxy } from '../oxy';
-import { resolveClientIp, verifySecret } from '@oxy.so/core/server';
+import { type EcosystemTraffic, resolveClientIp, verifySecret } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import { findIntentByPublicId } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
@@ -26,6 +25,8 @@ export interface SocketDeps {
    * calling this verifier.
    */
   socketAuth?: SocketAuth;
+  /** The process's ecosystem activity handle; absent in a test, where nothing is published. */
+  traffic?: Pick<EcosystemTraffic, 'observeSocket'>;
 }
 
 /**
@@ -291,7 +292,7 @@ export function initSocket(io: Server, deps: SocketDeps = {}): void {
   io.use(optionalSocketAuth(identityAuth));
 
   io.on('connection', (socket: Socket) => {
-    observeEcosystemSocket(socket);
+    deps.traffic?.observeSocket(socket);
     handleSubscribe(socket, throttles.subscribe);
   });
 }
@@ -357,7 +358,10 @@ export const refusePayerCredentials: SocketAuth = (socket, next) => {
  * from any origin, the same per-IP connection throttle, and `subscribe` by
  * client secret — the ONLY event, and the only thing a payer socket can reach.
  */
-export function initPayerSocket(io: Server): void {
+export function initPayerSocket(
+  io: Server,
+  traffic?: Pick<EcosystemTraffic, 'observeSocket'>,
+): void {
   active.payer = io;
   const throttles = createThrottles();
 
@@ -365,7 +369,7 @@ export function initPayerSocket(io: Server): void {
   io.use(refusePayerCredentials);
 
   io.on('connection', (socket: Socket) => {
-    observeEcosystemSocket(socket);
+    traffic?.observeSocket(socket);
     handleSubscribe(socket, throttles.subscribe);
   });
 }
