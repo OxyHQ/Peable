@@ -150,7 +150,7 @@ const { findIntentForMerchant, findIntentById } = await import(
 );
 const { transitionIntent } = await import('../../services/intentTransition');
 const { balanceTransactions, taxTransactions } = await import('../../db/schema');
-const { eq } = await import('drizzle-orm');
+const { eq, sql } = await import('drizzle-orm');
 const { useIdentityKeyResolver } = await import('../../services/socialReceive');
 const { forgetRecentIdentityKeys } = await import('../../services/faircoin/keyBinding');
 const { testIdentityPublicKey } = await import('../../__tests__/setup/identityKeys');
@@ -160,6 +160,7 @@ type TaxProvider = import('../../services/tax/provider').TaxProvider;
 // ---- The fake tax provider ----------------------------------------------------------
 
 let taxDown = false;
+let duringTaxCalculation: (() => Promise<void>) | undefined;
 const taxProvider: TaxProvider = {
   id: 'fake_tax',
   livemode: false,
@@ -172,6 +173,7 @@ const taxProvider: TaxProvider = {
   },
   async calculate(input) {
     if (taxDown) throw new TaxProviderUnavailableError('timeout');
+    await duringTaxCalculation?.();
     return {
       providerRef: 'taxcalc_fake',
       livemode: false,
@@ -266,6 +268,7 @@ beforeEach(async () => {
   merchant = await seedMerchant({ oxyAppId: appId, environment: 'development' });
   confirmPlan.length = 0;
   taxDown = false;
+  duringTaxCalculation = undefined;
   // What earlier cases owed is sent (and forgotten) before this one starts.
   await dispatchCustomerEmails(mailer);
   mailer.sent.length = 0;
@@ -1718,5 +1721,364 @@ describe('the contracts (ADR 0014 D5)', () => {
     await ok('POST', `${portal}/cancel`, { subscription: sub.id });
     const renewed = await ok('POST', `${portal}/renew`, { subscription: sub.id });
     expect(renewed.subscriptions[0].cancel_at_period_end).toBe(false);
+  });
+});
+
+describe('opt-in reviewed invoice finalization', () => {
+  async function draft(taxed = false) {
+    if (taxed) await approveTax();
+    const payer = await customer(null);
+    const invoice = await ok('POST', '/v1/invoices', {
+      customer: payer.id,
+      currency: 'EUR',
+      collection_method: 'send_invoice',
+      days_until_due: 30,
+      auto_advance: false,
+      automatic_tax: { enabled: taxed },
+    });
+    const plan = await price('1000');
+    const item = await ok('POST', '/v1/invoiceitems', {
+      customer: payer.id,
+      invoice: invoice.id,
+      price: plan.id,
+      quantity: 1,
+    });
+    return { payer, invoice, item };
+  }
+  async function review(id: string) {
+    return ok('GET', `/v1/invoices/${id}?include_finalization_revision=true&expand[]=customer`);
+  }
+  async function unchanged(id: string) {
+    const row = await ok('GET', `/v1/invoices/${id}`);
+    expect(row).toMatchObject({
+      status: 'draft',
+      number: null,
+      amount_paid: '0',
+      starting_balance: '0',
+    });
+    expect(row.finalization_revision).toBeUndefined();
+    expect(row.accepted_finalization_revision).toBeUndefined();
+    expect((await review(id)).accepted_finalization_revision).toBeNull();
+    expect(
+      (await eventTypes()).filter(
+        (type) => type === 'invoice.finalized' || type === 'invoice.paid',
+      ),
+    ).toEqual([]);
+    expect((await sentKinds()).filter((kind) => kind.startsWith('invoice'))).toEqual([]);
+  }
+  test('ordinary wire remains unchanged; stable reviewed inputs finalize exactly once', async () => {
+    const { invoice, payer } = await draft(true);
+    expect((await ok('GET', `/v1/invoices/${invoice.id}`)).finalization_revision).toBeUndefined();
+    const reviewed = await review(invoice.id);
+    expect(reviewed.finalization_revision).toMatch(/^[a-f0-9]{64}$/);
+    expect(reviewed.accepted_finalization_revision).toBeNull();
+    expect(reviewed.customer.id).toBe(payer.id);
+    expect((await review(invoice.id)).finalization_revision).toBe(reviewed.finalization_revision);
+    const final = await ok('POST', `/v1/invoices/${invoice.id}/finalize`, {
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    expect(final).toMatchObject({
+      status: 'open',
+      total: '1200',
+      amount_due: '1200',
+      auto_advance: false,
+    });
+    expect(final.finalization_revision).toBeUndefined();
+    expect(final.accepted_finalization_revision).toBeUndefined();
+    expect((await review(invoice.id)).accepted_finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
+    expect((await review(invoice.id)).finalization_revision).toBeNull();
+    const repeated = await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    expect(repeated.status).toBe(409);
+    expect((await eventTypes()).filter((type) => type === 'invoice.finalized')).toHaveLength(1);
+  });
+
+  test('accepted revision survives a discarded response and a refused replay without widening ordinary wire', async () => {
+    const { invoice } = await draft();
+    const reviewed = await review(invoice.id);
+    // Discard the finalize response completely: recovery uses only a new authenticated retrieve.
+    await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    const recovered = await review(invoice.id);
+    expect(recovered.status).toBe('open');
+    expect(recovered.accepted_finalization_revision).toBe(reviewed.finalization_revision);
+    expect(recovered.finalization_revision).toBeNull();
+    expect(
+      (
+        await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+          expected_finalization_revision: 'f'.repeat(64),
+        })
+      ).status,
+    ).toBe(409);
+    expect((await review(invoice.id)).accepted_finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
+    expect(
+      (await ok('GET', `/v1/invoices/${invoice.id}`)).accepted_finalization_revision,
+    ).toBeUndefined();
+    const listed = await ok('GET', '/v1/invoices');
+    expect(
+      listed.data.find((row: Json) => row.id === invoice.id).accepted_finalization_revision,
+    ).toBeUndefined();
+    const events = await ok('GET', '/v1/events');
+    expect(events.data.filter((row: Json) => row.type === 'invoice.finalized')).toHaveLength(1);
+    expect(
+      events.data.find((row: Json) => row.type === 'invoice.finalized').data.object
+        .accepted_finalization_revision,
+    ).toBeUndefined();
+  });
+
+  test('legacy finalization does not manufacture an accepted revision', async () => {
+    const { invoice } = await draft();
+    await review(invoice.id);
+    await ok('POST', `/v1/invoices/${invoice.id}/finalize`, {});
+    const final = await review(invoice.id);
+    expect(final.finalization_revision).toBeNull();
+    expect(final.accepted_finalization_revision).toBeNull();
+  });
+
+  test('concurrent conditional finalizers preserve the one committed accepted revision', async () => {
+    const { invoice } = await draft();
+    const reviewed = await review(invoice.id);
+    const results = await Promise.all(
+      [1, 2].map(() =>
+        call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+          expected_finalization_revision: reviewed.finalization_revision,
+        }),
+      ),
+    );
+    expect(results.map((row) => row.status).sort()).toEqual([200, 409]);
+    expect((await review(invoice.id)).accepted_finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
+    expect((await eventTypes()).filter((type) => type === 'invoice.finalized')).toHaveLength(1);
+  });
+
+  test.each([
+    'line',
+    'discount',
+    'terms',
+    'balance',
+    'customer',
+    'settings',
+    'tax-policy',
+  ] as const)('rejects stale %s before numbering, balance application or mail', async (kind) => {
+    const { invoice, payer, item } = await draft(true);
+    const reviewed = await review(invoice.id);
+    switch (kind) {
+      case 'line':
+        await ok('POST', `/v1/invoiceitems/${item.id}`, { quantity: 2 });
+        break;
+      case 'discount': {
+        const coupon = await ok('POST', '/v1/coupons', { percent_off: 25, duration: 'once' });
+        await ok('POST', `/v1/invoices/${invoice.id}`, { discounts: [{ coupon: coupon.id }] });
+        break;
+      }
+      case 'terms':
+        await ok('POST', `/v1/invoices/${invoice.id}`, { days_until_due: 5 });
+        break;
+      case 'balance':
+        await ok('POST', `/v1/customers/${payer.id}/balance_transactions`, {
+          amount: '-500',
+          currency: 'EUR',
+        });
+        break;
+      case 'customer':
+        await ok('POST', `/v1/customers/${payer.id}`, { email: 'changed@example.test' });
+        break;
+      case 'settings': {
+        const { updateBillingSettings } = await import('../../db/billingEngine/settingsRepository');
+        await updateBillingSettings(gatewayDb(), merchant.id, { emailInvoiceFinalized: false });
+        break;
+      }
+      case 'tax-policy': {
+        const tax = createTaxService({ db: gatewayDb(), providers: [taxProvider] });
+        await tax.updateSettings(merchant, { default_tax_behavior: 'inclusive' });
+        break;
+      }
+    }
+    const result = await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    expect(result.status).toBe(409);
+    expect(result.json.error.code).toBe('invoice_finalization_conflict');
+    await unchanged(invoice.id);
+    const balances = await ok('GET', `/v1/customers/${payer.id}/balance_transactions`);
+    expect(balances.data.filter((entry: Json) => entry.type === 'applied_to_invoice')).toEqual([]);
+  });
+
+  test.each(['insert', 'update', 'delete', 'balance', 'tax-policy'] as const)(
+    'concurrent %s while tax is preparing conflicts without financial effects',
+    async (kind) => {
+      const { invoice, payer, item } = await draft(true);
+      const reviewed = await review(invoice.id);
+      let entered: () => void = () => {
+        throw new Error('barrier not initialized');
+      };
+      let release: () => void = () => {
+        throw new Error('barrier not initialized');
+      };
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const continueTax = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      duringTaxCalculation = async () => {
+        entered();
+        await continueTax;
+      };
+      const finalizing = call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+        expected_finalization_revision: reviewed.finalization_revision,
+      });
+      await Promise.race([
+        started,
+        finalizing.then(() => {
+          throw new Error('finalization returned before tax barrier');
+        }),
+      ]);
+      let mutationError: unknown;
+      try {
+        switch (kind) {
+          case 'insert':
+            await ok('POST', '/v1/invoiceitems', {
+              customer: payer.id,
+              invoice: invoice.id,
+              amount: '1',
+              currency: 'EUR',
+            });
+            break;
+          case 'update':
+            await ok('POST', `/v1/invoiceitems/${item.id}`, { quantity: 2 });
+            break;
+          case 'delete':
+            await ok('DELETE', `/v1/invoiceitems/${item.id}`);
+            break;
+          case 'balance':
+            await ok('POST', `/v1/customers/${payer.id}/balance_transactions`, {
+              amount: '-500',
+              currency: 'EUR',
+            });
+            break;
+          case 'tax-policy': {
+            const tax = createTaxService({ db: gatewayDb(), providers: [taxProvider] });
+            await tax.updateSettings(merchant, { default_tax_behavior: 'inclusive' });
+            break;
+          }
+        }
+      } catch (error) {
+        mutationError = error;
+      } finally {
+        release();
+      }
+      const result = await finalizing;
+      if (mutationError) throw mutationError;
+      expect(result.status).toBe(409);
+      expect(result.json.error.code).toBe('invoice_finalization_conflict');
+      await unchanged(invoice.id);
+    },
+  );
+
+  test.each([false, true])(
+    'final transaction lock protects inputs and waiting editors (settings change=%s)',
+    async (change) => {
+      const { invoice, item } = await draft();
+      const { ensureBillingSettings, updateBillingSettings } = await import(
+        '../../db/billingEngine/settingsRepository'
+      );
+      await ensureBillingSettings(gatewayDb(), merchant.id);
+      const reviewed = await review(invoice.id);
+      let ready: (pid: number) => void = () => {
+        throw new Error('uninitialized barrier');
+      };
+      let release: () => void = () => {
+        throw new Error('uninitialized barrier');
+      };
+      const held = new Promise<number>((resolve) => {
+        ready = resolve;
+      });
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const blocker = gatewayDb().transaction(async (tx) => {
+        await tx.execute(
+          sql`select 1 from billing_settings where merchant_id=${merchant.id} for update`,
+        );
+        if (change) await updateBillingSettings(tx, merchant.id, { emailInvoiceFinalized: false });
+        const [row] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        ready(must(row).pid);
+        await hold;
+      });
+      const pid = await held;
+      const finalizing = call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+        expected_finalization_revision: reviewed.finalization_revision,
+      });
+      let editing: ReturnType<typeof call> | undefined;
+      let gateError: unknown;
+      try {
+        const deadline = Date.now() + 5000;
+        for (;;) {
+          const [row] = await gatewayDb().execute<{ blocked: boolean }>(sql`
+          select exists(select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))
+          and query like '%update "billing_settings"%') as blocked`);
+          if (must(row).blocked) break;
+          if (Date.now() >= deadline)
+            throw new Error('finalization did not reach the numbering lock');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        // The final tx already owns invoice and has revalidated its snapshot.
+        if (!change) editing = call('POST', `/v1/invoiceitems/${item.id}`, { quantity: 2 });
+      } catch (error) {
+        gateError = error;
+      } finally {
+        release();
+      }
+      await blocker;
+      const result = await finalizing;
+      const editResult = await editing;
+      if (gateError) throw gateError;
+      if (change) {
+        expect(result.status).toBe(409);
+        expect(result.json.error.code).toBe('invoice_finalization_conflict');
+        await unchanged(invoice.id);
+        const settings = await ensureBillingSettings(gatewayDb(), merchant.id);
+        expect(settings.nextInvoiceNumber).toBe(1);
+      } else {
+        expect(result.status).toBe(200);
+        expect(result.json).toMatchObject({ status: 'open', total: '1000' });
+        expect(editResult?.status).toBe(400);
+        expect(editResult?.json.error.code).toBe('invoice_not_editable');
+        const stored = await ok('GET', `/v1/invoices/${invoice.id}`);
+        expect(stored.lines.data[0].amount).toBe('1000');
+      }
+    },
+  );
+  test('auto_advance cannot override reviewed input; a new review is required', async () => {
+    const { invoice } = await draft();
+    const reviewed = await review(invoice.id);
+    const result = await call('POST', `/v1/invoices/${invoice.id}/finalize`, {
+      auto_advance: true,
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    expect(result.status).toBe(409);
+    await unchanged(invoice.id);
+  });
+
+  test('unrelated invoice numbering does not change the financial input revision', async () => {
+    const first = await draft();
+    const other = await draft();
+    const reviewed = await review(first.invoice.id);
+    await ok('POST', `/v1/invoices/${other.invoice.id}/finalize`, {});
+    expect((await review(first.invoice.id)).finalization_revision).toBe(
+      reviewed.finalization_revision,
+    );
+    const final = await ok('POST', `/v1/invoices/${first.invoice.id}/finalize`, {
+      expected_finalization_revision: reviewed.finalization_revision,
+    });
+    expect(final.number).toMatch(/-0002$/);
   });
 });

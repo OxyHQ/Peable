@@ -4,8 +4,8 @@
  * ## Finalizing is two steps, and the order is the point
  *
  * 1. {@link prepareInvoice} prices the draft — discounts with the catalog's
- *    pricing, then Peable Tax for every line (`invoiceTax.ts`). It writes
- *    nothing and may call the tax provider; a failure leaves the draft a draft
+ *    pricing, then Peable Tax for every line (`invoiceTax.ts`). It may record
+ *    neutral tax evidence/calculations and call the provider; failure leaves the draft a draft
  *    (fail closed).
  * 2. {@link commitFinalization} runs in ONE transaction: it proves the draft
  *    is still the one that was priced (the lines' digest), freezes every line's
@@ -65,6 +65,11 @@ import {
 } from './transitions';
 import { oweInvoiceEmailOnFinalize } from './notices';
 import { reversePrePaymentNotes } from './creditNotes';
+import {
+  captureFinalizationInput,
+  finalizationConflict,
+  type FinalizationInput,
+} from './finalizationRevision';
 
 /** How long a draft with `auto_advance` waits before it finalizes (Stripe's hour). */
 export const DRAFT_FINALIZATION_DELAY_MS = 3600_000;
@@ -110,12 +115,15 @@ export async function prepareInvoice(input: {
   readonly automaticTax: boolean;
   readonly lines: readonly DraftLine[];
   readonly coupon: CouponRow | null;
+  readonly captured?: FinalizationInput;
 }): Promise<PreparedInvoice> {
   const db = getDb();
-  const catalog = await loadCatalog(
-    db,
-    input.lines.map((line) => line.priceId),
-  );
+  const catalog =
+    input.captured?.catalog ??
+    (await loadCatalog(
+      db,
+      input.lines.map((line) => line.priceId),
+    ));
   const discounts = discountsFor(input.lines, catalog, input.coupon, input.currency);
   const nets = input.lines.map((line, i) => line.amount - (discounts[i] ?? 0n));
   const tax = await taxInvoiceLines(db, {
@@ -126,6 +134,7 @@ export async function prepareInvoice(input: {
     lines: input.lines,
     nets,
     catalog,
+    ...(input.captured ? { captured: input.captured.tax } : {}),
   });
   const totals = invoiceTotals({
     lines: input.lines.map((line, i) => ({
@@ -161,7 +170,7 @@ export async function commitFinalization(
   invoice: InvoiceRow,
   prepared: PreparedInvoice,
   now: Date,
-  options: { readonly autoAdvance?: boolean } = {},
+  options: { readonly autoAdvance?: boolean; readonly acceptedFinalizationRevision?: string } = {},
 ): Promise<FinalizeOutcome> {
   if (invoice.status !== 'draft') {
     throw new BillingEngineError(
@@ -234,6 +243,7 @@ export async function commitFinalization(
     automaticTaxStatus: invoice.automaticTax ? 'complete' : null,
     taxCalculationId: prepared.tax.calculation?.id ?? null,
     taxedLinesDigest: prepared.digest,
+    acceptedFinalizationRevision: options.acceptedFinalizationRevision ?? null,
     lastFinalizationError: null,
     nextPaymentAttempt:
       invoice.collectionMethod === 'charge_automatically' && amountDue > 0n && autoAdvance
@@ -276,10 +286,28 @@ export async function loadDraft(invoice: InvoiceRow): Promise<{
  */
 export async function finalizeStoredInvoice(
   invoiceId: string,
-  options: { readonly autoAdvance?: boolean; readonly manual?: boolean } = {},
+  options: {
+    readonly autoAdvance?: boolean;
+    readonly manual?: boolean;
+    readonly expectedFinalizationRevision?: string;
+  } = {},
 ): Promise<InvoiceRow> {
   const db = getDb();
-  const invoice = await findInvoiceById(db, invoiceId);
+  const captured =
+    options.expectedFinalizationRevision === undefined
+      ? undefined
+      : await db.transaction((tx) => captureFinalizationInput(tx, invoiceId), {
+          isolationLevel: 'repeatable read',
+          accessMode: 'read only',
+        });
+  if (
+    captured &&
+    (captured.revision !== options.expectedFinalizationRevision ||
+      captured.invoice.status !== 'draft' ||
+      (options.autoAdvance !== undefined && options.autoAdvance !== captured.invoice.autoAdvance))
+  )
+    throw finalizationConflict();
+  const invoice = captured?.invoice ?? (await findInvoiceById(db, invoiceId));
   if (!invoice)
     throw new BillingEngineError('resource_missing', 'invoice not found', undefined, 404);
   if (invoice.status !== 'draft') {
@@ -288,7 +316,7 @@ export async function finalizeStoredInvoice(
       `this invoice is ${invoice.status}; only a draft can be finalized`,
     );
   }
-  const draft = await loadDraft(invoice);
+  const draft = captured ?? (await loadDraft(invoice));
   if (options.manual && draft.lines.length === 0) {
     throw new BillingEngineError(
       'invoice_no_customer_line_items',
@@ -305,6 +333,7 @@ export async function finalizeStoredInvoice(
       automaticTax: invoice.automaticTax,
       lines: draft.lines,
       coupon: draft.coupon,
+      ...(captured ? { captured } : {}),
     });
   } catch (error) {
     if (error instanceof InvoiceTaxError) {
@@ -327,11 +356,30 @@ export async function finalizeStoredInvoice(
     }
     throw error;
   }
-  const outcome = await db.transaction(async (tx) => {
-    const locked = await lockInvoice(tx, invoice.id);
-    if (!locked) throw new Error('invoice vanished');
-    return commitFinalization(tx, locked, prepared, now, options);
-  });
+  let outcome: FinalizeOutcome;
+  try {
+    outcome = await db.transaction(
+      async (tx) => {
+        const locked = await lockInvoice(tx, invoice.id);
+        if (!locked) throw new Error('invoice vanished');
+        if (captured) {
+          const current = await captureFinalizationInput(tx, invoice.id);
+          if (current.invoice.status !== 'draft' || current.revision !== captured.revision)
+            throw finalizationConflict();
+        }
+        return commitFinalization(tx, locked, prepared, now, {
+          ...options,
+          ...(captured ? { acceptedFinalizationRevision: captured.revision } : {}),
+        });
+      },
+      captured ? { isolationLevel: 'serializable' } : undefined,
+    );
+  } catch (error) {
+    // A concurrent input write during revalidation is a stale approval, not a
+    // reason to replay the financial operation automatically.
+    if (captured && serializationConflict(error)) throw finalizationConflict();
+    throw error;
+  }
   kickWebhookOutbox();
   return (await findInvoiceById(db, invoice.id)) ?? outcome.invoice;
 }
@@ -513,4 +561,16 @@ export async function deleteDraftInTx(tx: Transaction, invoice: InvoiceRow): Pro
 
 export function isPayable(status: InvoiceStatus): boolean {
   return status === 'open' || status === 'uncollectible';
+}
+
+function serializationConflict(error: unknown): boolean {
+  for (
+    let current = error, depth = 0;
+    current && typeof current === 'object' && depth < 5;
+    depth++
+  ) {
+    if ('code' in current && current.code === '40001') return true;
+    current = 'cause' in current ? current.cause : undefined;
+  }
+  return false;
 }

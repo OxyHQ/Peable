@@ -414,7 +414,7 @@ export async function updateInvoice(
 export async function finalizeInvoice(
   merchant: MerchantRow,
   publicId: string,
-  options: { autoAdvance?: boolean },
+  options: { autoAdvance?: boolean; expectedFinalizationRevision?: string },
 ): Promise<InvoiceRow> {
   const invoice = await invoiceFor(merchant, publicId);
   return finalizeStoredInvoice(invoice.id, { ...options, manual: true });

@@ -1,3 +1,4 @@
+import { readInvoiceTaxPolicy } from '../../db/tax/invoicePolicyRepository';
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
@@ -147,6 +148,17 @@ type RegistrationRow = typeof taxRegistrations.$inferSelect;
 type EvidenceRow = typeof taxLocationEvidence.$inferSelect;
 type CalculationRow = typeof taxCalculations.$inferSelect;
 
+/** Internal immutable inputs for a conditionally finalized invoice. Preparatory
+ * location evidence/calculations are deliberately not part of this policy. */
+export interface InvoiceTaxPolicy {
+  readonly merchantId: string;
+  readonly evaluatedAt: Date;
+  readonly settings: SettingsRow | null;
+  readonly registrations: readonly RegistrationRow[];
+  readonly products: readonly (typeof taxProductCodes.$inferSelect)[];
+  readonly provider: { readonly id: string; readonly livemode: boolean } | null;
+}
+
 /** A report's filing window: `from` inclusive, `to` exclusive, Unix seconds (`taxReportQuery`). */
 export interface TaxReportWindow {
   readonly from: number;
@@ -276,6 +288,26 @@ export function createTaxService(options: TaxServiceOptions) {
   }
 
   const service = {
+    async captureInvoicePolicy(
+      merchant: MerchantRow,
+      references: readonly string[],
+      view: DatabaseOrTransaction,
+    ): Promise<InvoiceTaxPolicy> {
+      const { settings, registrations, products } = await readInvoiceTaxPolicy(
+        view,
+        merchant.id,
+        references,
+      );
+      const provider = providerFor(merchant, settings ?? undefined);
+      return {
+        merchantId: merchant.id,
+        evaluatedAt: now(),
+        settings,
+        registrations,
+        products,
+        provider: provider ? { id: provider.id, livemode: provider.livemode } : null,
+      };
+    },
     async getSettings(merchant: MerchantRow): Promise<TaxSettings> {
       return settingsDto(merchant, await settingsRow(merchant));
     },
@@ -596,11 +628,14 @@ export function createTaxService(options: TaxServiceOptions) {
       merchant: MerchantRow,
       /** Typed for internal callers; a route's body is parsed the same either way. */
       raw: CreateTaxCalculationParams,
-      opts: { requireActive: boolean },
+      opts: { requireActive: boolean; invoicePolicy?: InvoiceTaxPolicy },
     ): Promise<TaxCalculation> {
       const input = parseTaxRequest(createTaxCalculationParams, raw);
       const currency = input.currency.toUpperCase();
-      const settings = await settingsRow(merchant);
+      const snapshot = opts.invoicePolicy;
+      if (snapshot && snapshot.merchantId !== merchant.id)
+        throw new TaxError('invalid_tax_request');
+      const settings = snapshot ? (snapshot.settings ?? undefined) : await settingsRow(merchant);
       if (opts.requireActive && settings?.status !== 'active')
         throw new TaxError('tax_settings_not_active');
       const [evidence] = await db
@@ -615,22 +650,24 @@ export function createTaxService(options: TaxServiceOptions) {
       if (!evidence) throw new TaxError('not_found');
       if (evidence.status === 'insufficient') throw new TaxError('customer_location_insufficient');
       if (evidence.status === 'conflicting') throw new TaxError('customer_location_conflicting');
-      const at = now();
+      const at = snapshot?.evaluatedAt ?? now();
       if (+evidence.expiresAt <= +at || !evidence.country)
         throw new TaxError('customer_location_expired');
       const country = evidence.country;
-      const products = await db
-        .select()
-        .from(taxProductCodes)
-        .where(
-          and(
-            eq(taxProductCodes.merchantId, merchant.id),
-            inArray(
-              taxProductCodes.productRef,
-              input.line_items.map((line) => line.reference),
-            ),
-          ),
-        );
+      const products = snapshot
+        ? snapshot.products
+        : await db
+            .select()
+            .from(taxProductCodes)
+            .where(
+              and(
+                eq(taxProductCodes.merchantId, merchant.id),
+                inArray(
+                  taxProductCodes.productRef,
+                  input.line_items.map((line) => line.reference),
+                ),
+              ),
+            );
       const lines = input.line_items.map((line) => {
         const taxCode =
           line.tax_code ??
@@ -651,7 +688,17 @@ export function createTaxService(options: TaxServiceOptions) {
       const publicId = newId('taxcalc');
       const taxable = lines.filter((line) => line.taxCode !== NONTAXABLE_TAX_CODE);
       const [registration] = taxable.length
-        ? await coveringRegistrations(merchant, country, evidence.state, at)
+        ? snapshot
+          ? snapshot.registrations
+              .filter(
+                (row) =>
+                  row.approvedAt &&
+                  (!row.expiresAt || +row.expiresAt > +at) &&
+                  (!row.activeFrom || +row.activeFrom <= +at),
+              )
+              .filter((row) => registrationCovers(row, country, evidence.state))
+              .sort((a, b) => Number(b.state !== null) - Number(a.state !== null))
+          : await coveringRegistrations(merchant, country, evidence.state, at)
         : [];
       let collection: TaxCalculation['collection'];
       let providerId: string | null = null;
@@ -701,6 +748,12 @@ export function createTaxService(options: TaxServiceOptions) {
       } else {
         collection = 'collect';
         const calculating = providerFor(merchant, settings);
+        if (
+          snapshot &&
+          (snapshot.provider?.id !== calculating?.id ||
+            snapshot.provider?.livemode !== calculating?.livemode)
+        )
+          throw new TaxError('tax_calculation_unavailable', 'provider_changed');
         if (!calculating) throw new TaxError('tax_calculation_unavailable', 'no_provider');
         const billing = evidence.items.find(
           (item) => item.type === 'billing_address' && item.country === country,

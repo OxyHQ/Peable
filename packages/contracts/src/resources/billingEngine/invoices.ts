@@ -194,6 +194,22 @@ export const invoiceSchema = defineObject(
         .nullable()
         .describe('The payer-facing page (anonymous, an unguessable token); `null` while a draft.'),
       invoice_pdf: z.string().nullable().describe('The PDF of the same; `null` while a draft.'),
+      accepted_finalization_revision: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .nullable()
+        .optional()
+        .describe(
+          'Only returned by retrieve with include_finalization_revision=true. The exact revision accepted and stored atomically with finalization; null before finalization or when finalized without a revision. This immutable receipt supports recovery after a lost finalize response; amount equality alone is not proof.',
+        ),
+      finalization_revision: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .nullable()
+        .optional()
+        .describe(
+          'Only returned by retrieve with include_finalization_revision=true. A versioned snapshot of the inputs that finalization will consume; null after finalization. Pass it as expected_finalization_revision to refuse changes before financial effects.',
+        ),
       last_finalization_error: z
         .object({ code: z.string(), message: z.string() })
         .strict()
@@ -336,8 +352,26 @@ export const updateInvoiceParams = z
   .strict();
 export type UpdateInvoiceParams = z.input<typeof updateInvoiceParams>;
 
+export const retrieveInvoiceQuery = expandOnlyQuery.extend({
+  include_finalization_revision: queryBoolean
+    .optional()
+    .describe(
+      'Include an opaque approval revision captured consistently with this invoice; omitted by default.',
+    ),
+});
+
 export const finalizeInvoiceParams = z
-  .object({ auto_advance: z.boolean().optional(), expand: expandParam.optional() })
+  .object({
+    auto_advance: z.boolean().optional(),
+    expected_finalization_revision: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional()
+      .describe(
+        'The revision returned by opt-in retrieve. Changed inputs return 409 invoice_finalization_conflict before financial effects; review again instead of retrying this approval. auto_advance must match the reviewed draft.',
+      ),
+    expand: expandParam.optional(),
+  })
   .strict();
 export type FinalizeInvoiceParams = z.input<typeof finalizeInvoiceParams>;
 
@@ -453,7 +487,7 @@ export const invoiceRoutes = [
     auth: 'service',
     scope: 'payments:read',
     params: invoiceId,
-    query: expandOnlyQuery,
+    query: retrieveInvoiceQuery,
     response: invoiceSchema,
     sdk: 'invoices.retrieve',
     expandable: 'invoice',

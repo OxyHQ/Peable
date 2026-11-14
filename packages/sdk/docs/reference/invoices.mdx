@@ -271,6 +271,7 @@ Errors answer the error envelope with the HTTP status and `error.type` of the fa
 | --- | --- | --- | --- |
 | `id` **required** | path | string | The invoice (`in_…`). |
 | `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `include_finalization_revision` | query | boolean | Include an opaque approval revision captured consistently with this invoice; omitted by default. |
 | `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
 
 **Response `200`**
@@ -503,6 +504,7 @@ It gets its number, its tax and its payer-facing page.
 | Field | Type | Description |
 | --- | --- | --- |
 | `auto_advance` | boolean |  |
+| `expected_finalization_revision` | string | The revision returned by opt-in retrieve. Changed inputs return 409 invoice_finalization_conflict before financial effects; review again instead of retrying this approval. auto_advance must match the reviewed draft. Matches `^[0-9a-f]{64}$`. |
 | `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
 
 **Response `200`**
