@@ -35,7 +35,7 @@
   "devDependencies": {
     "@noble/hashes": "1.8.0",
     "@noble/secp256k1": "2.3.0",
-    "@oxy.so/contracts": "7.0.0",
+    "@oxy.so/contracts": "7.1.0",
     "@peable.to/pay": "*",
     "@peable.to/sdk": "*",
     "@types/bun": "latest",
