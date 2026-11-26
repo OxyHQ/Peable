@@ -337,7 +337,7 @@ jobs:
 
   # test's hosted twin in the Seldon race: the same name and steps.
   test-hosted:
-    name: ${{ vars.CI_SELDON_RACE == 'true' && 'test' || 'test (Seldon race off)' }}
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'test' || 'test (seldon twin, off)' }}
     needs: [race]
     if: ${{ !cancelled() && !failure() && needs.race.outputs.race == 'true' }}
     runs-on: ubuntu-latest
@@ -352,7 +352,7 @@ jobs:
   # test's rescue: reruns it hosted when its Seldon lane failed (the house
   # network drops connections); a genuine failure fails again.
   test-rescue:
-    name: ${{ vars.CI_SELDON_RACE == 'true' && 'test' || 'test (Seldon race off)' }}
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'test' || 'test (seldon rescue, off)' }}
     needs: [test]
     if: ${{ !cancelled() && needs.test.result == 'failure' && vars.CI_SELDON_RACE == 'true' && github.run_attempt == 1 && (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
