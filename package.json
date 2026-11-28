@@ -55,8 +55,8 @@
     "bun": ">=1.0.0"
   },
   "overrides": {
-    "@oxy.so/contracts": "7.2.0",
-    "@oxy.so/core": "7.52.0",
+    "@oxy.so/contracts": "7.5.0",
+    "@oxy.so/core": "7.55.0",
     "lightningcss": "1.30.1",
     "lightningcss-linux-x64-gnu": "1.30.1",
     "lightningcss-linux-x64-musl": "1.30.1",
@@ -66,9 +66,9 @@
     "@peable.to/sdk": "workspace:*",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@oxy.so/bloom": "21.7.1"
+    "@oxy.so/bloom": "23.10.1"
   },
   "dependencies": {
-    "@oxy.so/core": "7.52.0"
+    "@oxy.so/core": "7.55.0"
   }
 }
