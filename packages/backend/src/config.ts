@@ -423,6 +423,8 @@ function readOrigins(raw: string | undefined): string[] {
       // payer routes are anonymous (the order's own client secret), so these
       // origins gain nothing but the ability to read the order they were handed.
       'https://mention.earth',
+      // Mention's second web host; mention.earth stays.
+      'https://mention.org',
       'https://mercaria.co',
       'https://dashboard.mercaria.co',
       ...(raw ?? '')

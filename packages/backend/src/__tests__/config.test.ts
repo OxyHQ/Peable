@@ -42,6 +42,7 @@ test('the browsers Pay with Peable runs in are admitted with no deployment overr
     'https://checkout.peable.to',
     'https://orbit.peable.to',
     'https://mention.earth',
+    'https://mention.org',
     'https://mercaria.co',
     'https://dashboard.mercaria.co',
   ])
